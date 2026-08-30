@@ -1,0 +1,27 @@
+# Utah live ISO environment.
+# The live image is a disposable overlay around a normal Utah bootc image.
+# The host-side builder supplies the source image as an OCI ref.
+ARG SOURCE_IMAGE=localhost/utah:testing
+FROM ${SOURCE_IMAGE}
+
+ARG DEBUG=0
+ENV DEBUG=${DEBUG}
+
+# Utah already carries dracut-live; systemd-boot is added only to the live
+# environment because the installed image uses the Hummingbird bootloader.
+RUN dnf5 install -y --setopt=install_weak_deps=False systemd-boot-unsigned && \
+    dnf5 clean all && rm -rf /var/cache/dnf /var/cache/libdnf5
+
+COPY src/configure-live.sh /usr/local/libexec/utah-configure-live
+RUN chmod 0755 /usr/local/libexec/utah-configure-live && \
+    /usr/local/libexec/utah-configure-live
+
+# Rebuild against Utah's own kernel and userspace. Hummingbird's dracut emits
+# a harmless /root install warning in the container build context but still
+# returns a successful image with dmsquash-live included.
+RUN set -eux; \
+    kernel="$(ls /usr/lib/modules | sort -V | tail -1)"; \
+    dracut --force --reproducible --no-hostonly \
+      --add dmsquash-live \
+      --add-drivers 'squashfs overlay loop iso9660 sr_mod cdrom' \
+      "/usr/lib/modules/${kernel}/initramfs.img" "${kernel}"

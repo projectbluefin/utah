@@ -59,6 +59,15 @@ packages = [
     "unzip",
 ]
 
+[services]
+# Bluefin's desktop image adds these to the server base before 40-services.sh
+# enables their units. uupd is downloaded separately because it is published
+# as a release binary rather than an RPM in the Hummingbird repositories.
+packages = [
+    "fwupd",
+    "tailscale",
+]
+
 [unavailable]
 # Packages Bluefin ships that none of Utah's repositories provide.  Each entry
 # MUST carry a tracking issue: this list is the documented parity debt, not a

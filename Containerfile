@@ -1,4 +1,9 @@
 ARG BASE_IMAGE=quay.io/hummingbird-community/bootc-os:latest@sha256:c5539f9ed4d93aab6bd41e4f5aef8ab83055f3f9e855a47b69fadb7420d0d1df
+# The package factory publishes a complete, digest-addressable RPM repository.
+# Keep this pin in Utah so an image build is reproducible and can be reviewed
+# against the exact package set it consumes.
+ARG PACKAGE_IMAGE=ghcr.io/projectbluefin/utah-packages
+ARG PACKAGE_IMAGE_SHA=sha256:2848c60d51fc6d75c3c89b246aad0e5ebf1fe84c5b7696203f02f14727bd158b
 ARG COMMON_IMAGE=ghcr.io/projectbluefin/common
 ARG COMMON_IMAGE_SHA=sha256:fb943c87866292fb74eb74610e9cd08a1a91fe42e763e28473f3f57cf18f26a5
 ARG BREW_IMAGE=ghcr.io/ublue-os/brew
@@ -6,6 +11,7 @@ ARG BREW_IMAGE_SHA=sha256:8f952ae54585db9f855a306ef365e13609ed7c7944b12b823ba7d5
 
 FROM ${COMMON_IMAGE}@${COMMON_IMAGE_SHA} AS common
 FROM ${BREW_IMAGE}@${BREW_IMAGE_SHA} AS brew
+FROM ${PACKAGE_IMAGE}@${PACKAGE_IMAGE_SHA} AS packages
 FROM ${BASE_IMAGE}
 
 ARG IMAGE_NAME=utah
@@ -13,6 +19,11 @@ ARG IMAGE_FLAVOR=main
 ARG IMAGE_VENDOR=hanthor
 ARG VERSION=testing
 ARG SHA_HEAD_SHORT=unknown
+# Production images keep SSH closed; local VM diagnostics can opt in with
+# ENABLE_SSHD=1, following tunaOS's debug-image convention.
+ARG ENABLE_SSHD=0
+# Renovate can update this pinned release independently of the base image.
+ARG UUPD_VERSION=v1.4.0
 
 LABEL org.opencontainers.image.title="Utah"
 LABEL org.opencontainers.image.description="A Hummingbird-based Bluefin GNOME workstation"
@@ -26,17 +37,23 @@ COPY packages/utah.toml /usr/share/utah/utah.toml
 COPY packages/hummingbird.repo /etc/yum.repos.d/hummingbird.repo
 COPY packages/fedora-44.repo /etc/yum.repos.d/fedora-44.repo
 COPY packages/nvidia-container.repo /etc/yum.repos.d/nvidia-container.repo
+COPY packages/utah-packages.repo /etc/yum.repos.d/utah-packages.repo
+# The package image is an RPM repository, not a runtime dependency. Its
+# contents are intentionally copied into the image so the package transaction
+# is reproducible and does not depend on a mutable Pages mirror.
+COPY --from=packages /repository /etc/utah-packages
 COPY scripts/install-packages.py /usr/local/libexec/utah-install-packages
 COPY scripts/verify-rpm-contract.py /usr/local/libexec/utah-verify-rpm-contract
 COPY scripts/build-gnome-extensions.sh /usr/local/libexec/utah-build-gnome-extensions
 COPY scripts/install-ogc-kernel.sh /usr/local/libexec/utah-install-ogc-kernel
 COPY scripts/install-nvidia.sh /usr/local/libexec/utah-install-nvidia
 COPY scripts/clean-stage.sh /usr/local/libexec/utah-clean-stage
+COPY scripts/configure-services.sh /usr/local/libexec/utah-configure-services
 COPY --from=common /system_files/shared /tmp/utah-common
 COPY --from=brew /system_files /tmp/utah-brew
 COPY system_files/shared /tmp/utah-local
 
-RUN chmod 0755 /usr/local/libexec/utah-install-packages /usr/local/libexec/utah-verify-rpm-contract /usr/local/libexec/utah-build-gnome-extensions /usr/local/libexec/utah-install-ogc-kernel /usr/local/libexec/utah-install-nvidia /usr/local/libexec/utah-clean-stage && \
+RUN chmod 0755 /usr/local/libexec/utah-install-packages /usr/local/libexec/utah-verify-rpm-contract /usr/local/libexec/utah-build-gnome-extensions /usr/local/libexec/utah-install-ogc-kernel /usr/local/libexec/utah-install-nvidia /usr/local/libexec/utah-clean-stage /usr/local/libexec/utah-configure-services && \
     cp -a /tmp/utah-common/. / && \
     cp -a /tmp/utah-brew/. / && \
     cp -a /tmp/utah-local/. / && \
@@ -52,7 +69,9 @@ RUN chmod 0755 /usr/local/libexec/utah-install-packages /usr/local/libexec/utah-
 #
 # Utah keeps Bluefin's user-facing package contract.  Hummingbird supplies the
 # bootable base; Hummingbird's own repository plus Fedora 44 supply the rest,
-# which is the pairing Hummingbird composes its own buildroot from.
+# The pinned Utah package repository, Hummingbird's own repository, and Fedora
+# 44 supply the desktop and the rest, which is the pairing Hummingbird composes
+# its own buildroot from.
 # A missing package is a build failure: silently skipping one would make parity
 # claims meaningless.  The only exceptions are the packages listed under
 # [unavailable] in packages/utah.toml, each of which carries a tracking issue.
@@ -67,10 +86,29 @@ RUN /usr/local/libexec/utah-install-packages \
     DNF="$(command -v dnf5 || command -v dnf)" && \
     "$DNF" clean all && rm -rf /var/cache/libdnf5 /var/cache/dnf
 
-# The extensions are the same pinned submodules Bluefin ships. Keeping their
-# build here makes GNOME 51 compatibility visible in the normal image CI path.
-RUN /usr/local/libexec/utah-build-gnome-extensions && \
-    glib-compile-schemas /usr/share/glib-2.0/schemas
+# Hummingbird defaults to a server preset and disables unlisted services.
+# configure-services is the Utah equivalent of bluefin-lts's 40-services.sh:
+# it applies the desktop service policy, login defaults, update policy, and
+# removes the extension build toolchain before the final cleanup.
+RUN mkdir -p /tmp/uupd && \
+    curl -fsSL "https://github.com/ublue-os/uupd/releases/download/${UUPD_VERSION}/uupd_Linux_x86_64.tar.gz" \
+      | tar -xzf - -C /tmp/uupd && \
+    curl -fsSL "https://raw.githubusercontent.com/ublue-os/uupd/${UUPD_VERSION}/uupd.service" \
+      -o /tmp/uupd/uupd.service && \
+    curl -fsSL "https://raw.githubusercontent.com/ublue-os/uupd/${UUPD_VERSION}/uupd.timer" \
+      -o /tmp/uupd/uupd.timer && \
+    /usr/local/libexec/utah-build-gnome-extensions && \
+    glib-compile-schemas /usr/share/glib-2.0/schemas && \
+    ENABLE_SSHD="${ENABLE_SSHD}" /usr/local/libexec/utah-configure-services
+
+# Fedora's shim package stages its EFI payload under bootupd's update tree,
+# while bootupd discovers image-provided EFI components under /usr/lib/efi.
+# Mirror the signed payload into bootupd's component layout so bootc can create
+# a generic disk image without depending on the build host's ESP.
+RUN shim_version="$(rpm -q --qf '%{VERSION}-%{RELEASE}' shim-x64)" && \
+    test -d /usr/lib/bootupd/updates/EFI/fedora && \
+    install -d "/usr/lib/efi/shim/${shim_version}/EFI/fedora" && \
+    cp -a /usr/lib/bootupd/updates/EFI/fedora/. "/usr/lib/efi/shim/${shim_version}/EFI/fedora/"
 
 # Dakota-compatible flavors: OGC is built and asserted before NVIDIA so the
 # NVIDIA path can bind its module to the exact kernel tree it will boot.

@@ -1,0 +1,14 @@
+# Utah is a graphical workstation, unlike the Hummingbird server base.
+# Keep these in /usr/lib so bootc's first-boot preset application sees them.
+enable gdm.service
+enable firewalld.service
+enable fwupd.service
+enable fwupd-refresh.timer
+enable tailscaled.service
+enable uupd.timer
+enable ublue-system-setup.service
+enable systemd-resolved.service
+enable bootc-unified-storage.service
+enable dconf-update.service
+disable sshd.service
+disable rpm-ostree.service

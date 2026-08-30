@@ -19,7 +19,10 @@ from pathlib import Path
 # while the Hummingbird base pins 3.5.6, so a Rawhide desktop stack is
 # unresolvable here -- 38 packages in this contract's closure need
 # libcrypto.so.4, including boot-critical ones.
-REPOS = ("public-hummingbird-x86_64-rpms", "fedora-44", "fedora-44-updates")
+# The factory is first so its Hummingbird-targeted rebuilds win over an
+# equally-versioned Fedora package. The repository is copied from the
+# digest-pinned OCI package image by Containerfile.
+REPOS = ("utah-packages", "public-hummingbird-x86_64-rpms", "fedora-44", "fedora-44-updates")
 
 
 def section(path: Path, name: str) -> list[str]:
@@ -49,6 +52,9 @@ def contract(base: Path, overlay: Path, major: str | None) -> list[str]:
     if major:
         packages += section(base, f"fedora_v{major}")
     packages += section(overlay, "gnome")
+    # Service packages are part of the desktop contract as well: 40-services.sh
+    # cannot enable what the server base never installed.
+    packages += section(overlay, "services")
     unavailable = set(section(overlay, "unavailable"))
     # Deduplicate while preserving order so build logs stay diffable.
     seen: dict[str, None] = {}

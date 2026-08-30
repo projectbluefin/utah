@@ -10,10 +10,19 @@ the flavor set and the kernel cache work. The README is the user-facing page.
   single source for the build, promote and release matrices; see below.
 - Pinned Hummingbird `bootc-os` base, preserving its hardened and fast-moving
   upstream model.
+- Pinned `utah-packages` OCI repository, consumed before Fedora packages so
+  Hummingbird-targeted rebuilds are actually installed.
 - Bluefin's base package manifest is the compatibility contract.
 - Bluefin's pinned `projectbluefin/common` and `ublue-os/brew` OCI payloads,
   plus its GNOME Extensions submodules, are retained with their normal build
   step.
+- `scripts/configure-services.sh` mirrors bluefin-lts's `40-services.sh`: it
+  applies the desktop presets, enables GDM, firmware updates, Tailscale,
+  uupd, user setup and resolved, configures authselect, and removes the
+  extension build toolchain before cleanup.
+- Published images keep SSH disabled. Set `ENABLE_SSHD=1` only for a local
+  diagnostic build; this follows TunaOS's debug-image convention and makes
+  the disposable root key used by `boot-vm` useful.
 - The OGC kernel and NVIDIA's open module are built from source, since neither
   Hummingbird nor UBlue publishes a build for this base. Both are cached in an
   image of their own so the cost is paid once per pin, not once per push; see
@@ -26,9 +35,37 @@ the flavor set and the kernel cache work. The README is the user-facing page.
 ```bash
 just check
 just build-ghcr utah testing main
+just generate-bootable-image testing
+just boot-vm
+
+# Optional local diagnostics over SSH (never use for a published image):
+ENABLE_SSHD=1 just build-ghcr utah testing main
 ```
 
-The image is tagged `localhost/utah:testing`.
+The image is tagged `localhost/utah:testing`. `generate-bootable-image` uses
+`bootc install to-disk` to create `output/bootable.raw`; `boot-vm` runs that disk
+with `ghcr.io/qemus/qemu` and serves the graphical console at the printed URL.
+Confirm that GDM starts and the GNOME Shell desktop renders in the web console.
+Override `BASE_DIR`, `VM_RAM`, or `VM_CPUS` when needed. `boot-vm` prints the
+noVNC and SSH ports; SSH is available only when the image was built with
+`ENABLE_SSHD=1`. The generated local disk carries `utah.local`, which skips
+unified-storage's registry repull; published images omit that argument and keep
+the service enabled.
+
+### Live ISO (initial bring-up)
+
+The first ISO slice reuses Utah's own kernel, dracut-live, and GNOME image:
+
+```bash
+just iso testing
+just boot-iso             # QEMU/noVNC live-session validation
+just debug=1 iso testing   # optional live-session SSH diagnostics
+```
+
+The result is `output/utah-live.iso`, assembled with systemd-boot, a
+`UTAH_LIVE` dmsquash-live root, and a serial `UTAH_LIVE_READY` marker. It is
+intended to prove live desktop boot first; bootc-installer/offline payload
+integration is the next ISO milestone.
 
 ### Image flavors
 

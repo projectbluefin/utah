@@ -1,6 +1,9 @@
 repo_organization := env_var_or_default("REPO_ORGANIZATION", "hanthor")
 image := "utah"
 kernel_cache_image := "utah-kernel-cache"
+base_dir := env_var_or_default("BASE_DIR", "output")
+vm_ram := env_var_or_default("VM_RAM", "8192")
+vm_cpus := env_var_or_default("VM_CPUS", "4")
 
 default:
     @just --list
@@ -11,6 +14,24 @@ check:
     test -f Containerfile
     test -f packages/bluefin.toml
     test -f packages/utah.toml
+    test -f packages/utah-packages.repo
+    test -f system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
+    test -f system_files/shared/usr/lib/systemd/system/bootc-unified-storage.service.d/10-utah-local-test.conf
+    grep -q 'enable gdm.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
+    grep -q 'enable ublue-system-setup.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
+    test -f scripts/configure-services.sh
+    bash -n scripts/configure-services.sh
+    test -f iso/live/Containerfile
+    test -f iso/live/src/configure-live.sh
+    test -f iso/scripts/build-iso.sh
+    bash -n iso/live/src/configure-live.sh
+    bash -n iso/scripts/build-iso.sh
+    grep -q 'UTAH_LIVE' iso/scripts/build-iso.sh
+    grep -q 'ENABLE_SSHD' Containerfile
+    grep -q 'ENABLE_SSHD="${ENABLE_SSHD:-0}"' Justfile
+    grep -q 'ARG PACKAGE_IMAGE_SHA=' Containerfile
+    grep -q 'COPY --from=packages /repository /etc/utah-packages' Containerfile
+    grep -q '"utah-packages"' scripts/install-packages.py
     python3 -m py_compile scripts/install-packages.py
     python3 -m py_compile scripts/verify-rpm-contract.py
     python3 -m py_compile scripts/check-repo-availability.py
@@ -126,6 +147,7 @@ build-ghcr base_name stream flavor kernel_pin="":
       --build-arg IMAGE_VENDOR={{ repo_organization }} \
       --build-arg VERSION="$version" \
       --build-arg SHA_HEAD_SHORT="$(git rev-parse --short HEAD)" \
+      --build-arg ENABLE_SSHD="${ENABLE_SSHD:-0}" \
       --tag "localhost/$image_name:{{ stream }}" \
       --file Containerfile .
 
@@ -143,6 +165,140 @@ gen-sbom base_name stream flavor syft_cmd:
     image_name="$(just image_name '{{ base_name }}' '{{ stream }}' '{{ flavor }}')"
     mkdir -p "sbom_out/$image_name"
     "{{ syft_cmd }}" "localhost/$image_name:{{ stream }}" -o json >"sbom_out/$image_name/sbom.json"
+
+# Install the locally built bootc image to a sparse disk for QEMU. This follows
+# Bluefin's bootc-to-disk path rather than trying to boot an OCI layer directly.
+generate-bootable-image stream="testing":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ref="localhost/{{ image }}:{{ stream }}"
+    # bootc needs the host root namespace. Local image builds normally use
+    # rootless Podman, so transfer that image into rootful storage once before
+    # running the disk install.
+    if sudo podman image exists "$ref"; then
+      PODMAN=(sudo podman)
+    elif podman image exists "$ref"; then
+      echo "Loading rootless $ref into rootful Podman for bootc..."
+      archive="$(mktemp -p /var/tmp --suffix=.oci.tar)"
+      trap 'rm -f "$archive"' EXIT
+      podman save --format oci-archive -o "$archive" "$ref"
+      sudo podman load -i "$archive"
+      PODMAN=(sudo podman)
+    else
+      echo "Image $ref not found; run: just build-ghcr {{ image }} {{ stream }} main" >&2
+      exit 1
+    fi
+    mkdir -p "{{ base_dir }}"
+    disk="$(realpath "{{ base_dir }}")/bootable.raw"
+    rm -f "$disk"
+    fallocate -l 30G "$disk"
+    echo "Installing $ref to $disk"
+    install_args=(
+      --via-loopback /data/bootable.raw
+      --filesystem btrfs
+      --wipe
+      --generic-image
+    )
+    volumes=(
+      -v "$(realpath "{{ base_dir }}"):/data:Z"
+    )
+    # The local OCI ref is not available from the guest's localhost registry;
+    # mark this disposable disk so its published-image-only unified-storage
+    # service is skipped instead of retrying forever.
+    if [[ "$ref" == localhost/* ]]; then
+      install_args+=( --karg=utah.local )
+    fi
+    # Inject the developer key into root for headless boot diagnostics. This
+    # does not enable password login and is only present in the disposable
+    # locally generated disk, never in the OCI image.
+    if [ -f "$HOME/.ssh/id_ed25519.pub" ]; then
+      volumes+=( -v "$HOME/.ssh:/ssh:ro" )
+      install_args+=( --root-ssh-authorized-keys /ssh/id_ed25519.pub )
+    fi
+    "${PODMAN[@]}" run --rm --privileged --pid=host \
+      "${volumes[@]}" \
+      --security-opt label=type:unconfined_t \
+      "$ref" bootc install to-disk "${install_args[@]}"
+    # bootupd writes the vendor EFI entry but a fresh QEMU VM has no NVRAM
+    # entry. Install the standard removable-media fallback so QEMU firmware
+    # can find the image without importing host firmware variables.
+    loop="$(sudo losetup --find --show --partscan "$disk")"
+    esp="$(mktemp -d)"
+    trap 'sudo umount "$esp" 2>/dev/null || true; sudo losetup -d "$loop" 2>/dev/null || true; rm -rf "$esp"' EXIT
+    sudo mount "${loop}p2" "$esp"
+    sudo install -d "$esp/EFI/BOOT"
+    sudo install -m 0644 "$esp/EFI/fedora/shimx64.efi" "$esp/EFI/BOOT/BOOTX64.EFI"
+    # Fedora's shim looks for its GRUB loader beside the removable-media
+    # fallback path when no vendor NVRAM entry exists.
+    sudo install -m 0644 "$esp/EFI/fedora/grubx64.efi" "$esp/EFI/BOOT/grubx64.efi"
+    sudo umount "$esp"
+    sudo losetup -d "$loop"
+    trap - EXIT
+    rm -rf "$esp"
+    sync
+    echo "Bootable disk ready: $disk"
+
+# Build a single-architecture UEFI live ISO. This first slice proves the
+# Utah live boot path; installer payload integration is intentionally the next
+# ISO milestone.
+iso stream="testing" debug="0":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ref="localhost/{{ image }}:{{ stream }}"
+    podman image exists "$ref" || { echo "Image $ref not found; run just build-ghcr {{ image }} {{ stream }} main" >&2; exit 1; }
+    mkdir -p "{{ base_dir }}"
+    bash iso/scripts/build-iso.sh "$ref" "$(realpath "{{ base_dir }}")/utah-live.iso" "Utah Live" "{{ debug }}"
+
+# Boot the live ISO with QEMU-for-Docker and expose its noVNC console.
+boot-iso:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    iso="$(realpath "{{ base_dir }}/utah-live.iso")"
+    test -f "$iso" || { echo "Missing $iso; run just iso" >&2; exit 1; }
+    port=8006
+    while ss -H -tln "sport = :$port" 2>/dev/null | grep -q .; do port=$((port + 1)); done
+    echo "Utah live ISO console: http://127.0.0.1:$port"
+    podman run --rm --privileged --device /dev/kvm --pull=always \
+      --publish "127.0.0.1:${port}:8006" \
+      --env NETWORK=user \
+      --env CPU_CORES="{{ vm_cpus }}" \
+      --env RAM_SIZE="{{ vm_ram }}" \
+      --env TPM=y \
+      --env BOOT_MODE=uefi \
+      --env ARGUMENTS=-snapshot \
+      --volume "$iso:/boot.iso:ro" \
+      ghcr.io/qemus/qemu:latest
+
+# Boot the installed Utah disk through QEMU-for-Docker. Open the printed URL
+# and confirm GDM appears and the GNOME Shell desktop renders. The disk is
+# mounted at /boot.img and -snapshot keeps the test disposable.
+boot-vm:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    disk="$(realpath "{{ base_dir }}/bootable.raw")"
+    test -f "$disk" || { echo "Missing $disk; run just generate-bootable-image" >&2; exit 1; }
+    port=8006
+    while ss -H -tln "sport = :$port" 2>/dev/null | grep -q .; do
+      port=$((port + 1))
+    done
+    ssh_port=2222
+    while ss -H -tln "sport = :$ssh_port" 2>/dev/null | grep -q .; do
+      ssh_port=$((ssh_port + 1))
+    done
+    echo "QEMU web console: http://127.0.0.1:$port"
+    echo "SSH diagnostics: ssh -p $ssh_port root@127.0.0.1"
+    podman run --rm --privileged --device /dev/kvm --pull=always \
+      --publish "127.0.0.1:${port}:8006" \
+      --publish "127.0.0.1:${ssh_port}:22" \
+      --env USER_PORTS=22 \
+      --env NETWORK=user \
+      --env CPU_CORES="{{ vm_cpus }}" \
+      --env RAM_SIZE="{{ vm_ram }}" \
+      --env TPM=y \
+      --env BOOT_MODE=uefi \
+      --env ARGUMENTS=-snapshot \
+      --volume "$disk:/boot.img" \
+      ghcr.io/qemus/qemu:latest
 
 secureboot base_name default_tag flavor:
     #!/usr/bin/env bash

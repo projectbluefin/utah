@@ -58,7 +58,7 @@ being noticed later.
 | | count |
 | --- | --- |
 | Bluefin contract installed | **64** |
-| Utah additions (GNOME 51, build tooling) | 16 |
+| Utah additions (GNOME 51, desktop services) | 12 |
 | Genuinely unavailable | **1** |
 
 The install writes its resolved list to `/usr/share/utah/contract.txt` and the
@@ -83,8 +83,10 @@ This is the honest list, and it is why the label above says pre-alpha.
   installs Fedora's. Nothing is absent from the image; hardware-accelerated
   codecs are what differ. `utah-packages` already builds several of them, so
   this closes when Utah consumes that overlay.
-- **Utah does not consume `utah-packages` yet.** The packages build; the wiring
-  is a follow-up.
+- **The image is still pre-alpha.** The digest-pinned `utah-packages` OCI
+  repository is consumed and the local QEMU image reaches GDM and GNOME Shell.
+  Initial single-architecture live ISO bring-up is now scaffolded; installer
+  payload/offline installation integration is still pending.
 - **CUDA is deliberately excluded** — 7.68 GB installed. Use the NVIDIA
   container toolkit, which is included, and run CUDA in a container.
 
