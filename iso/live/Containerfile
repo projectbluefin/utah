@@ -4,17 +4,30 @@
 ARG SOURCE_IMAGE=localhost/utah:testing
 FROM ${SOURCE_IMAGE}
 
+# TARGET_IMAGE is the published image name recorded in the installer recipe
+# and embedded offline store. SOURCE_IMAGE may be localhost for development;
+# it must never leak into the released recipe.
+ARG TARGET_IMAGE=ghcr.io/projectbluefin/utah:testing
 ARG DEBUG=0
-ENV DEBUG=${DEBUG}
+ENV TARGET_IMAGE=${TARGET_IMAGE} DEBUG=${DEBUG}
 
 # Utah already carries dracut-live; systemd-boot is added only to the live
 # environment because the installed image uses the Hummingbird bootloader.
 RUN dnf5 install -y --setopt=install_weak_deps=False systemd-boot-unsigned && \
     dnf5 clean all && rm -rf /var/cache/dnf /var/cache/libdnf5
 
-COPY src/configure-live.sh /usr/local/libexec/utah-configure-live
-RUN chmod 0755 /usr/local/libexec/utah-configure-live && \
-    /usr/local/libexec/utah-configure-live
+# Bake the installer plus precisely the Flatpaks declared by the Bluefin
+# Brewfile into the squashfs. The cache is only a build accelerator; /var/lib
+# is committed into the live image and copied to the installed target offline.
+COPY src/install-flatpaks.sh /usr/local/libexec/utah-install-live-flatpaks
+RUN --mount=type=cache,target=/var/cache/flatpak-dl,id=utah-flatpak \
+    awk -F '"' '/^flatpak / {print $2}' /usr/share/ublue-os/homebrew/system-flatpaks.Brewfile > /tmp/flatpaks-list && \
+    chmod 0755 /usr/local/libexec/utah-install-live-flatpaks && \
+    /usr/local/libexec/utah-install-live-flatpaks
+
+COPY src/ /tmp/utah-live-src/
+RUN chmod 0755 /tmp/utah-live-src/configure-live.sh && \
+    /tmp/utah-live-src/configure-live.sh
 
 # Rebuild against Utah's own kernel and userspace. Hummingbird's dracut emits
 # a harmless /root install warning in the container build context but still

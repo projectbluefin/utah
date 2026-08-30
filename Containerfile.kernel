@@ -21,14 +21,8 @@ ARG BASE_IMAGE=quay.io/hummingbird-community/bootc-os:latest@sha256:c5539f9ed4d9
 FROM ${BASE_IMAGE} AS builder
 
 # The toolchain the kernel build needs comes from the same pairing the image
-# itself installs from: Hummingbird's overlay plus Fedora 44.  Hummingbird alone
-# cannot satisfy it -- it carries perl but none of perl's ~40 subpackages, so
-# `dnf install perl` fails with forty lines of "nothing provides
-# perl-Archive-Tar needed by perl-4:5.42.2-525.hum1".  That went unnoticed while
-# this step ran inside the main Containerfile, which copies these repo files in
-# well before it.
+# itself installs from: Hummingbird's overlay plus the utah-packages factory.
 COPY packages/hummingbird.repo /etc/yum.repos.d/hummingbird.repo
-COPY packages/fedora-44.repo /etc/yum.repos.d/fedora-44.repo
 COPY scripts/install-ogc-kernel.sh /usr/local/libexec/utah-install-ogc-kernel
 COPY scripts/install-nvidia.sh /usr/local/libexec/utah-install-nvidia
 

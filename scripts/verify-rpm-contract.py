@@ -51,12 +51,12 @@ def main() -> int:
     unavailable = set(section(overlay, "unavailable"))
 
     # Prefer the set install-packages.py actually resolved. Recomputing it here
-    # is what let the two drift: install adds [fedora_v<major>] for the running
-    # release and this check never did, so on the Fedora 44 base
-    # gnupg2-scdaemon was installed but never verified -- it could have gone
-    # missing silently. The file is written by the install step, so in an image
-    # build it is always present; the manifest path below is the off-image
-    # fallback for --check, which asserts nothing about installation.
+    # is what let the two drift once: install added [fedora_v<major>] for the
+    # running release and this check never did, so a contract package was
+    # installed but never verified -- it could have gone missing silently. The
+    # file is written by the install step, so in an image build it is always
+    # present; the manifest path below is the off-image fallback for --check,
+    # which asserts nothing about installation.
     resolved = Path("/usr/share/utah/contract.txt")
     if resolved.exists():
         contract = [line for line in resolved.read_text().split() if line]

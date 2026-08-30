@@ -1,0 +1,18 @@
+{
+  "default_image": "ghcr.io/projectbluefin/utah:testing",
+  "fallback_flatpaks": [],
+  "images": [
+    {
+      "name": "Utah",
+      "imgref": "ghcr.io/projectbluefin/utah:testing",
+      "desc": "Utahraptor — a Bluefin-derived GNOME workstation on Fedora Hummingbird",
+      "icon": "resource:///org/bootcinstaller/Installer/images/bluefin.png",
+      "bootloader": "grub2",
+      "filesystem": "btrfs",
+      "composefs": false,
+      "needs_user_creation": true,
+      "flatpak_var_path": "var/lib/flatpak",
+      "filesystems": ["btrfs", "xfs"]
+    }
+  ]
+}

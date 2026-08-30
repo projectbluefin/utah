@@ -37,6 +37,8 @@ disable_unit() {
 # Hummingbird intentionally does not ship every Bluefin integration package.
 enable_unit rechunker-group-fix.service
 enable_unit brew-setup.service
+enable_unit flatpak-nuke-fedora.service
+enable_unit flatpak-preinstall.service
 enable_unit gdm.service
 enable_unit firewalld.service
 enable_unit fwupd.service
@@ -47,6 +49,16 @@ enable_unit uupd.timer
 enable_unit ublue-system-setup.service
 enable_unit systemd-resolved.service
 enable_unit bootc-unified-storage.service
+
+# Bluefin's Brewfile and Bazaar preinstall hook need the Flathub remote before
+# first boot. Keep this as a .flatpakrepo descriptor so the remote is available
+# to both flatpak-preinstall and brew-setup without baking mutable /var state.
+install -d -m0755 /etc/flatpak/remotes.d
+curl --fail --retry 3 --silent --show-error \
+    --output /etc/flatpak/remotes.d/flathub.flatpakrepo \
+    https://dl.flathub.org/repo/flathub.flatpakrepo
+
+disable_unit flatpak-add-fedora-repos.service
 
 # Keep image updates under uupd/bootc rather than the legacy rpm-ostree path.
 disable_unit rpm-ostree.service

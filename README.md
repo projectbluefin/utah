@@ -25,7 +25,7 @@ issues](https://github.com/projectbluefin/utah/issues) is the whole point.
 Hummingbird](https://packages.redhat.com), which supplies a hardened, fast-moving
 bootable base and no desktop at all. Utah adds the desktop: Bluefin's package
 contract on top, and the GNOME 51 stack built from source because neither
-Hummingbird nor Fedora 44 ships it.
+Hummingbird nor a Fedora release ships it.
 
 Two repositories, the way `common` and `brew` already work:
 

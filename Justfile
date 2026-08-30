@@ -1,4 +1,4 @@
-repo_organization := env_var_or_default("REPO_ORGANIZATION", "hanthor")
+repo_organization := env_var_or_default("REPO_ORGANIZATION", "projectbluefin")
 image := "utah"
 kernel_cache_image := "utah-kernel-cache"
 base_dir := env_var_or_default("BASE_DIR", "output")
@@ -21,11 +21,30 @@ check:
     grep -q 'enable ublue-system-setup.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
     test -f scripts/configure-services.sh
     bash -n scripts/configure-services.sh
+    test -f scripts/configure-branding.sh
+    bash -n scripts/configure-branding.sh
+    test -f scripts/verify-desktop-contract.py
+    test -f scripts/verify-gnome-extensions.py
+    test -f contracts/bluefin-desktop.toml
+    python3 -m py_compile scripts/verify-desktop-contract.py scripts/verify-gnome-extensions.py
+    python3 scripts/verify-desktop-contract.py --check contracts/bluefin-desktop.toml
+    python3 scripts/verify-gnome-extensions.py --source
+    grep -q '/system_files/bluefin' Containerfile
+    grep -q 'flatpak-preinstall.service' scripts/configure-services.sh
+    grep -q 'flathub.flatpakrepo' scripts/configure-services.sh
     test -f iso/live/Containerfile
     test -f iso/live/src/configure-live.sh
+    test -f iso/live/src/install-flatpaks.sh
+    test -f iso/live/src/etc/bootc-installer/images.json
+    test -f iso/live/src/etc/bootc-installer/recipe.json
     test -f iso/scripts/build-iso.sh
     bash -n iso/live/src/configure-live.sh
+    bash -n iso/live/src/install-flatpaks.sh
     bash -n iso/scripts/build-iso.sh
+    python3 -m json.tool iso/live/src/etc/bootc-installer/images.json >/dev/null
+    python3 -m json.tool iso/live/src/etc/bootc-installer/recipe.json >/dev/null
+    grep -q 'org.bootcinstaller.Installer' iso/live/src/install-flatpaks.sh
+    grep -q 'containers-storage' iso/scripts/build-iso.sh
     grep -q 'UTAH_LIVE' iso/scripts/build-iso.sh
     grep -q 'ENABLE_SSHD' Containerfile
     grep -q 'ENABLE_SSHD="${ENABLE_SSHD:-0}"' Justfile
@@ -56,6 +75,19 @@ check:
     # config/flavors.json exists to stop: narrowing the build matrix while
     # promote and release still name images nothing produces fails late.
     ! grep -rn 'utah-nvidia\|utah-gaming' .github/workflows/
+
+# Verify branding, desktop defaults, first-boot Flatpak policy, and service
+# enablement in an already-composed image. The same verifier runs in the
+# Containerfile, so this is useful for a local image or a CI artifact.
+check-desktop-contract image_ref="localhost/utah:testing":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    podman run --rm --entrypoint /usr/bin/python3 \
+      -v "$PWD/contracts/bluefin-desktop.toml:/tmp/bluefin-desktop.toml:ro" \
+      -v "$PWD/scripts/verify-desktop-contract.py:/tmp/verify-desktop-contract.py:ro" \
+      "{{ image_ref }}" /tmp/verify-desktop-contract.py /tmp/bluefin-desktop.toml
+    podman run --rm --entrypoint /usr/bin/python3 \
+      "{{ image_ref }}" /usr/local/libexec/utah-verify-gnome-extensions
 
 # Fail fast when a contract package is in none of the repositories the image
 # actually enables, instead of discovering it twenty minutes into a build.
@@ -247,7 +279,7 @@ iso stream="testing" debug="0":
     ref="localhost/{{ image }}:{{ stream }}"
     podman image exists "$ref" || { echo "Image $ref not found; run just build-ghcr {{ image }} {{ stream }} main" >&2; exit 1; }
     mkdir -p "{{ base_dir }}"
-    bash iso/scripts/build-iso.sh "$ref" "$(realpath "{{ base_dir }}")/utah-live.iso" "Utah Live" "{{ debug }}"
+    bash iso/scripts/build-iso.sh "$ref" "$(realpath "{{ base_dir }}")/utah-live.iso" "Utah Live" "{{ debug }}" "ghcr.io/{{ repo_organization }}/{{ image }}:{{ stream }}"
 
 # Boot the live ISO with QEMU-for-Docker and expose its noVNC console.
 boot-iso:

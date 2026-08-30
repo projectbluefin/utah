@@ -14,15 +14,15 @@ import sys
 import tomllib
 from pathlib import Path
 
-# Hummingbird plus Fedora 44, the pairing Hummingbird composes its own
-# buildroot from. NOT the rolling Rawhide: Rawhide has moved to OpenSSL 4
-# while the Hummingbird base pins 3.5.6, so a Rawhide desktop stack is
-# unresolvable here -- 38 packages in this contract's closure need
-# libcrypto.so.4, including boot-critical ones.
+# Utah installs only from its Hummingbird base plus the utah-packages
+# factory, which publishes every GNOME 51 and Bluefin-parity binary this
+# image needs rebuilt against Hummingbird. Fedora repositories are never
+# enabled at runtime: they are bootstrap material for the package factory's
+# buildroot, not a source of installed packages.
 # The factory is first so its Hummingbird-targeted rebuilds win over an
-# equally-versioned Fedora package. The repository is copied from the
+# equally-versioned Hummingbird package. The repository is copied from the
 # digest-pinned OCI package image by Containerfile.
-REPOS = ("utah-packages", "public-hummingbird-x86_64-rpms", "fedora-44", "fedora-44-updates")
+REPOS = ("utah-packages", "public-hummingbird-x86_64-rpms")
 
 
 def section(path: Path, name: str) -> list[str]:
@@ -120,8 +120,8 @@ def main() -> int:
 
     # Record exactly what this run resolved, so the contract check asserts the
     # set that was actually asked for rather than recomputing it and drifting.
-    # It drifted: install adds [fedora_v<major>] and the verifier never did, so
-    # on the Fedora 44 base gnupg2-scdaemon was installed and never checked.
+    # It drifted once: install added [fedora_v<major>] and the verifier never
+    # did, so a contract package was installed and never checked.
     resolved = Path("/usr/share/utah/contract.txt")
     try:
         resolved.parent.mkdir(parents=True, exist_ok=True)

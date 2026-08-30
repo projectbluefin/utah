@@ -84,7 +84,8 @@ fi
 # here and comes out again below.
 #
 # It is not in the repositories this image enables either. The base kernel is a
-# Fedora 43 build, 7.1.8-100.fc43, and we pair Hummingbird with Fedora 44:
+# Fedora 43 build, 7.1.8-100.fc43, and Utah enables only Hummingbird plus its
+# own package factory:
 #
 #   No match for argument: kernel-devel-7.1.8-100.fc43.x86_64
 #

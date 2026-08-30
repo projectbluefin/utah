@@ -22,13 +22,13 @@
 #
 #   This is why they are absent from the contract rather than listed under
 #   [unavailable]: [unavailable] means "no source provides this name at all",
-#   which is true of pipewire-libs-extra and false of these. Recording them as
-#   missing would be wrong, and recording them as satisfied would hide a real
-#   functional difference from Bluefin.
+#   which is false of these. Recording them as missing would be wrong, and
+#   recording them as satisfied would hide a real functional difference from
+#   Bluefin.
 #
 #   The factory is already building several of them for Hummingbird --
 #   intel-gmmlib, intel-mediasdk, intel-vpl-gpu-rt, libheif and libva all built
-#   in hanthor/hummingbird-github. When that overlay is published and enabled
+#   in projectbluefin/hummingbird-github. When that overlay is published and enabled
 #   here, it becomes the source that negativo17 is for Bluefin, and these can
 #   move into the contract as a version assertion rather than a name one.
 
@@ -72,15 +72,7 @@ packages = [
 # Packages Bluefin ships that none of Utah's repositories provide.  Each entry
 # MUST carry a tracking issue: this list is the documented parity debt, not a
 # dumping ground for packages that are merely inconvenient.
-#
-# pipewire-libs-extra
-#   Not a Fedora package at all: it only ever existed in negativo17's
-#   fedora-multimedia repo, which Bluefin enables for its whole [fedora]
-#   install.  Absent from Fedora 44 and from Hummingbird alike.
-#   Tracked in hanthor/utah#4.
-packages = [
-    "pipewire-libs-extra",
-]
+packages = []
 
 # nvidia-container-toolkit was recorded here as a second gap. It is not one, and
 # the reasoning that put it here was faulty: it came from UBlue's akmods bundle,

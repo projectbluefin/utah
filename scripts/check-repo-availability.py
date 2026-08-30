@@ -2,10 +2,10 @@
 """Check the package contract against the repositories Utah actually installs from.
 
 Every package Utah claims parity on is looked up in the repodata of the same
-repositories the image build enables: Hummingbird's own overlay and Fedora 44.
-A package that is neither available nor listed under [unavailable] in
-packages/utah.toml fails here, in the seconds-long preflight job, instead of
-twenty minutes into a container build.
+repositories the image build enables: Hummingbird's own overlay and the
+utah-packages factory. A package that is neither available nor listed under
+[unavailable] in packages/utah.toml fails here, in the seconds-long preflight
+job, instead of twenty minutes into a container build.
 
 Checking Rawhide instead would be actively misleading: Rawhide has moved to
 OpenSSL 4 while the Hummingbird base pins 3.5.6, so a package being present
@@ -23,12 +23,12 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-# The same repositories packages/hummingbird.repo and packages/fedora-44.repo
-# put into the image, in the same precedence order.
+# The same repositories the image installs from, in the same precedence order:
+# Hummingbird's own overlay plus the utah-packages factory (its Pages mirror,
+# since check-repos runs in CI before the OCI repo is copied into the image).
 REPOS = {
     "public-hummingbird": "https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
-    "fedora-44": "https://dl.fedoraproject.org/pub/fedora/linux/releases/44/Everything/x86_64/os/",
-    "fedora-44-updates": "https://dl.fedoraproject.org/pub/fedora/linux/updates/44/Everything/x86_64/",
+    "utah-packages": "https://projectbluefin.github.io/utah-packages/",
 }
 
 

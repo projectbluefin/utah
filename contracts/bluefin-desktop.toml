@@ -1,0 +1,134 @@
+# Runtime contract for Utah's Bluefin-derived desktop experience on top of
+# Hummingbird. This is intentionally separate from packages/bluefin.toml:
+# package parity proves RPMs; this file proves Utah identity, Bluefin desktop
+# defaults, and first-boot Flatpak policy.
+
+[branding]
+files = [
+  "/usr/share/ublue-os/bluefin-logos/bluefin.png",
+  "/usr/share/ublue-os/bluefin-logos/chicken.png",
+  "/usr/share/ublue-os/bluefin-logos/symbols/bluefin",
+  "/usr/share/backgrounds/bluefin/01-bluefin.xml",
+  "/usr/share/backgrounds/bluefin/06-bluefin.xml",
+  "/usr/share/glib-2.0/schemas/zz0-bluefin-modifications.gschema.override",
+  "/usr/share/ublue-os/fastfetch-user-count",
+  "/usr/share/ublue-os/bazaar-install-count",
+]
+
+[branding.os_release]
+NAME = "Utah"
+ID = "utah"
+ID_LIKE = "fedora"
+CPE_NAME = "cpe:/o:universal-blue:utah"
+HOME_URL = "https://projectbluefin.io"
+DOCUMENTATION_URL = "https://docs.projectbluefin.io"
+SUPPORT_URL = "https://github.com/projectbluefin/utah/issues/"
+BUG_REPORT_URL = "https://github.com/projectbluefin/utah/issues/"
+DEFAULT_HOSTNAME = "utah"
+VERSION_CODENAME = "Utahraptor"
+IMAGE_ID = "utah"
+
+[branding.os_release_patterns]
+PRETTY_NAME = '^Utah \(Version: .+\)$'
+VERSION = '^.+ \(Hummingbird\)$'
+VARIANT_ID = '^utah(-.*)?$'
+OSTREE_VERSION = '^.+$'
+IMAGE_VERSION = '^.+$'
+BUILD_ID = '^.+$'
+
+[branding.image_info]
+image-name = "utah"
+image-vendor = "projectbluefin"
+base-image-name = "hummingbird"
+
+[branding.image_info_patterns]
+image-flavor = '^(main|nvidia|gaming|nvidia-gaming)$'
+image-ref = '^ostree-image-signed:docker://ghcr\.io/projectbluefin/utah(-nvidia|-gaming|-nvidia-gaming)?$'
+image-tag = '^.+$'
+fedora-version = '^\d+$'
+
+[configuration]
+files = [
+  "/etc/dconf/db/distro.d/01-bluefin-folders",
+  "/etc/dconf/db/distro.d/02-bluefin-keybindings",
+  "/etc/dconf/db/distro.d/03-bluefin-ptyxis-palette",
+  "/etc/dconf/db/distro.d/04-bluefin-custom-command-menu",
+  "/etc/dconf/db/distro.d/05-bluefin-searchlight-extension",
+  "/etc/dconf/db/distro.d/locks/01-bluefin-locked-settings",
+]
+
+[configuration.file_contains]
+"/usr/share/glib-2.0/schemas/zz0-bluefin-modifications.gschema.override" = [
+  "io.github.kolunmi.Bazaar.desktop",
+  "picture-uri='file:///usr/share/backgrounds/bluefin/",
+]
+"/etc/dconf/db/distro.d/04-bluefin-custom-command-menu" = [
+  "Bazaar App Store",
+  "docs.projectbluefin.io",
+]
+"/etc/dconf/db/distro.d/02-bluefin-keybindings" = [
+  "xdg-terminal-exec",
+]
+
+[flatpak]
+files = [
+  "/etc/flatpak/remotes.d/flathub.flatpakrepo",
+  "/usr/share/flatpak/preinstall.d/bazaar.preinstall",
+  "/usr/share/ublue-os/privileged-setup.hooks.d/99-flatpaks.sh",
+  "/usr/share/ublue-os/homebrew/system-flatpaks.Brewfile",
+]
+brewfile = "/usr/share/ublue-os/homebrew/system-flatpaks.Brewfile"
+remote = "/etc/flatpak/remotes.d/flathub.flatpakrepo"
+remote_url = "https://dl.flathub.org/repo/"
+apps = [
+  "be.alexandervanhee.gradia",
+  "com.github.PintaProject.Pinta",
+  "com.github.tchx84.Flatseal",
+  "com.mattjakeman.ExtensionManager",
+  "com.ranfdev.DistroShelf",
+  "io.github.flattool.Ignition",
+  "io.github.flattool.Warehouse",
+  "io.github.kolunmi.Bazaar",
+  "io.gitlab.adhami3310.Impression",
+  "io.missioncenter.MissionCenter",
+  "it.mijorus.smile",
+  "org.gnome.Calculator",
+  "org.gnome.Calendar",
+  "org.gnome.Characters",
+  "org.gnome.Connections",
+  "org.gnome.Contacts",
+  "org.gnome.DejaDup",
+  "org.gnome.FileRoller",
+  "org.gnome.Firmware",
+  "org.gnome.Logs",
+  "org.gnome.Loupe",
+  "org.gnome.Maps",
+  "org.gnome.NautilusPreviewer",
+  "org.gnome.Papers",
+  "org.gnome.Showtime",
+  "org.gnome.SimpleScan",
+  "org.gnome.Snapshot",
+  "org.gnome.Decibels",
+  "org.gnome.TextEditor",
+  "org.gnome.Weather",
+  "org.gnome.baobab",
+  "org.gnome.clocks",
+  "org.gnome.font-viewer",
+  "org.gtk.Gtk3theme.adw-gtk3",
+  "org.gtk.Gtk3theme.adw-gtk3-dark",
+  "org.mozilla.thunderbird",
+  "org.mozilla.firefox",
+  "page.tesk.Refine",
+]
+
+[services]
+enabled = [
+  "bootc-unified-storage.service",
+  "brew-setup.service",
+  "dconf-update.service",
+  "flatpak-nuke-fedora.service",
+  "flatpak-preinstall.service",
+  "gdm.service",
+  "ublue-system-setup.service",
+  "uupd.timer",
+]
