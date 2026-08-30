@@ -37,6 +37,6 @@ jobs:
       registry: ghcr.io/${{ github.repository_owner }}
       variants: ${{ needs.variants.outputs.list }}
       cosign_identity_regexp: >-
-        ^https://github\.com/hanthor/utah/\.github/workflows/build\.yml@refs/heads/testing$
+        ^https://github\.com/projectbluefin/utah/\.github/workflows/build\.yml@refs/heads/testing$
       run_e2e: false
     secrets: inherit
