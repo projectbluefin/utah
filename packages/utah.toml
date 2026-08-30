@@ -72,7 +72,40 @@ packages = [
 # Packages Bluefin ships that none of Utah's repositories provide.  Each entry
 # MUST carry a tracking issue: this list is the documented parity debt, not a
 # dumping ground for packages that are merely inconvenient.
-packages = []
+#
+# evolution-ews-core
+#   The Exchange Web Services plugin for Evolution (fedora_v43 section of
+#   the Bluefin manifest). Building it requires the entire
+#   evolution-data-server stack -- camel, evolution-mail, evolution-shell,
+#   libebook, libecal, libedata-book -- which the factory does not yet build.
+#   Disproportionate cost for one Exchange plugin binary; the EDS closure can
+#   be added to the factory if Exchange support is ever required.
+#
+# fish
+#   Fedora's fish spec uses %cargo_generate_buildrequires, which requires
+#   every Rust crate as a system RPM (rust-anstyle, rust-clap, ...). Fedora
+#   44 does not ship Rust crate binary packages -- they exist only in
+#   Rawhide -- so the buildroot cannot satisfy them. Building fish needs a
+#   vendored/cargo-fetch rebuild of the spec rather than the system-crate
+#   model.
+#
+# tailscale
+#   tailscale 1.98.8's vendored go-json-experiment references json.SkipFunc,
+#   added to the stdlib in Go 1.28. Hummingbird's newest Go is 1.27, so the
+#   vendored tree cannot compile. Needs a version pin whose vendored deps
+#   target Go 1.27, or a Go 1.28+ toolchain in the buildroot.
+#
+# zsh
+#   The HTML docs build target pulls texi2html, which drags Fedora's ruby
+#   (ruby-default-gems) into a buildroot that already carries Hummingbird's
+#   ruby4.0. The two conflict on file paths, so the transaction fails. Needs
+#   either a ruby exclusion in the buildroot or dropping the html subpackage.
+packages = [
+    "evolution-ews-core",
+    "fish",
+    "tailscale",
+    "zsh",
+]
 
 # nvidia-container-toolkit was recorded here as a second gap. It is not one, and
 # the reasoning that put it here was faulty: it came from UBlue's akmods bundle,
