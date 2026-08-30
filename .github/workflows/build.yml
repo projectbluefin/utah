@@ -99,7 +99,7 @@ jobs:
     # kernel_cache is skipped whenever no flavor needs it, and a skipped
     # dependency would otherwise skip this too.
     if: ${{ !cancelled() && needs.contract.result == 'success' && needs.kernel_cache.result != 'failure' }}
-    uses: projectbluefin/actions/.github/workflows/reusable-build.yml@v1
+    uses: projectbluefin/actions/.github/workflows/reusable-build.yml@eb4c546389f19ad9e42f1af052623de73c620ebb # v1
     permissions:
       contents: read
       packages: write

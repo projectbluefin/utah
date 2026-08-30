@@ -37,7 +37,7 @@ jobs:
   execute:
     needs: [check-trigger, variants]
     if: needs.check-trigger.outputs.is-promotion == 'true'
-    uses: projectbluefin/actions/.github/workflows/reusable-execute-release.yml@v1
+    uses: projectbluefin/actions/.github/workflows/reusable-execute-release.yml@eb4c546389f19ad9e42f1af052623de73c620ebb # v1
     permissions:
       actions: read
       contents: write
