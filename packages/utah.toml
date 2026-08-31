@@ -1,4 +1,4 @@
-# Utah's Rawhide overlay on top of the Bluefin package contract.
+# Utah's overlay on top of the Bluefin package contract.
 #
 # packages/bluefin.toml is a byte-for-byte copy of projectbluefin/bluefin's
 # build_files/packages/base.toml and must stay that way -- it is the parity
@@ -8,7 +8,7 @@
 # Sections:
 #   [gnome]        GNOME 51 desktop contract Hummingbird does not ship
 #   [build]        toolchain needed to build the pinned GNOME extensions
-#   [unavailable]  Bluefin contract packages with no Fedora Rawhide source
+#   [unavailable]  Bluefin contract packages with no source in Utah's enabled repositories
 #
 # On [multimedia_overrides], which Utah deliberately does not install:
 #
@@ -33,8 +33,9 @@
 #   move into the contract as a version assertion rather than a name one.
 
 [gnome]
-# Hummingbird supplies the bootable base but not a desktop.  Fedora Rawhide
-# supplies the complete GNOME 51 dependency graph.
+# Hummingbird supplies the bootable base but not a desktop.  Utah's pinned
+# utah-packages repository and Fedora 44 supply the complete GNOME 51 dependency
+# graph.
 packages = [
     "gnome-control-center",
     "gnome-session",

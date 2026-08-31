@@ -12,6 +12,9 @@ the flavor set and the kernel cache work. The README is the user-facing page.
   upstream model.
 - Pinned `utah-packages` OCI repository, consumed before Fedora packages so
   Hummingbird-targeted rebuilds are actually installed.
+- The package factory builds GNOME 51 and desktop services from verified
+  upstream sources. Utah's own repository and Fedora 44 supply the complete
+  desktop dependency graph.
 - Bluefin's base package manifest is the compatibility contract.
 - Bluefin's pinned `projectbluefin/common` and `ublue-os/brew` OCI payloads,
   plus its GNOME Extensions submodules, are retained with their normal build
