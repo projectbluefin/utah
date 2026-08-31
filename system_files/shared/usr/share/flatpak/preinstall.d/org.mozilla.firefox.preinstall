@@ -1,0 +1,4 @@
+[Flatpak Preinstall org.mozilla.firefox]
+Branch=stable
+IsRuntime=false
+CollectionID=org.flathub.Stable
