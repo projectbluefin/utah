@@ -26,7 +26,11 @@ ARG SHA_HEAD_SHORT=unknown
 # ENABLE_SSHD=1, following tunaOS's debug-image convention.
 ARG ENABLE_SSHD=0
 # Renovate can update this pinned release independently of the base image.
+# UUPD_SHA256 is the x86_64 tarball digest from the release's published
+# uupd_<version>_checksums.txt; a mutable download that executed in the image
+# is otherwise unverified. Both move together, so Renovate updates both.
 ARG UUPD_VERSION=v1.4.0
+ARG UUPD_SHA256=c7463f193cd35b92cde2ee05496501d6ac13808899bd26e17e027b7ee9ee1acc
 
 LABEL org.opencontainers.image.title="Utah"
 LABEL org.opencontainers.image.description="A Hummingbird-based Bluefin GNOME workstation"
@@ -104,7 +108,9 @@ RUN /usr/local/libexec/utah-install-packages \
 # removes the extension build toolchain before the final cleanup.
 RUN mkdir -p /tmp/uupd && \
     curl -fsSL "https://github.com/ublue-os/uupd/releases/download/${UUPD_VERSION}/uupd_Linux_x86_64.tar.gz" \
-      | tar -xzf - -C /tmp/uupd && \
+      -o /tmp/uupd/uupd_Linux_x86_64.tar.gz && \
+    echo "${UUPD_SHA256}  /tmp/uupd/uupd_Linux_x86_64.tar.gz" | sha256sum --check --strict && \
+    tar -xzf /tmp/uupd/uupd_Linux_x86_64.tar.gz -C /tmp/uupd && \
     curl -fsSL "https://raw.githubusercontent.com/ublue-os/uupd/${UUPD_VERSION}/uupd.service" \
       -o /tmp/uupd/uupd.service && \
     curl -fsSL "https://raw.githubusercontent.com/ublue-os/uupd/${UUPD_VERSION}/uupd.timer" \
