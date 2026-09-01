@@ -9,6 +9,10 @@ INSTALLER_APP_ID=org.bootcinstaller.Installer
 INSTALLER_REPO=projectbluefin/bootc-installer
 FALLBACK_REPO=tuna-os/tuna-installer
 BUNDLE=org.bootcinstaller.Installer.flatpak
+# Pin the installer release so ISO composition is reproducible rather than
+# resolving a mutable `latest` during the build. Override with
+# UTAH_INSTALLER_VERSION when validating a newer installer.
+INSTALLER_VERSION="${UTAH_INSTALLER_VERSION:-v3.0.16}"
 
 mkdir -p "${FLATPAK_CACHE}/tmp" /run/dbus
 export TMPDIR="${FLATPAK_CACHE}/tmp"
@@ -24,10 +28,10 @@ flatpak remote-add --system --if-not-exists flathub https://dl.flathub.org/repo/
 # A bundle import needs a temporary local remote in an OCI build: direct
 # --bundle installs omit the deploy/active ref without flatpak-system-helper.
 if ! curl --retry 3 --fail --location \
-    "https://github.com/${INSTALLER_REPO}/releases/latest/download/${BUNDLE}" \
+    "https://github.com/${INSTALLER_REPO}/releases/download/${INSTALLER_VERSION}/${BUNDLE}" \
     -o /tmp/bootc-installer.flatpak; then
     curl --retry 3 --fail --location \
-        "https://github.com/${FALLBACK_REPO}/releases/latest/download/${BUNDLE}" \
+        "https://github.com/${FALLBACK_REPO}/releases/download/${INSTALLER_VERSION}/${BUNDLE}" \
         -o /tmp/bootc-installer.flatpak
 fi
 local_repo=/tmp/bootc-installer-repo

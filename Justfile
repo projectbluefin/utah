@@ -50,6 +50,10 @@ check:
     grep -q 'ENABLE_SSHD="${ENABLE_SSHD:-0}"' Justfile
     grep -q 'ARG PACKAGE_IMAGE_SHA=' Containerfile
     grep -q 'COPY --from=packages /repository /etc/utah-packages' Containerfile
+    # Every executable release asset fetched during composition must be pinned
+    # and verified; no build may resolve a mutable latest release.
+    python3 -m py_compile scripts/check-download-integrity.py
+    python3 scripts/check-download-integrity.py
     grep -q '"utah-packages"' scripts/install-packages.py
     python3 -m py_compile scripts/install-packages.py
     python3 -m py_compile scripts/verify-rpm-contract.py
