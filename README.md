@@ -14,9 +14,10 @@ Bluefin built on Fedora Hummingbird. The more ... civilized murder machine.
 
 ![alt](https://github.com/user-attachments/assets/56428338-54a0-4376-a53b-5f02f8b101a1)
 
-**Experimental pre-alpha** — this does not have users yet, it has a build. No
-image has been published, there is no installer and no ISO. Nothing here is
-ready to run on a machine you care about. [Filing
+**Experimental pre-alpha** — the image builds, boots, and reaches GDM in local
+QEMU validation. No image has been published to a registry, there is no
+installer payload, and no ISO has been released. Nothing here is ready to run on
+a machine you care about. [Filing
 issues](https://github.com/projectbluefin/utah/issues) is the whole point.
 
 ## What it is
@@ -57,7 +58,7 @@ being noticed later.
 
 | | count |
 | --- | --- |
-| Bluefin contract installed | **64** |
+| Bluefin contract installed | **62** |
 | Utah additions (GNOME 51, desktop services) | 12 |
 | Genuinely unavailable | **1** |
 
@@ -69,7 +70,10 @@ verify step asserts *that file*, so the two cannot disagree.
 This is the honest list, and it is why the label above says pre-alpha.
 
 - **Nothing is published.** No image, no ISO, no installer. An ISO is planned as
-  a fork of [dakota-iso](https://github.com/projectbluefin/dakota-iso).
+  a fork of [dakota-iso](https://github.com/projectbluefin/dakota-iso); the
+  initial single-architecture live ISO bring-up is now scaffolded and boots to
+  GDM in QEMU, and `bootc-installer`/offline payload integration is the next ISO
+  milestone.
 - **The NVIDIA and gaming flavors are unproven.** The OGC kernel compiles with
   `sched_ext` and `binderfs` genuinely enabled, and the NVIDIA open module
   compiles for the base kernel. The module against the OGC kernel, the driver
@@ -85,8 +89,6 @@ This is the honest list, and it is why the label above says pre-alpha.
   this closes when Utah consumes that overlay.
 - **The image is still pre-alpha.** The digest-pinned `utah-packages` OCI
   repository is consumed and the local QEMU image reaches GDM and GNOME Shell.
-  Initial single-architecture live ISO bring-up is now scaffolded; installer
-  payload/offline installation integration is still pending.
 - **CUDA is deliberately excluded** — 7.68 GB installed. Use the NVIDIA
   container toolkit, which is included, and run CUDA in a container.
 
@@ -97,3 +99,26 @@ things stand.
 
 See [docs/building.md](docs/building.md) for what the image is made of, how to
 build it locally, and how the flavor set and kernel cache work.
+
+## CI/CD pipeline and Dakota-style gates
+
+The project uses Dakota-style quality gates to validate every change before it
+reaches users:
+
+1. **Contract gate** — `just check` validates manifests, enforces Bluefin parity,
+   and asserts every contract package is resolvable in Utah's enabled
+   repositories. This runs on every PR and push.
+2. **Build gate** — The image is built for all enabled flavors only after the
+   contract gate passes. Kernel cache images are built on demand, keyed by a
+   hash of their inputs.
+3. **End-to-end gate** — `post-testing-e2e` validates the `:testing` images,
+   promotes them to the `:testing` tag, and gates promotion to `:main` on
+   success.
+4. **Release gate** — `execute-release` runs `smoke` and `common` gate suites
+   before producing final artifacts. Images are signed with cosign and published
+   with SBOMs and provenance attestations.
+
+Rollback is handled by branch promotion: `main` is protected, `testing` is the
+integration branch, and `sync-main-to-testing` resets `testing` to `main` after
+each release. Artifacts are verified by `verify-rpm-contract.py`, which asserts
+the exact package set recorded at install time.
