@@ -3,7 +3,7 @@ ARG BASE_IMAGE=quay.io/hummingbird-community/bootc-os:latest@sha256:c5539f9ed4d9
 # Keep this pin in Utah so an image build is reproducible and can be reviewed
 # against the exact package set it consumes.
 ARG PACKAGE_IMAGE=ghcr.io/projectbluefin/utah-packages
-ARG PACKAGE_IMAGE_SHA=sha256:2848c60d51fc6d75c3c89b246aad0e5ebf1fe84c5b7696203f02f14727bd158b
+ARG PACKAGE_IMAGE_SHA=sha256:9cb667291a1a0b112c39d3c6a69116bb52cb1a10c7df12290b9c298b5682426c
 ARG COMMON_IMAGE=ghcr.io/projectbluefin/common
 ARG COMMON_IMAGE_SHA=sha256:fb943c87866292fb74eb74610e9cd08a1a91fe42e763e28473f3f57cf18f26a5
 ARG BREW_IMAGE=ghcr.io/ublue-os/brew
