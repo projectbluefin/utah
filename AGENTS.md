@@ -25,7 +25,7 @@ just build-ghcr utah testing main     # local image build -> localhost/utah:test
 just check-desktop-contract           # in-image verifiers against a built image
 just generate-bootable-image testing  # bootc install to-disk -> output/bootable.raw
 just boot-vm                          # QEMU/noVNC; confirm GDM + GNOME Shell render
-just iso testing && just boot-iso     # live ISO build + boot (see docs/building.md)
+just iso testing && just boot-iso     # live ISO build + boot (see docs/skills/local-testing.md)
 ```
 
 `just check` is the gate CI runs first; a change that fails it fails the whole
@@ -43,8 +43,9 @@ checks (`scripts/check-skill-frontmatter.sh`, `scripts/check-skill-index.sh`,
   it; sync it verbatim from upstream. CI diffs it on every run
   (`just check-parity`).
 - **Utah's own package changes live in `packages/utah.toml`** (`[gnome]`,
-  `[build]`, `[unavailable]`). Every `[unavailable]` entry carries a tracking
-  issue. A missing contract package is a build failure, never a silent skip.
+  `[build]`, `[unavailable]`). Every `[unavailable]` entry MUST carry a
+  tracking issue. A missing contract package is a build failure, never a
+  silent skip.
 - **`config/flavors.json` is the single source of the flavor set.** No
   workflow may name `utah-nvidia` or `utah-gaming` literally — `just check`
   fails on it. Retire a flavor by moving it under `retired` with the reason.
@@ -112,5 +113,6 @@ Before marking work done:
 ## See also
 
 - [`README.md`](README.md) — user-facing overview and honest gap list.
-- [`docs/building.md`](docs/building.md) — what the image is made of, the
-  flavor set, the kernel cache, and where the build time goes.
+- [`docs/building.md`](docs/building.md) — the contributor build quickstart.
+- [`docs/skills/`](docs/skills/) — the canonical deep documentation, plus the
+  generated catalog (`index.json` / `index.md`).

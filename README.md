@@ -96,6 +96,6 @@ things stand.
 
 ## Contributing or building from source
 
-See [docs/building.md](docs/building.md) for what the image is made of, how to
-build it locally, and how the flavor set and kernel cache work. Agents start at
+See [docs/building.md](docs/building.md) for how to build the image locally,
+and [docs/skills/](docs/skills/) for the deep documentation. Agents start at
 [AGENTS.md](AGENTS.md).

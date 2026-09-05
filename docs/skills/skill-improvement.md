@@ -39,11 +39,12 @@ Output 1 without Output 2 leaves the factory no smarter.
 
 ## Where learnings go in Utah
 
-Utah keeps deep documentation next to the code: `docs/building.md`, the
-Containerfile comment blocks, manifest headers, and script headers. Update the
-nearest of those first. Add a file under `docs/skills/` only when no existing
-source owns the topic, and add it to the task index in
-[`../SKILL.md`](../SKILL.md).
+The relevant `docs/skills/*.md` file is the first home for learnings: update
+it, or create a new skill file, add it to the router table in
+[`../SKILL.md`](../SKILL.md), and regenerate the catalog
+(`python3 scripts/generate_skill_index.py --write`). Code-adjacent comments —
+the Containerfile comment blocks, manifest headers, and script headers —
+remain the place for mechanism detail beside the code.
 
 Factory-wide learnings go to `projectbluefin/common` as an issue with the
 learning, affected component, and evidence.

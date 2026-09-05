@@ -1,9 +1,10 @@
 # Utah Skill Router
 
 Agent entry point for `projectbluefin/utah`. Find the source that matches your
-task, load only that, then act. Utah keeps its deep documentation next to the
-code it describes — in `docs/building.md`, in the Containerfile's comment
-blocks, and in the manifests' headers — rather than duplicating it here.
+task, load only that, then act. Utah's deep documentation lives in
+[`skills/`](skills/) — the skills in the task index below. The Containerfile's
+comment blocks and the manifests' headers stay canonical for mechanism detail
+next to the code, and the skills cite them.
 
 ## Read order
 
