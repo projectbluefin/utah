@@ -4,6 +4,9 @@ ARG BASE_IMAGE=quay.io/hummingbird-community/bootc-os:latest@sha256:c5539f9ed4d9
 # against the exact package set it consumes.
 ARG PACKAGE_IMAGE=ghcr.io/projectbluefin/utah-packages
 ARG PACKAGE_IMAGE_SHA=sha256:2848c60d51fc6d75c3c89b246aad0e5ebf1fe84c5b7696203f02f14727bd158b
+# CI keeps PACKAGE_IMAGE_SHA pinned. PACKAGE_IMAGE_REF supports a local image
+# in containers-storage, where no registry digest is available.
+ARG PACKAGE_IMAGE_REF=${PACKAGE_IMAGE}@${PACKAGE_IMAGE_SHA}
 ARG COMMON_IMAGE=ghcr.io/projectbluefin/common
 ARG COMMON_IMAGE_SHA=sha256:fb943c87866292fb74eb74610e9cd08a1a91fe42e763e28473f3f57cf18f26a5
 ARG BREW_IMAGE=ghcr.io/ublue-os/brew
@@ -11,7 +14,7 @@ ARG BREW_IMAGE_SHA=sha256:8f952ae54585db9f855a306ef365e13609ed7c7944b12b823ba7d5
 
 FROM ${COMMON_IMAGE}@${COMMON_IMAGE_SHA} AS common
 FROM ${BREW_IMAGE}@${BREW_IMAGE_SHA} AS brew
-FROM ${PACKAGE_IMAGE}@${PACKAGE_IMAGE_SHA} AS packages
+FROM ${PACKAGE_IMAGE_REF} AS packages
 FROM ${BASE_IMAGE}
 
 ARG IMAGE_NAME=utah
