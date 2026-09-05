@@ -8,6 +8,8 @@ published — no image, no ISO artifact, no installer.
 
 1. This file — repo rules, build commands, and boundaries.
 2. [`docs/SKILL.md`](docs/SKILL.md) — task → source router.
+   `docs/skills/index.json` / `docs/skills/index.md` are the generated catalog
+   of the skills it routes to.
 3. [`projectbluefin/common`](https://github.com/projectbluefin/common)
    `AGENTS.md` and `docs/skills/factory-onboarding.md` — the shared-contract
    sidecar. Factory-wide rules; never overrides this repository's local
@@ -29,7 +31,9 @@ just iso testing && just boot-iso     # live ISO build + boot (see docs/building
 `just check` is the gate CI runs first; a change that fails it fails the whole
 matrix. It needs the GNOME extension submodules initialized
 (`git submodule update --init --recursive`) or the extension contract check
-fails with missing `metadata.json` errors. Run `just check` and
+fails with missing `metadata.json` errors. It also runs the skill catalog
+checks (`scripts/check-skill-frontmatter.sh`, `scripts/check-skill-index.sh`,
+`python3 scripts/generate_skill_index.py --check`). Run `just check` and
 `pre-commit run --all-files` before every commit.
 
 ## Invariants — do not break
@@ -87,6 +91,12 @@ fails with missing `metadata.json` errors. Run `just check` and
 
 Every session: ship the work AND update the relevant skill file in
 `docs/skills/`. Same PR. Not a follow-up.
+
+`docs/SKILL.md` (the router) and `docs/skills/index.json` (the generated
+catalog) are canonical. When skills change — added, removed, or front-matter
+edited — regenerate the catalog with
+`python3 scripts/generate_skill_index.py --write`; `just check` and pre-commit
+fail on a stale catalog.
 
 Banned:
 - No changelog files. Delete `IMPROVEMENTS.md`, `CHANGELOG.md`, `SESSION.md`

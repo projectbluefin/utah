@@ -22,3 +22,21 @@ repos:
         entry: 'uses:(?!.*projectbluefin/).*@(main|master|latest|v[0-9])'
         types: [yaml]
         files: '\.github/workflows/'
+      - id: check-skill-frontmatter
+        name: Validate skill front-matter
+        language: system
+        entry: bash scripts/check-skill-frontmatter.sh
+        pass_filenames: false
+        always_run: true
+      - id: check-skill-index
+        name: Validate docs/SKILL.md skill index
+        language: system
+        entry: bash scripts/check-skill-index.sh
+        pass_filenames: false
+        always_run: true
+      - id: check-skill-catalog
+        name: Validate docs/skills/index.json is up to date
+        language: system
+        entry: python3 scripts/generate_skill_index.py --check
+        pass_filenames: false
+        always_run: true

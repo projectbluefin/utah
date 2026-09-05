@@ -32,8 +32,8 @@ each pinned to a SHA tagged `v1`:
 - `.github/workflows/sync-main-to-testing.yml` -- every push to `main`.
 
 CI delegates builds, vulnerability reporting, SBOMs, keyless signatures,
-provenance, caching, and rechunking to `projectbluefin/actions@v1` (design
-bullet, `docs/building.md`).
+provenance, caching, and rechunking to `projectbluefin/actions@v1` (originated
+as a `docs/building.md` design bullet; now lives in this skill).
 
 ## contract: the cheap gate
 
