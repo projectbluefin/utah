@@ -1,0 +1,149 @@
+{
+  "generated_at": "2026-09-05",
+  "schema_version": "1.0",
+  "skills": [
+    {
+      "id": "ci-workflows",
+      "name": "ci-workflows",
+      "one_line_purpose": "Navigate Utah's build, promote, and sync workflow topology.",
+      "entry_point": "docs/skills/ci-workflows.md",
+      "category": "ci-ops",
+      "status": "active",
+      "tags": [
+        "ci",
+        "workflows",
+        "actions",
+        "promotion"
+      ],
+      "description": "build.yml contract gate, kernel-cache job, main/kernel matrix split, promote-testing-to-main and sync-main-to-testing, actions@v1 delegation. Use when changing .github/workflows/ or debugging a red run.",
+      "version": "1.0",
+      "last_updated": "2026-09-05",
+      "doc_type": "reference"
+    },
+    {
+      "id": "containerfile",
+      "name": "containerfile",
+      "one_line_purpose": "Edit the Containerfile without regressing layer count or cache hits.",
+      "entry_point": "docs/skills/containerfile.md",
+      "category": "image-build",
+      "status": "active",
+      "tags": [
+        "containerfile",
+        "layers",
+        "caching",
+        "build-time"
+      ],
+      "description": "Layer discipline: COPY folding, late per-image ARGs, script staging, clean+lint in one layer. Use when modifying the Containerfile, adding a script, or investigating build time.",
+      "version": "1.0",
+      "last_updated": "2026-09-05",
+      "doc_type": "policy"
+    },
+    {
+      "id": "desktop-contract",
+      "name": "desktop-contract",
+      "one_line_purpose": "Maintain Utah identity, Bluefin desktop defaults, and first-boot Flatpak policy.",
+      "entry_point": "docs/skills/desktop-contract.md",
+      "category": "contracts",
+      "status": "active",
+      "tags": [
+        "desktop",
+        "branding",
+        "gnome",
+        "flatpak"
+      ],
+      "description": "The runtime desktop contract in contracts/bluefin-desktop.toml and its in-image verifiers. Use when changing branding, os-release, service presets, GNOME extensions, or first-boot Flatpak behavior.",
+      "version": "1.0",
+      "last_updated": "2026-09-05",
+      "doc_type": "policy"
+    },
+    {
+      "id": "flavors",
+      "name": "flavors",
+      "one_line_purpose": "Add, remove, or retire an image flavor safely.",
+      "entry_point": "docs/skills/flavors.md",
+      "category": "image-build",
+      "status": "active",
+      "tags": [
+        "flavors",
+        "matrix",
+        "workflows"
+      ],
+      "description": "config/flavors.json is the single source for build, promote, and release matrices. Use when changing the flavor set or debugging a matrix that names an image nothing builds.",
+      "version": "1.0",
+      "last_updated": "2026-09-05",
+      "doc_type": "procedure"
+    },
+    {
+      "id": "kernel-cache",
+      "name": "kernel-cache",
+      "one_line_purpose": "Understand and rebuild the OGC kernel and NVIDIA module cache image.",
+      "entry_point": "docs/skills/kernel-cache.md",
+      "category": "image-build",
+      "status": "active",
+      "tags": [
+        "kernel",
+        "nvidia",
+        "ogc",
+        "cache"
+      ],
+      "description": "The kernel cache image, its content-hash tag, and unpack-or-compile behavior. Use when touching install-ogc-kernel.sh, install-nvidia.sh, Containerfile.kernel, or debugging flavored builds.",
+      "version": "1.0",
+      "last_updated": "2026-09-05",
+      "doc_type": "reference"
+    },
+    {
+      "id": "local-testing",
+      "name": "local-testing",
+      "one_line_purpose": "Build, install, and boot Utah locally in a VM or live ISO.",
+      "entry_point": "docs/skills/local-testing.md",
+      "category": "testing",
+      "status": "active",
+      "tags": [
+        "qemu",
+        "bootc",
+        "iso",
+        "vm",
+        "testing"
+      ],
+      "description": "Local validation loop: build-ghcr, bootc install to-disk, QEMU/noVNC boot, live ISO. Use when validating changes end-to-end or debugging boot, GDM, or live-session failures.",
+      "version": "1.0",
+      "last_updated": "2026-09-05",
+      "doc_type": "runbook"
+    },
+    {
+      "id": "package-contract",
+      "name": "package-contract",
+      "one_line_purpose": "Maintain Bluefin package parity and Utah's overlay manifest.",
+      "entry_point": "docs/skills/package-contract.md",
+      "category": "contracts",
+      "status": "active",
+      "tags": [
+        "packages",
+        "parity",
+        "bluefin",
+        "contracts"
+      ],
+      "description": "Bluefin parity contract: verbatim bluefin.toml, utah.toml overlay, [unavailable] rules, repository policy. Use when adding, removing, or debugging packages or parity/check-repos failures.",
+      "version": "1.0",
+      "last_updated": "2026-09-05",
+      "doc_type": "policy"
+    },
+    {
+      "id": "skill-improvement",
+      "name": "skill-improvement",
+      "one_line_purpose": "Capture durable agent learnings in maintained docs.",
+      "entry_point": "docs/skills/skill-improvement.md",
+      "category": "meta",
+      "status": "active",
+      "tags": [
+        "skills",
+        "improvement",
+        "documentation"
+      ],
+      "description": "The skill-improvement mandate for Utah \u2014 every session ships the work and the learning together. Use when completing a task and deciding whether to write or update a skill file.",
+      "version": "1.0",
+      "last_updated": "2026-09-05",
+      "doc_type": "policy"
+    }
+  ]
+}

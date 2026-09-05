@@ -17,18 +17,24 @@ blocks, and in the manifests' headers — rather than duplicating it here.
 
 | I need to... | Read |
 |---|---|
-| Understand what the image is made of and how to build it | [`building.md`](building.md) |
-| Change the package set or check Bluefin parity | `packages/utah.toml` header + [`AGENTS.md`](../AGENTS.md) invariants |
-| Understand why `[multimedia_overrides]` is not installed | `packages/utah.toml` header comment |
-| Edit the `Containerfile` | The "Layer discipline" comment block at the top of `Containerfile` |
-| Add, remove, or retire an image flavor | [`skills/flavors.md`](skills/flavors.md) + `config/flavors.json` |
-| Work on the OGC kernel or NVIDIA module cache | [`skills/kernel-cache.md`](skills/kernel-cache.md) + `scripts/kernel-cache-tag.sh` header |
-| Build and boot a local VM or live ISO | [`building.md`](building.md#build-locally) |
-| Change branding, desktop defaults, or first-boot Flatpak policy | `contracts/bluefin-desktop.toml` header + `scripts/verify-desktop-contract.py` |
-| Change `.github/workflows/` | Comments in `.github/workflows/build.yml` + common's `docs/skills/ci-tooling/SKILL.md` |
-| Understand where build time goes before optimizing | [`skills/containerfile.md`](skills/containerfile.md) |
-| Decide whether / how to update a skill | [`skills/skill-improvement.md`](skills/skill-improvement.md) |
+| Build the image locally (quickstart) | [`building.md`](building.md#build-locally) |
+| Add, remove, or debug packages, or fix parity/check-repos failures | [`skills/package-contract.md`](skills/package-contract.md) |
+| Add, remove, or retire an image flavor | [`skills/flavors.md`](skills/flavors.md) |
+| Work on the OGC kernel or NVIDIA module cache | [`skills/kernel-cache.md`](skills/kernel-cache.md) |
+| Edit the `Containerfile`, add a script, or investigate build time | [`skills/containerfile.md`](skills/containerfile.md) |
+| Validate changes end-to-end in a VM or live ISO | [`skills/local-testing.md`](skills/local-testing.md) |
+| Change branding, desktop defaults, or first-boot Flatpak policy | [`skills/desktop-contract.md`](skills/desktop-contract.md) |
+| Change `.github/workflows/` or debug a red run | [`skills/ci-workflows.md`](skills/ci-workflows.md) |
+| Decide whether to write or update a skill | [`skills/skill-improvement.md`](skills/skill-improvement.md) |
 | Onboard into the factory / cross-repo rules | common's `docs/skills/factory-onboarding.md` |
+
+## Skill catalog
+
+[`skills/index.json`](skills/index.json) and [`skills/index.md`](skills/index.md)
+are the generated catalog of all skills, produced by
+`python3 scripts/generate_skill_index.py --write`. They are machine output —
+never hand-edit them; run the generator after changing any skill's front
+matter.
 
 ## How to load
 
