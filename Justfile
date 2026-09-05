@@ -26,6 +26,11 @@ check:
     test -f scripts/verify-desktop-contract.py
     test -f scripts/verify-gnome-extensions.py
     test -f contracts/bluefin-desktop.toml
+    # The reusable image workflow checks out this repository without
+    # submodules. Populate them here before validating the source contract;
+    # otherwise CI reports every extension as missing while a developer clone
+    # (or the contract workflow's recursive checkout) passes.
+    git submodule update --init --recursive
     python3 -m py_compile scripts/verify-desktop-contract.py scripts/verify-gnome-extensions.py
     python3 scripts/verify-desktop-contract.py --check contracts/bluefin-desktop.toml
     python3 scripts/verify-gnome-extensions.py --source
@@ -49,6 +54,7 @@ check:
     grep -q 'ENABLE_SSHD' Containerfile
     grep -q 'ENABLE_SSHD="${ENABLE_SSHD:-0}"' Justfile
     grep -q 'ARG PACKAGE_IMAGE_SHA=' Containerfile
+    grep -q 'ARG PACKAGE_IMAGE_REF=' Containerfile
     grep -q 'COPY --from=packages /repository /etc/utah-packages' Containerfile
     # Every executable release asset fetched during composition must be pinned
     # and verified; no build may resolve a mutable latest release.
@@ -186,6 +192,29 @@ build-ghcr base_name stream flavor kernel_pin="":
       --build-arg SHA_HEAD_SHORT="$(git rev-parse --short HEAD)" \
       --build-arg ENABLE_SSHD="${ENABLE_SSHD:-0}" \
       --tag "localhost/$image_name:{{ stream }}" \
+      --file Containerfile .
+
+# Compose with an RPM repository already in local containers-storage. This uses
+# the same Containerfile transaction as CI without waiting for publication.
+build-local stream="testing" package_image="localhost/utah-packages:local-merged":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    package_image="{{ package_image }}"
+    podman image exists "$package_image" || {
+      echo "Local package image not found: $package_image" >&2
+      exit 1
+    }
+    version="local-{{ stream }}-$(git rev-parse --short HEAD)"
+    podman build \
+      --build-arg PACKAGE_IMAGE_REF="$package_image" \
+      --build-arg IMAGE_NAME="{{ image }}" \
+      --build-arg IMAGE_ID="{{ image }}" \
+      --build-arg IMAGE_FLAVOR=main \
+      --build-arg IMAGE_VENDOR="{{ repo_organization }}" \
+      --build-arg VERSION="$version" \
+      --build-arg SHA_HEAD_SHORT="$(git rev-parse --short HEAD)" \
+      --build-arg ENABLE_SSHD="${ENABLE_SSHD:-1}" \
+      --tag "localhost/{{ image }}:{{ stream }}" \
       --file Containerfile .
 
 generate-build-tags base_name stream flavor kernel_pin build_number version event_name event_number:
