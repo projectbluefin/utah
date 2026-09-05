@@ -1,14 +1,22 @@
 ---
 name: skill-improvement
+version: "1.0"
+last_updated: "2026-09-05"
 id: skill-improvement
 one_line_purpose: Capture durable agent learnings in maintained docs.
 entry_point: docs/skills/skill-improvement.md
 category: meta
+mcp_compliance_level: partial
+optimization_status: draft
 status: active
+dependencies: []
 tags: [skills, improvement, documentation]
 description: >-
-  The skill-improvement mandate for Utah — every agent session must produce a
-  documentation update alongside the work when it learned something durable.
+  The skill-improvement mandate for Utah — every session ships the work and
+  the learning together. Use when completing a task and deciding whether to
+  write or update a skill file.
+metadata:
+  type: policy
 ---
 
 # Skill Improvement Mandate
