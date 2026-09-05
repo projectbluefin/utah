@@ -70,7 +70,10 @@ This is the honest list, and it is why the label above says pre-alpha.
 
 - **Nothing is published.** No image, no ISO, no installer. An ISO is planned as
   a fork of [dakota-iso](https://github.com/projectbluefin/dakota-iso).
-- **The NVIDIA and gaming flavors are unproven.** The OGC kernel compiles with
+- **The NVIDIA and gaming flavors are unproven.** Nothing asserted the claims
+  below across a boot until `post-testing-e2e.yml` gained a boot gate; it now
+  checks them on every flavor before `:testing` moves, so this entry should be
+  settled by the first green run rather than by argument. The OGC kernel compiles with
   `sched_ext` and `binderfs` genuinely enabled, and the NVIDIA open module
   compiles for the base kernel. The module against the OGC kernel, the driver
   installer flags, and the flavored builds pulling the kernel cache image have

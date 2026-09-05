@@ -62,19 +62,27 @@ def main() -> int:
         contract = [line for line in resolved.read_text().split() if line]
         gnome_names = set(section(overlay, "gnome"))
         service_names = set(section(overlay, "services"))
-        bluefin = [p for p in contract if p not in gnome_names and p not in service_names]
+        firmware_names = set(section(overlay, "firmware"))
+        overlay_names = gnome_names | service_names | firmware_names
+        bluefin = [p for p in contract if p not in overlay_names]
         gnome = [p for p in contract if p in gnome_names]
         services = [p for p in contract if p in service_names]
+        firmware = [p for p in contract if p in firmware_names]
     else:
         bluefin = [p for p in section(args.manifest, "fedora") if p not in unavailable]
         gnome = section(overlay, "gnome")
         services = section(overlay, "services")
+        # The off-image fallback used to stop at services, so --check silently
+        # asserted nothing about firmware -- the same blind spot that let the
+        # image ship with none.
+        firmware = section(overlay, "firmware")
     nvidia = list(NVIDIA_PACKAGES) if "nvidia" in flavor else []
-    expected = [*bluefin, *gnome, *services, *nvidia]
+    expected = [*bluefin, *gnome, *services, *firmware, *nvidia]
 
     print(
         f"Verifying {len(bluefin)} Bluefin packages, {len(gnome)} GNOME desktop packages,"
-        f" {len(services)} desktop service packages, and {len(nvidia)} NVIDIA packages",
+        f" {len(services)} desktop service packages, {len(firmware)} firmware packages,"
+        f" and {len(nvidia)} NVIDIA packages",
         flush=True,
     )
     if args.check:

@@ -55,6 +55,11 @@ check:
     python3 -m py_compile scripts/verify-rpm-contract.py
     python3 -m py_compile scripts/check-repo-availability.py
     python3 scripts/install-packages.py --check packages/bluefin.toml
+    # Both scripts compose their package list from sections named one by
+    # one, so a new section in utah.toml can be live in one and invisible
+    # to the other. [services] was unverified that way, and [firmware]
+    # briefly was too.
+    python3 scripts/check-overlay-sections.py
     python3 scripts/verify-rpm-contract.py --check packages/bluefin.toml
     grep -qE 'reusable-build\.yml@(v1|[0-9a-f]{40} # v1)$' .github/workflows/build.yml
     test -f Containerfile.kernel
@@ -75,6 +80,23 @@ check:
     # config/flavors.json exists to stop: narrowing the build matrix while
     # promote and release still name images nothing produces fails late.
     ! grep -rn 'utah-nvidia\|utah-gaming' .github/workflows/
+    # Nor its own count of them. Promotion asserted `count -eq 4` after it had
+    # already copied whatever it found, so a short set advanced :testing for
+    # the flavors it did reach and failed afterwards.
+    ! grep -nE '\-eq [0-9]+' .github/workflows/post-testing-e2e.yml
+    grep -q 'scripts/flavors.py' .github/workflows/post-testing-e2e.yml
+    # Promotion must be gated on a real boot, not only on the build's own
+    # in-image contract checks. Those cannot see whether the thing starts.
+    test -f scripts/verify-boot.sh
+    test -f Containerfile.e2e
+    bash -n scripts/verify-boot.sh
+    grep -q 'e2e-boot' .github/workflows/post-testing-e2e.yml
+    grep -qE '^\s*needs: \[resolve, boot\]' .github/workflows/post-testing-e2e.yml
+    grep -q 'UTAH_BOOT_OK' scripts/verify-boot.sh
+    # The verification layer is a test artifact. If it ever appears in the
+    # image's own Containerfile it would ship a unit that powers the machine
+    # off shortly after gdm starts.
+    ! grep -q 'verify-boot' Containerfile
 
 # Verify branding, desktop defaults, first-boot Flatpak policy, and service
 # enablement in an already-composed image. The same verifier runs in the
@@ -300,6 +322,66 @@ generate-bootable-image stream="testing":
     rm -rf "$esp"
     sync
     echo "Bootable disk ready: $disk"
+
+# The runner has no KVM, so this is TCG emulation and slow -- minutes, not
+# seconds. That is still the cheapest honest answer to "does it boot", and it
+# is the one gate the build-time contract checks cannot supply.
+#
+# Boot an image headless and assert what only a boot can show.
+e2e-boot image_ref timeout="1800":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    work="$(mktemp -d)"
+    trap 'rm -rf "$work"' EXIT
+    # The verification layer is built here and never pushed; see
+    # Containerfile.e2e for why it is not part of the image under test.
+    test_ref="localhost/utah-e2e:$(date +%s)"
+    podman build --build-arg IMAGE="{{ image_ref }}" \
+      --tag "$test_ref" --file Containerfile.e2e .
+    disk="$work/boot.raw"
+    truncate -s 20G "$disk"
+    # console=ttyS0 is what makes the verifier readable: the harness has no way
+    # into this VM other than the serial port.
+    sudo podman run --rm --privileged --pid=host \
+      --security-opt label=type:unconfined_t \
+      -v "$work:/data:Z" \
+      "$test_ref" bootc install to-disk \
+        --via-loopback /data/boot.raw --filesystem btrfs --wipe \
+        --generic-image --karg console=ttyS0,115200 --karg utah.local
+    sudo chown "$(id -u):$(id -g)" "$disk"
+    # A fresh VM has no NVRAM entry, so install the removable-media fallback
+    # the same way generate-bootable-image does.
+    loop="$(sudo losetup --find --show --partscan "$disk")"
+    esp="$work/esp"; mkdir -p "$esp"
+    sudo mount "${loop}p2" "$esp"
+    sudo install -d "$esp/EFI/BOOT"
+    sudo install -m 0644 "$esp/EFI/fedora/shimx64.efi" "$esp/EFI/BOOT/BOOTX64.EFI"
+    sudo install -m 0644 "$esp/EFI/fedora/grubx64.efi" "$esp/EFI/BOOT/grubx64.efi"
+    sudo umount "$esp"
+    sudo losetup -d "$loop"
+    cp /usr/share/OVMF/OVMF_VARS_4M.fd "$work/vars.fd" 2>/dev/null \
+      || cp /usr/share/OVMF/OVMF_VARS.fd "$work/vars.fd"
+    code=/usr/share/OVMF/OVMF_CODE_4M.fd
+    test -f "$code" || code=/usr/share/OVMF/OVMF_CODE.fd
+    log="$work/console.log"
+    set +e
+    timeout "{{ timeout }}" qemu-system-x86_64 \
+      -machine q35 -m 4096 -smp "$(nproc)" -no-reboot -nographic \
+      -drive "if=pflash,format=raw,unit=0,readonly=on,file=$code" \
+      -drive "if=pflash,format=raw,unit=1,file=$work/vars.fd" \
+      -drive "file=$disk,format=raw,if=virtio" \
+      -serial "file:$log" -display none
+    set -e
+    echo "--- serial console"
+    cat "$log" || true
+    echo "--- end serial console"
+    if grep -q '^UTAH_BOOT_OK ' "$log"; then
+      grep '^UTAH_BOOT_OK ' "$log"
+      exit 0
+    fi
+    echo "The VM never reported a successful boot." >&2
+    grep -E 'utah-boot:|Kernel panic|emergency|Failed to' "$log" >&2 || true
+    exit 1
 
 # Build a single-architecture UEFI live ISO. This first slice proves the
 # Utah live boot path; installer payload integration is intentionally the next

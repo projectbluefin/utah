@@ -9,31 +9,157 @@ on:
 permissions: read-all
 
 jobs:
-  promote-to-testing:
+  # Which images the run produced, and their digests, resolved once so the boot
+  # matrix and the promotion agree on exactly the same set.
+  resolve:
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'testing'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
-      packages: write
       actions: read
+      contents: read
+    outputs:
+      images: ${{ steps.verify.outputs.images }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
       - name: Download all flavor digests
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh run download "${{ github.event.workflow_run.id }}" --repo "${{ github.repository }}" --pattern 'image-digest-testing-*' --dir /tmp/digests
-      - name: Promote verified images to testing
+      # The whole set is checked before any of it is promoted. This used to
+      # copy each digest as it read it and assert the total afterwards, which
+      # is the wrong order twice over: a short or unexpected set had already
+      # moved :testing for the flavors it did reach by the time the assertion
+      # failed, and the total was a literal four, while config/flavors.json is
+      # supposed to be the only source for which images exist. `just check`
+      # forbids that literal everywhere else in this workflow directory.
+      - name: Verify the run produced exactly the promised images
+        id: verify
+        run: |
+          set -euo pipefail
+          find /tmp/digests -name '*.txt' -exec cat {} + > /tmp/digests.txt
+          python3 - <<'PY'
+          import json, os, pathlib, subprocess, sys
+
+          expected = {
+              item["image"]
+              for item in json.loads(
+                  subprocess.run(
+                      [sys.executable, "scripts/flavors.py", "images"],
+                      capture_output=True, text=True, check=True,
+                  ).stdout
+              )
+          }
+          found = {}
+          for line in pathlib.Path("/tmp/digests.txt").read_text().splitlines():
+              name, _, digest = line.partition("=")
+              name, digest = name.strip(), digest.strip()
+              if not name or not digest:
+                  continue
+              if not digest.startswith("sha256:"):
+                  sys.exit(f"{name}: {digest!r} is not a digest")
+              if name in found and found[name] != digest:
+                  sys.exit(f"{name}: the run reported two different digests")
+              found[name] = digest
+
+          missing = sorted(expected - set(found))
+          unexpected = sorted(set(found) - expected)
+          if missing or unexpected:
+              if missing:
+                  print("The build did not produce these images:", ", ".join(missing))
+              if unexpected:
+                  print("The build produced images no flavor asks for:", ", ".join(unexpected))
+              sys.exit(
+                  "Refusing to advance :testing. config/flavors.json is the only "
+                  "source for which images exist, and this run does not match it."
+              )
+          images = [{"image": name, "digest": found[name]} for name in sorted(expected)]
+          with open(os.environ["GITHUB_OUTPUT"], "a") as handle:
+              handle.write("images=" + json.dumps(images) + "\n")
+          print(f"verified all {len(expected)} promised images:", ", ".join(sorted(expected)))
+          PY
+
+  # Every promised image is booted before any of them is promoted. The build
+  # already asserts what an image contains -- the package contract, the desktop
+  # contract, the extensions, bootc lint -- and none of that can tell you it
+  # comes up, that the gaming flavors boot the OGC kernel rather than the stock
+  # one, or that the NVIDIA module matches the kernel that actually booted.
+  # Those are the claims the README calls unproven, so they are checked here
+  # rather than asserted in prose.
+  boot:
+    needs: resolve
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(needs.resolve.outputs.images) }}
+    # TCG emulation without KVM, which hosted runners do not offer. A desktop
+    # image takes minutes to reach gdm this way.
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - name: Install just
+        uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc                       /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
+          df -h /
+      - name: Install QEMU and UEFI firmware
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 ovmf
+      - name: Log in to GHCR
         env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GITHUB_TOKEN" | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Boot ${{ matrix.image.image }} and verify it
+        env:
           REGISTRY: ghcr.io/${{ github.repository_owner }}
         run: |
           set -euo pipefail
+          ref="${REGISTRY}/${{ matrix.image.image }}@${{ matrix.image.digest }}"
+          # By digest, so the image booted is the exact one that will be
+          # promoted rather than whatever the tag points at by then.
+          podman pull "$ref"
+          just e2e-boot "$ref"
+
+  promote-to-testing:
+    needs: [resolve, boot]
+    runs-on: ubuntu-24.04
+    permissions:
+      packages: write
+      actions: read
+    steps:
+      # No re-derivation here. resolve already checked the run against
+      # config/flavors.json and boot proved every one of those images starts,
+      # so this copies exactly that list and nothing else.
+      - name: Promote the booted images to testing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REGISTRY: ghcr.io/${{ github.repository_owner }}
+          IMAGES: ${{ needs.resolve.outputs.images }}
+        run: |
+          set -euo pipefail
           echo "$GH_TOKEN" | skopeo login ghcr.io --username "${{ github.actor }}" --password-stdin
-          count=0
+          python3 - <<'PY' > /tmp/promote.txt
+          import json, os
+          for item in json.loads(os.environ["IMAGES"]):
+              print(item["image"], item["digest"], sep="=")
+          PY
+          test -s /tmp/promote.txt
           while IFS='=' read -r name digest; do
-            [[ -n "$name" && "$digest" == sha256:* ]] || continue
+            [ -n "$name" ] || continue
+            echo "promoting ${name}@${digest}"
             skopeo copy --all "docker://${REGISTRY}/${name}@${digest}" "docker://${REGISTRY}/${name}:testing"
-            count=$((count + 1))
-          done < <(find /tmp/digests -name '*.txt' -exec cat {} +)
-          test "$count" -eq 4
+          done < /tmp/promote.txt

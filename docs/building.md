@@ -67,6 +67,32 @@ The result is `output/utah-live.iso`, assembled with systemd-boot, a
 intended to prove live desktop boot first; bootc-installer/offline payload
 integration is the next ISO milestone.
 
+### Proving an image boots
+
+The Containerfile asserts what an image *contains* -- the package contract, the
+desktop contract, the GNOME extensions, `bootc container lint`. None of that can
+say whether it starts, and three of Utah's claims live entirely on the other
+side of a boot: that a desktop appears at all, that the gaming flavors run the
+OGC kernel rather than the stock one, and that the NVIDIA module matches the
+kernel that actually booted rather than the one it was compiled against.
+
+`just e2e-boot <image-ref>` answers those. It derives a throwaway layer from the
+image (`Containerfile.e2e`), which adds a first-boot unit running
+`scripts/verify-boot.sh`, installs that to a disk with `bootc install to-disk`,
+and boots it under QEMU with the console on a serial port. The verifier prints
+its findings and one marker line, `UTAH_BOOT_OK`, and powers the machine off;
+the caller passes only if that marker appears. A VM that panics or hangs cannot
+look like a pass, because a hang produces no marker either.
+
+That layer is never published. A published image must contain what it promises
+and nothing more, and it certainly must not carry a unit that powers the machine
+off once gdm is up.
+
+`post-testing-e2e.yml` runs it for every flavor between verifying the image set
+and advancing `:testing`, so an image that does not boot cannot be promoted.
+Hosted runners offer no KVM, so this is TCG emulation and takes minutes per
+flavor; that is the cost of the only check that can answer the question.
+
 ### Image flavors
 
 `config/flavors.json` decides which images exist. Everything derives from it --

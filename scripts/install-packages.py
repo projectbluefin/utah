@@ -55,6 +55,10 @@ def contract(base: Path, overlay: Path, major: str | None) -> list[str]:
     # Service packages are part of the desktop contract as well: 40-services.sh
     # cannot enable what the server base never installed.
     packages += section(overlay, "services")
+    # Firmware likewise. Bluefin inherits it from its Fedora base and so never
+    # names it; Hummingbird's base ships none, and nothing Requires it, so it
+    # reaches the image only by being asked for here.
+    packages += section(overlay, "firmware")
     unavailable = set(section(overlay, "unavailable"))
     # Deduplicate while preserving order so build logs stay diffable.
     seen: dict[str, None] = {}

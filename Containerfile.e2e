@@ -1,0 +1,41 @@
+# The boot test layer. Never published.
+#
+# A published image must contain what it promises and nothing else, so the unit
+# that drives the boot check does not live in it. This derives from a finished
+# flavor image, adds the verifier and a first-boot unit, and is installed to a
+# throwaway disk by `just e2e-disk`. The image under test is unmodified in
+# every other respect: same kernel, same packages, same configuration, so what
+# boots here is what would boot on hardware.
+ARG IMAGE
+FROM ${IMAGE}
+
+COPY scripts/verify-boot.sh /usr/local/libexec/utah-verify-boot
+
+# Ordered after gdm rather than after graphical.target: reaching the target
+# does not mean the display manager came up, and gdm is what a user meets
+# first. The verifier polls for it anyway, so a slow start is not a failure.
+#
+# Output goes to the console because that is the only channel the harness has:
+# it reads the serial port of a VM it cannot log in to.
+RUN chmod 0755 /usr/local/libexec/utah-verify-boot && \
+    printf '%s\n' \
+      '[Unit]' \
+      'Description=Utah boot verification' \
+      'After=gdm.service systemd-user-sessions.service' \
+      'Wants=gdm.service' \
+      '' \
+      '[Service]' \
+      'Type=oneshot' \
+      'RemainAfterExit=yes' \
+      'ExecStart=/usr/local/libexec/utah-verify-boot' \
+      'StandardOutput=journal+console' \
+      'StandardError=journal+console' \
+      '# Whatever the verdict, the VM must not sit there until the job times' \
+      '# out. The harness decides pass or fail from the console text.' \
+      'ExecStopPost=/usr/bin/systemctl --no-block poweroff' \
+      '' \
+      '[Install]' \
+      'WantedBy=multi-user.target' \
+      > /usr/lib/systemd/system/utah-verify-boot.service && \
+    systemctl enable utah-verify-boot.service && \
+    test -x /usr/local/libexec/utah-verify-boot

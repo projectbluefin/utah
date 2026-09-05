@@ -7,6 +7,7 @@
 #
 # Sections:
 #   [gnome]        GNOME 51 desktop contract Hummingbird does not ship
+#   [firmware]     device firmware Bluefin inherits from its Fedora base
 #   [build]        toolchain needed to build the pinned GNOME extensions
 #   [unavailable]  Bluefin contract packages with no Fedora Rawhide source
 #
@@ -46,6 +47,64 @@ packages = [
     "mutter",
     "xdg-desktop-portal",
     "xdg-desktop-portal-gnome",
+]
+
+[firmware]
+# Bluefin never names these: it inherits them from its Fedora base image, so
+# they are absent from the parity contract in packages/bluefin.toml. Utah's
+# base is Hummingbird's bootc-os, which ships the kernel and no firmware at
+# all -- 262 packages, none of them linux-firmware -- and Hummingbird's
+# repository has none either. Nothing Requires linux-firmware, so no
+# resolution pulls it in and no gate noticed: the boot test runs under QEMU on
+# virtio, which needs no firmware blobs. The result was an image that reaches
+# GDM and cannot bring up any wifi adapter that loads a blob, which is nearly
+# all of them, nor an AMD, Intel or NVIDIA GPU at full capability.
+#
+# This list is Bluefin's, read out of files/pkg-churn.json in
+# projectbluefin/bluefin, which records what that image actually carries. That
+# is the parity target, not "everything Fedora splits out of linux-firmware".
+# Bluefin takes twenty-one of the thirty subpackages and leaves the datacenter
+# NIC families -- liquidio, mlxsw_spectrum, mrvlprestera, netronome, qed -- and
+# the Qualcomm SoC ones behind. Matching it rather than taking the lot saves
+# about 350 MiB, most of that qcom-firmware at 148 MiB and
+# mlxsw_spectrum-firmware at 102 MiB, neither of which an x86_64 desktop
+# loads. Bluefin does keep qcom-wwan-firmware for modems and mt7xxx-firmware
+# for MediaTek wireless while dropping the broader mediatek-firmware; that
+# asymmetry is theirs, and it is copied rather than smoothed over.
+#
+# alsa-sof-firmware is the one entry that is not a linux-firmware subpackage.
+# Sound Open Firmware is what a modern Intel laptop loads before it has audio
+# at all. Dakota agrees strongly enough to give it its own BuildStream
+# component, components/sof-firmware.bst, separate from linux-firmware.
+#
+# Dakota was read too. It curates at file level rather than by package -- 6,810
+# files under components/linux-firmware.bst -- and its set is wider than
+# Bluefin's, carrying qcom, netronome, mellanox and qed. Bluefin is the closer
+# comparison for Utah and the contract this repository already tracks, so it
+# is the one matched.
+packages = [
+    "alsa-sof-firmware",
+    "amd-gpu-firmware",
+    "amd-ucode-firmware",
+    "atheros-firmware",
+    "brcmfmac-firmware",
+    "cirrus-audio-firmware",
+    "intel-audio-firmware",
+    "intel-gpu-firmware",
+    "intel-vsc-firmware",
+    "iwlegacy-firmware",
+    "iwlwifi-dvm-firmware",
+    "iwlwifi-mld-firmware",
+    "iwlwifi-mvm-firmware",
+    "libertas-firmware",
+    "linux-firmware",
+    "linux-firmware-whence",
+    "mt7xxx-firmware",
+    "nvidia-gpu-firmware",
+    "nxpwireless-firmware",
+    "qcom-wwan-firmware",
+    "realtek-firmware",
+    "tiwilink-firmware",
 ]
 
 [build]
@@ -100,8 +159,29 @@ packages = [
 #   (ruby-default-gems) into a buildroot that already carries Hummingbird's
 #   ruby4.0. The two conflict on file paths, so the transaction fails. Needs
 #   either a ruby exclusion in the buildroot or dropping the html subpackage.
+#
+# firefox, firefox-langpacks
+#   Not a gap: a deliberate substitution, and the only entry here that is not
+#   parity debt. The package factory used to build the RPM and stopped -- a
+#   full PGO and LTO Gecko compile was the longest build it had and it
+#   repeatedly hit the runner memory ceiling, for a leaf application no other
+#   package links. There is no packages/firefox recipe any more, so the name
+#   can never appear in Utah's repositories.
+#
+#   What ships instead is the Flatpak, which was already here before the RPM
+#   went away: org.mozilla.firefox is in contracts/bluefin-desktop.toml, and
+#   system_files/.../99-flatpaks.sh installs Bluefin's own policy into the
+#   org.mozilla.firefox.systemconfig extension. So the browser is present and
+#   configured; verify-desktop-contract.py asserts it on every build, which is
+#   a stronger check than the RPM name ever got.
+#
+#   This entry exists so the parity arithmetic stays honest: Bluefin's manifest
+#   asks for an RPM Utah does not install, and that is recorded here rather
+#   than passing silently.
 packages = [
     "evolution-ews-core",
+    "firefox",
+    "firefox-langpacks",
     "fish",
     "tailscale",
     "zsh",
