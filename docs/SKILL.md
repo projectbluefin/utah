@@ -21,12 +21,12 @@ blocks, and in the manifests' headers — rather than duplicating it here.
 | Change the package set or check Bluefin parity | `packages/utah.toml` header + [`AGENTS.md`](../AGENTS.md) invariants |
 | Understand why `[multimedia_overrides]` is not installed | `packages/utah.toml` header comment |
 | Edit the `Containerfile` | The "Layer discipline" comment block at the top of `Containerfile` |
-| Add, remove, or retire an image flavor | [`building.md`](building.md#image-flavors) + `config/flavors.json` |
-| Work on the OGC kernel or NVIDIA module cache | [`building.md`](building.md#the-kernel-cache-image) + `scripts/kernel-cache-tag.sh` header |
+| Add, remove, or retire an image flavor | [`skills/flavors.md`](skills/flavors.md) + `config/flavors.json` |
+| Work on the OGC kernel or NVIDIA module cache | [`skills/kernel-cache.md`](skills/kernel-cache.md) + `scripts/kernel-cache-tag.sh` header |
 | Build and boot a local VM or live ISO | [`building.md`](building.md#build-locally) |
 | Change branding, desktop defaults, or first-boot Flatpak policy | `contracts/bluefin-desktop.toml` header + `scripts/verify-desktop-contract.py` |
 | Change `.github/workflows/` | Comments in `.github/workflows/build.yml` + common's `docs/skills/ci-tooling/SKILL.md` |
-| Understand where build time goes before optimizing | [`building.md`](building.md#where-the-build-time-goes) |
+| Understand where build time goes before optimizing | [`skills/containerfile.md`](skills/containerfile.md) |
 | Decide whether / how to update a skill | [`skills/skill-improvement.md`](skills/skill-improvement.md) |
 | Onboard into the factory / cross-repo rules | common's `docs/skills/factory-onboarding.md` |
 
