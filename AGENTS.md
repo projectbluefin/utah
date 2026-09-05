@@ -27,7 +27,10 @@ just iso testing && just boot-iso     # live ISO build + boot (see docs/building
 ```
 
 `just check` is the gate CI runs first; a change that fails it fails the whole
-matrix. Run `just check` and `pre-commit run --all-files` before every commit.
+matrix. It needs the GNOME extension submodules initialized
+(`git submodule update --init --recursive`) or the extension contract check
+fails with missing `metadata.json` errors. Run `just check` and
+`pre-commit run --all-files` before every commit.
 
 ## Invariants — do not break
 
