@@ -26,6 +26,11 @@ check:
     test -f scripts/verify-desktop-contract.py
     test -f scripts/verify-gnome-extensions.py
     test -f contracts/bluefin-desktop.toml
+    # The reusable image workflow checks out this repository without
+    # submodules. Populate them here before validating the source contract;
+    # otherwise CI reports every extension as missing while a developer clone
+    # (or the contract workflow's recursive checkout) passes.
+    git submodule update --init --recursive
     python3 -m py_compile scripts/verify-desktop-contract.py scripts/verify-gnome-extensions.py
     python3 scripts/verify-desktop-contract.py --check contracts/bluefin-desktop.toml
     python3 scripts/verify-gnome-extensions.py --source
