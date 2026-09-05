@@ -50,8 +50,16 @@ packages = [
 
 [build]
 # Build dependencies for scripts/build-gnome-extensions.sh.
+#
+# cmake is deliberately absent, though Bluefin lists it. Every cmake in the
+# Hummingbird repository -- 4.3.0-2.1.hum1 through 4.3.0-5.1.hum1 -- requires
+# libjsoncpp.so.26, and the only jsoncpp there provides libjsoncpp.so.27, so
+# cmake cannot be installed from Hummingbird at all. It is a missed rebuild on
+# their side after the jsoncpp bump, not a gap this image has to answer for,
+# and nothing in build-gnome-extensions.sh invokes cmake: it runs make, meson,
+# unzip and glib-compile-schemas. Restore this entry once Hummingbird rebuilds
+# cmake, or if an extension ever needs it.
 packages = [
-    "cmake",
     "dbus-devel",
     "glib2-devel",
     "meson",
@@ -89,12 +97,6 @@ packages = [
 #   vendored/cargo-fetch rebuild of the spec rather than the system-crate
 #   model.
 #
-# tailscale
-#   tailscale 1.98.8's vendored go-json-experiment references json.SkipFunc,
-#   added to the stdlib in Go 1.28. Hummingbird's newest Go is 1.27, so the
-#   vendored tree cannot compile. Needs a version pin whose vendored deps
-#   target Go 1.27, or a Go 1.28+ toolchain in the buildroot.
-#
 # zsh
 #   The HTML docs build target pulls texi2html, which drags Fedora's ruby
 #   (ruby-default-gems) into a buildroot that already carries Hummingbird's
@@ -112,17 +114,19 @@ packages = [
 #   or the Utah package repository. The image uses Hummingbird's bootable base
 #   and does not build installer media here.
 #
-# pipewire-libs-extra
-#   The recipe is staged in utah-packages, but no published repository currently
-#   contains its binary RPM. Remove this entry once the package has completed a
-#   verified build and is visible in the Pages repository.
+# anaconda-live, slitherer
+#   Utah installs through the bootc-installer live path, not Anaconda WebUI.
+#   anaconda-live pulls anaconda-webui and Cockpit, whose authentication path
+#   requires GHmac; Hummingbird's GLib disables that API unconditionally. The
+#   factory contract documents the full incompatibility and excludes this
+#   installer branch rather than shipping an authentication path that fails.
 packages = [
+    "anaconda-live",
     "evolution-ews-core",
     "fish",
     "firefox",
     "grub2-efi-x64-cdboot",
-    "pipewire-libs-extra",
-    "tailscale",
+    "slitherer",
     "zsh",
 ]
 
