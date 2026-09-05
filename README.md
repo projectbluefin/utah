@@ -1,7 +1,7 @@
 # Utahraptor
 †Utahraptor ostrommaysi
 
-Bluefin built on Fedora Hummingbird. The more ... civilized murder machine. 
+Bluefin built on Fedora Hummingbird. The more ... civilized murder machine.
 
 > Your day keeps getting worse.
 

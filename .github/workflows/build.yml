@@ -63,9 +63,11 @@ jobs:
           MAIN="$(python3 scripts/flavors.py list-main)"
           KERNEL="$(python3 scripts/flavors.py list-kernel)"
           test -n "$MAIN" && test -n "$KERNEL"
-          echo "main=$MAIN" >> "$GITHUB_OUTPUT"
-          echo "kernel=$KERNEL" >> "$GITHUB_OUTPUT"
-          echo "needs_kernel=$(python3 scripts/flavors.py needs-kernel)" >> "$GITHUB_OUTPUT"
+          {
+            echo "main=$MAIN"
+            echo "kernel=$KERNEL"
+            echo "needs_kernel=$(python3 scripts/flavors.py needs-kernel)"
+          } >> "$GITHUB_OUTPUT"
           echo "building $LIST: on the base image $MAIN, on the kernel cache $KERNEL"
 
   # The OGC kernel compile and the NVIDIA module build depend only on the base

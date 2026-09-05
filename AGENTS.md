@@ -27,7 +27,7 @@ just iso testing && just boot-iso     # live ISO build + boot (see docs/building
 ```
 
 `just check` is the gate CI runs first; a change that fails it fails the whole
-matrix. Run it before every commit.
+matrix. Run `just check` and `pre-commit run --all-files` before every commit.
 
 ## Invariants — do not break
 
