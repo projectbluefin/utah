@@ -58,8 +58,8 @@ The first ISO slice reuses Utah's own kernel, dracut-live, and GNOME image:
 
 ```bash
 just iso testing
-just boot-iso             # QEMU/noVNC live-session validation
-just debug=1 iso testing   # optional live-session SSH diagnostics
+just boot-iso        # QEMU/noVNC live-session validation
+just iso testing 1   # optional live-session SSH diagnostics (debug=1)
 ```
 
 The result is `output/utah-live.iso`, assembled with systemd-boot, a
@@ -74,8 +74,8 @@ the build matrix, the promote matrix, the release matrix, and whether the kernel
 cache image below is built at all:
 
 ```bash
-python3 scripts/flavors.py list          # ["main"]
-python3 scripts/flavors.py needs-kernel  # false
+python3 scripts/flavors.py list          # ["main", "nvidia", "gaming", "nvidia-gaming"]
+python3 scripts/flavors.py needs-kernel  # true
 ```
 
 All four are currently built. A flavor is switched off by removing it from

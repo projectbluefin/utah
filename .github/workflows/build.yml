@@ -15,7 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Cheap, network-only gate. A contract package with no Rawhide source used to
+  # Cheap, network-only gate. A contract package that none of Utah's
+  # repositories provide used to
   # surface as an opaque `exit status 71` from the image build; catching it here
   # costs seconds instead of the full matrix.
   contract:

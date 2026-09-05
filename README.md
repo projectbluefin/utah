@@ -57,9 +57,9 @@ being noticed later.
 
 | | count |
 | --- | --- |
-| Bluefin contract installed | **64** |
+| Bluefin contract installed | **61** |
 | Utah additions (GNOME 51, desktop services) | 12 |
-| Genuinely unavailable | **1** |
+| Genuinely unavailable | **4** |
 
 The install writes its resolved list to `/usr/share/utah/contract.txt` and the
 verify step asserts *that file*, so the two cannot disagree.
@@ -68,8 +68,9 @@ verify step asserts *that file*, so the two cannot disagree.
 
 This is the honest list, and it is why the label above says pre-alpha.
 
-- **Nothing is published.** No image, no ISO, no installer. An ISO is planned as
-  a fork of [dakota-iso](https://github.com/projectbluefin/dakota-iso).
+- **Nothing is published.** No image, no ISO artifact, no installer. A live
+  ISO builds locally (`just iso`); installer payload integration is the next
+  ISO milestone.
 - **The NVIDIA and gaming flavors are unproven.** The OGC kernel compiles with
   `sched_ext` and `binderfs` genuinely enabled, and the NVIDIA open module
   compiles for the base kernel. The module against the OGC kernel, the driver
@@ -96,4 +97,5 @@ things stand.
 ## Contributing or building from source
 
 See [docs/building.md](docs/building.md) for what the image is made of, how to
-build it locally, and how the flavor set and kernel cache work.
+build it locally, and how the flavor set and kernel cache work. Agents start at
+[AGENTS.md](AGENTS.md).
