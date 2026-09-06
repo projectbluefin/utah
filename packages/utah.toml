@@ -101,9 +101,25 @@ packages = [
 #   (ruby-default-gems) into a buildroot that already carries Hummingbird's
 #   ruby4.0. The two conflict on file paths, so the transaction fails. Needs
 #   either a ruby exclusion in the buildroot or dropping the html subpackage.
+#
+# firefox
+#   Bluefin's desktop contract names Firefox, but neither Hummingbird's overlay
+#   nor utah-packages publishes the browser build. Tracked by #35.
+#
+# grub2-efi-x64-cdboot
+#   This boot-media subpackage is absent from both enabled repositories. Utah
+#   uses Hummingbird's bootable base and does not build installer media. Tracked
+#   by #35.
+#
+# pipewire-libs-extra
+#   Bluefin obtains this package from negativo17's fedora-multimedia repository,
+#   which Utah deliberately does not enable. Tracked by #35.
 packages = [
     "evolution-ews-core",
+    "firefox",
     "fish",
+    "grub2-efi-x64-cdboot",
+    "pipewire-libs-extra",
     "tailscale",
     "zsh",
 ]
