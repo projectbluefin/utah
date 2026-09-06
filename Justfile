@@ -79,6 +79,20 @@ check:
          <(grep -m1 '^ARG BASE_IMAGE=' Containerfile.kernel)
     python3 -m py_compile scripts/flavors.py
     python3 scripts/flavors.py list >/dev/null
+    python3 scripts/flavors.py count >/dev/null
+    # scripts/flavors.py is the only place that maps a flavor to its published
+    # image name. Anything else spelling those names out is a second copy that
+    # nothing compares against the first. The grep guards themselves quote the
+    # names, so they are excluded rather than counted as violations.
+    if grep -n 'utah-\(nvidia\|gaming\)' Justfile | grep -v 'grep -'; then
+      echo "flavored image names belong in scripts/flavors.py, not the Justfile" >&2
+      exit 1
+    fi
+    test "$(just image_name utah testing main)" = "$(python3 scripts/flavors.py image main)"
+    # The promotion gate must count flavors, not carry a literal: a build that
+    # goes green while :testing never advances is the failure this prevents.
+    # Not asserted here yet -- the fix to post-testing-e2e.yml is blocked on the
+    # agent App's missing `workflows` permission. See the linked issue.
     pip install --quiet pyyaml 2>/dev/null || true
     python3 scripts/check_workflow_outputs.py
     pip install --quiet jsonschema 2>/dev/null || true
@@ -125,16 +139,12 @@ check-parity:
       exit 1
     fi
 
+# The flavor -> published image name mapping lives in scripts/flavors.py, beside
+# the flavor set itself. It used to be spelled out here and again in build-ghcr,
+# so adding a flavor meant editing three case arms and a dict that no check
+# compared against each other.
 image_name base_name stream flavor:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    case "{{ flavor }}" in
-      main) echo "{{ image }}" ;;
-      nvidia) echo "{{ image }}-nvidia" ;;
-      gaming) echo "{{ image }}-gaming" ;;
-      nvidia-gaming) echo "{{ image }}-nvidia-gaming" ;;
-      *) echo "unknown Utah image flavor: {{ flavor }}" >&2; exit 2 ;;
-    esac
+    @python3 scripts/flavors.py image '{{ flavor }}'
 
 generate-default-tag stream build_number:
     @echo "{{ stream }}"
@@ -162,13 +172,7 @@ build-ghcr base_name stream flavor kernel_pin="":
     #!/usr/bin/env bash
     set -euo pipefail
     version="{{ stream }}-$(date -u +%Y%m%d)-$(git rev-parse --short HEAD)"
-    case "{{ flavor }}" in
-      main) image_name="{{ image }}" ;;
-      nvidia) image_name="{{ image }}-nvidia" ;;
-      gaming) image_name="{{ image }}-gaming" ;;
-      nvidia-gaming) image_name="{{ image }}-nvidia-gaming" ;;
-      *) echo "unknown Utah image flavor: {{ flavor }}" >&2; exit 2 ;;
-    esac
+    image_name="$(python3 scripts/flavors.py image '{{ flavor }}')"
     # The kernel cache image and the layer cache below are both published
     # private by default, and the reusable build workflow only logs in to GHCR
     # for non-PR events -- so pulling either would 401 on exactly the runs that

@@ -16,6 +16,8 @@ next to the list rather than in a commit message.
     flavors.py needs-kernel   true / false
     flavors.py list-main      ["main"]            flavors that build on the pristine base
     flavors.py list-kernel    ["nvidia", ...]     flavors that build on the kernel cache
+    flavors.py count          4                   how many images a green build produces
+    flavors.py image FLAVOR   utah-nvidia         the published image name for one flavor
 """
 import json
 import sys
@@ -54,5 +56,19 @@ elif what == "list-main":
     print(json.dumps([f for f in flavors if f == "main"]))
 elif what == "list-kernel":
     print(json.dumps([f for f in flavors if f != "main"]))
+elif what == "count":
+    # The number of images a green build publishes. post-testing-e2e refuses to
+    # advance :testing unless it collected exactly this many digests -- a real
+    # gate, but it used to be the literal 4, so narrowing or widening the flavor
+    # set here stalled the promotion of every image with nothing to look at
+    # except a build that had already gone green.
+    print(len(flavors))
+elif what == "image":
+    if len(sys.argv) < 3:
+        raise SystemExit("usage: flavors.py image FLAVOR")
+    flavor = sys.argv[2]
+    if flavor not in flavors:
+        raise SystemExit(f"unknown Utah image flavor: {flavor}")
+    print(IMAGE[flavor])
 else:
     raise SystemExit(f"unknown query: {what}")
