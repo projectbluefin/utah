@@ -8,6 +8,15 @@ vm_cpus := env_var_or_default("VM_CPUS", "4")
 default:
     @just --list
 
+# Unit tests for the helper scripts under scripts/. These are host-side and
+# need no image, so they run inside `just check` rather than waiting for a
+# build to fail on a wrong matrix.
+test:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    pip install --quiet pytest 2>/dev/null || true
+    python3 -m pytest tests/unit -q
+
 check:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -79,6 +88,9 @@ check:
          <(grep -m1 '^ARG BASE_IMAGE=' Containerfile.kernel)
     python3 -m py_compile scripts/flavors.py
     python3 scripts/flavors.py list >/dev/null
+    # Parsing is not agreement. The build, promote and release matrices all
+    # read this one script, so assert what it answers, not just that it runs.
+    just test
     pip install --quiet pyyaml 2>/dev/null || true
     python3 scripts/check_workflow_outputs.py
     pip install --quiet jsonschema 2>/dev/null || true
