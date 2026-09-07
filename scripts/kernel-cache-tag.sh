@@ -16,5 +16,5 @@ cd "$(dirname "$0")/.."
 {
   grep -m1 '^ARG BASE_IMAGE=' Containerfile.kernel
   cat scripts/install-ogc-kernel.sh scripts/install-nvidia.sh
-  cat packages/hummingbird.repo
+  cat packages/hummingbird.repo packages/fedora-44.repo
 } | sha256sum | cut -c1-16

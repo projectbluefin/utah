@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Install Utah's package contract: Bluefin's manifest plus the Rawhide overlay.
+"""Install Utah's package contract: Bluefin's manifest plus the Utah overlay.
 
 Mirrors projectbluefin/bluefin's build_files/base/03-packages.sh and
-build_files/shared/package-lib.sh, adapted to a single Fedora Rawhide repo.
+build_files/shared/package-lib.sh, adapted to Utah's repositories: the pinned
+utah-packages factory repository plus Hummingbird's own.
 """
 
 from __future__ import annotations
@@ -43,10 +44,9 @@ def contract(base: Path, overlay: Path, major: str | None) -> list[str]:
 
     Bluefin installs [fedora] plus the [fedora_v<major>] section for the
     Fedora release it targets, and simply skips that section when it does not
-    exist.  Rawhide is Fedora 46 and upstream's manifest stops at v44, so on
-    Rawhide this resolves to [fedora] alone -- which is what Bluefin itself
-    would install there.  Keeping the lookup dynamic means Utah picks the
-    section up for free the moment upstream adds one.
+    exist.  The lookup is dynamic: whatever release the base image reports,
+    Utah installs the matching section when upstream defines one and skips it
+    otherwise, so a new upstream section is picked up for free.
     """
     packages = section(base, "fedora")
     if major:
@@ -132,7 +132,7 @@ def main() -> int:
     print(f"Fedora release is {major}", flush=True)
     for pkg in section(overlay, "unavailable"):
         # Loud, not silent: a parity gap the operator should see in the log.
-        print(f"NOTE: {pkg} has no Rawhide source and is skipped (see packages/utah.toml)")
+        print(f"NOTE: {pkg} has no source in Utah's repositories and is skipped (see packages/utah.toml)")
 
     # Bluefin excludes PackageKit from its bulk install; an image-based system
     # must not carry a second package manager that can write to /usr.

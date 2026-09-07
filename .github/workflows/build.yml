@@ -15,7 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Cheap, network-only gate. A contract package with no Rawhide source used to
+  # Cheap, network-only gate. A contract package that none of Utah's
+  # repositories provide used to
   # surface as an opaque `exit status 71` from the image build; catching it here
   # costs seconds instead of the full matrix.
   contract:
@@ -23,7 +24,8 @@ jobs:
     permissions:
       contents: read
     outputs:
-      flavors: ${{ steps.flavors.outputs.list }}
+      main_flavors: ${{ steps.flavors.outputs.main }}
+      kernel_flavors: ${{ steps.flavors.outputs.kernel }}
       needs_kernel: ${{ steps.flavors.outputs.needs_kernel }}
     steps:
       - name: Checkout
@@ -43,6 +45,12 @@ jobs:
       # config/flavors.json is the single source for the build, promote and
       # release matrices. It used to be four literals in three files, which is
       # one place to narrow the set and three places to forget.
+      #
+      # The set is split in two here, by what each flavor builds on. main uses
+      # the pristine Hummingbird base; the rest use the kernel cache image. They
+      # are submitted as two separate matrices below so that a kernel cache
+      # miss -- twenty minutes of compiling -- holds up only the flavors that
+      # consume it, instead of every image in the run.
       - name: Resolve the image flavors
         id: flavors
         run: |
@@ -52,9 +60,15 @@ jobs:
           # matrix in the reusable workflow: no image job is created at all and
           # the only symptom is "build_container: failure" from the aggregator.
           test -n "$LIST" && [ "$LIST" != "[]" ]
-          echo "list=$LIST" >> "$GITHUB_OUTPUT"
-          echo "needs_kernel=$(python3 scripts/flavors.py needs-kernel)" >> "$GITHUB_OUTPUT"
-          echo "building $LIST"
+          MAIN="$(python3 scripts/flavors.py list-main)"
+          KERNEL="$(python3 scripts/flavors.py list-kernel)"
+          test -n "$MAIN" && test -n "$KERNEL"
+          {
+            echo "main=$MAIN"
+            echo "kernel=$KERNEL"
+            echo "needs_kernel=$(python3 scripts/flavors.py needs-kernel)"
+          } >> "$GITHUB_OUTPUT"
+          echo "building $LIST: on the base image $MAIN, on the kernel cache $KERNEL"
 
   # The OGC kernel compile and the NVIDIA module build depend only on the base
   # image and on the two scripts that perform them, so they are hoisted out of
@@ -96,11 +110,12 @@ jobs:
           podman build --tag "$ref" --file Containerfile.kernel .
           podman push "$ref"
 
-  build:
-    needs: [contract, kernel_cache]
-    # kernel_cache is skipped whenever no flavor needs it, and a skipped
-    # dependency would otherwise skip this too.
-    if: ${{ !cancelled() && needs.contract.result == 'success' && needs.kernel_cache.result != 'failure' }}
+  # main starts the moment the contract check passes. It never pulls the kernel
+  # cache, so there is no reason for it to wait on that job; before this split
+  # a cache miss cost main the same twenty minutes it cost nvidia-gaming.
+  build_main:
+    needs: contract
+    if: needs.contract.outputs.main_flavors != '[]'
     uses: projectbluefin/actions/.github/workflows/reusable-build.yml@eb4c546389f19ad9e42f1af052623de73c620ebb # v1
     permissions:
       contents: read
@@ -111,8 +126,34 @@ jobs:
       issues: write
     with:
       brand_name: utah
-      image_flavors: ${{ needs.contract.outputs.flavors }}
+      image_flavors: ${{ needs.contract.outputs.main_flavors }}
       stream_name: testing
       architecture: '["x86_64"]'
       # Testing is advanced only after post-testing-e2e validates the build.
+      publish_stream_tag: "false"
+
+  # The flavors that take the kernel cache image as their base.
+  #
+  # brand_name differs from the call above on purpose. The reusable workflow
+  # keys its own concurrency group on brand_name and stream_name with
+  # cancel-in-progress, so two calls carrying the same pair would cancel each
+  # other. Utah's Justfile ignores base_name when naming images (image names
+  # come from the flavor alone), so the only visible effect is the name of the
+  # digest artifact, which post-testing-e2e matches by glob.
+  build_kernel:
+    needs: [contract, kernel_cache]
+    if: ${{ !cancelled() && needs.contract.result == 'success' && needs.kernel_cache.result == 'success' && needs.contract.outputs.kernel_flavors != '[]' }}
+    uses: projectbluefin/actions/.github/workflows/reusable-build.yml@eb4c546389f19ad9e42f1af052623de73c620ebb # v1
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+      security-events: write
+      issues: write
+    with:
+      brand_name: utah-kernel
+      image_flavors: ${{ needs.contract.outputs.kernel_flavors }}
+      stream_name: testing
+      architecture: '["x86_64"]'
       publish_stream_tag: "false"

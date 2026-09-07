@@ -1,0 +1,24 @@
+# Fedora 44 is the Hummingbird buildroot pairing, not a runtime repository.
+# Keep this enabled only in Containerfile.kernel's builder stage: the runtime
+# image deliberately ships Hummingbird plus the Utah package repository.
+[fedora-44]
+name=Fedora 44 - $basearch
+baseurl=https://dl.fedoraproject.org/pub/fedora/linux/releases/44/Everything/$basearch/os/
+enabled=1
+metadata_expire=6h
+repo_gpgcheck=0
+type=rpm
+gpgcheck=1
+gpgkey=https://src.fedoraproject.org/rpms/fedora-repos/raw/rawhide/f/RPM-GPG-KEY-fedora-44-primary
+skip_if_unavailable=False
+
+[fedora-44-updates]
+name=Fedora 44 - $basearch - Updates
+baseurl=https://dl.fedoraproject.org/pub/fedora/linux/updates/44/Everything/$basearch/
+enabled=1
+metadata_expire=6h
+repo_gpgcheck=0
+type=rpm
+gpgcheck=1
+gpgkey=https://src.fedoraproject.org/rpms/fedora-repos/raw/rawhide/f/RPM-GPG-KEY-fedora-44-primary
+skip_if_unavailable=False

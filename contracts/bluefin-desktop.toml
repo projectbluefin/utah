@@ -116,7 +116,15 @@ apps = [
   "org.gnome.font-viewer",
   "org.gtk.Gtk3theme.adw-gtk3",
   "org.gtk.Gtk3theme.adw-gtk3-dark",
-  "org.mozilla.Thunderbird",
+  # Spelled lower-case because Bluefin's Brewfile spells it that way. Flathub's
+  # application id is org.mozilla.Thunderbird, so this looks like a typo
+  # upstream -- but this list is a parity assertion against their Brewfile, not
+  # against Flathub, and correcting it here would report drift that is not
+  # ours. Follow it back if Thunderbird turns out not to install.
+  #
+  # The comparison is order-sensitive, so this list is in Brewfile order, not
+  # sorted: thunderbird precedes firefox there.
+  "org.mozilla.thunderbird",
   "org.mozilla.firefox",
   "page.tesk.Refine",
 ]

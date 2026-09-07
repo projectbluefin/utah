@@ -26,6 +26,11 @@ check:
     test -f scripts/verify-desktop-contract.py
     test -f scripts/verify-gnome-extensions.py
     test -f contracts/bluefin-desktop.toml
+    # The reusable image workflow checks out this repository without
+    # submodules. Populate them here before validating the source contract;
+    # otherwise CI reports every extension as missing while a developer clone
+    # (or the contract workflow's recursive checkout) passes.
+    git submodule update --init --recursive
     python3 -m py_compile scripts/verify-desktop-contract.py scripts/verify-gnome-extensions.py
     python3 scripts/verify-desktop-contract.py --check contracts/bluefin-desktop.toml
     python3 scripts/verify-gnome-extensions.py --source
@@ -49,7 +54,12 @@ check:
     grep -q 'ENABLE_SSHD' Containerfile
     grep -q 'ENABLE_SSHD="${ENABLE_SSHD:-0}"' Justfile
     grep -q 'ARG PACKAGE_IMAGE_SHA=' Containerfile
+    grep -q 'ARG PACKAGE_IMAGE_REF=' Containerfile
     grep -q 'COPY --from=packages /repository /etc/utah-packages' Containerfile
+    # Every executable release asset fetched during composition must be pinned
+    # and verified; no build may resolve a mutable latest release.
+    python3 -m py_compile scripts/check-download-integrity.py
+    python3 scripts/check-download-integrity.py
     grep -q '"utah-packages"' scripts/install-packages.py
     python3 -m py_compile scripts/install-packages.py
     python3 -m py_compile scripts/verify-rpm-contract.py
@@ -71,6 +81,10 @@ check:
     python3 scripts/flavors.py list >/dev/null
     pip install --quiet pyyaml 2>/dev/null || true
     python3 scripts/check_workflow_outputs.py
+    pip install --quiet jsonschema 2>/dev/null || true
+    bash scripts/check-skill-frontmatter.sh
+    bash scripts/check-skill-index.sh
+    python3 scripts/generate_skill_index.py --check
     # No workflow may carry its own copy of the flavor list. That drift is what
     # config/flavors.json exists to stop: narrowing the build matrix while
     # promote and release still name images nothing produces fails late.
@@ -155,6 +169,13 @@ build-ghcr base_name stream flavor kernel_pin="":
       nvidia-gaming) image_name="{{ image }}-nvidia-gaming" ;;
       *) echo "unknown Utah image flavor: {{ flavor }}" >&2; exit 2 ;;
     esac
+    # The kernel cache image and the layer cache below are both published
+    # private by default, and the reusable build workflow only logs in to GHCR
+    # for non-PR events -- so pulling either would 401 on exactly the runs that
+    # need them most.  It passes GITHUB_TOKEN through to this recipe, so use it.
+    if [ -n "${GITHUB_TOKEN:-}" ]; then
+      echo "${GITHUB_TOKEN}" | podman login ghcr.io -u "${GITHUB_ACTOR:-x}" --password-stdin
+    fi
     # main builds neither the OGC kernel nor an NVIDIA module, so it keeps the
     # pristine Hummingbird base and does not pull the cache image at all.  The
     # other three take the cache image as their base; the install scripts find
@@ -163,17 +184,40 @@ build-ghcr base_name stream flavor kernel_pin="":
     if [ "{{ flavor }}" != main ]; then
       cache_ref="$(./scripts/kernel-cache-tag.sh)"
       cache_ref="ghcr.io/{{ repo_organization }}/{{ kernel_cache_image }}:${cache_ref}"
-      # The cache image is published private by default, and the reusable build
-      # workflow only logs in to GHCR for non-PR events -- so pulling the base
-      # would 401 on exactly the runs that need it most.  It passes GITHUB_TOKEN
-      # through to this recipe, so use it.
-      if [ -n "${GITHUB_TOKEN:-}" ]; then
-        echo "${GITHUB_TOKEN}" | podman login ghcr.io -u "${GITHUB_ACTOR:-x}" --password-stdin
-      fi
       base_args=(--build-arg BASE_IMAGE="$cache_ref")
+    fi
+    # Registry layer cache, the same arrangement Bluefin uses.  The package
+    # transaction is the one expensive layer in the Containerfile and its
+    # inputs move rarely: the two manifests, the repo files, the pinned package
+    # image and the install script.  With --cache-from an unchanged layer is
+    # pulled instead of rebuilt; with --cache-to (REGISTRY_CACHE_WRITE=1, which
+    # the reusable workflow sets for non-PR events only) it is published for
+    # the next run.  Pull-request and local builds are read-only, so nothing a
+    # PR does can poison what testing builds from.
+    #
+    # The cache lives in the image's own GHCR package as SHA-keyed blobs, so it
+    # needs no package of its own and GITHUB_TOKEN already has write access to
+    # it.  Podman 5 wants an untagged ref here.  The probe is skopeo list-tags,
+    # which succeeds on any readable package and fails on one that is private
+    # to us or not yet pushed, in which case the cache is simply off.
+    layer_cache_ref="ghcr.io/{{ repo_organization }}/${image_name}"
+    layer_cache_args=()
+    layer_cache_readable=false
+    if command -v skopeo >/dev/null 2>&1 && skopeo list-tags "docker://${layer_cache_ref}" >/dev/null 2>&1; then
+      layer_cache_readable=true
+      layer_cache_args+=(--cache-from "$layer_cache_ref")
+    fi
+    if [ "${REGISTRY_CACHE_WRITE:-0}" = "1" ]; then
+      layer_cache_args+=(--cache-to "$layer_cache_ref")
+      echo "Registry layer cache: read=${layer_cache_readable} write=true (${layer_cache_ref})"
+    elif [ "$layer_cache_readable" = true ]; then
+      echo "Registry layer cache: read-only (${layer_cache_ref})"
+    else
+      echo "Registry layer cache: off (${layer_cache_ref} is not readable from here)"
     fi
     podman build \
       "${base_args[@]}" \
+      "${layer_cache_args[@]}" \
       --build-arg IMAGE_NAME="$image_name" \
       --build-arg IMAGE_ID="{{ image }}" \
       --build-arg IMAGE_FLAVOR={{ flavor }} \
@@ -182,6 +226,29 @@ build-ghcr base_name stream flavor kernel_pin="":
       --build-arg SHA_HEAD_SHORT="$(git rev-parse --short HEAD)" \
       --build-arg ENABLE_SSHD="${ENABLE_SSHD:-0}" \
       --tag "localhost/$image_name:{{ stream }}" \
+      --file Containerfile .
+
+# Compose with an RPM repository already in local containers-storage. This uses
+# the same Containerfile transaction as CI without waiting for publication.
+build-local stream="testing" package_image="localhost/utah-packages:local-merged":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    package_image="{{ package_image }}"
+    podman image exists "$package_image" || {
+      echo "Local package image not found: $package_image" >&2
+      exit 1
+    }
+    version="local-{{ stream }}-$(git rev-parse --short HEAD)"
+    podman build \
+      --build-arg PACKAGE_IMAGE_REF="$package_image" \
+      --build-arg IMAGE_NAME="{{ image }}" \
+      --build-arg IMAGE_ID="{{ image }}" \
+      --build-arg IMAGE_FLAVOR=main \
+      --build-arg IMAGE_VENDOR="{{ repo_organization }}" \
+      --build-arg VERSION="$version" \
+      --build-arg SHA_HEAD_SHORT="$(git rev-parse --short HEAD)" \
+      --build-arg ENABLE_SSHD="${ENABLE_SSHD:-1}" \
+      --tag "localhost/{{ image }}:{{ stream }}" \
       --file Containerfile .
 
 generate-build-tags base_name stream flavor kernel_pin build_number version event_name event_number:

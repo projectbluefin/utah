@@ -1,4 +1,4 @@
-# Utah's overlay on top of the Bluefin package contract.
+# Utah's package overlay on top of the Bluefin package contract.
 #
 # packages/bluefin.toml is a byte-for-byte copy of projectbluefin/bluefin's
 # build_files/packages/base.toml and must stay that way -- it is the parity
@@ -8,7 +8,7 @@
 # Sections:
 #   [gnome]        GNOME 51 desktop contract Hummingbird does not ship
 #   [build]        toolchain needed to build the pinned GNOME extensions
-#   [unavailable]  Bluefin contract packages with no source in Utah's enabled repositories
+#   [unavailable]  Bluefin contract packages none of Utah's repositories provide
 #
 # On [multimedia_overrides], which Utah deliberately does not install:
 #
@@ -33,9 +33,8 @@
 #   move into the contract as a version assertion rather than a name one.
 
 [gnome]
-# Hummingbird supplies the bootable base but not a desktop.  Utah's pinned
-# utah-packages repository and Fedora 44 supply the complete GNOME 51 dependency
-# graph.
+# Hummingbird supplies the bootable base but not a desktop.  The pinned
+# utah-packages repository supplies the complete GNOME 51 dependency graph.
 packages = [
     "gnome-control-center",
     "gnome-session",
@@ -51,8 +50,16 @@ packages = [
 
 [build]
 # Build dependencies for scripts/build-gnome-extensions.sh.
+#
+# cmake is deliberately absent, though Bluefin lists it. Every cmake in the
+# Hummingbird repository -- 4.3.0-2.1.hum1 through 4.3.0-5.1.hum1 -- requires
+# libjsoncpp.so.26, and the only jsoncpp there provides libjsoncpp.so.27, so
+# cmake cannot be installed from Hummingbird at all. It is a missed rebuild on
+# their side after the jsoncpp bump, not a gap this image has to answer for,
+# and nothing in build-gnome-extensions.sh invokes cmake: it runs make, meson,
+# unzip and glib-compile-schemas. Restore this entry once Hummingbird rebuilds
+# cmake, or if an extension ever needs it.
 packages = [
-    "cmake",
     "dbus-devel",
     "glib2-devel",
     "meson",
@@ -64,8 +71,14 @@ packages = [
 # Bluefin's desktop image adds these to the server base before 40-services.sh
 # enables their units. uupd is downloaded separately because it is published
 # as a release binary rather than an RPM in the Hummingbird repositories.
+#
+# systemd-resolved is not in the Bluefin contract because Fedora's base image
+# already carries it. Hummingbird's bootable base does not: the package exists
+# in their repository but is not installed, so the image had no resolver and
+# configure-services stopped on a unit file that was never there.
 packages = [
     "fwupd",
+    "systemd-resolved",
     "tailscale",
 ]
 
@@ -90,12 +103,6 @@ packages = [
 #   vendored/cargo-fetch rebuild of the spec rather than the system-crate
 #   model.
 #
-# tailscale
-#   tailscale 1.98.8's vendored go-json-experiment references json.SkipFunc,
-#   added to the stdlib in Go 1.28. Hummingbird's newest Go is 1.27, so the
-#   vendored tree cannot compile. Needs a version pin whose vendored deps
-#   target Go 1.27, or a Go 1.28+ toolchain in the buildroot.
-#
 # zsh
 #   The HTML docs build target pulls texi2html, which drags Fedora's ruby
 #   (ruby-default-gems) into a buildroot that already carries Hummingbird's
@@ -103,24 +110,26 @@ packages = [
 #   either a ruby exclusion in the buildroot or dropping the html subpackage.
 #
 # firefox
-#   Bluefin's desktop contract names Firefox, but neither Hummingbird's overlay
-#   nor utah-packages publishes the browser build. Tracked by #35.
+#   Bluefin's desktop contract names Firefox, but this factory currently only
+#   carries mozjs140 (the embeddable JavaScript runtime), not the Firefox
+#   browser build. Keep this explicit until a Hummingbird-compatible Firefox
+#   recipe is added. Tracked by #35.
 #
 # grub2-efi-x64-cdboot
-#   This boot-media subpackage is absent from both enabled repositories. Utah
-#   uses Hummingbird's bootable base and does not build installer media. Tracked
-#   by #35.
+#   This boot-media subpackage is not present in either Hummingbird's overlay
+#   or the Utah package repository. The image uses Hummingbird's bootable base
+#   and does not build installer media here. Tracked by #35.
 #
 # pipewire-libs-extra
-#   Bluefin obtains this package from negativo17's fedora-multimedia repository,
-#   which Utah deliberately does not enable. Tracked by #35.
+#   Not published by Hummingbird or utah-packages. Bluefin obtains it from
+#   negativo17's fedora-multimedia repository, which Utah does not enable.
+#   Tracked by #35.
 packages = [
     "evolution-ews-core",
     "firefox",
     "fish",
     "grub2-efi-x64-cdboot",
     "pipewire-libs-extra",
-    "tailscale",
     "zsh",
 ]
 

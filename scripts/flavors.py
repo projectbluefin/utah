@@ -14,6 +14,8 @@ next to the list rather than in a commit message.
     flavors.py images     [{"image": "utah"}, ...]         promote
     flavors.py releases   [{"image": "utah", "source_tag": ...}, ...]  release
     flavors.py needs-kernel   true / false
+    flavors.py list-main      ["main"]            flavors that build on the pristine base
+    flavors.py list-kernel    ["nvidia", ...]     flavors that build on the kernel cache
 """
 import json
 import sys
@@ -44,5 +46,13 @@ elif what == "needs-kernel":
     # Only the OGC and NVIDIA flavors consume the kernel cache image. With
     # neither in the set, building it is 45 minutes spent on nothing.
     print("true" if any(f != "main" for f in flavors) else "false")
+elif what == "list-main":
+    # main is built on the pristine Hummingbird base and never waits for the
+    # kernel cache. The build workflow submits it separately so a cache miss
+    # (about twenty minutes of kernel compile) delays only the flavors that
+    # actually consume the result.
+    print(json.dumps([f for f in flavors if f == "main"]))
+elif what == "list-kernel":
+    print(json.dumps([f for f in flavors if f != "main"]))
 else:
     raise SystemExit(f"unknown query: {what}")

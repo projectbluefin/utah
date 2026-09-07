@@ -104,6 +104,6 @@ rm -rf /tmp/uupd
 
 # Build-only extension tooling is not part of the desktop image.
 DNF="$(command -v dnf5 || command -v dnf)"
-"$DNF" -y remove --no-autoremove cmake dbus-devel glib2-devel meson sassc unzip
+"$DNF" -y remove --no-autoremove dbus-devel glib2-devel meson sassc unzip
 
 echo "Utah desktop service configuration complete"

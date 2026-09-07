@@ -36,9 +36,12 @@ unzip -o /usr/share/gnome-shell/extensions/gradia-integration@alexandervanhee.gi
 rm -f /usr/share/gnome-shell/extensions/gradia-integration@alexandervanhee.github.io/gradia-integration@alexandervanhee.github.io.shell-extension.zip
 glib-compile-schemas --strict /usr/share/gnome-shell/extensions/gradia-integration@alexandervanhee.github.io/schemas
 
-# GSConnect (commented out until G49 support)
-meson setup --prefix=/usr /usr/share/gnome-shell/extensions/gsconnect@andyholmes.github.io /usr/share/gnome-shell/extensions/gsconnect@andyholmes.github.io/_build
-meson install -C /usr/share/gnome-shell/extensions/gsconnect@andyholmes.github.io/_build --skip-subprojects
+# GSConnect
+# Disable update-desktop-database hook since desktop-file-utils is unavailable in Hummingbird/Utah repositories.
+gsconnect_dir="/usr/share/gnome-shell/extensions/gsconnect@andyholmes.github.io"
+sed -i 's/update_desktop_database: true/update_desktop_database: false/' "${gsconnect_dir}/meson.build"
+meson setup --prefix=/usr "${gsconnect_dir}" "${gsconnect_dir}/_build"
+meson install -C "${gsconnect_dir}/_build" --skip-subprojects
 # GSConnect installs schemas to /usr/share/glib-2.0/schemas and meson compiles them automatically
 
 # Custom Command Menu

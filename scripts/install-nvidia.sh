@@ -52,6 +52,11 @@ modules_only="${UTAH_NVIDIA_MODULES_ONLY:-}"
 driver_version="${UTAH_NVIDIA_DRIVER_VERSION:-595.84}"
 run="NVIDIA-Linux-x86_64-${driver_version}.run"
 url="https://download.nvidia.com/XFree86/Linux-x86_64/${driver_version}/${run}"
+# NVIDIA publishes a SHA-256 beside every installer. The vendor `.run` is
+# executed during composition, so it is verified against that published digest
+# rather than trusted from a plain HTTPS fetch. It is fetched from the same
+# directory the installer comes from and pinned per driver version.
+sha_url="${url}.sha256sum"
 
 ogc_release=""
 [ -f /usr/lib/utah/ogc-kernel-release ] && ogc_release="$(cat /usr/lib/utah/ogc-kernel-release)"
@@ -101,34 +106,6 @@ KERNEL_DEVEL_SHA256="${UTAH_KERNEL_DEVEL_SHA256:-b2b504c42b94875af88d666d64ca910
 
 build_tree="/usr/lib/modules/${kernel}/build"
 installed_kernel_devel=""
-if [ ! -d "$build_tree" ]; then
-  echo "No build tree at $build_tree; supplying kernel-devel-${kernel}"
-  if "$DNF" -y install "kernel-devel-${kernel}"; then
-    installed_kernel_devel="kernel-devel-${kernel}"
-  else
-    arch="${kernel##*.}"; nv="${kernel%.*}"; ver="${nv%%-*}"; rel="${nv#*-}"
-    koji="https://kojipkgs.fedoraproject.org/packages/kernel/${ver}/${rel}/${arch}"
-    rpmfile="kernel-devel-${ver}-${rel}.${arch}.rpm"
-    echo "Not in the enabled repositories; taking it from ${koji}/${rpmfile}"
-    curl --retry 3 --retry-all-errors -fsSLo "/tmp/${rpmfile}" "${koji}/${rpmfile}"
-    actual="$(sha256sum "/tmp/${rpmfile}" | cut -d" " -f1)"
-    if [ "$actual" != "$KERNEL_DEVEL_SHA256" ]; then
-      echo "kernel-devel SHA-256 is $actual, expected $KERNEL_DEVEL_SHA256" >&2
-      echo "The base image kernel has moved; update KERNEL_DEVEL_SHA256." >&2
-      exit 1
-    fi
-    "$DNF" -y install "/tmp/${rpmfile}"
-    installed_kernel_devel="kernel-devel"
-    rm -f "/tmp/${rpmfile}"
-  fi
-fi
-if [ ! -d "$build_tree" ]; then
-  echo "Still no kernel build tree at $build_tree after installing kernel-devel;" >&2
-  echo "the NVIDIA module cannot be compiled against the kernel this image boots." >&2
-  diagnose
-  exit 1
-fi
-
 # Track which of these the image did not already have, the same way
 # install-ogc-kernel.sh does. The unconditional removal this used to end with
 # took out gcc, gcc-c++ and make on nvidia-gaming even though all three are in
@@ -136,17 +113,71 @@ fi
 # to remove.
 nvidia_toolchain=(gcc make kmod)
 nvidia_absent=()
-for pkg in "${nvidia_toolchain[@]}"; do
-  rpm -q "$pkg" >/dev/null 2>&1 || nvidia_absent+=("$pkg")
-done
+toolchain_ready=""
 
-"$DNF" -y install "${nvidia_toolchain[@]}"
+# Everything a compile needs and an unpack does not: kernel-devel for the base
+# kernel and the toolchain. This used to run unconditionally, before the cache
+# was consulted, so an image whose modules arrived prebuilt still spent a
+# minute and a half fetching a 60 MB kernel-devel from koji and installing gcc,
+# only to remove both again at the end. It is called from the compile path of
+# build_module and nowhere else, so an image served entirely from the cache
+# never pays for it. The cache builder, which has no cache, still does.
+ensure_toolchain() {
+  [ -n "$toolchain_ready" ] && return 0
+  toolchain_ready=1
+  if [ ! -d "$build_tree" ]; then
+    echo "No build tree at $build_tree; supplying kernel-devel-${kernel}"
+    if "$DNF" -y install "kernel-devel-${kernel}"; then
+      installed_kernel_devel="kernel-devel-${kernel}"
+    else
+      local arch nv ver rel koji rpmfile actual
+      arch="${kernel##*.}"; nv="${kernel%.*}"; ver="${nv%%-*}"; rel="${nv#*-}"
+      koji="https://kojipkgs.fedoraproject.org/packages/kernel/${ver}/${rel}/${arch}"
+      rpmfile="kernel-devel-${ver}-${rel}.${arch}.rpm"
+      echo "Not in the enabled repositories; taking it from ${koji}/${rpmfile}"
+      curl --retry 3 --retry-all-errors -fsSLo "/tmp/${rpmfile}" "${koji}/${rpmfile}"
+      actual="$(sha256sum "/tmp/${rpmfile}" | cut -d" " -f1)"
+      if [ "$actual" != "$KERNEL_DEVEL_SHA256" ]; then
+        echo "kernel-devel SHA-256 is $actual, expected $KERNEL_DEVEL_SHA256" >&2
+        echo "The base image kernel has moved; update KERNEL_DEVEL_SHA256." >&2
+        exit 1
+      fi
+      "$DNF" -y install "/tmp/${rpmfile}"
+      installed_kernel_devel="kernel-devel"
+      rm -f "/tmp/${rpmfile}"
+    fi
+  fi
+  if [ ! -d "$build_tree" ]; then
+    echo "Still no kernel build tree at $build_tree after installing kernel-devel;" >&2
+    echo "the NVIDIA module cannot be compiled against the kernel this image boots." >&2
+    diagnose
+    exit 1
+  fi
+  local pkg
+  for pkg in "${nvidia_toolchain[@]}"; do
+    rpm -q "$pkg" >/dev/null 2>&1 || nvidia_absent+=("$pkg")
+  done
+  "$DNF" -y install "${nvidia_toolchain[@]}"
+}
 
 if [ -f "${CACHE_DIR}/nvidia-installer.run" ]; then
   run_path="${CACHE_DIR}/nvidia-installer.run"
 else
   run_path="/tmp/${run}"
   curl --retry 3 --retry-all-errors -fsSLo "$run_path" "$url"
+  # Verify the installer against NVIDIA's published SHA-256. The digest file is
+  # `<sha>  <run>`; check with the local filename so the comparison holds
+  # regardless of the temp path.
+  expected="$(curl --retry 3 --retry-all-errors -fsSL "$sha_url" | awk 'NR==1{print $1}')"
+  if [ -z "$expected" ]; then
+    echo "Could not fetch NVIDIA installer SHA-256 from ${sha_url}" >&2
+    exit 1
+  fi
+  actual="$(sha256sum "$run_path" | cut -d' ' -f1)"
+  if [ "$actual" != "$expected" ]; then
+    echo "NVIDIA installer SHA-256 is $actual, expected $expected" >&2
+    exit 1
+  fi
 fi
 # Unpacking the installer is only needed in order to compile, so do it on
 # demand: when every module comes from the cache, this never runs.
@@ -164,6 +195,7 @@ build_module() {
     echo "Unpacking the prebuilt NVIDIA module for ${release}"
     tar -C / -xf "$cached"
   else
+    ensure_toolchain
     test -d "$tree"
     ensure_source
     # Drive NVIDIA own Makefile rather than the kernel build system directly.

@@ -1,0 +1,57 @@
+---
+name: skill-improvement
+version: "1.0"
+last_updated: "2026-09-05"
+id: skill-improvement
+one_line_purpose: Capture durable agent learnings in maintained docs.
+entry_point: docs/skills/skill-improvement.md
+category: meta
+mcp_compliance_level: partial
+optimization_status: draft
+status: active
+dependencies: []
+tags: [skills, improvement, documentation]
+description: >-
+  The skill-improvement mandate for Utah — every session ships the work and
+  the learning together. Use when completing a task and deciding whether to
+  write or update a skill file.
+metadata:
+  type: policy
+---
+
+# Skill Improvement Mandate
+
+Every agent session produces two outputs:
+
+1. **The work** — the PR, fix, or improvement.
+2. **The learning** — what a future agent needs to know.
+
+Output 1 without Output 2 leaves the factory no smarter.
+
+## Before you mark work complete
+
+- [ ] Did I discover a workaround, non-obvious pattern, or convention?
+- [ ] Is there an authoritative source for the area I worked in
+      (see [`../SKILL.md`](../SKILL.md))?
+- [ ] If yes — did I update it?
+- [ ] If no — did I create a skill file here?
+- [ ] Is the update committed in **this same PR**? Not a follow-up. Same PR.
+
+## Where learnings go in Utah
+
+The relevant `docs/skills/*.md` file is the first home for learnings: update
+it, or create a new skill file, add it to the router table in
+[`../SKILL.md`](../SKILL.md), and regenerate the catalog
+(`python3 scripts/generate_skill_index.py --write`). Code-adjacent comments —
+the Containerfile comment blocks, manifest headers, and script headers —
+remain the place for mechanism detail beside the code.
+
+Factory-wide learnings go to `projectbluefin/common` as an issue with the
+learning, affected component, and evidence.
+
+## Banned
+
+- Changelog files (`IMPROVEMENTS.md`, `CHANGELOG.md`, `SESSION.md`) — delete
+  on sight.
+- Session notes committed to the repo (`NOTES.md`, `PLAN.md`, `TODO.md`).
+- "Append here" instructions — route to a maintained source instead.
