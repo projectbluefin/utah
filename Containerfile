@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=quay.io/hummingbird-community/bootc-os:latest@sha256:51fa61e4fb5e571fb4b93afe7258145523e7c74a3b4cb1d9ba0ea5e499e7caaf
+ARG BASE_IMAGE=quay.io/hummingbird-community/bootc-os:latest@sha256:4a3393125d2b0d9264f89a162659336b23d20c46ca9026ed7315d83d39a34293
 # The package factory publishes a complete, digest-addressable RPM repository.
 # Keep this pin in Utah so an image build is reproducible and can be reviewed
 # against the exact package set it consumes.
@@ -79,7 +79,7 @@ RUN mkdir -p /usr/local/libexec && \
                 configure-branding.sh:utah-configure-branding \
                 verify-desktop-contract.py:utah-verify-desktop-contract \
                 verify-gnome-extensions.py:utah-verify-gnome-extensions; do \
-      install -m 0755 "/tmp/utah-scripts/${pair%%:*}" "/usr/local/libexec/${pair##*:}" || exit 1; \
+      install -D -m 0755 "/tmp/utah-scripts/${pair%%:*}" "/usr/local/libexec/${pair##*:}" || exit 1; \
     done && \
     cp -a /tmp/utah-common/. / && \
     cp -a /tmp/utah-bluefin/. / && \
