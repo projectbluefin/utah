@@ -132,6 +132,15 @@ ARG ENABLE_SSHD=0
 # is otherwise unverified. Both move together, so Renovate updates both.
 ARG UUPD_VERSION=v1.4.0
 ARG UUPD_SHA256=c7463f193cd35b92cde2ee05496501d6ac13808899bd26e17e027b7ee9ee1acc
+# chairlift is a projectbluefin-owned Go/GTK4/Libadwaita tool, released
+# straight to GitHub Releases (see projectbluefin/chairlift's release.yml) —
+# not part of the utah-packages factory, which rebuilds Fedora's own desktop
+# stack from dist-git recipes and doesn't fit an independently-released
+# project like this one. CHAIRLIFT_SHA256 is the x86_64 RPM digest from the
+# release's published checksums.txt; both move together, so Renovate updates
+# both alongside UUPD's pair above.
+ARG CHAIRLIFT_VERSION=v0.12.0
+ARG CHAIRLIFT_SHA256=56109c3b5955cc4c8f9a94e7e56dd6cf5f79f4ed2a4687847d13c4fdc802838b
 
 # Hummingbird defaults to a server preset and disables unlisted services.
 # configure-services is the Utah equivalent of bluefin-lts's 40-services.sh:
@@ -153,6 +162,13 @@ RUN mkdir -p /tmp/uupd && \
       -o /tmp/uupd/uupd.service && \
     curl -fsSL "https://raw.githubusercontent.com/ublue-os/uupd/${UUPD_VERSION}/uupd.timer" \
       -o /tmp/uupd/uupd.timer && \
+    mkdir -p /tmp/chairlift && \
+    curl -fsSL "https://github.com/projectbluefin/chairlift/releases/download/${CHAIRLIFT_VERSION}/projectbluefin-chairlift-${CHAIRLIFT_VERSION#v}-1.x86_64.rpm" \
+      -o /tmp/chairlift/chairlift.rpm && \
+    echo "${CHAIRLIFT_SHA256}  /tmp/chairlift/chairlift.rpm" | sha256sum --check --strict && \
+    dnf="$(command -v dnf5 || command -v dnf)" && \
+    "${dnf}" install -y /tmp/chairlift/chairlift.rpm && \
+    rm -rf /tmp/chairlift && \
     /usr/local/libexec/utah-build-gnome-extensions && \
     /usr/local/libexec/utah-verify-gnome-extensions && \
     glib-compile-schemas /usr/share/glib-2.0/schemas && \
