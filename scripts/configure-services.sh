@@ -48,8 +48,14 @@ disable_unit() {
 # systemd-tmpfiles-setup-dev.service, which creates the static device nodes --
 # and the installed system then times out every .device unit at once,
 # /dev/ttyS0 as readily as the /boot filesystem, and lands in an emergency
-# shell. Disable rather than leave it to the vendor preset.
+# shell. Remove it outright: disabling only drops the preset's symlinks, and
+# anything that later pulls the unit in by name would bring the cycle back.
+# Strip the unit and its drop-in directory so nothing can order against it.
 disable_unit rechunker-group-fix.service
+rm -f /usr/lib/systemd/system/rechunker-group-fix.service
+rm -rf /usr/lib/systemd/system/rechunker-group-fix.service.d
+rm -f /usr/lib/systemd/system/*.wants/rechunker-group-fix.service \
+      /etc/systemd/system/*.wants/rechunker-group-fix.service
 enable_unit brew-setup.service
 enable_unit flatpak-nuke-fedora.service
 enable_unit flatpak-preinstall.service
