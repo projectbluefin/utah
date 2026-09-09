@@ -109,6 +109,10 @@ about installation.
   fail fast on that case — names only, no versions — instead of discovering
   it twenty minutes into a build (recipe comment, `Justfile`, `check-repos`;
   needs network access).
+- If a pinned repository loses an optional service RPM, move that name from
+  `[services]` to `[unavailable]` with a tracking issue. `configure-services.sh`
+  guards absent units, so this preserves the build while documenting the
+  parity gap.
 - `[unavailable]` entries still present in the install set are a validation
   error (`install-packages.py --check`).
 - Drift in `packages/bluefin.toml` from upstream is a CI failure
