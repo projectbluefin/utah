@@ -1,4 +1,11 @@
 # Utahraptor
+
+<!-- BEGIN E2E VERIFICATION -->
+[![Verified end to end](docs/verification/screenshots/installed-fastfetch.png)](docs/verification/README.md)
+
+*Verified end to end on 2026-09-06T18:12:30Z: installed to a LUKS2-encrypted disk, unlocked at the Plymouth prompt, and logged in to a GNOME session — the shot above is fastfetch inside that booted install. Full record and more screenshots in [docs/verification](docs/verification/README.md), refreshed by `just luks-test`.*
+<!-- END E2E VERIFICATION -->
+
 †Utahraptor ostrommaysi
 
 Bluefin built on Fedora Hummingbird. The more ... civilized murder machine.

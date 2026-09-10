@@ -72,11 +72,23 @@ packages = [
 # enables their units. uupd is downloaded separately because it is published
 # as a release binary rather than an RPM in the Hummingbird repositories.
 #
-# systemd-resolved is not in the Bluefin contract because Fedora's base image
-# already carries it. Hummingbird's bootable base does not: the package exists
-# in their repository but is not installed, so the image had no resolver and
-# configure-services stopped on a unit file that was never there.
+# systemd-resolved and flatpak are not in the Bluefin contract because Fedora's
+# base image already carries them. Hummingbird's bootable base does not.
+# systemd-resolved exists in their repository but is not installed, so the
+# image had no resolver and configure-services stopped on a unit file that was
+# never there. flatpak is not in their repository at all -- the factory builds
+# it now -- and without it the image declares a Flatpak contract it has no way
+# to install, and the live ISO build stops at "flatpak: command not found".
+#
+# cryptsetup is the same shape again: Hummingbird ships cryptsetup-libs but not
+# the tool, so the installer could not create an encrypted volume --
+#   fisherman: fatal: missing required host tool: "cryptsetup" not found
+# -- and an installed system whose disk is encrypted could not manage its own
+# keys. The initramfs already carries the crypt and systemd-cryptsetup dracut
+# modules, so unlocking was never the gap; creating the volume was.
 packages = [
+    "cryptsetup",
+    "flatpak",
     "fwupd",
     "systemd-resolved",
     "tailscale",
@@ -120,16 +132,28 @@ packages = [
 #   or the Utah package repository. The image uses Hummingbird's bootable base
 #   and does not build installer media here. Tracked by #35.
 #
+# anaconda-live, slitherer
+#   Utah installs through the bootc-installer live path, not Anaconda WebUI.
+#   anaconda-live pulls anaconda-webui, which pulls cockpit-bridge,
+#   cockpit-ws, cockpit-networkmanager and cockpit-storaged, and cockpit
+#   cannot be delivered on this platform: Hummingbird's glib2 disables GHmac
+#   unconditionally, which is the authentication primitive cockpit-ws uses.
+#   anaconda-webui also pulls slitherer, whose qt6-qtwebengine nothing here
+#   provides. Excluding the branch is what keeps the transaction from asking
+#   for an authentication path that cannot work.
+#
 # pipewire-libs-extra
 #   Not published by Hummingbird or utah-packages. Bluefin obtains it from
 #   negativo17's fedora-multimedia repository, which Utah does not enable.
 #   Tracked by #35.
 packages = [
+    "anaconda-live",
     "evolution-ews-core",
     "firefox",
     "fish",
     "grub2-efi-x64-cdboot",
     "pipewire-libs-extra",
+    "slitherer",
     "zsh",
 ]
 

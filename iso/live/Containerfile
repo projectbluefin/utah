@@ -13,7 +13,13 @@ ENV TARGET_IMAGE=${TARGET_IMAGE} DEBUG=${DEBUG}
 
 # Utah already carries dracut-live; systemd-boot is added only to the live
 # environment because the installed image uses the Hummingbird bootloader.
-RUN dnf5 install -y --setopt=install_weak_deps=False systemd-boot-unsigned && \
+#
+# dbus-daemon is for the build itself: install-flatpaks.sh starts a system bus
+# so flatpak can install into /var/lib, and Utah carries dbus-broker rather
+# than the reference daemon, so /usr/bin/dbus-daemon is not there. The package
+# is small and never leaves the live overlay.
+RUN dnf5 install -y --setopt=install_weak_deps=False \
+        systemd-boot-unsigned dbus-daemon && \
     dnf5 clean all && rm -rf /var/cache/dnf /var/cache/libdnf5
 
 # Bake the installer plus precisely the Flatpaks declared by the Bluefin
@@ -32,9 +38,22 @@ RUN chmod 0755 /tmp/utah-live-src/configure-live.sh && \
 # Rebuild against Utah's own kernel and userspace. Hummingbird's dracut emits
 # a harmless /root install warning in the container build context but still
 # returns a successful image with dmsquash-live included.
+#
+# tpm2-tss and pcsc are omitted because they cannot be satisfied. Hummingbird's
+# dracut config adds "fido2 tpm2-tss pkcs11 pcsc" unconditionally, and a module
+# named there is an error rather than a skip when its helpers are missing:
+# tpm2-tss wants tpm2_pcrread from tpm2-tools and pcsc wants the pcsc-lite
+# tools, and neither package exists in Hummingbird or in this factory.
+#
+# Dropping them costs nothing here. This is the live initramfs, which boots an
+# unencrypted squashfs from the ISO and has no smartcard or TPM-backed volume
+# to open; the installed system boots the payload image's own initramfs, which
+# this build never touches. Revisit if Utah ever wants TPM-bound LUKS, which
+# needs tpm2-tools in the installed image, not in the live overlay.
 RUN set -eux; \
     kernel="$(ls /usr/lib/modules | sort -V | tail -1)"; \
     dracut --force --reproducible --no-hostonly \
       --add dmsquash-live \
+      --omit 'tpm2-tss pcsc' \
       --add-drivers 'squashfs overlay loop iso9660 sr_mod cdrom' \
       "/usr/lib/modules/${kernel}/initramfs.img" "${kernel}"
