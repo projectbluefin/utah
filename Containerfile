@@ -68,7 +68,7 @@ COPY --from=common /system_files/bluefin /tmp/utah-bluefin
 COPY --from=brew /system_files /tmp/utah-brew
 COPY system_files/shared /tmp/utah-local
 
-RUN for pair in install-packages.py:utah-install-packages \
+    for pair in install-packages.py:utah-install-packages \
                 verify-rpm-contract.py:utah-verify-rpm-contract \
                 build-gnome-extensions.sh:utah-build-gnome-extensions \
                 install-ogc-kernel.sh:utah-install-ogc-kernel \
@@ -78,7 +78,7 @@ RUN for pair in install-packages.py:utah-install-packages \
                 configure-branding.sh:utah-configure-branding \
                 verify-desktop-contract.py:utah-verify-desktop-contract \
                 verify-gnome-extensions.py:utah-verify-gnome-extensions; do \
-      install -m 0755 "/tmp/utah-scripts/${pair%%:*}" "/usr/local/libexec/${pair##*:}" || exit 1; \
+      install -D -m 0755 "/tmp/utah-scripts/${pair%%:*}" "/usr/local/libexec/${pair##*:}" || exit 1; \
     done && \
     cp -a /tmp/utah-common/. / && \
     cp -a /tmp/utah-bluefin/. / && \
