@@ -40,7 +40,7 @@ FROM ${BASE_IMAGE}
 # are the whole input to the expensive layer, so everything else waits its
 # turn below them.
 COPY packages/bluefin.toml packages/utah.toml contracts/bluefin-desktop.toml /usr/share/utah/
-COPY packages/hummingbird.repo packages/nvidia-container.repo packages/utah-packages.repo /etc/yum.repos.d/
+COPY packages/fedora-44.repo packages/hummingbird.repo packages/nvidia-container.repo packages/utah-packages.repo /etc/yum.repos.d/
 # The package image is an RPM repository, not a runtime dependency. Its
 # contents are intentionally copied into the image so the package transaction
 # is reproducible and does not depend on a mutable Pages mirror.
@@ -96,10 +96,8 @@ RUN for pair in install-packages.py:utah-install-packages \
 # after the NVIDIA and OGC step.
 #
 # Utah keeps Bluefin's user-facing package contract.  Hummingbird supplies the
-# bootable base; the pinned Utah package repository and Hummingbird's own
-# repository supply the desktop and the rest.  Fedora repositories are never
-# enabled at runtime -- they are bootstrap material for the package factory's
-# buildroot, not a source of installed packages.
+# bootable base; Fedora 44, the pinned Utah package repository, and Hummingbird's
+# own repository supply the desktop and the rest.
 # A missing package is a build failure: silently skipping one would make parity
 # claims meaningless.  The only exceptions are the packages listed under
 # [unavailable] in packages/utah.toml, each of which carries a tracking issue.
