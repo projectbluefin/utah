@@ -128,14 +128,39 @@ packages = [
 #   Not published by Hummingbird or utah-packages. Bluefin obtains it from
 #   negativo17's fedora-multimedia repository, which Utah does not enable.
 #   Tracked by #35.
+#
+# The remaining parity packages below are not published by either configured
+# repository. Keep them explicit until the factory adds compatible builds.
+# Tracked by #35.
 packages = [
+    "adw-gtk3-theme",
+    "adwaita-fonts-all",
+    "alsa-firmware",
+    "alsa-tools-firmware",
+    "containerd",
     "evolution-ews-core",
     "firefox",
     "fish",
+    "fzf",
+    "google-noto-sans-cjk-vf-fonts",
     "fwupd",
+    "gum",
     "grub2-efi-x64-cdboot",
+    "ibus-mozc",
+    "ibus-unikey",
+    "input-remapper",
+    "libcamera-gstreamer",
+    "libcamera-tools",
+    "livesys-scripts",
+    "mesa-libGLU",
+    "mozc",
+    "nautilus-gsconnect",
     "pipewire-libs-extra",
+    "sassc",
     "tailscale",
+    "waypipe",
+    "xorriso",
+    "xdg-desktop-portal",
     "zsh",
 ]
 
