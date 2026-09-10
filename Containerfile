@@ -10,7 +10,7 @@ ARG PACKAGE_IMAGE_REF=${PACKAGE_IMAGE}@${PACKAGE_IMAGE_SHA}
 ARG COMMON_IMAGE=ghcr.io/projectbluefin/common
 ARG COMMON_IMAGE_SHA=sha256:fb943c87866292fb74eb74610e9cd08a1a91fe42e763e28473f3f57cf18f26a5
 ARG BREW_IMAGE=ghcr.io/ublue-os/brew
-ARG BREW_IMAGE_SHA=sha256:8f952ae54585db9f855a306ef365e13609ed7c7944b12b823ba7d5ce8e1a145b
+ARG BREW_IMAGE_SHA=sha256:d52b3f578f01623636aff534291b0bd8ff0a0244ef225bf51aecb5fa05a137af
 
 FROM ${COMMON_IMAGE}@${COMMON_IMAGE_SHA} AS common
 FROM ${BREW_IMAGE}@${BREW_IMAGE_SHA} AS brew
@@ -68,7 +68,7 @@ COPY --from=common /system_files/bluefin /tmp/utah-bluefin
 COPY --from=brew /system_files /tmp/utah-brew
 COPY system_files/shared /tmp/utah-local
 
-RUN for pair in install-packages.py:utah-install-packages \
+    for pair in install-packages.py:utah-install-packages \
                 verify-rpm-contract.py:utah-verify-rpm-contract \
                 build-gnome-extensions.sh:utah-build-gnome-extensions \
                 install-ogc-kernel.sh:utah-install-ogc-kernel \
@@ -78,7 +78,7 @@ RUN for pair in install-packages.py:utah-install-packages \
                 configure-branding.sh:utah-configure-branding \
                 verify-desktop-contract.py:utah-verify-desktop-contract \
                 verify-gnome-extensions.py:utah-verify-gnome-extensions; do \
-      install -m 0755 "/tmp/utah-scripts/${pair%%:*}" "/usr/local/libexec/${pair##*:}" || exit 1; \
+      install -D -m 0755 "/tmp/utah-scripts/${pair%%:*}" "/usr/local/libexec/${pair##*:}" || exit 1; \
     done && \
     cp -a /tmp/utah-common/. / && \
     cp -a /tmp/utah-bluefin/. / && \
