@@ -58,12 +58,12 @@ packages = [
 # their side after the jsoncpp bump, not a gap this image has to answer for,
 # and nothing in build-gnome-extensions.sh invokes cmake: it runs make, meson,
 # unzip and glib-compile-schemas. Restore this entry once Hummingbird rebuilds
-# cmake, or if an extension ever needs it.
+# cmake, or if an extension ever needs it. sassc was dropped alongside: dash-to-dock's
+# stylesheet.css now ships precompiled, so no build step needs a Sass compiler.
 packages = [
     "dbus-devel",
     "glib2-devel",
     "meson",
-    "sassc",
     "unzip",
 ]
 
