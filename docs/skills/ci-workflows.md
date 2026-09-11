@@ -30,6 +30,9 @@ each pinned to a SHA tagged `v1`:
 - `.github/workflows/promote-testing-to-main.yml` -- pushes to `testing`, a
   nightly cron, and manual dispatch.
 - `.github/workflows/sync-main-to-testing.yml` -- every push to `main`.
+- `.github/workflows/iso.yml` -- builds, tests, and publishes the production
+  x86_64 UEFI ISO after testing promotion, running offline LUKS-encrypted
+  installation and graphical boot gates in QEMU.
 
 CI delegates builds, vulnerability reporting, SBOMs, keyless signatures,
 provenance, caching, and rechunking to `projectbluefin/actions@v1` (originated

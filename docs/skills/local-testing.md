@@ -119,6 +119,24 @@ just boot-iso        # QEMU/noVNC live-session validation
 just iso testing 1   # optional live-session SSH diagnostics (debug=1)
 ```
 
+## Offline ISO and encrypted installation validation
+
+The offline installer test validates the production ISO end to end in QEMU:
+boots the live ISO, verifies the live graphical desktop, executes a network-isolated
+installation from the embedded OCI payload onto a LUKS2 encrypted volume,
+unlocks the encrypted disk via Plymouth (`luks-unlock.py`), and validates that
+the installed deployment reaches the graphical target with default Flatpaks intact:
+
+```bash
+just iso testing 1
+just iso-e2e output/utah-live.iso ghcr.io/projectbluefin/utah:testing luks
+```
+
+Key features:
+- Supports `encryption="luks"` (default) or `encryption="none"`.
+- `iso/scripts/luks-unlock.py` monitors QEMU serial and framebuffer screendumps to detect Plymouth's passphrase prompt and inject the unlock key.
+- Captures serial logs (`live-serial.log`, `installed-serial.log`), framebuffer screenshots (`live-desktop.png`, `installed-desktop.png`), and retains failed disk images on error.
+
 The result is `output/utah-live.iso`, assembled with systemd-boot, a
 `UTAH_LIVE` dmsquash-live root, and a serial `UTAH_LIVE_READY` marker. It is
 intended to prove live desktop boot first; bootc-installer/offline payload

@@ -76,7 +76,13 @@ packages = [
 # already carries it. Hummingbird's bootable base does not: the package exists
 # in their repository but is not installed, so the image had no resolver and
 # configure-services stopped on a unit file that was never there.
+#
+# cryptsetup is required by fisherman when the install target requests a LUKS
+# encrypted volume. Hummingbird ships cryptsetup-libs but not the CLI. The
+# initramfs already carries the crypt and systemd-cryptsetup dracut modules;
+# installing cryptsetup allows volume creation and key management.
 packages = [
+    "cryptsetup",
     "fwupd",
     "systemd-resolved",
     "tailscale",

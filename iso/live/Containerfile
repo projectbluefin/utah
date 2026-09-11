@@ -4,12 +4,14 @@
 ARG SOURCE_IMAGE=localhost/utah:testing
 FROM ${SOURCE_IMAGE}
 
-# TARGET_IMAGE is the published image name recorded in the installer recipe
-# and embedded offline store. SOURCE_IMAGE may be localhost for development;
-# it must never leak into the released recipe.
+# TARGET_IMAGE is the tag imported into the embedded offline store. The
+# separately supplied TRACKING_IMAGE is the exact remote ref recorded for
+# updates. SOURCE_IMAGE may be localhost for development; it must never leak
+# into the released recipe.
 ARG TARGET_IMAGE=ghcr.io/projectbluefin/utah:testing
+ARG TRACKING_IMAGE=ghcr.io/projectbluefin/utah:testing
 ARG DEBUG=0
-ENV TARGET_IMAGE=${TARGET_IMAGE} DEBUG=${DEBUG}
+ENV TARGET_IMAGE=${TARGET_IMAGE} TRACKING_IMAGE=${TRACKING_IMAGE} DEBUG=${DEBUG}
 
 # Utah already carries dracut-live; systemd-boot is added only to the live
 # environment because the installed image uses the Hummingbird bootloader.

@@ -46,6 +46,13 @@ check:
     bash -n iso/live/src/configure-live.sh
     bash -n iso/live/src/install-flatpaks.sh
     bash -n iso/scripts/build-iso.sh
+    test -f iso/scripts/offline-e2e.sh
+    bash -n iso/scripts/offline-e2e.sh
+    test -f iso/scripts/luks-unlock.py
+    python3 -m py_compile iso/scripts/luks-unlock.py
+    test -f tests/unit/test_luks_unlock.py
+    python3 -m unittest tests/unit/test_luks_unlock.py
+    grep -q 'cryptsetup' packages/utah.toml
     python3 -m json.tool iso/live/src/etc/bootc-installer/images.json >/dev/null
     python3 -m json.tool iso/live/src/etc/bootc-installer/recipe.json >/dev/null
     grep -q 'org.bootcinstaller.Installer' iso/live/src/install-flatpaks.sh
@@ -368,6 +375,18 @@ boot-iso:
       --env ARGUMENTS=-snapshot \
       --volume "$iso:/boot.iso:ro" \
       ghcr.io/qemus/qemu:latest
+
+# Run network-isolated live ISO install and graphical boot E2E test in QEMU.
+# Supports encryption="luks" (default) or encryption="none".
+iso-e2e iso="" payload_ref="ghcr.io/projectbluefin/utah:testing" encryption="luks":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    iso_path="{{ iso }}"
+    if [[ -z "$iso_path" ]]; then
+      iso_path="$(realpath "{{ base_dir }}/utah-live.iso")"
+    fi
+    test -f "$iso_path" || { echo "Missing ISO: $iso_path; run just iso" >&2; exit 1; }
+    UTAH_E2E_ENCRYPTION="{{ encryption }}" bash iso/scripts/offline-e2e.sh "$iso_path" "{{ payload_ref }}"
 
 # Boot the installed Utah disk through QEMU-for-Docker. Open the printed URL
 # and confirm GDM appears and the GNOME Shell desktop renders. The disk is
