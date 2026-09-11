@@ -26,6 +26,7 @@ just check-desktop-contract           # in-image verifiers against a built image
 just generate-bootable-image testing  # bootc install to-disk -> output/bootable.raw
 just boot-vm                          # QEMU/noVNC; confirm GDM + GNOME Shell render
 just iso testing && just boot-iso     # live ISO build + boot (see docs/skills/local-testing.md)
+just lifecycle-e2e                    # bootc upgrade & rollback lifecycle validation in QEMU
 ```
 
 `just check` is the gate CI runs first; a change that fails it fails the whole

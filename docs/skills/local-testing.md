@@ -127,6 +127,22 @@ QEMU-for-Docker and exposes the noVNC console at the printed URL (comment
 above `boot-iso` in `Justfile`), with TPM, UEFI, and `-snapshot` so nothing
 persists.
 
+## Bootc Upgrade and Rollback Lifecycle Testing
+
+Validate that atomic updates work end-to-end across deployments:
+
+```bash
+just lifecycle-e2e <base_image_or_disk> [candidate_image]
+```
+
+The test executes in QEMU:
+1. Boots the initial deployment in QEMU, establishes SSH, asserts Utah identity (`ID=utah`, `IMAGE_ID=utah`) and graphical desktop (`graphical.target`, `gdm.service`), and captures the booted digest.
+2. Stages an upgrade using bootc/uupd policy (`bootc switch <candidate>` or `bootc upgrade`) and asserts that `.status.staged` exists with the candidate digest.
+3. Reboots the VM, asserts that `.status.booted` matches the candidate digest and `.status.rollback` matches the initial digest, and validates desktop smoke checks.
+4. Stages a rollback (`bootc rollback`) and asserts that `.status.staged` references the initial digest.
+5. Reboots the VM, asserts that `.status.booted` matches the initial digest, and confirms desktop health.
+6. Writes structured diagnostics (`lifecycle-summary.json` and `lifecycle-report.md`) detailing active deployments and digests at every phase.
+
 ## Verification
 
 ```bash
@@ -141,4 +157,5 @@ just generate-bootable-image testing
 just boot-vm     # success: GDM appears and GNOME Shell renders in noVNC
 just iso testing
 just boot-iso    # success: live session renders; serial shows UTAH_LIVE_READY
+just lifecycle-e2e output/bootable.raw
 ```

@@ -1,0 +1,82 @@
+name: Bootc Lifecycle E2E
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_image:
+        description: "Initial Utah image ref or digest (default: ghcr.io/projectbluefin/utah:testing)"
+        required: false
+        type: string
+        default: "ghcr.io/projectbluefin/utah:testing"
+      candidate_image:
+        description: "Candidate Utah image ref or digest to upgrade to (optional)"
+        required: false
+        type: string
+        default: ""
+  workflow_run:
+    workflows: ["Post-Testing E2E"]
+    types: [completed]
+    branches: [testing]
+
+permissions: read-all
+
+concurrency:
+  group: utah-lifecycle-${{ github.event.workflow_run.head_sha || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  lifecycle-test:
+    name: Validate bootc upgrade and rollback lifecycle
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'testing')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          submodules: recursive
+
+      - name: Install QEMU and virtualization dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            qemu-system-x86 \
+            qemu-utils \
+            ovmf \
+            ffmpeg
+
+      - name: Run bootc upgrade and rollback lifecycle E2E
+        env:
+          BASE_IMG: ${{ inputs.base_image || 'ghcr.io/projectbluefin/utah:testing' }}
+          CANDIDATE_IMG: ${{ inputs.candidate_image || '' }}
+          UTAH_LIFECYCLE_WORK: /tmp/utah-lifecycle-e2e
+        run: |
+          set -euo pipefail
+          bash scripts/bootc-lifecycle-e2e.sh "${BASE_IMG}" "${CANDIDATE_IMG}"
+
+      - name: Publish lifecycle report to step summary
+        if: always()
+        run: |
+          if [[ -f /tmp/utah-lifecycle-e2e/lifecycle-report.md ]]; then
+            cat /tmp/utah-lifecycle-e2e/lifecycle-report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload lifecycle test artifacts and diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bootc-lifecycle-diagnostics
+          path: |
+            /tmp/utah-lifecycle-e2e/lifecycle-summary.json
+            /tmp/utah-lifecycle-e2e/lifecycle-report.md
+            /tmp/utah-lifecycle-e2e/serial.log
+            /tmp/utah-lifecycle-e2e/screenshots/*.png
+            /tmp/utah-lifecycle-e2e/diagnostics/
+          if-no-files-found: warn
