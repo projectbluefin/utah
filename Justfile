@@ -19,6 +19,12 @@ check:
     test -f system_files/shared/usr/lib/systemd/system/bootc-unified-storage.service.d/10-utah-local-test.conf
     grep -q 'enable gdm.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
     grep -q 'enable ublue-system-setup.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
+    grep -q 'enable utah-countme.timer' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
+    test -f system_files/shared/usr/lib/systemd/system/utah-countme.service
+    test -f system_files/shared/usr/lib/systemd/system/utah-countme.timer
+    test -f system_files/shared/usr/libexec/utah-countme
+    bash -n system_files/shared/usr/libexec/utah-countme
+    pytest tests/unit/test_countme.py
     test -f scripts/configure-services.sh
     bash -n scripts/configure-services.sh
     test -f scripts/configure-branding.sh

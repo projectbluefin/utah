@@ -1,0 +1,116 @@
+#!/usr/bin/bash
+# /usr/libexec/utah-countme
+# Weekly user-counting client for Utah (bootc) systems
+set -euo pipefail
+
+DISABLED_FILE="${DISABLED_FILE:-/etc/projectbluefin/countme/disabled}"
+IMAGE_INFO="${IMAGE_INFO:-/usr/share/ublue-os/image-info.json}"
+STATE_DIR="${STATE_DIRECTORY:-/var/lib/utah-countme}"
+OS_RELEASE_FILE="${OS_RELEASE_FILE:-/etc/os-release}"
+WEEK=604800
+
+# Allow users to opt out without disabling the timer.
+[ -e "$DISABLED_FILE" ] && exit 0
+
+if ! command -v jq >/dev/null 2>&1; then
+    echo "utah-countme: jq is unavailable; skipping telemetry" >&2
+    exit 0
+fi
+
+if ! command -v curl >/dev/null 2>&1; then
+    echo "utah-countme: curl is unavailable; skipping telemetry" >&2
+    exit 0
+fi
+
+NOW=$(date +%s)
+
+# Ensure state directory exists
+if [ ! -d "$STATE_DIR" ]; then
+    mkdir -p "$STATE_DIR"
+fi
+
+EPOCH_FILE="${STATE_DIR}/epoch"
+LASTRUN_FILE="${STATE_DIR}/lastrun"
+
+# 1. Initialize epoch file on first run
+if [ ! -f "$EPOCH_FILE" ]; then
+    echo "$NOW" > "$EPOCH_FILE"
+fi
+EPOCH=$(cat "$EPOCH_FILE" 2>/dev/null || echo "$NOW")
+
+# 2. Throttling: only run once per 7-day window
+if [ -f "$LASTRUN_FILE" ]; then
+    LASTRUN=$(cat "$LASTRUN_FILE" 2>/dev/null || echo 0)
+    if (( NOW - LASTRUN < WEEK )); then
+        exit 0
+    fi
+fi
+
+# 3. Compute Fedora-style week bucket
+# 1: first week, 2: 2–4w, 3: 5–24w, 4: >24w
+WEEKS=$(( (NOW - EPOCH) / WEEK + 1 ))
+if (( WEEKS <= 1 )); then
+    BUCKET=1
+elif (( WEEKS <= 4 )); then
+    BUCKET=2
+elif (( WEEKS <= 24 )); then
+    BUCKET=3
+else
+    BUCKET=4
+fi
+
+# 4. Extract image metadata
+REPO="utah"
+IMAGE_TAG="unknown"
+IMAGE_FLAVOR="unknown"
+
+if [ -f "$IMAGE_INFO" ]; then
+    INFO_NAME=$(jq -r '."image-name" // empty' "$IMAGE_INFO" 2>/dev/null || true)
+    if [ -n "$INFO_NAME" ]; then
+        REPO="$INFO_NAME"
+    fi
+    INFO_TAG=$(jq -r '."image-tag" // empty' "$IMAGE_INFO" 2>/dev/null || true)
+    if [ -n "$INFO_TAG" ]; then
+        IMAGE_TAG="$INFO_TAG"
+    fi
+    INFO_FLAVOR=$(jq -r '."image-flavor" // empty' "$IMAGE_INFO" 2>/dev/null || true)
+    if [ -n "$INFO_FLAVOR" ]; then
+        IMAGE_FLAVOR="$INFO_FLAVOR"
+    fi
+fi
+
+# Fallback to os-release if tag or flavor are still unknown
+if [ -f "$OS_RELEASE_FILE" ]; then
+    if [ "$IMAGE_TAG" = "unknown" ]; then
+        OS_VERSION=$(grep -E '^(OSTREE_VERSION|IMAGE_VERSION|VERSION_ID)=' "$OS_RELEASE_FILE" 2>/dev/null | head -n1 | cut -d= -f2 | tr -d '"' || true)
+        if [ -n "$OS_VERSION" ]; then
+            IMAGE_TAG="$OS_VERSION"
+        fi
+    fi
+    if [ "$IMAGE_FLAVOR" = "unknown" ]; then
+        OS_FLAVOR=$(grep -E '^IMAGE_FLAVOR=' "$OS_RELEASE_FILE" 2>/dev/null | cut -d= -f2 | tr -d '"' || true)
+        if [ -n "$OS_FLAVOR" ]; then
+            IMAGE_FLAVOR="$OS_FLAVOR"
+        fi
+    fi
+fi
+
+# Default flavor to "main" if still unspecified
+if [ "$IMAGE_FLAVOR" = "unknown" ]; then
+    IMAGE_FLAVOR="main"
+fi
+
+ARCH=$(uname -m)
+OS_VERSION_ID="unknown"
+if [ -f "$OS_RELEASE_FILE" ]; then
+    OS_VERSION_ID=$(grep -E '^VERSION_ID=' "$OS_RELEASE_FILE" 2>/dev/null | cut -d= -f2 | tr -d '"' || echo "unknown")
+fi
+
+# 5. Formulate request
+USER_AGENT="utah-countme (${REPO} ${OS_VERSION_ID}; ${IMAGE_FLAVOR}; Linux.${ARCH})"
+URL="https://countme.projectbluefin.io/metalink?repo=${REPO}&tag=${IMAGE_TAG}&flavor=${IMAGE_FLAVOR}&arch=${ARCH}&countme=${BUCKET}"
+
+# 6. Send ping
+if curl -sf --retry 3 --max-time 10 -H "User-Agent: ${USER_AGENT}" "$URL" >/dev/null; then
+    echo "$NOW" > "$LASTRUN_FILE"
+fi

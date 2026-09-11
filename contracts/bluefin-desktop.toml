@@ -138,5 +138,6 @@ enabled = [
   "flatpak-preinstall.service",
   "gdm.service",
   "ublue-system-setup.service",
+  "utah-countme.timer",
   "uupd.timer",
 ]

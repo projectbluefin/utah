@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-05",
+  "generated_at": "2026-09-11",
   "schema_version": "1.0",
   "skills": [
     {
@@ -41,7 +41,7 @@
     {
       "id": "desktop-contract",
       "name": "desktop-contract",
-      "one_line_purpose": "Maintain Utah identity, Bluefin desktop defaults, and first-boot Flatpak policy.",
+      "one_line_purpose": "Maintain Utah identity, Bluefin desktop defaults, telemetry, and first-boot Flatpak policy.",
       "entry_point": "docs/skills/desktop-contract.md",
       "category": "contracts",
       "status": "active",
@@ -49,11 +49,13 @@
         "desktop",
         "branding",
         "gnome",
-        "flatpak"
+        "flatpak",
+        "telemetry",
+        "countme"
       ],
-      "description": "The runtime desktop contract in contracts/bluefin-desktop.toml and its in-image verifiers. Use when changing branding, os-release, service presets, GNOME extensions, or first-boot Flatpak behavior.",
-      "version": "1.0",
-      "last_updated": "2026-09-05",
+      "description": "The runtime desktop contract in contracts/bluefin-desktop.toml and its in-image verifiers. Use when changing branding, os-release, service presets, GNOME extensions, countme telemetry, or first-boot Flatpak behavior.",
+      "version": "1.1",
+      "last_updated": "2026-09-11",
       "doc_type": "policy"
     },
     {

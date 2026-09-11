@@ -1,20 +1,20 @@
 ---
 name: desktop-contract
-version: "1.0"
-last_updated: "2026-09-05"
+version: "1.1"
+last_updated: "2026-09-11"
 id: desktop-contract
-one_line_purpose: Maintain Utah identity, Bluefin desktop defaults, and first-boot Flatpak policy.
+one_line_purpose: Maintain Utah identity, Bluefin desktop defaults, telemetry, and first-boot Flatpak policy.
 entry_point: docs/skills/desktop-contract.md
 category: contracts
 mcp_compliance_level: partial
 optimization_status: draft
 status: active
 dependencies: []
-tags: [desktop, branding, gnome, flatpak]
+tags: [desktop, branding, gnome, flatpak, telemetry, countme]
 description: >-
   The runtime desktop contract in contracts/bluefin-desktop.toml and its
   in-image verifiers. Use when changing branding, os-release, service
-  presets, GNOME extensions, or first-boot Flatpak behavior.
+  presets, GNOME extensions, countme telemetry, or first-boot Flatpak behavior.
 metadata:
   type: policy
 ---
@@ -57,7 +57,7 @@ The TOML's sections are the contract's table of contents:
 - **`[services]`** — systemd units the preset must enable: `gdm.service`,
   `ublue-system-setup.service`, `flatpak-preinstall.service`,
   `flatpak-nuke-fedora.service`, `brew-setup.service`, `dconf-update.service`,
-  `bootc-unified-storage.service`, `uupd.timer`.
+  `bootc-unified-storage.service`, `utah-countme.timer`, `uupd.timer`.
 
 ## GNOME extensions are pinned submodules
 
@@ -88,15 +88,29 @@ system and glib-compile-schemas.
 Hummingbird defaults to a server preset and disables unlisted services, so
 the desktop policy is applied explicitly. `scripts/configure-services.sh`
 mirrors bluefin-lts's `40-services.sh`: it applies the desktop presets,
-enables GDM, firmware updates, Tailscale, uupd, user setup and resolved,
-configures authselect, and removes the extension build toolchain before
-cleanup (Containerfile RUN comment; originated in `docs/building.md`'s former
-design section and now lives in this skill).
+enables GDM, firmware updates, Tailscale, uupd, user setup, resolved, and
+the weekly `utah-countme.timer` client reporting, configures authselect, and
+removes the extension build toolchain before cleanup (Containerfile RUN comment;
+originated in `docs/building.md`'s former design section and now lives in this
+skill).
 
 Hummingbird's base does not include `systemd-resolved` by default; it is listed
 under `[services]` in `packages/utah.toml` and configured in
 `scripts/configure-services.sh`, which also disables `PrivateTmp` on
 `systemd-resolved.service` for bootc early-boot DNS resolution.
+
+## Countme telemetry
+
+Utah reports weekly anonymous telemetry to `countme.projectbluefin.io` matching
+Project Bluefin ADR 0006:
+- **Client implementation:** `/usr/libexec/utah-countme` executed via
+  `utah-countme.service` and scheduled by `utah-countme.timer`.
+- **Systemd isolation:** Runs as `DynamicUser=yes` with
+  `StateDirectory=utah-countme` storing local installation `epoch` and
+  `lastrun` timestamps.
+- **Reporting parameters:** Sends empty GET requests containing image `repo`,
+  `tag`, `flavor`, `arch`, and Fedora-style installation age bucket `countme`.
+- **Opt-out:** Honored whenever `/etc/projectbluefin/countme/disabled` exists.
 
 ## The verifiers run twice
 
