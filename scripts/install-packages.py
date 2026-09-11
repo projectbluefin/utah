@@ -15,15 +15,18 @@ import sys
 import tomllib
 from pathlib import Path
 
-# Utah installs only from its Hummingbird base plus the utah-packages
-# factory, which publishes every GNOME 51 and Bluefin-parity binary this
-# image needs rebuilt against Hummingbird. Fedora repositories are never
-# enabled at runtime: they are bootstrap material for the package factory's
-# buildroot, not a source of installed packages.
+# Utah installs from Fedora 44, its Hummingbird base, and the utah-packages
+# factory, which publishes every GNOME 51 and Bluefin-parity binary this image
+# needs rebuilt against Hummingbird.
 # The factory is first so its Hummingbird-targeted rebuilds win over an
 # equally-versioned Hummingbird package. The repository is copied from the
 # digest-pinned OCI package image by Containerfile.
-REPOS = ("utah-packages", "public-hummingbird-x86_64-rpms")
+REPOS = (
+    "utah-packages",
+    "public-hummingbird-x86_64-rpms",
+    "fedora-44",
+    "fedora-44-updates",
+)
 
 
 def section(path: Path, name: str) -> list[str]:

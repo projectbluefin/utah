@@ -1,6 +1,6 @@
-# Fedora 44 is the Hummingbird buildroot pairing, not a runtime repository.
-# Keep this enabled only in Containerfile.kernel's builder stage: the runtime
-# image deliberately ships Hummingbird plus the Utah package repository.
+# Fedora 44 is the Hummingbird runtime package source and buildroot pairing.
+# The runtime image uses it alongside Hummingbird and the Utah package
+# repository.
 [fedora-44]
 name=Fedora 44 - $basearch
 baseurl=https://dl.fedoraproject.org/pub/fedora/linux/releases/44/Everything/$basearch/os/

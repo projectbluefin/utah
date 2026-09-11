@@ -63,7 +63,6 @@ packages = [
     "dbus-devel",
     "glib2-devel",
     "meson",
-    "sassc",
     "unzip",
 ]
 
@@ -109,6 +108,10 @@ packages = [
 #   ruby4.0. The two conflict on file paths, so the transaction fails. Needs
 #   either a ruby exclusion in the buildroot or dropping the html subpackage.
 #
+# fwupd, tailscale
+#   The pinned Utah package repository currently publishes neither service RPM.
+#   configure-services.sh treats both units as optional. Tracked by #35.
+#
 # firefox
 #   Bluefin's desktop contract names Firefox, but this factory currently only
 #   carries mozjs140 (the embeddable JavaScript runtime), not the Firefox
@@ -124,12 +127,39 @@ packages = [
 #   Not published by Hummingbird or utah-packages. Bluefin obtains it from
 #   negativo17's fedora-multimedia repository, which Utah does not enable.
 #   Tracked by #35.
+#
+# The remaining parity packages below are not published by either configured
+# repository. Keep them explicit until the factory adds compatible builds.
+# Tracked by #35.
 packages = [
+    "adw-gtk3-theme",
+    "adwaita-fonts-all",
+    "alsa-firmware",
+    "alsa-tools-firmware",
+    "containerd",
     "evolution-ews-core",
     "firefox",
     "fish",
+    "fzf",
+    "google-noto-sans-cjk-vf-fonts",
+    "fwupd",
+    "gum",
     "grub2-efi-x64-cdboot",
+    "ibus-mozc",
+    "ibus-unikey",
+    "input-remapper",
+    "libcamera-gstreamer",
+    "libcamera-tools",
+    "livesys-scripts",
+    "mesa-libGLU",
+    "mozc",
+    "nautilus-gsconnect",
     "pipewire-libs-extra",
+    "sassc",
+    "tailscale",
+    "waypipe",
+    "xorriso",
+    "xdg-desktop-portal",
     "zsh",
 ]
 
