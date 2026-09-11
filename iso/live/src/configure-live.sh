@@ -5,7 +5,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALLER_APP_ID=org.bootcinstaller.Installer
+# TARGET_IMAGE names the OCI object embedded in the live image. The tracking
+# reference can remain the exact digest that was validated before composition.
 TARGET_IMAGE="${TARGET_IMAGE:-ghcr.io/projectbluefin/utah:testing}"
+TRACKING_IMAGE="${TRACKING_IMAGE:-${TARGET_IMAGE}}"
 
 # Live media must not apply update or unified-storage policy intended for an
 # installed image. The payload embedded in the squashfs is the install source.
@@ -97,7 +100,8 @@ cp "${SCRIPT_DIR}/etc/bootc-installer/images.json" /etc/bootc-installer/images.j
 python3 - <<PY
 import json
 from pathlib import Path
-ref = "${TARGET_IMAGE}"
+local_ref = "${TARGET_IMAGE}"
+ref = "${TRACKING_IMAGE}"
 for path in (Path("/etc/bootc-installer/images.json"), Path("${SCRIPT_DIR}/etc/bootc-installer/recipe.json")):
     data = json.loads(path.read_text())
     if path.name == "images.json":
@@ -107,7 +111,7 @@ for path in (Path("/etc/bootc-installer/images.json"), Path("${SCRIPT_DIR}/etc/b
         data["imgref"] = ref
         data["targetImgref"] = ref
         data["image"] = ""
-        data["local_imgref"] = f"containers-storage:{ref}"
+        data["local_imgref"] = f"containers-storage:{local_ref}"
         data["bootloader"] = "grub2"
         data["composeFsBackend"] = False
     Path("/etc/bootc-installer" , path.name).write_text(json.dumps(data, indent=2) + "\n")

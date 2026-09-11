@@ -1,7 +1,7 @@
 ---
 name: ci-workflows
 version: "1.0"
-last_updated: "2026-09-05"
+last_updated: "2026-09-11"
 id: ci-workflows
 one_line_purpose: Navigate Utah's build, promote, and sync workflow topology.
 entry_point: docs/skills/ci-workflows.md
@@ -13,7 +13,7 @@ dependencies: []
 tags: [ci, workflows, actions, promotion]
 description: >-
   build.yml contract gate, kernel-cache job, main/kernel matrix split,
-  promote-testing-to-main and sync-main-to-testing, actions@v1 delegation.
+  post-testing digest gate, ISO build/install/boot, and actions@v1 delegation.
   Use when changing .github/workflows/ or debugging a red run.
 metadata:
   type: reference
@@ -21,8 +21,10 @@ metadata:
 
 # CI Workflows
 
-Three workflows, all thin callers into `projectbluefin/actions@v1` reusables,
-each pinned to a SHA tagged `v1`:
+The image workflows are thin callers into `projectbluefin/actions@v1`
+reusables, each pinned to a SHA tagged `v1`. The ISO workflow is intentionally
+local because its QEMU and Fisherman gates need to retain disk and console
+evidence on the same runner:
 
 - `.github/workflows/build.yml` -- pull requests, pushes to `testing`, a
   nightly cron, and manual dispatch. Top-level `permissions: {}`; each job
@@ -30,6 +32,10 @@ each pinned to a SHA tagged `v1`:
 - `.github/workflows/promote-testing-to-main.yml` -- pushes to `testing`, a
   nightly cron, and manual dispatch.
 - `.github/workflows/sync-main-to-testing.yml` -- every push to `main`.
+- `.github/workflows/iso.yml` -- after a successful `Post-Testing E2E` run on
+  `testing`, resolves the exact `utah` x86_64 digest, builds the UEFI ISO,
+  boots the live desktop, installs the embedded OCI payload with Fisherman
+  under a restricted network, and boots the installed system with no network.
 
 CI delegates builds, vulnerability reporting, SBOMs, keyless signatures,
 provenance, caching, and rechunking to `projectbluefin/actions@v1` (originated
@@ -58,6 +64,26 @@ commands live in [flavors.md](flavors.md). An empty resolved set fails
 loudly there, because an invalid matrix creates no image job at all and the
 only symptom is `build_container: failure` from the aggregator (comment,
 `.github/workflows/build.yml`).
+
+## iso: the offline production gate
+
+`iso.yml` listens to `Post-Testing E2E`, so ISO composition starts only after
+the image promotion/digest gate has succeeded. It finds the matching
+`Build Utah` run by commit and downloads the `utah=sha256:...` digest artifact;
+the workflow never builds release media from a moving `:testing` tag.
+
+The build and all gates stay in one job. `iso/scripts/build-iso.sh` creates the
+single-architecture UEFI media and embeds a run-specific local payload tag.
+`iso/scripts/offline-e2e.sh` then observes `UTAH_LIVE_READY`, captures the live
+serial console and framebuffer, invokes Fisherman through
+`containers-storage:`, checks the installed root's Utah identity, and boots
+the disk without its ISO or a network. A test-only service emits
+`UTAH_INSTALLED_GRAPHICAL_OK` only after `graphical.target`, GDM, and GNOME
+Shell are all active.
+
+The ISO, SHA-256 file, and manifest are uploaded only in a success-conditioned
+step after every gate. Failure uploads retain the staging directory, including
+the live/installed serial logs, screenshots, and failed disk image.
 
 ## kernel_cache: skipped unless needed, skipped when published
 
