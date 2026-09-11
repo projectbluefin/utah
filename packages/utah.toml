@@ -16,7 +16,7 @@
 #   intel-mediasdk, libheif and friends -- are not extra packages. They are the
 #   same package names Fedora already ships, which Bluefin *replaces* with
 #   negativo17 builds by enabling fedora-multimedia. Utah does not enable that
-#   repository, so it installs Fedora's builds of those names instead. Nothing
+#   repository, so it installs Hummingbird's builds of those names instead. Nothing
 #   is missing from the image; what differs is which build of them it carries,
 #   and the practical consequence is hardware-accelerated codec support.
 #
