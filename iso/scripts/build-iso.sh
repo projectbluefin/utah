@@ -1,28 +1,42 @@
 #!/usr/bin/env bash
 # Build a single-architecture UEFI live ISO from a Utah bootc image.
-# Usage: build-iso.sh IMAGE OUTPUT_ISO [TITLE] [DEBUG] [PUBLISHED_IMAGE]
+# Usage: build-iso.sh IMAGE OUTPUT_ISO [TITLE] [DEBUG] [PUBLISHED_IMAGE] [TRACKING_IMAGE]
 set -euo pipefail
 
 IMAGE="${1:?image ref is required}"
 OUTPUT_ISO="${2:?output ISO path is required}"
 TITLE="${3:-Utah Live}"
 DEBUG="${4:-0}"
-# SOURCE_IMAGE may be localhost for development, but the embedded store and
-# installer recipe use this stable, publishable reference.
+# SOURCE_IMAGE may be localhost for development. PUBLISHED_IMAGE is the
+# run-specific tag embedded in the local store; TRACKING_IMAGE remains the
+# exact remote reference validated before composition.
 PUBLISHED_IMAGE="${5:-ghcr.io/projectbluefin/utah:testing}"
+TRACKING_IMAGE="${6:-${PUBLISHED_IMAGE}}"
 LABEL="UTAH_LIVE"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 mkdir -p "$(dirname "${OUTPUT_ISO}")"
 OUTPUT_ISO="$(realpath "${OUTPUT_ISO}")"
 LIVE_IMAGE="localhost/utah-live:testing"
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/utah-iso.XXXXXX")"
-trap 'rm -rf "${WORK}"' EXIT
+# The live root contains the full Utah desktop and the embedded OCI payload.
+# Keep assembly on a real-disk staging area rather than a small /tmp tmpfs.
+WORK_ROOT="${UTAH_ISO_WORKDIR:-${TMPDIR:-/var/tmp}}"
+mkdir -p "${WORK_ROOT}"
+WORK="$(mktemp -d "${WORK_ROOT}/utah-iso.XXXXXX")"
+# podman unshare owns files copied out of an image mount with subordinate IDs.
+# Run cleanup in that namespace too, otherwise a successful ISO build can
+# fail its EXIT trap while leaving many gigabytes behind.
+cleanup_work() {
+    podman unshare rm -rf "${WORK}" 2>/dev/null || rm -rf "${WORK}" 2>/dev/null || true
+}
+trap cleanup_work EXIT
 
 cd "${ROOT}"
 echo "Building live environment from ${IMAGE}"
 podman build --layers \
+    --cap-add sys_admin --security-opt label=disable \
     --build-arg SOURCE_IMAGE="${IMAGE}" \
     --build-arg TARGET_IMAGE="${PUBLISHED_IMAGE}" \
+    --build-arg TRACKING_IMAGE="${TRACKING_IMAGE}" \
     --build-arg DEBUG="${DEBUG}" \
     --tag "${LIVE_IMAGE}" \
     --file iso/live/Containerfile iso/live
