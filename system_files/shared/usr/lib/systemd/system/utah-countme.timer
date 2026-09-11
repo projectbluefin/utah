@@ -1,0 +1,16 @@
+[Unit]
+Description=Weekly Utah Count Me telemetry timer
+Documentation=https://docs.projectbluefin.io
+ConditionPathExists=/run/ostree-booted
+ConditionPathExists=/usr/share/ublue-os/image-info.json
+ConditionPathExists=!/etc/projectbluefin/countme/disabled
+
+[Timer]
+OnBootSec=10m
+OnCalendar=weekly
+Persistent=true
+AccuracySec=1h
+RandomizedDelaySec=12h
+
+[Install]
+WantedBy=timers.target

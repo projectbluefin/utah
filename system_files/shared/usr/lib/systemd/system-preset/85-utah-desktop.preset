@@ -6,6 +6,7 @@ enable fwupd.service
 enable fwupd-refresh.timer
 enable tailscaled.service
 enable uupd.timer
+enable utah-countme.timer
 enable ublue-system-setup.service
 enable systemd-resolved.service
 enable bootc-unified-storage.service
