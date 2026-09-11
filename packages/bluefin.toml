@@ -1,34 +1,21 @@
-# Package manifest for the bluefin base image.
-# Read by build_files/base/03-packages.sh via build_files/shared/read-packages.
+# Machine-readable contract derived from Bluefin's effective package payload.
+#
+# Sources in projectbluefin/bluefin:
+#   - build_files/packages/base.toml (fedora, version-specific, overrides, excluded)
+#   - build_files/base/03-packages.sh (external and multimedia transactions)
 #
 # Sections:
-#   [multimedia_overrides]   packages synced from fedora-multimedia repo
-#   [fedora]                 base Fedora packages, all versions
-#   [fedora_v42]             additions for Fedora 42 only
-#   [fedora_v43]             additions for Fedora 43 only
-#   [fedora_v44]             additions for Fedora 44 only
+#   [fedora]                 base Fedora packages common to all supported versions
+#   [fedora_v*]              version-specific Fedora additions
+#   [external]               packages from external repositories/COPRs
+#   [multimedia]             codecs and multimedia packages from 03-packages.sh
+#   [multimedia_overrides]   packages synced from negativo17/fedora-multimedia
 #   [excluded]               packages removed from the base image
+#
+# Validated by scripts/check-parity.py on every CI run (`just check-parity`).
 
-[multimedia_overrides]
-# Replace mesa and friends with less-crippled versions from negativo17/fedora-multimedia.
-# Versions are pinned with `dnf5 versionlock` after install.
-packages = [
-    "intel-gmmlib",
-    "intel-mediasdk",
-    "intel-vpl-gpu-rt",
-    "libheif",
-    "libva",
-    "libva-intel-media-driver",
-    "mesa-dri-drivers",
-    "mesa-filesystem",
-    "mesa-libEGL",
-    "mesa-libGL",
-    "mesa-libgbm",
-    "mesa-vulkan-drivers",
-]
-
-[fedora]
 # Base packages from Fedora repos — common to all supported Fedora versions.
+[fedora]
 packages = [
     "adw-gtk3-theme",
     "adwaita-fonts-all",
@@ -43,10 +30,10 @@ packages = [
     "dracut-live",
     "evtest",
     "fastfetch",
+    "firefox",
     "firewall-config",
     "fish",
     "flatpak-spawn",
-    "firefox",
     "fzf",
     "gcc",
     "gcc-c++",
@@ -95,25 +82,69 @@ packages = [
     "zsh",
 ]
 
+# Fedora 42 additions
 [fedora_v42]
-# TODO: remove when F42 is dropped
 packages = [
     "evolution-ews-core",
 ]
 
+# Fedora 43 additions
 [fedora_v43]
 packages = [
     "evolution-ews-core",
     "gnupg2-scdaemon",
 ]
 
+# Fedora 44 additions
 [fedora_v44]
 packages = [
     "gnupg2-scdaemon",
 ]
 
-[excluded]
+# External and COPR packages installed in Bluefin's package transaction.
+[external]
+packages = [
+    "tailscale",
+    "uupd",
+]
+
+# Codecs and extra multimedia packages installed in Bluefin's transaction.
+[multimedia]
+packages = [
+    "@multimedia",
+    "ffmpeg",
+    "ffmpeg-libs",
+    "ffmpegthumbnailer",
+    "gstreamer1-plugins-bad-free",
+    "gstreamer1-plugins-bad-free-libs",
+    "gstreamer1-plugins-base",
+    "gstreamer1-plugins-good",
+    "lame",
+    "lame-libs",
+    "libavcodec",
+    "libfdk-aac",
+    "libjxl",
+]
+
+# Packages synced from negativo17/fedora-multimedia repo.
+[multimedia_overrides]
+packages = [
+    "intel-gmmlib",
+    "intel-mediasdk",
+    "intel-vpl-gpu-rt",
+    "libheif",
+    "libva",
+    "libva-intel-media-driver",
+    "mesa-dri-drivers",
+    "mesa-filesystem",
+    "mesa-libEGL",
+    "mesa-libGL",
+    "mesa-libgbm",
+    "mesa-vulkan-drivers",
+]
+
 # Packages removed from the base image — conflicts with or replaced by image content.
+[excluded]
 packages = [
     "default-fonts-cjk-sans",
     "fedora-bookmarks",

@@ -47,15 +47,17 @@ is built to produce, not something you can pull today.
 
 ## Package parity with Bluefin
 
-`packages/bluefin.toml` is a byte-for-byte copy of Bluefin's `base.toml`, and CI
-diffs it against upstream on every run, so drift fails the build rather than
-being noticed later.
+`packages/bluefin.toml` is a machine-readable contract derived from Bluefin's
+effective package payload (covering base Fedora, version-specific, external,
+and multimedia transactions). CI derives and verifies it against upstream on
+every run (`just check-parity`), so additions or removals fail the build rather
+than accumulating quietly.
 
 | | count |
 | --- | --- |
-| Bluefin contract installed | **61** |
+| Bluefin contract installed | **64** |
 | Utah additions (GNOME 51, desktop services) | 12 |
-| Genuinely unavailable | **4** |
+| Documented unavailable exceptions | **28** |
 
 The install writes its resolved list to `/usr/share/utah/contract.txt` and the
 verify step asserts *that file*, so the two cannot disagree.

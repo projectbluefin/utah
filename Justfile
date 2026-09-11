@@ -64,6 +64,7 @@ check:
     python3 -m py_compile scripts/install-packages.py
     python3 -m py_compile scripts/verify-rpm-contract.py
     python3 -m py_compile scripts/check-repo-availability.py
+    python3 -m py_compile scripts/check-parity.py
     python3 scripts/install-packages.py --check packages/bluefin.toml
     python3 scripts/verify-rpm-contract.py --check packages/bluefin.toml
     grep -qE 'reusable-build\.yml@(v1|[0-9a-f]{40} # v1)$' .github/workflows/build.yml
@@ -109,21 +110,11 @@ check-desktop-contract image_ref="localhost/utah:testing":
 check-repos:
     python3 scripts/check-repo-availability.py packages/bluefin.toml packages/utah.toml
 
-# packages/bluefin.toml is a verbatim copy of Bluefin's base.toml.  Drift here
-# is a parity bug, so make it loud rather than letting it accumulate quietly.
+# packages/bluefin.toml is derived from Bluefin's effective package payload
+# (base, version-specific, external, and multimedia transactions).
+# Drift here is a parity bug, so make it loud rather than letting it accumulate quietly.
 check-parity:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    upstream=$(mktemp)
-    trap 'rm -f "$upstream"' EXIT
-    curl -fsSL -o "$upstream" \
-      https://raw.githubusercontent.com/projectbluefin/bluefin/main/build_files/packages/base.toml
-    if diff -u "$upstream" packages/bluefin.toml; then
-      echo "packages/bluefin.toml matches projectbluefin/bluefin"
-    else
-      echo "packages/bluefin.toml has drifted from projectbluefin/bluefin" >&2
-      exit 1
-    fi
+    python3 scripts/check-parity.py
 
 image_name base_name stream flavor:
     #!/usr/bin/env bash

@@ -1,36 +1,29 @@
 # Utah's package overlay on top of the Bluefin package contract.
 #
-# packages/bluefin.toml is a byte-for-byte copy of projectbluefin/bluefin's
-# build_files/packages/base.toml and must stay that way -- it is the parity
-# contract, and any drift there is a parity bug.  Everything Utah needs *in
-# addition to* (or *instead of*) that contract lives here.
+# packages/bluefin.toml is the machine-readable contract derived from Bluefin's
+# effective package payload (base Fedora, version-specific, external, and
+# multimedia transactions).  Everything Utah needs *in addition to* (or *instead
+# of*) that contract lives here.
 #
 # Sections:
 #   [gnome]        GNOME 51 desktop contract Hummingbird does not ship
 #   [build]        toolchain needed to build the pinned GNOME extensions
+#   [services]     desktop services Hummingbird server base does not install
 #   [unavailable]  Bluefin contract packages none of Utah's repositories provide
 #
-# On [multimedia_overrides], which Utah deliberately does not install:
+# On multimedia transactions:
 #
-#   Those twelve entries -- mesa-libGL, mesa-vulkan-drivers, libva,
-#   intel-mediasdk, libheif and friends -- are not extra packages. They are the
-#   same package names Fedora already ships, which Bluefin *replaces* with
-#   negativo17 builds by enabling fedora-multimedia. Utah does not enable that
-#   repository, so it installs Fedora's builds of those names instead. Nothing
-#   is missing from the image; what differs is which build of them it carries,
-#   and the practical consequence is hardware-accelerated codec support.
+#   Bluefin executes an extensive multimedia transaction combining negativo17's
+#   fedora-multimedia repository overrides (mesa, libva, etc.) and codecs
+#   (ffmpeg, gstreamer plugins, lame, fdk-aac, libjxl). Utah does not enable
+#   negativo17 or Fedora runtime repositories.
 #
-#   This is why they are absent from the contract rather than listed under
-#   [unavailable]: [unavailable] means "no source provides this name at all",
-#   which is false of these. Recording them as missing would be wrong, and
-#   recording them as satisfied would hide a real functional difference from
-#   Bluefin.
-#
-#   The factory is already building several of them for Hummingbird --
-#   intel-gmmlib, intel-mediasdk, intel-vpl-gpu-rt, libheif and libva all built
-#   in projectbluefin/hummingbird-github. When that overlay is published and enabled
-#   here, it becomes the source that negativo17 is for Bluefin, and these can
-#   move into the contract as a version assertion rather than a name one.
+#   Where Hummingbird or utah-packages already provides the required build
+#   (intel-gmmlib, intel-mediasdk, intel-vpl-gpu-rt, libheif, libva), Utah
+#   installs it directly as part of the contract. Packages not yet available
+#   in Utah's enabled repositories are recorded in [unavailable] with tracking
+#   issue #12, until the complete multimedia closure from utah-packages#24 is
+#   published.
 
 [gnome]
 # Hummingbird supplies the bootable base but not a desktop.  The pinned
@@ -69,8 +62,11 @@ packages = [
 
 [services]
 # Bluefin's desktop image adds these to the server base before 40-services.sh
-# enables their units. uupd is downloaded separately because it is published
-# as a release binary rather than an RPM in the Hummingbird repositories.
+# enables their units.
+#
+# tailscale is part of Bluefin's external contract (packages/bluefin.toml [external]).
+# uupd is downloaded separately because it is published as a release binary
+# rather than an RPM in the Hummingbird repositories.
 #
 # systemd-resolved is not in the Bluefin contract because Fedora's base image
 # already carries it. Hummingbird's bootable base does not: the package exists
@@ -79,7 +75,6 @@ packages = [
 packages = [
     "fwupd",
     "systemd-resolved",
-    "tailscale",
 ]
 
 [unavailable]
@@ -93,7 +88,7 @@ packages = [
 #   evolution-data-server stack -- camel, evolution-mail, evolution-shell,
 #   libebook, libecal, libedata-book -- which the factory does not yet build.
 #   Disproportionate cost for one Exchange plugin binary; the EDS closure can
-#   be added to the factory if Exchange support is ever required.
+#   be added to the factory if Exchange support is ever required. Tracked by #10.
 #
 # fish
 #   Fedora's fish spec uses %cargo_generate_buildrequires, which requires
@@ -101,13 +96,14 @@ packages = [
 #   44 does not ship Rust crate binary packages -- they exist only in
 #   Rawhide -- so the buildroot cannot satisfy them. Building fish needs a
 #   vendored/cargo-fetch rebuild of the spec rather than the system-crate
-#   model.
+#   model. Tracked by #35.
 #
 # zsh
 #   The HTML docs build target pulls texi2html, which drags Fedora's ruby
 #   (ruby-default-gems) into a buildroot that already carries Hummingbird's
 #   ruby4.0. The two conflict on file paths, so the transaction fails. Needs
 #   either a ruby exclusion in the buildroot or dropping the html subpackage.
+#   Tracked by #35.
 #
 # firefox
 #   Bluefin's desktop contract names Firefox, but this factory currently only
@@ -123,13 +119,59 @@ packages = [
 # pipewire-libs-extra
 #   Not published by Hummingbird or utah-packages. Bluefin obtains it from
 #   negativo17's fedora-multimedia repository, which Utah does not enable.
-#   Tracked by #35.
+#   Tracked by #35 and #12.
+#
+# uupd
+#   Bluefin installs uupd via the ublue-os/packages COPR. Utah does not enable
+#   COPR repositories at runtime; instead, uupd is downloaded as a pinned,
+#   digest-verified release binary in the Containerfile via
+#   scripts/check-download-integrity.py. Tracked by #20 and #11.
+#
+# tailscale
+#   Bluefin installs Tailscale from pkgs.tailscale.com. In Utah, Tailscale is
+#   packaged by utah-packages, but the binary RPM is not yet published in the
+#   repository build due to utah-packages#75. Tracked by #54.
+#
+# Multimedia packages and overrides:
+#   @multimedia, ffmpeg, ffmpeg-libs, ffmpegthumbnailer,
+#   gstreamer1-plugins-bad-free, gstreamer1-plugins-bad-free-libs,
+#   gstreamer1-plugins-base, gstreamer1-plugins-good, lame, lame-libs,
+#   libavcodec, libfdk-aac, libjxl, libva-intel-media-driver, mesa-dri-drivers,
+#   mesa-filesystem, mesa-libEGL, mesa-libGL, mesa-libgbm, mesa-vulkan-drivers
+#
+#   Bluefin installs these from negativo17's fedora-multimedia repository.
+#   Utah does not enable third-party or negativo17 repositories at runtime.
+#   Instead, the utah-packages factory is building the complete multimedia
+#   and codec closure for Hummingbird (utah-packages#24). Until that closure
+#   is built and published, these packages cannot be installed. Tracked by #12.
 packages = [
+    "@multimedia",
     "evolution-ews-core",
+    "ffmpeg",
+    "ffmpeg-libs",
+    "ffmpegthumbnailer",
     "firefox",
     "fish",
     "grub2-efi-x64-cdboot",
+    "gstreamer1-plugins-bad-free",
+    "gstreamer1-plugins-bad-free-libs",
+    "gstreamer1-plugins-base",
+    "gstreamer1-plugins-good",
+    "lame",
+    "lame-libs",
+    "libavcodec",
+    "libfdk-aac",
+    "libjxl",
+    "libva-intel-media-driver",
+    "mesa-dri-drivers",
+    "mesa-filesystem",
+    "mesa-libEGL",
+    "mesa-libGL",
+    "mesa-libgbm",
+    "mesa-vulkan-drivers",
     "pipewire-libs-extra",
+    "tailscale",
+    "uupd",
     "zsh",
 ]
 

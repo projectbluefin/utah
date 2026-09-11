@@ -38,10 +38,9 @@ checks (`scripts/check-skill-frontmatter.sh`, `scripts/check-skill-index.sh`,
 
 ## Invariants — do not break
 
-- **`packages/bluefin.toml` is a byte-for-byte copy** of
-  `projectbluefin/bluefin` `build_files/packages/base.toml`. Never hand-edit
-  it; sync it verbatim from upstream. CI diffs it on every run
-  (`just check-parity`).
+- **`packages/bluefin.toml` is derived from Bluefin's effective package payload**
+  (base, version-specific, external, and multimedia transactions).
+  CI verifies it against upstream on every run (`just check-parity`).
 - **Utah's own package changes live in `packages/utah.toml`** (`[gnome]`,
   `[build]`, `[unavailable]`). Every `[unavailable]` entry MUST carry a
   tracking issue. A missing contract package is a build failure, never a
