@@ -8,6 +8,10 @@
 # Sections:
 #   [gnome]        GNOME 51 desktop contract Hummingbird does not ship
 #   [build]        toolchain needed to build the pinned GNOME extensions
+#   [services]     desktop services Bluefin adds on top of the server base
+#   [factory]      Bluefin parity packages expected from the Utah package factory
+#   [repositories] explicitly allowed runtime RPM repositories
+#   [supply_chain] provenance and release identity policies
 #   [unavailable]  Bluefin contract packages none of Utah's repositories provide
 #
 # On [multimedia_overrides], which Utah deliberately does not install:
@@ -48,6 +52,19 @@ packages = [
     "xdg-desktop-portal-gnome",
 ]
 
+[gnome.major_versions]
+gnome-control-center = "51"
+gnome-session = "51"
+gnome-settings-daemon = "51"
+gnome-shell = "51"
+gsettings-desktop-schemas = "51"
+mutter = "51"
+xdg-desktop-portal-gnome = "51"
+gtk4 = "4"
+libadwaita = "1"
+xdg-desktop-portal = "1"
+
+
 [build]
 # Build dependencies for scripts/build-gnome-extensions.sh.
 #
@@ -81,6 +98,77 @@ packages = [
     "systemd-resolved",
     "tailscale",
 ]
+
+[factory]
+# Bluefin parity packages expected to be built and provided by the Utah package factory.
+# These packages must carry the factory release identity (.hum1.bfin) and cannot silently
+# resolve from Hummingbird or another repository.
+packages = [
+    "adw-gtk3-theme",
+    "adwaita-fonts-all",
+    "alsa-firmware",
+    "alsa-tools-firmware",
+    "anaconda-live",
+    "containerd",
+    "ddcutil",
+    "distrobox",
+    "evtest",
+    "fastfetch",
+    "flatpak-spawn",
+    "fzf",
+    "gnome-ponytail-daemon",
+    "gnome-tweaks",
+    "google-noto-sans-cjk-vf-fonts",
+    "gum",
+    "gvfs-nfs",
+    "ibus-mozc",
+    "ibus-unikey",
+    "igt-gpu-tools",
+    "input-remapper",
+    "isomd5sum",
+    "just",
+    "libappindicator-gtk3",
+    "libayatana-appindicator-gtk3",
+    "libblockdev-btrfs",
+    "libblockdev-dm",
+    "libblockdev-lvm",
+    "libblockdev-mpath",
+    "libcamera-gstreamer",
+    "libcamera-tools",
+    "libratbag-ratbagd",
+    "libva-utils",
+    "livesys-scripts",
+    "make",
+    "mesa-libGLU",
+    "mozc",
+    "nautilus-gsconnect",
+    "openrgb-udev-rules",
+    "python3-gnome-ponytail-daemon",
+    "slitherer",
+    "squashfs-tools",
+    "switcheroo-control",
+    "waypipe",
+    "wireguard-tools",
+    "wl-clipboard",
+    "xdg-terminal-exec",
+    "xorriso",
+    "zenity",
+]
+
+[repositories]
+# Runtime RPM repositories explicitly allowed in the composed image.
+# Fedora or any unapproved repository enabled at runtime will fail verification.
+allowlist = [
+    "utah-packages",
+    "public-hummingbird-x86_64-rpms",
+    "nvidia-container-toolkit",
+]
+
+[supply_chain]
+report_path = "/usr/share/utah/package-provenance.json"
+factory_release_pattern = '.*\.hum\d*\.bfin.*'
+hummingbird_release_pattern = '.*\.hum\d*.*'
+
 
 [unavailable]
 # Packages Bluefin ships that none of Utah's repositories provide.  Each entry
