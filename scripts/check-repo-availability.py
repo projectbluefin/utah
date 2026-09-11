@@ -85,11 +85,17 @@ def main() -> int:
     overlay = args.overlay or args.manifest.with_name("utah.toml")
 
     unavailable = set(section(overlay, "unavailable"))
-    wanted = sorted(
-        set(section(args.manifest, "fedora"))
-        | set(section(overlay, "gnome"))
-        | set(section(overlay, "build"))
-    )
+    manifest_data = tomllib.loads(args.manifest.read_text())
+    manifest_pkgs: set[str] = set()
+    for sec_name, sec_val in manifest_data.items():
+        if sec_name == "excluded":
+            continue
+        if sec_name.startswith("fedora_v") and sec_name != "fedora_v44":
+            continue
+        manifest_pkgs.update(sec_val.get("packages", []))
+
+    overlay_pkgs = set(section(overlay, "gnome")) | set(section(overlay, "build"))
+    wanted = sorted(manifest_pkgs | overlay_pkgs)
     names: set[str] = set()
     for label, base in REPOS.items():
         found = repo_package_names(base)

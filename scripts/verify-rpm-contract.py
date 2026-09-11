@@ -66,7 +66,14 @@ def main() -> int:
         gnome = [p for p in contract if p in gnome_names]
         services = [p for p in contract if p in service_names]
     else:
-        bluefin = [p for p in section(args.manifest, "fedora") if p not in unavailable]
+        bluefin_pkgs = (
+            section(args.manifest, "fedora")
+            + section(args.manifest, "fedora_v44")
+            + section(args.manifest, "external")
+            + section(args.manifest, "multimedia")
+            + section(args.manifest, "multimedia_overrides")
+        )
+        bluefin = [p for p in bluefin_pkgs if p not in unavailable]
         gnome = section(overlay, "gnome")
         services = section(overlay, "services")
     nvidia = list(NVIDIA_PACKAGES) if "nvidia" in flavor else []

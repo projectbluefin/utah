@@ -42,15 +42,17 @@ def fedora_major() -> str:
 def contract(base: Path, overlay: Path, major: str | None) -> list[str]:
     """The exact set of packages the built image must contain.
 
-    Bluefin installs [fedora] plus the [fedora_v<major>] section for the
-    Fedora release it targets, and simply skips that section when it does not
-    exist.  The lookup is dynamic: whatever release the base image reports,
-    Utah installs the matching section when upstream defines one and skips it
-    otherwise, so a new upstream section is picked up for free.
+    Bluefin executes base [fedora], version-specific [fedora_v<major>],
+    [external] (e.g. tailscale, uupd), [multimedia], and [multimedia_overrides]
+    transactions. Utah installs all of these plus Utah's desktop additions
+    ([gnome], [services]), minus any documented exceptions in [unavailable].
     """
     packages = section(base, "fedora")
     if major:
         packages += section(base, f"fedora_v{major}")
+    packages += section(base, "external")
+    packages += section(base, "multimedia")
+    packages += section(base, "multimedia_overrides")
     packages += section(overlay, "gnome")
     # Service packages are part of the desktop contract as well: 40-services.sh
     # cannot enable what the server base never installed.
@@ -101,7 +103,7 @@ def main() -> int:
 
     if args.check:
         # No rpmdb to consult off-image, so validate the manifests only.
-        packages = contract(args.manifest, overlay, major=None)
+        packages = contract(args.manifest, overlay, major="44")
         if not packages:
             raise ValueError("Bluefin package manifest is empty")
         unavailable = section(overlay, "unavailable")
