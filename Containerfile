@@ -57,6 +57,7 @@ COPY scripts/install-packages.py \
      scripts/configure-services.sh \
      scripts/configure-branding.sh \
      scripts/verify-desktop-contract.py \
+     scripts/verify-first-boot.sh \
      scripts/verify-gnome-extensions.py \
      /tmp/utah-scripts/
 # Common publishes Bluefin artwork, desktop defaults, Brewfiles, and setup
@@ -77,8 +78,9 @@ RUN for pair in install-packages.py:utah-install-packages \
                 configure-services.sh:utah-configure-services \
                 configure-branding.sh:utah-configure-branding \
                 verify-desktop-contract.py:utah-verify-desktop-contract \
+                verify-first-boot.sh:utah-verify-first-boot \
                 verify-gnome-extensions.py:utah-verify-gnome-extensions; do \
-      install -m 0755 "/tmp/utah-scripts/${pair%%:*}" "/usr/local/libexec/${pair##*:}" || exit 1; \
+      install -Dm0755 "/tmp/utah-scripts/${pair%%:*}" "/usr/local/libexec/${pair##*:}" || exit 1; \
     done && \
     cp -a /tmp/utah-common/. / && \
     cp -a /tmp/utah-bluefin/. / && \

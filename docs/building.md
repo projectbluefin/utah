@@ -11,6 +11,11 @@ just build-ghcr utah testing main
 just generate-bootable-image testing
 just boot-vm
 
+# From the booted VM, validate first-boot units and repeat-boot state:
+sudo /usr/local/libexec/utah-verify-first-boot
+# Reboot, then run:
+sudo UTAH_EXPECT_REPEAT=1 /usr/local/libexec/utah-verify-first-boot
+
 # Optional local diagnostics over SSH (never use for a published image):
 ENABLE_SSHD=1 just build-ghcr utah testing main
 ```

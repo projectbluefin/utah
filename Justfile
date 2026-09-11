@@ -21,6 +21,8 @@ check:
     grep -q 'enable ublue-system-setup.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
     test -f scripts/configure-services.sh
     bash -n scripts/configure-services.sh
+    test -f scripts/verify-first-boot.sh
+    bash -n scripts/verify-first-boot.sh
     test -f scripts/configure-branding.sh
     bash -n scripts/configure-branding.sh
     test -f scripts/verify-desktop-contract.py
@@ -33,10 +35,16 @@ check:
     git submodule update --init --recursive
     python3 -m py_compile scripts/verify-desktop-contract.py scripts/verify-gnome-extensions.py
     python3 scripts/verify-desktop-contract.py --check contracts/bluefin-desktop.toml
+    test -f tests/unit/test_first_boot.py
+    python3 tests/unit/test_first_boot.py
     python3 scripts/verify-gnome-extensions.py --source
     grep -q '/system_files/bluefin' Containerfile
     grep -q 'flatpak-preinstall.service' scripts/configure-services.sh
     grep -q 'flathub.flatpakrepo' scripts/configure-services.sh
+    grep -q 'input-remapper.service' scripts/configure-services.sh
+    grep -q 'bluefin-stats-refresh.timer' scripts/configure-services.sh
+    grep -q 'UTAH_FIRST_BOOT_OK' scripts/verify-first-boot.sh
+    grep -q 'UTAH_EXPECT_REPEAT' scripts/verify-first-boot.sh
     test -f iso/live/Containerfile
     test -f iso/live/src/configure-live.sh
     test -f iso/live/src/install-flatpaks.sh

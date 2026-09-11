@@ -1,7 +1,7 @@
 ---
 name: desktop-contract
 version: "1.0"
-last_updated: "2026-09-05"
+last_updated: "2026-09-11"
 id: desktop-contract
 one_line_purpose: Maintain Utah identity, Bluefin desktop defaults, and first-boot Flatpak policy.
 entry_point: docs/skills/desktop-contract.md
@@ -54,10 +54,17 @@ The TOML's sections are the contract's table of contents:
   (`https://dl.flathub.org/repo/`), the Bazaar preinstall, the
   `99-flatpaks.sh` privileged-setup hook, and the system-flatpaks Brewfile
   whose app list the contract enumerates.
+- **`[first_boot]`** — hooks that must be present and parse as shell before
+  the image is considered bootable. The Tailscale hook also documents the
+  persistent deferred-state file used when its optional binary is absent.
 - **`[services]`** — systemd units the preset must enable: `gdm.service`,
   `ublue-system-setup.service`, `flatpak-preinstall.service`,
   `flatpak-nuke-fedora.service`, `brew-setup.service`, `dconf-update.service`,
-  `bootc-unified-storage.service`, `uupd.timer`.
+  `bootc-unified-storage.service`, `input-remapper.service`,
+  `bluefin-stats-refresh.timer`, `uupd.timer`, and the global
+  `ublue-user-setup.service`. `tailscaled.service` is optional: when its unit
+  is present it must be enabled, and when its package is absent the hook must
+  leave a retryable state instead of invoking a missing command.
 
 ## GNOME extensions are pinned submodules
 
@@ -98,6 +105,38 @@ under `[services]` in `packages/utah.toml` and configured in
 `scripts/configure-services.sh`, which also disables `PrivateTmp` on
 `systemd-resolved.service` for bootc early-boot DNS resolution.
 
+`input-remapper.service` and `bluefin-stats-refresh.timer` are explicit policy,
+not incidental package defaults. The stats unit checks the writable `/var`
+mount and creates `/var/cache/bluefin` at execution time because image cleanup
+removes build-time cache directories.
+
+## First-boot runtime validation
+
+The image contains `/usr/local/libexec/utah-verify-first-boot`. Run it from a
+booted Utah system after the graphical session is available:
+
+```bash
+sudo /usr/local/libexec/utah-verify-first-boot
+```
+
+It checks the enabled system and global user setup units, failed setup results,
+hook syntax, the Flathub remote, the declared system Flatpaks, the update and
+statistics policy, and the optional Tailscale path. It writes a persistent
+key/value report to `/var/lib/utah/first-boot-status` and prints one of
+`UTAH_FIRST_BOOT_OK`, `UTAH_FIRST_BOOT_RETRYABLE`, or
+`UTAH_FIRST_BOOT_FAIL`. A missing network-dependent Flatpak or optional
+Tailscale package is reported as retryable with the next action visible in the
+report; it is not silently treated as installed.
+
+After rebooting the same disposable system, request the repeat-boot assertion:
+
+```bash
+sudo UTAH_EXPECT_REPEAT=1 /usr/local/libexec/utah-verify-first-boot
+```
+
+The report records the boot ID and increments its boot count, so a second
+invocation in the same boot cannot masquerade as a repeat-boot result.
+
 ## The verifiers run twice
 
 The same verifier runs in the Containerfile and on demand, so a local image
@@ -113,6 +152,9 @@ or a CI artifact can be checked after the fact (recipe comment, `Justfile`,
   already-composed image: the desktop verifier and the contract are
   bind-mounted from the working tree, the extension verifier runs from the
   image's own `/usr/local/libexec`.
+- **After boot** — run `utah-verify-first-boot` in the guest. This is the only
+  check that can observe first-boot unit failures, actual Flatpak installation,
+  deferred optional setup, and a changed boot ID across a reboot.
 - **Off-image** — `verify-desktop-contract.py --check` validates the contract
   TOML itself in source-only CI and is part of `just check`; it asserts
   nothing about any image.

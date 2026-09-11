@@ -129,14 +129,43 @@ apps = [
   "page.tesk.Refine",
 ]
 
+[first_boot]
+# These are the hooks copied into the image by Utah or the Bluefin-derived
+# common layer. The runtime verifier syntax-checks every one before checking
+# first-boot service results.
+hooks = [
+  "/usr/share/ublue-os/privileged-setup.hooks.d/10-tailscale.sh",
+  "/usr/share/ublue-os/privileged-setup.hooks.d/11-framework-ucsi-workaround.sh",
+  "/usr/share/ublue-os/privileged-setup.hooks.d/99-flatpaks.sh",
+  "/usr/share/ublue-os/user-setup.hooks.d/12-gnupg.sh",
+  "/usr/share/ublue-os/user-setup.hooks.d/20-framework.sh",
+  "/usr/share/ublue-os/user-setup.hooks.d/99-privileged.sh",
+]
+deferred_state = "/var/lib/ublue/setup-services/tailscale.deferred"
+
+[first_boot.file_contains]
+"/usr/share/ublue-os/privileged-setup.hooks.d/10-tailscale.sh" = [
+  "command -v tailscale",
+  "tailscale.deferred",
+  "rerun ublue-privileged-setup",
+]
+
 [services]
 enabled = [
   "bootc-unified-storage.service",
+  "bluefin-stats-refresh.timer",
   "brew-setup.service",
   "dconf-update.service",
   "flatpak-nuke-fedora.service",
   "flatpak-preinstall.service",
   "gdm.service",
+  "input-remapper.service",
   "ublue-system-setup.service",
   "uupd.timer",
+]
+user_enabled = [
+  "ublue-user-setup.service",
+]
+optional = [
+  "tailscaled.service",
 ]
