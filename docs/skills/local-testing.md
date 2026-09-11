@@ -1,7 +1,7 @@
 ---
 name: local-testing
 version: "1.0"
-last_updated: "2026-09-05"
+last_updated: "2026-09-11"
 id: local-testing
 one_line_purpose: Build, install, and boot Utah locally in a VM or live ISO.
 entry_point: docs/skills/local-testing.md
@@ -13,8 +13,8 @@ dependencies: []
 tags: [qemu, bootc, iso, vm, testing]
 description: >-
   Local validation loop: build-ghcr, bootc install to-disk, QEMU/noVNC boot,
-  live ISO. Use when validating changes end-to-end or debugging boot, GDM, or
-  live-session failures.
+  live ISO boot paths, and Secure Boot strategy. Use when validating changes
+  end-to-end or debugging boot, GDM, or live-session failures.
 metadata:
   type: runbook
 ---
@@ -126,6 +126,50 @@ integration is the next ISO milestone. `just boot-iso` boots it with
 QEMU-for-Docker and exposes the noVNC console at the printed URL (comment
 above `boot-iso` in `Justfile`), with TPM, UEFI, and `-snapshot` so nothing
 persists.
+
+### Supported and unsupported boot paths
+
+- **UEFI x86_64 (Supported)**: The live ISO is built strictly for UEFI boot
+  using `systemd-boot` located at `EFI/BOOT/BOOTX64.EFI` on the FAT32 ESP.
+  Dracut locates the live squashfs root via `root=live:LABEL=UTAH_LIVE`.
+  This is the only supported and tested live boot path.
+- **Legacy BIOS/CSM (Unsupported)**: Legacy MBR boot is unsupported. The ISO
+  omits MBR boot sectors and isolinux binaries.
+- **File-backed / Ventoy ISO loopback (Unsupported)**: Tools such as Ventoy
+  or GRUB loopback rely on initramfs hooks to mount the ISO container file from
+  a host filesystem before pivoting to the live root. Utah does not implement
+  custom dracut loopback handlers or a `rd.utah.isofile` locator; `loopback.cfg`
+  is deliberately omitted from the ISO to avoid advertising a non-functional
+  boot path. Media must be written directly to physical drives (e.g. via
+  Fedora Media Writer, `dd`, or balenaEtcher).
+
+### Kernel arguments and SELinux enforcement
+
+Production live boot entries configure:
+`root=live:LABEL=UTAH_LIVE rd.live.image rd.live.overlay.overlayfs=1 console=ttyS0,115200n8`
+
+- Every kernel argument corresponds to an implemented and tested dracut boot
+  path (`dmsquash-live`, `overlayfs`, and serial console logging).
+- **SELinux policy**: The live session runs with SELinux in **Enforcing** mode
+  by default. Permissive mode (`enforcing=0`) is disabled in production media.
+  Any debugging exception must be explicitly supplied as an interactive boot
+  argument by the developer.
+
+### Secure Boot strategy
+
+- **Live ISO bootloader**: The live image installs `systemd-boot-unsigned`.
+  On hardware with Microsoft UEFI Secure Boot enabled, firmware will reject the
+  unsigned EFI loader unless Secure Boot is temporarily disabled in UEFI setup.
+  Production releases will incorporate Fedora's signed shim (`shimx64.efi`) and
+  a signed bootloader binary.
+- **Custom flavor kernels (`gaming`, `nvidia-gaming`)**: The OGC gaming kernel
+  (`linux-ogc`) is compiled from source and unsigned. Secure Boot systems
+  require either disabling Secure Boot or enrolling a Project Bluefin/Utah
+  Machine Owner Key (MOK) into UEFI NVRAM using `mokutil` (`ujust enroll-secure-boot-key`).
+- **Custom flavor modules (`nvidia`, `nvidia-gaming`)**: Out-of-tree NVIDIA
+  kernel modules compiled against the base or OGC kernel run under kernel
+  lockdown when Secure Boot is active. Unsigned modules fail to load; production
+  deployments sign modules via `scripts/sign-file` with an enrolled MOK key.
 
 ## Verification
 

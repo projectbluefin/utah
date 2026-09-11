@@ -69,6 +69,13 @@ This is the honest list, and it is why the label above says pre-alpha.
 - **Nothing is published.** No image, no ISO artifact, no installer. A live
   ISO builds locally (`just iso`); installer payload integration is the next
   ISO milestone.
+- **Live media boot paths and Secure Boot.** Live media requires UEFI boot;
+  legacy BIOS and file-backed/Ventoy booting are explicitly unsupported (flash
+  directly using Fedora Media Writer or `dd`). Production live boot runs
+  SELinux in Enforcing mode. Because the live environment currently uses
+  `systemd-boot-unsigned`, Secure Boot must be disabled in firmware to boot the
+  live media until signed shim integration is complete. Custom OGC kernels and
+  NVIDIA modules similarly require MOK enrollment or Secure Boot disabled.
 - **The NVIDIA and gaming flavors are unproven.** The OGC kernel compiles with
   `sched_ext` and `binderfs` genuinely enabled, and the NVIDIA open module
   compiles for the base kernel. The module against the OGC kernel, the driver

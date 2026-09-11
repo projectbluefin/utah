@@ -99,26 +99,23 @@ cat > "${WORK}/utah-live.conf" <<EOF
  title   ${TITLE}
  linux   /images/pxeboot/vmlinuz
  initrd  /images/pxeboot/initrd.img
- options root=live:LABEL=${LABEL} rd.live.image rd.live.overlay.overlayfs=1 enforcing=0 console=ttyS0,115200n8
+ options root=live:LABEL=${LABEL} rd.live.image rd.live.overlay.overlayfs=1 console=ttyS0,115200n8
 EOF
 sed -i 's/^ //' "${WORK}/utah-live.conf"
 printf 'timeout 5\ndefault utah-live.conf\n' > "${WORK}/loader.conf"
 mcopy -i "${ESP}" "${WORK}/utah-live.conf" ::/loader/entries/utah-live.conf
 mcopy -i "${ESP}" "${WORK}/loader.conf" ::/loader/loader.conf
 
+# Assemble the ISO filesystem. Utah live media supports x86_64 UEFI boot via
+# systemd-boot. BIOS/legacy MBR boot and file-backed/Ventoy loopback booting are
+# unsupported; loopback.cfg and rd.utah.isofile are deliberately omitted.
 ISO_ROOT="${WORK}/iso-root"
-mkdir -p "${ISO_ROOT}/EFI/BOOT" "${ISO_ROOT}/LiveOS" "${ISO_ROOT}/images/pxeboot" "${ISO_ROOT}/boot/grub"
+mkdir -p "${ISO_ROOT}/EFI/BOOT" "${ISO_ROOT}/LiveOS" "${ISO_ROOT}/images/pxeboot"
 cp "${SYSTEMD_BOOT}" "${ISO_ROOT}/EFI/BOOT/BOOTX64.EFI"
 cp "${VMLINUZ}" "${ISO_ROOT}/images/pxeboot/vmlinuz"
 cp "${INITRD}" "${ISO_ROOT}/images/pxeboot/initrd.img"
 cp "${ESP}" "${ISO_ROOT}/EFI/efi.img"
 cp "${SQUASHFS}" "${ISO_ROOT}/LiveOS/squashfs.img"
-cat > "${ISO_ROOT}/boot/grub/loopback.cfg" <<EOF
-menuentry "${TITLE}" {
-    linux /images/pxeboot/vmlinuz root=live:LABEL=${LABEL} rd.live.image rd.live.overlay.overlayfs=1 enforcing=0 console=ttyS0,115200n8 rd.utah.isofile=\${iso_path}
-    initrd /images/pxeboot/initrd.img
-}
-EOF
 
 xorriso -as mkisofs -iso-level 3 -r -J --joliet-long -V "${LABEL}" \
     --efi-boot EFI/efi.img -efi-boot-part --efi-boot-image \
