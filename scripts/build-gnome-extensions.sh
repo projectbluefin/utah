@@ -27,8 +27,19 @@ mv /usr/share/gnome-shell/extensions/tmp/caffeine/caffeine@patapon.info /usr/sha
 glib-compile-schemas --strict /usr/share/gnome-shell/extensions/caffeine@patapon.info/schemas
 
 # Dash to Dock
-make -C /usr/share/gnome-shell/extensions/dash-to-dock@micxgx.gmail.com
-glib-compile-schemas --strict /usr/share/gnome-shell/extensions/dash-to-dock@micxgx.gmail.com/schemas
+# Upstream's Makefile renders stylesheet.css from _stylesheet.scss with sassc,
+# which neither the Hummingbird base nor the Utah package repository provides
+# (see [unavailable] in packages/utah.toml). The stylesheet is deterministic
+# for the pinned submodule ref, so Utah ships it precompiled. Guard on the
+# scss digest so a submodule bump cannot silently ship a stale stylesheet.
+dtd_dir="/usr/share/gnome-shell/extensions/dash-to-dock@micxgx.gmail.com"
+dtd_scss_sha="75892eff2b2d98fc94046a1d1a0a0defb4daaa8f0cadee251205e353ea048e0f"
+if ! echo "${dtd_scss_sha}  ${dtd_dir}/_stylesheet.scss" | sha256sum --check --strict --status; then
+    echo "dash-to-dock _stylesheet.scss no longer matches the precompiled stylesheet; re-render system_files/shared/usr/share/utah/dash-to-dock-stylesheet.css" >&2
+    exit 1
+fi
+install -m 0644 /usr/share/utah/dash-to-dock-stylesheet.css "${dtd_dir}/stylesheet.css"
+glib-compile-schemas --strict "${dtd_dir}/schemas"
 
 # Gradia Capture
 bash /usr/share/gnome-shell/extensions/gradia-integration@alexandervanhee.github.io/build.sh
