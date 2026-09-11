@@ -1,7 +1,7 @@
 ---
 name: package-contract
 version: "1.0"
-last_updated: "2026-09-05"
+last_updated: "2026-09-11"
 id: package-contract
 one_line_purpose: Maintain Bluefin package parity and Utah's overlay manifest.
 entry_point: docs/skills/package-contract.md
@@ -57,9 +57,10 @@ Bluefin's `[multimedia_overrides]` (twelve names: mesa-libGL,
 mesa-vulkan-drivers, libva, intel-mediasdk, libheif and friends) are **not**
 extra packages. They are the same names Fedora already ships, which Bluefin
 *replaces* with negativo17 builds by enabling `fedora-multimedia`. Utah does
-not enable that repository, so it installs Fedora's builds instead. Nothing
-is absent from the image; what differs is which build it carries, and the
-practical consequence is hardware-accelerated codec support.
+not enable that repository, so it installs Hummingbird's builds instead. Fedora
+repositories are never enabled at runtime. Nothing is absent from the image;
+what differs is which build it carries, and the practical consequence is
+hardware-accelerated codec support.
 
 That is why they are absent from the contract rather than listed under
 `[unavailable]`: recording them as missing would be wrong (a source does
@@ -114,9 +115,10 @@ about installation.
 - Drift in `packages/bluefin.toml` from upstream is a CI failure
   (`just check-parity`).
 
-Current counts, per the README "Package parity" section: 61 Bluefin contract
-packages installed, 12 Utah additions (GNOME 51, desktop services), 4
-genuinely unavailable.
+Current counts, per the README "Package parity" section: 58 Bluefin contract
+packages installed, 13 Utah additions (10 GNOME 51, 3 desktop services; 71 total
+verified), 6 genuinely unavailable (deferred parity debt: evolution-ews-core,
+firefox, fish, grub2-efi-x64-cdboot, pipewire-libs-extra, zsh).
 
 ## Verification
 

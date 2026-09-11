@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-05",
+  "generated_at": "2026-09-11",
   "schema_version": "1.0",
   "skills": [
     {
@@ -107,7 +107,7 @@
       ],
       "description": "Local validation loop: build-ghcr, bootc install to-disk, QEMU/noVNC boot, live ISO. Use when validating changes end-to-end or debugging boot, GDM, or live-session failures.",
       "version": "1.0",
-      "last_updated": "2026-09-05",
+      "last_updated": "2026-09-11",
       "doc_type": "runbook"
     },
     {
@@ -125,7 +125,7 @@
       ],
       "description": "Bluefin parity contract: verbatim bluefin.toml, utah.toml overlay, [unavailable] rules, repository policy. Use when adding, removing, or debugging packages or parity/check-repos failures.",
       "version": "1.0",
-      "last_updated": "2026-09-05",
+      "last_updated": "2026-09-11",
       "doc_type": "policy"
     },
     {

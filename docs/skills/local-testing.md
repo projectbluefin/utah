@@ -1,7 +1,7 @@
 ---
 name: local-testing
 version: "1.0"
-last_updated: "2026-09-05"
+last_updated: "2026-09-11"
 id: local-testing
 one_line_purpose: Build, install, and boot Utah locally in a VM or live ISO.
 entry_point: docs/skills/local-testing.md
@@ -106,12 +106,14 @@ The local OCI ref is not available from the guest's localhost registry, so
 unified-storage service is skipped instead of retrying its registry repull
 forever. Published images omit that argument and keep the service enabled.
 
-## Live ISO (initial bring-up)
+## Live ISO (offline installer environment)
 
-The first ISO slice reuses Utah's own kernel, dracut-live, and GNOME image.
-`just iso` builds a single-architecture UEFI live ISO; this first slice proves
-the Utah live boot path, and installer payload integration is intentionally
-the next ISO milestone (comment above `iso` in `Justfile`):
+The live ISO reuses Utah's own kernel, dracut-live, and GNOME image. `just iso`
+builds a single-architecture UEFI live ISO that embeds the bootc-installer
+Flatpak bundle (`org.bootcinstaller.Installer`) and the target OCI image in a
+VFS `containers-storage` graphroot for offline installation (Dakota's
+offline-payload design adapted for Utah's conventional bootc base; recipe
+comment above `iso` in `Justfile` and `iso/scripts/build-iso.sh`):
 
 ```bash
 just iso testing
@@ -120,9 +122,9 @@ just iso testing 1   # optional live-session SSH diagnostics (debug=1)
 ```
 
 The result is `output/utah-live.iso`, assembled with systemd-boot, a
-`UTAH_LIVE` dmsquash-live root, and a serial `UTAH_LIVE_READY` marker. It is
-intended to prove live desktop boot first; bootc-installer/offline payload
-integration is the next ISO milestone. `just boot-iso` boots it with
+`UTAH_LIVE` dmsquash-live root, and a serial `UTAH_LIVE_READY` marker. The
+offline installer payload is fully integrated locally; public release ISO
+artifacts have not yet been published. `just boot-iso` boots it with
 QEMU-for-Docker and exposes the noVNC console at the printed URL (comment
 above `boot-iso` in `Justfile`), with TPM, UEFI, and `-snapshot` so nothing
 persists.
