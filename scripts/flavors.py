@@ -11,6 +11,7 @@ what a flavor moves to when it is switched off, so the reason it is off stays
 next to the list rather than in a commit message.
 
     flavors.py list       ["main"]
+    flavors.py count      1
     flavors.py images     [{"image": "utah"}, ...]         promote
     flavors.py releases   [{"image": "utah", "source_tag": ...}, ...]  release
     flavors.py needs-kernel   true / false
@@ -37,6 +38,8 @@ if unknown:
 what = sys.argv[1] if len(sys.argv) > 1 else "list"
 if what == "list":
     print(json.dumps(flavors))
+elif what == "count":
+    print(len(flavors))
 elif what == "images":
     print(json.dumps([{"image": IMAGE[f]} for f in flavors]))
 elif what == "releases":

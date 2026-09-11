@@ -79,6 +79,8 @@ check:
          <(grep -m1 '^ARG BASE_IMAGE=' Containerfile.kernel)
     python3 -m py_compile scripts/flavors.py
     python3 scripts/flavors.py list >/dev/null
+    ! grep -nE 'count" -eq [0-9]' .github/workflows/post-testing-e2e.yml
+    grep -q 'flavors.py count' .github/workflows/post-testing-e2e.yml
     pip install --quiet pyyaml 2>/dev/null || true
     python3 scripts/check_workflow_outputs.py
     pip install --quiet jsonschema 2>/dev/null || true
