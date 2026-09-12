@@ -16,9 +16,21 @@ jobs:
       github.event.workflow_run.head_branch == 'testing'
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       packages: write
       actions: read
     steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          # workflow_run has no ref: default; without this, checkout resolves
+          # the default branch instead of the commit that produced the images
+          # being promoted, so the flavor count and the digests being
+          # promoted could come from two different commits.
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - name: Resolve the expected image count
+        id: flavors
+        run: echo "count=$(python3 scripts/flavors.py count)" >> "$GITHUB_OUTPUT"
       - name: Download all flavor digests
         env:
           GH_TOKEN: ${{ github.token }}
@@ -27,6 +39,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REGISTRY: ghcr.io/${{ github.repository_owner }}
+          EXPECTED: ${{ steps.flavors.outputs.count }}
         run: |
           set -euo pipefail
           echo "$GH_TOKEN" | skopeo login ghcr.io --username "${{ github.actor }}" --password-stdin
@@ -36,4 +49,4 @@ jobs:
             skopeo copy --all "docker://${REGISTRY}/${name}@${digest}" "docker://${REGISTRY}/${name}:testing"
             count=$((count + 1))
           done < <(find /tmp/digests -name '*.txt' -exec cat {} +)
-          test "$count" -eq 4
+          test "$count" -eq "$EXPECTED"
