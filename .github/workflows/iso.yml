@@ -267,6 +267,18 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: utah-iso-failure-${{ github.run_id }}
-          path: ${{ github.workspace }}/.ci/utah-iso-output/
+          # Logs, screenshots and the summary only -- not the qcow2 install
+          # disk or OVMF pflash vars. Those are multi-GB, add nothing a
+          # serial log/screenshot doesn't already show for triage, and
+          # there's no reason to publish a full guest filesystem image
+          # (test creds, host keys, etc.) as a public CI artifact.
+          path: |
+            ${{ github.workspace }}/.ci/utah-iso-output/candidate.txt
+            ${{ github.workspace }}/.ci/utah-iso-output/el-torito.txt
+            ${{ github.workspace }}/.ci/utah-iso-output/manifest.json
+            ${{ github.workspace }}/.ci/utah-iso-output/e2e/live-serial.log
+            ${{ github.workspace }}/.ci/utah-iso-output/e2e/installed-serial.log
+            ${{ github.workspace }}/.ci/utah-iso-output/e2e/e2e-summary.txt
+            ${{ github.workspace }}/.ci/utah-iso-output/e2e/screenshots/
           if-no-files-found: warn
           retention-days: 14
