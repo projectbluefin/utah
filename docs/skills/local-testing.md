@@ -1,7 +1,7 @@
 ---
 name: local-testing
 version: "1.0"
-last_updated: "2026-09-05"
+last_updated: "2026-09-11"
 id: local-testing
 one_line_purpose: Build, install, and boot Utah locally in a VM or live ISO.
 entry_point: docs/skills/local-testing.md
@@ -106,12 +106,11 @@ The local OCI ref is not available from the guest's localhost registry, so
 unified-storage service is skipped instead of retrying its registry repull
 forever. Published images omit that argument and keep the service enabled.
 
-## Live ISO (initial bring-up)
+## Live ISO and offline installation
 
-The first ISO slice reuses Utah's own kernel, dracut-live, and GNOME image.
-`just iso` builds a single-architecture UEFI live ISO; this first slice proves
-the Utah live boot path, and installer payload integration is intentionally
-the next ISO milestone (comment above `iso` in `Justfile`):
+The ISO reuses Utah's own kernel, dracut-live, and GNOME image, then embeds the
+bootc-installer bundle, default Flatpaks, and the selected OCI image in the
+live squashfs. `just iso` builds a single-architecture UEFI live ISO:
 
 ```bash
 just iso testing
@@ -120,12 +119,32 @@ just iso testing 1   # optional live-session SSH diagnostics (debug=1)
 ```
 
 The result is `output/utah-live.iso`, assembled with systemd-boot, a
-`UTAH_LIVE` dmsquash-live root, and a serial `UTAH_LIVE_READY` marker. It is
-intended to prove live desktop boot first; bootc-installer/offline payload
-integration is the next ISO milestone. `just boot-iso` boots it with
-QEMU-for-Docker and exposes the noVNC console at the printed URL (comment
-above `boot-iso` in `Justfile`), with TPM, UEFI, and `-snapshot` so nothing
-persists.
+`UTAH_LIVE` dmsquash-live root, and a serial `UTAH_LIVE_READY` marker. `just
+boot-iso` boots it with QEMU-for-Docker and exposes the noVNC console at the
+printed URL (comment above `boot-iso` in `Justfile`), with TPM, UEFI, and
+`-snapshot` so nothing persists.
+
+The CI-shaped installer test requires the debug ISO because it uses the live
+SSH control channel. It keeps the test output under `BASE_DIR`:
+
+```bash
+just iso testing 1
+just iso-e2e
+```
+
+`iso-e2e` gives the live VM a QEMU user network with `restrict=on` and only a
+host-forwarded SSH control port. Fisherman must install through the embedded
+`containers-storage` reference. The installed disk is then booted with no ISO
+and `-net none`; its serial marker is emitted only after Utah identity,
+`graphical.target`, GDM, and a GNOME Shell session are all present. Serial
+logs, screenshots, and the disposable installed disk remain in
+`output/utah-iso-e2e` after either success or failure.
+
+The automated production path is `.github/workflows/iso.yml`. It starts after
+the testing digest gate, resolves the exact x86_64 image digest from the build
+artifacts, and uploads the ISO plus SHA-256 manifest only after the same live,
+offline-install, and installed-boot gates pass. A failed run uploads the ISO
+staging directory, including serial logs, screenshots, and the failed disk.
 
 ## Verification
 
@@ -139,6 +158,7 @@ Then the manual runbook, when the change touches the boot path:
 just build-ghcr utah testing main
 just generate-bootable-image testing
 just boot-vm     # success: GDM appears and GNOME Shell renders in noVNC
-just iso testing
+just iso testing 1
+just iso-e2e      # success: live boot, offline Fisherman install, GNOME boot
 just boot-iso    # success: live session renders; serial shows UTAH_LIVE_READY
 ```

@@ -8,9 +8,10 @@ Bluefin built on Fedora Hummingbird. The more ... civilized murder machine.
 ![alt](https://github.com/user-attachments/assets/56428338-54a0-4376-a53b-5f02f8b101a1)
 
 **Experimental pre-alpha** — the image builds, boots, and reaches GDM in local
-QEMU validation. No image has been published to a registry, there is no
-installer payload, and no ISO has been released. Nothing here is ready to run on
-a machine you care about. [Filing
+QEMU validation. No stable image or ISO has been released. The gated CI path
+now builds a candidate ISO, installs its embedded payload offline, and retains
+the boot evidence; nothing here is ready to run on a machine you care about.
+[Filing
 issues](https://github.com/projectbluefin/utah/issues) is the whole point.
 
 ## What it is
@@ -66,9 +67,9 @@ verify step asserts *that file*, so the two cannot disagree.
 
 This is the honest list, and it is why the label above says pre-alpha.
 
-- **Nothing is published.** No image, no ISO artifact, no installer. A live
-  ISO builds locally (`just iso`); installer payload integration is the next
-  ISO milestone.
+- **Nothing is released.** The testing pipeline produces an ISO artifact only
+  after the exact-image, live-boot, offline-install, and installed-graphical
+  gates pass. A stable release ISO and public download remain future work.
 - **The NVIDIA and gaming flavors are unproven.** The OGC kernel compiles with
   `sched_ext` and `binderfs` genuinely enabled, and the NVIDIA open module
   compiles for the base kernel. The module against the OGC kernel, the driver

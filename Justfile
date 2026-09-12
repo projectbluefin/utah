@@ -43,14 +43,19 @@ check:
     test -f iso/live/src/etc/bootc-installer/images.json
     test -f iso/live/src/etc/bootc-installer/recipe.json
     test -f iso/scripts/build-iso.sh
+    test -f iso/scripts/offline-e2e.sh
     bash -n iso/live/src/configure-live.sh
     bash -n iso/live/src/install-flatpaks.sh
     bash -n iso/scripts/build-iso.sh
+    bash -n iso/scripts/offline-e2e.sh
     python3 -m json.tool iso/live/src/etc/bootc-installer/images.json >/dev/null
     python3 -m json.tool iso/live/src/etc/bootc-installer/recipe.json >/dev/null
     grep -q 'org.bootcinstaller.Installer' iso/live/src/install-flatpaks.sh
     grep -q 'containers-storage' iso/scripts/build-iso.sh
     grep -q 'UTAH_LIVE' iso/scripts/build-iso.sh
+    grep -q 'UTAH_LIVE_READY' iso/scripts/offline-e2e.sh
+    grep -q 'restrict=on' iso/scripts/offline-e2e.sh
+    grep -q -- '-net none' iso/scripts/offline-e2e.sh
     grep -q 'ENABLE_SSHD' Containerfile
     grep -q 'ENABLE_SSHD="${ENABLE_SSHD:-0}"' Justfile
     grep -q 'ARG PACKAGE_IMAGE_SHA=' Containerfile
@@ -338,9 +343,9 @@ generate-bootable-image stream="testing":
     sync
     echo "Bootable disk ready: $disk"
 
-# Build a single-architecture UEFI live ISO. This first slice proves the
-# Utah live boot path; installer payload integration is intentionally the next
-# ISO milestone.
+# Build a single-architecture UEFI live ISO with the installer and an embedded
+# OCI payload. Use `iso-e2e` below to exercise the same offline install path CI
+# uses.
 iso stream="testing" debug="0":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -348,6 +353,12 @@ iso stream="testing" debug="0":
     podman image exists "$ref" || { echo "Image $ref not found; run just build-ghcr {{ image }} {{ stream }} main" >&2; exit 1; }
     mkdir -p "{{ base_dir }}"
     bash iso/scripts/build-iso.sh "$ref" "$(realpath "{{ base_dir }}")/utah-live.iso" "Utah Live" "{{ debug }}" "ghcr.io/{{ repo_organization }}/{{ image }}:{{ stream }}"
+
+# Run the CI-shaped live boot, offline Fisherman install, and installed GNOME
+# boot test against a locally built ISO. The test leaves its serial logs,
+# screenshots, and installed disk under BASE_DIR for diagnosis.
+iso-e2e iso_path="output/utah-live.iso" payload_ref="ghcr.io/projectbluefin/utah:testing":
+    UTAH_E2E_WORK="{{ base_dir }}/utah-iso-e2e" bash iso/scripts/offline-e2e.sh "{{ iso_path }}" "{{ payload_ref }}"
 
 # Boot the live ISO with QEMU-for-Docker and expose its noVNC console.
 boot-iso:

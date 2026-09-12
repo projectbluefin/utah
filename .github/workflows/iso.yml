@@ -1,0 +1,284 @@
+name: Build, test, and publish Utah ISO
+
+run-name: >-
+  Utah ISO validation for ${{ github.event.workflow_run.head_sha || inputs.image || 'manual' }}
+
+on:
+  # The image promotion workflow is the dependency for this pipeline. Its
+  # successful conclusion means the candidate passed the digest gate before
+  # this workflow starts composing release media.
+  workflow_run:
+    workflows: ["Post-Testing E2E"]
+    types: [completed]
+    branches: [testing]
+  workflow_dispatch:
+    inputs:
+      image:
+        description: "Exact x86_64 image reference to test (must use @sha256:...)"
+        required: false
+        type: string
+      source_run_id:
+        description: "Successful Build Utah run containing image digest artifacts"
+        required: false
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: utah-iso-${{ github.event.workflow_run.head_sha || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  resolve-image:
+    name: Resolve exact candidate image
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+      packages: read
+    outputs:
+      image: ${{ steps.resolve.outputs.image }}
+      payload_ref: ${{ steps.resolve.outputs.payload_ref }}
+      source_digest: ${{ steps.resolve.outputs.source_digest }}
+    steps:
+      - name: Resolve exact x86_64 image digest
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DISPATCH_IMAGE: ${{ inputs.image }}
+          DISPATCH_RUN_ID: ${{ inputs.source_run_id }}
+          EVENT_SHA: ${{ github.event.workflow_run.head_sha }}
+          REPOSITORY: ${{ github.repository }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          build_run_id=manual
+          image="${DISPATCH_IMAGE:-}"
+          source_digest=""
+
+          if [[ -n "$image" ]]; then
+            if [[ ! "$image" =~ ^ghcr\.io/[^/]+/utah@sha256:[0-9a-f]{64}$ ]]; then
+              echo "image must be an exact ghcr.io/<owner>/utah@sha256:<digest> reference" >&2
+              exit 1
+            fi
+            source_digest="${image##*@}"
+          else
+            # A workflow_run for Post-Testing E2E carries that workflow's run
+            # ID, not the Build Utah run that produced the digest artifacts.
+            # Resolve the build by the shared commit unless a manual caller
+            # supplied its build run explicitly.
+            build_run_id="${DISPATCH_RUN_ID:-}"
+            if [[ -z "$build_run_id" && -n "${EVENT_SHA:-}" ]]; then
+              build_run_id="$(gh run list \
+                --repo "$REPOSITORY" \
+                --workflow build.yml \
+                --commit "$EVENT_SHA" \
+                --event push \
+                --status success \
+                --limit 1 \
+                --json databaseId \
+                --jq '.[0].databaseId')"
+            fi
+            [[ -n "$build_run_id" ]] || {
+              echo "No successful Build Utah run was supplied or found for ${EVENT_SHA:-the manual run}" >&2
+              exit 1
+            }
+
+            digest_dir="${RUNNER_TEMP}/utah-build-digests"
+            mkdir -p "$digest_dir"
+            gh run download "$build_run_id" \
+              --repo "$REPOSITORY" \
+              --pattern 'image-digest-testing-*' \
+              --dir "$digest_dir"
+
+            mapfile -t digests < <(
+              grep -RhsE '^utah=sha256:[0-9a-f]{64}$' "$digest_dir" \
+                | cut -d= -f2- \
+                | sort -u
+            )
+            [[ "${#digests[@]}" -eq 1 ]] || {
+              printf 'Expected exactly one main utah digest, found %s\n' "${#digests[@]}" >&2
+              printf '%s\n' "${digests[@]}" >&2
+              exit 1
+            }
+            source_digest="${digests[0]}"
+            image="ghcr.io/${OWNER,,}/utah@${source_digest}"
+          fi
+
+          # The payload reference is deliberately a run-specific tag. It is
+          # written into the ISO's local containers-storage and can never
+          # accidentally turn into a registry pull during the offline test.
+          payload_ref="ghcr.io/${OWNER,,}/utah:ci-$GITHUB_RUN_ID"
+          {
+            echo "image=$image"
+            echo "payload_ref=$payload_ref"
+            echo "source_digest=$source_digest"
+          } >> "$GITHUB_OUTPUT"
+          echo "Candidate: ${image}"
+          echo "Payload reference inside ISO: ${payload_ref}"
+          echo "Build run: ${build_run_id}"
+
+  iso-e2e:
+    name: Build, install, and boot x86_64 UEFI ISO
+    needs: resolve-image
+    if: needs.resolve-image.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    permissions:
+      contents: read
+      packages: read
+    env:
+      IMAGE: ${{ needs.resolve-image.outputs.image }}
+      PAYLOAD_REF: ${{ needs.resolve-image.outputs.payload_ref }}
+      SOURCE_DIGEST: ${{ needs.resolve-image.outputs.source_digest }}
+      ISO_OUTPUT: ${{ github.workspace }}/.ci/utah-iso-output
+      ISO_PATH: ${{ github.workspace }}/.ci/utah-iso-output/utah-live.iso
+      E2E_WORK: ${{ github.workspace }}/.ci/utah-iso-output/e2e
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Install ISO and VM tooling
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            podman skopeo squashfs-tools xorriso dosfstools mtools \
+            qemu-system-x86 qemu-utils ovmf ffmpeg sshpass
+          # The ISO build stages a full uncompressed root before making the
+          # squashfs. Reclaim the hosted runner's preinstalled SDKs first.
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          mkdir -p "$ISO_OUTPUT"
+          df -h /
+
+      - name: Pull exact candidate image
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          echo "$GH_TOKEN" | podman login ghcr.io \
+            --username "$GITHUB_ACTOR" --password-stdin
+          podman pull "$IMAGE"
+          architecture="$(podman image inspect --format '{{.Architecture}}' "$IMAGE")"
+          case "$architecture" in
+            amd64|x86_64) ;;
+            *) echo "Expected an x86_64 image, got ${architecture}" >&2; exit 1 ;;
+          esac
+          echo "Pulled ${IMAGE} (${architecture})"
+
+      - name: Build UEFI ISO without publishing it
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/utah-iso-stage"
+          UTAH_ISO_WORKDIR="${RUNNER_TEMP}/utah-iso-stage" \
+            bash iso/scripts/build-iso.sh \
+              "$IMAGE" "$ISO_PATH" "Utah Live" 1 "$PAYLOAD_REF" "$IMAGE"
+          test -s "$ISO_PATH"
+          xorriso -indev "$ISO_PATH" -report_el_torito plain \
+            | tee "${ISO_OUTPUT}/el-torito.txt"
+          grep -qi 'EFI' "${ISO_OUTPUT}/el-torito.txt"
+          sha256sum "$ISO_PATH" > "${ISO_OUTPUT}/utah-live.iso.sha256"
+          cat > "${ISO_OUTPUT}/candidate.txt" <<EOF
+          image=${IMAGE}
+          source_digest=${SOURCE_DIGEST}
+          payload_ref=${PAYLOAD_REF}
+          architecture=x86_64
+          firmware=UEFI
+          EOF
+          sed -i 's/^          //' "${ISO_OUTPUT}/candidate.txt"
+
+      - name: Run live, offline install, and installed graphical boot gates
+        run: |
+          set -euo pipefail
+          UTAH_E2E_WORK="$E2E_WORK" \
+            bash iso/scripts/offline-e2e.sh "$ISO_PATH" "$PAYLOAD_REF" "$IMAGE"
+
+      - name: Validate retained gate evidence
+        if: success()
+        run: |
+          set -euo pipefail
+          test -s "$E2E_WORK/live-serial.log"
+          test -s "$E2E_WORK/installed-serial.log"
+          test -s "$E2E_WORK/e2e-summary.txt"
+          for label in live-desktop installed-desktop; do
+            if [[ ! -s "$E2E_WORK/screenshots/${label}.png" && \
+              ! -s "$E2E_WORK/screenshots/${label}.ppm" ]]; then
+              echo "Missing ${label} screenshot evidence" >&2
+              exit 1
+            fi
+          done
+
+      - name: Write final ISO manifest
+        if: success()
+        env:
+          MANIFEST: ${{ github.workspace }}/.ci/utah-iso-output/manifest.json
+        run: |
+          set -euo pipefail
+          python3 - "$MANIFEST" "$ISO_PATH" "$IMAGE" "$SOURCE_DIGEST" "$PAYLOAD_REF" <<'PY'
+          import hashlib
+          import json
+          import pathlib
+          import sys
+
+          manifest, iso, image, digest, payload = sys.argv[1:]
+          path = pathlib.Path(iso)
+          sha256 = hashlib.sha256()
+          with path.open("rb") as source:
+              for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                  sha256.update(chunk)
+          pathlib.Path(manifest).write_text(json.dumps({
+              "artifact": path.name,
+              "sha256": sha256.hexdigest(),
+              "architecture": "x86_64",
+              "firmware": "UEFI",
+              "source_image": image,
+              "source_digest": digest,
+              "embedded_payload": payload,
+              "live_marker": "UTAH_LIVE_READY",
+              "installed_marker": "UTAH_INSTALLED_GRAPHICAL_OK",
+              "network": {
+                  "live_control": "qemu-user-restrict-on",
+                  "installed": "none",
+              },
+          }, indent=2) + "\n")
+          PY
+
+      - name: Publish production ISO and checksum
+        if: success()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: utah-iso-x86_64-${{ github.run_id }}
+          path: |
+            ${{ github.workspace }}/.ci/utah-iso-output/utah-live.iso
+            ${{ github.workspace }}/.ci/utah-iso-output/utah-live.iso.sha256
+            ${{ github.workspace }}/.ci/utah-iso-output/candidate.txt
+            ${{ github.workspace }}/.ci/utah-iso-output/el-torito.txt
+            ${{ github.workspace }}/.ci/utah-iso-output/manifest.json
+            ${{ github.workspace }}/.ci/utah-iso-output/e2e/live-serial.log
+            ${{ github.workspace }}/.ci/utah-iso-output/e2e/installed-serial.log
+            ${{ github.workspace }}/.ci/utah-iso-output/e2e/e2e-summary.txt
+            ${{ github.workspace }}/.ci/utah-iso-output/e2e/screenshots/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Retain failed ISO diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: utah-iso-failure-${{ github.run_id }}
+          # Logs, screenshots and the summary only -- not the qcow2 install
+          # disk or OVMF pflash vars. Those are multi-GB, add nothing a
+          # serial log/screenshot doesn't already show for triage, and
+          # there's no reason to publish a full guest filesystem image
+          # (test creds, host keys, etc.) as a public CI artifact.
+          path: |
+            ${{ github.workspace }}/.ci/utah-iso-output/candidate.txt
+            ${{ github.workspace }}/.ci/utah-iso-output/el-torito.txt
+            ${{ github.workspace }}/.ci/utah-iso-output/manifest.json
+            ${{ github.workspace }}/.ci/utah-iso-output/e2e/live-serial.log
+            ${{ github.workspace }}/.ci/utah-iso-output/e2e/installed-serial.log
+            ${{ github.workspace }}/.ci/utah-iso-output/e2e/e2e-summary.txt
+            ${{ github.workspace }}/.ci/utah-iso-output/e2e/screenshots/
+          if-no-files-found: warn
+          retention-days: 14
