@@ -1,7 +1,7 @@
 ---
 name: package-contract
 version: "1.0"
-last_updated: "2026-09-05"
+last_updated: "2026-09-11"
 id: package-contract
 one_line_purpose: Maintain Bluefin package parity and Utah's overlay manifest.
 entry_point: docs/skills/package-contract.md
@@ -37,10 +37,15 @@ policy for changing them.
   addition to* or *instead of* the contract lives here. The full rules are in
   the header comment of that file (cite it; do not move or copy it):
 
-  - `[gnome]` — GNOME 51 desktop contract Hummingbird does not ship.
+  - `[gnome]` — GNOME 51 desktop contract Hummingbird does not ship, with
+    major version assertions (`[gnome.major_versions]`).
   - `[build]` — toolchain needed to build the pinned GNOME extensions
     (`scripts/build-gnome-extensions.sh`).
   - `[services]` — desktop services Bluefin adds on top of the server base.
+  - `[factory]` — Bluefin parity packages expected from the Utah package factory
+    rebuilds (`.hum1.bfin`).
+  - `[repositories]` — explicitly allowed runtime RPM repositories.
+  - `[supply_chain]` — provenance report path and release identity patterns.
   - `[unavailable]` — Bluefin contract packages none of Utah's repositories
     provide.
 
@@ -83,6 +88,15 @@ The pinned package image is an RPM repository, not a runtime dependency: its
 contents are copied into the image so the package transaction is reproducible
 and does not depend on a mutable mirror (`Containerfile` L41-44).
 
+An explicit repository allowlist (`[repositories].allowlist`) in
+`packages/utah.toml` restricts runtime repositories strictly to:
+- `utah-packages`
+- `public-hummingbird-x86_64-rpms`
+- `nvidia-container-toolkit` (for nvidia flavors)
+
+Any unapproved repository or any repository resolving from Fedora causes the
+build contract check (`scripts/verify-rpm-contract.py`) to fail closed.
+
 ## Supply-chain download verification
 
 Every executable release asset fetched during image or ISO composition is
@@ -90,6 +104,44 @@ version-pinned and verified against a committed digest or published checksum
 before extraction or execution. `scripts/check-download-integrity.py` runs
 in `just check` and pre-commit to statically enforce that no build recipe
 resolves a mutable latest release or downloads unverified executables.
+
+## Supply-chain contract and provenance attestation
+
+Beyond package name presence, `scripts/verify-rpm-contract.py` enforces full
+supply-chain integrity and NEVRA identity:
+
+1. **GNOME 51 major version & release identity**: Core GNOME desktop contract
+   packages (`gnome-shell`, `mutter`, `gnome-control-center`, `gnome-session`,
+   `gnome-settings-daemon`, `gsettings-desktop-schemas`, `xdg-desktop-portal-gnome`)
+   must match required major version 51 (`[gnome.major_versions]`) and carry
+   factory/Hummingbird release identity (`.hum1.bfin` / `.hum`), failing if
+   any Fedora disttag (`.fc`) is detected.
+2. **Factory parity package origin**: Bluefin parity packages expected from
+   factory rebuilds (`[factory].packages`) must carry the factory release
+   identity (`.bfin`, e.g. `.hum1.bfin`) and cannot silently resolve from
+   Hummingbird base or any other repository.
+
+   `[factory].packages` is a contract with the `utah-packages` factory repo,
+   not just this one: every name listed is a promise that `utah-packages`
+   rebuilds and publishes it. There is no shared CI between the two repos, so
+   if a package is dropped or renamed on the factory side, this check is the
+   only thing that will notice -- and it notices here, not there. Keep the
+   list in sync with what the factory actually ships, and link the tracking
+   issue for keeping the two repos' release-identity conventions in sync
+   once one exists.
+
+   The `.hum1.bfin` / `.hum` release-identity patterns themselves are not
+   hardcoded in the script -- they live in `[supply_chain].factory_release_pattern`
+   and `[supply_chain].hummingbird_release_pattern` in `packages/utah.toml`,
+   so a dist-tag convention change on either repo is a one-line data edit
+   there, not a code change here.
+3. **Runtime repository allowlist**: The final image is verified to expose only
+   the explicitly allowed runtime RPM repositories; any enabled Fedora or
+   unapproved repository fails the build.
+4. **Build provenance & NEVRA report retention**: A complete resolved
+   package-origin/NEVRA report is written to
+   `/usr/share/utah/package-provenance.json` recording package NEVRAs, source
+   RPMs, vendor, repository origin classification, and attestation status.
 
 ## Install and verify cannot disagree
 
