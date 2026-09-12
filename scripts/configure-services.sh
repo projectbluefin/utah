@@ -25,6 +25,9 @@ user_unit_exists() {
     return 1
 }
 
+# Under `set -e` above, a missing required unit aborts this script and fails
+# the image build for every flavor -- not just this one. Only mark a unit
+# required here if losing it silently would be worse than a broken build.
 enable_required_unit() {
     if ! unit_exists "$1"; then
         echo "Required desktop unit is missing: $1" >&2

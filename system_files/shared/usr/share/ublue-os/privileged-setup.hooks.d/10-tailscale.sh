@@ -16,9 +16,11 @@ defer_tailscale() {
     echo "Tailscale setup deferred: ${reason}"
 }
 
-# Tailscale is an optional integration in the setup hook. Do this check before
-# version-script: recording a completed version while the package is absent
-# would make the hook silently skip forever after Tailscale is installed.
+# Tailscale is an optional integration: this hook tolerates the tailscale
+# package/unit being absent entirely and defers rather than failing. Do this
+# check before version-script: recording a completed version while the
+# package is absent would make the hook silently skip forever after
+# Tailscale is installed.
 if ! command -v tailscale >/dev/null 2>&1; then
     defer_tailscale "the tailscale binary is not installed"
     exit 0
