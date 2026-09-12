@@ -44,6 +44,12 @@ DEFAULT_ALLOWED_REPOS: tuple[str, ...] = (
     "nvidia-container-toolkit",
 )
 
+# Release-identity patterns for the factory (.hum1.bfin) and Hummingbird
+# (.hum) rebuild conventions. Overridable via [supply_chain] in utah.toml so a
+# dist-tag convention change on either side is a data edit, not a code change.
+DEFAULT_FACTORY_RELEASE_PATTERN = r"\.bfin"
+DEFAULT_HUMMINGBIRD_RELEASE_PATTERN = r"\.hum\d*(\.bfin)?"
+
 # Expected major versions for GNOME contract packages.
 DEFAULT_GNOME_MAJORS: dict[str, str] = {
     "gnome-control-center": "51",
@@ -106,6 +112,7 @@ def verify_gnome_packages(
     gnome_pkgs: list[str],
     pkg_map: dict[str, dict[str, str]],
     expected_majors: dict[str, str],
+    hummingbird_pattern: str = DEFAULT_HUMMINGBIRD_RELEASE_PATTERN,
 ) -> list[str]:
     """Verify GNOME contract packages for required major version and release identity."""
     errors: list[str] = []
@@ -124,7 +131,7 @@ def verify_gnome_packages(
                     f"GNOME package '{pkg}' version '{ver}' does not match required major version '{exp_maj}'"
                 )
         # Release identity must match factory (.hum1.bfin) or Hummingbird (.hum)
-        if not re.search(r"\.hum\d*(\.bfin)?", rel):
+        if not re.search(hummingbird_pattern, rel):
             errors.append(
                 f"GNOME package '{pkg}' release '{rel}' does not match expected factory/Hummingbird release identity"
             )
@@ -138,6 +145,7 @@ def verify_gnome_packages(
 def verify_factory_packages(
     factory_pkgs: list[str],
     pkg_map: dict[str, dict[str, str]],
+    factory_pattern: str = DEFAULT_FACTORY_RELEASE_PATTERN,
 ) -> list[str]:
     """Ensure Bluefin parity packages expected from factory carry .bfin and did not silently resolve from base repos."""
     errors: list[str] = []
@@ -146,7 +154,7 @@ def verify_factory_packages(
         if not info:
             continue
         rel = info["release"]
-        if not re.search(r"\.bfin", rel):
+        if not re.search(factory_pattern, rel):
             errors.append(
                 f"Bluefin parity package '{pkg}' expected from factory (.bfin), but resolved with release '{rel}' (silent repository fallback)"
             )
@@ -317,12 +325,6 @@ def retain_provenance_report(
         output_path.parent.mkdir(parents=True, exist_ok=True)
         report_json = json.dumps(report, indent=2) + "\n"
         output_path.write_text(report_json)
-        for alias in ("package-origins.json", "nevra-report.json"):
-            alias_path = output_path.with_name(alias)
-            try:
-                alias_path.write_text(report_json)
-            except OSError:
-                pass
         print(
             f"Retained resolved package-origin/NEVRA report at {output_path} "
             f"({len(packages_list)} packages: {summary_counts['factory_packages']} factory rebuilds, "
@@ -377,6 +379,14 @@ def main() -> int:
     raw_allowlist = overlay_data.get("repositories", {}).get("allowlist", DEFAULT_ALLOWED_REPOS)
     repo_allowlist = set(raw_allowlist)
 
+    supply_chain_cfg = overlay_data.get("supply_chain", {})
+    factory_release_pattern = supply_chain_cfg.get(
+        "factory_release_pattern", DEFAULT_FACTORY_RELEASE_PATTERN
+    )
+    hummingbird_release_pattern = supply_chain_cfg.get(
+        "hummingbird_release_pattern", DEFAULT_HUMMINGBIRD_RELEASE_PATTERN
+    )
+
     print(
         f"Verifying {len(bluefin)} Bluefin packages, {len(gnome)} GNOME desktop packages,"
         f" {len(services)} desktop service packages, and {len(nvidia)} NVIDIA packages",
@@ -414,11 +424,13 @@ def main() -> int:
 
     # Acceptance Criterion 1: GNOME contract package version & release identity
     validation_errors: list[str] = []
-    gnome_errors = verify_gnome_packages(gnome, pkg_map, expected_gnome_majors)
+    gnome_errors = verify_gnome_packages(
+        gnome, pkg_map, expected_gnome_majors, hummingbird_release_pattern
+    )
     validation_errors.extend(gnome_errors)
 
     # Acceptance Criterion 2: Bluefin parity packages expected from factory cannot silently resolve elsewhere
-    factory_errors = verify_factory_packages(factory_pkgs, pkg_map)
+    factory_errors = verify_factory_packages(factory_pkgs, pkg_map, factory_release_pattern)
     validation_errors.extend(factory_errors)
 
     # Acceptance Criterion 3: Final repository allowlist fails on Fedora or unapproved repos

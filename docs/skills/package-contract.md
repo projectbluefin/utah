@@ -120,14 +120,28 @@ supply-chain integrity and NEVRA identity:
    factory rebuilds (`[factory].packages`) must carry the factory release
    identity (`.bfin`, e.g. `.hum1.bfin`) and cannot silently resolve from
    Hummingbird base or any other repository.
+
+   `[factory].packages` is a contract with the `utah-packages` factory repo,
+   not just this one: every name listed is a promise that `utah-packages`
+   rebuilds and publishes it. There is no shared CI between the two repos, so
+   if a package is dropped or renamed on the factory side, this check is the
+   only thing that will notice -- and it notices here, not there. Keep the
+   list in sync with what the factory actually ships, and link the tracking
+   issue for keeping the two repos' release-identity conventions in sync
+   once one exists.
+
+   The `.hum1.bfin` / `.hum` release-identity patterns themselves are not
+   hardcoded in the script -- they live in `[supply_chain].factory_release_pattern`
+   and `[supply_chain].hummingbird_release_pattern` in `packages/utah.toml`,
+   so a dist-tag convention change on either repo is a one-line data edit
+   there, not a code change here.
 3. **Runtime repository allowlist**: The final image is verified to expose only
    the explicitly allowed runtime RPM repositories; any enabled Fedora or
    unapproved repository fails the build.
 4. **Build provenance & NEVRA report retention**: A complete resolved
    package-origin/NEVRA report is written to
-   `/usr/share/utah/package-provenance.json` (also linked to `package-origins.json`
-   and `nevra-report.json`) recording package NEVRAs, source RPMs, vendor,
-   repository origin classification, and attestation status.
+   `/usr/share/utah/package-provenance.json` recording package NEVRAs, source
+   RPMs, vendor, repository origin classification, and attestation status.
 
 ## Install and verify cannot disagree
 

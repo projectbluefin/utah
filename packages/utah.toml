@@ -166,6 +166,11 @@ allowlist = [
 
 [supply_chain]
 report_path = "/usr/share/utah/package-provenance.json"
+# These patterns encode the *current* dist-tag convention on each side. If
+# utah-packages or Hummingbird ever change how they tag releases, update the
+# pattern here rather than in scripts/verify-rpm-contract.py -- the two repos'
+# release-identity conventions must move together, and this is the one place
+# that should need editing when they do.
 factory_release_pattern = '.*\.hum\d*\.bfin.*'
 hummingbird_release_pattern = '.*\.hum\d*.*'
 
