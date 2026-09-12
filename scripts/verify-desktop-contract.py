@@ -57,22 +57,36 @@ def parse_brewfile(path: Path) -> list[str]:
     return apps
 
 
-def unit_enabled(unit: str) -> bool:
-    result = subprocess.run(
-        ["systemctl", "is-enabled", unit], capture_output=True, text=True, check=False
-    )
+def unit_exists(unit: str, *, global_scope: bool = False) -> bool:
+    command = ["systemctl"]
+    if global_scope:
+        command.append("--global")
+    command.extend(["cat", unit])
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    return result.returncode == 0
+
+
+def unit_enabled(unit: str, *, global_scope: bool = False) -> bool:
+    command = ["systemctl"]
+    if global_scope:
+        command.append("--global")
+    command.extend(["is-enabled", unit])
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
     return result.returncode == 0 and result.stdout.strip() in {"enabled", "enabled-runtime"}
 
 
 def validate_contract(contract: dict[str, Any]) -> list[str]:
     errors: list[str] = []
-    for section in ("branding", "configuration", "flatpak", "services"):
+    for section in ("branding", "configuration", "flatpak", "first_boot", "services"):
         if section not in contract:
             errors.append(f"missing [{section}] section")
-    for section in ("branding", "configuration", "flatpak"):
+    for section in ("branding", "configuration", "flatpak", "first_boot"):
         for file_name in contract.get(section, {}).get("files", []):
             if not Path(file_name).is_absolute():
                 errors.append(f"{section} file must be absolute: {file_name}")
+        for hook_name in contract.get(section, {}).get("hooks", []):
+            if not Path(hook_name).is_absolute():
+                errors.append(f"{section} hook must be absolute: {hook_name}")
     flatpak = contract.get("flatpak", {})
     apps = flatpak.get("apps", [])
     if not apps:
@@ -81,6 +95,8 @@ def validate_contract(contract: dict[str, Any]) -> list[str]:
         errors.append("Flatpak app contract contains duplicate IDs")
     if not str(flatpak.get("brewfile", "")).startswith("/"):
         errors.append("Flatpak Brewfile path must be absolute")
+    if not str(contract.get("first_boot", {}).get("deferred_state", "")).startswith("/"):
+        errors.append("first-boot deferred state path must be absolute")
     return errors
 
 
@@ -102,12 +118,21 @@ def main() -> int:
     branding = contract["branding"]
     configuration = contract["configuration"]
     flatpak = contract["flatpak"]
+    first_boot = contract["first_boot"]
     services = contract["services"]
 
-    for section in (branding, configuration, flatpak):
+    for section in (branding, configuration, flatpak, first_boot):
         for file_name in section.get("files", []):
             if not Path(file_name).is_file():
                 errors.append(f"required file is missing: {file_name}")
+        for hook_name in section.get("hooks", []):
+            hook = Path(hook_name)
+            if not hook.is_file():
+                errors.append(f"required first-boot hook is missing: {hook_name}")
+            elif subprocess.run(
+                ["bash", "-n", hook_name], capture_output=True, text=True, check=False
+            ).returncode != 0:
+                errors.append(f"first-boot hook is not valid shell: {hook_name}")
 
     os_release = read_os_release(Path("/usr/lib/os-release"))
     errors.extend(
@@ -135,14 +160,15 @@ def main() -> int:
                 )
             )
 
-    for file_name, expected_lines in configuration.get("file_contains", {}).items():
-        path = Path(file_name)
-        if not path.is_file():
-            continue
-        content = path.read_text()
-        for expected in expected_lines:
-            if expected not in content:
-                errors.append(f"{file_name} is missing required setting: {expected!r}")
+    for section in (configuration, first_boot):
+        for file_name, expected_lines in section.get("file_contains", {}).items():
+            path = Path(file_name)
+            if not path.is_file():
+                continue
+            content = path.read_text()
+            for expected in expected_lines:
+                if expected not in content:
+                    errors.append(f"{file_name} is missing required setting: {expected!r}")
 
     brewfile = Path(flatpak["brewfile"])
     if brewfile.is_file():
@@ -163,6 +189,14 @@ def main() -> int:
     for unit in services.get("enabled", []):
         if not unit_enabled(unit):
             errors.append(f"required service is not enabled: {unit}")
+
+    for unit in services.get("user_enabled", []):
+        if not unit_enabled(unit, global_scope=True):
+            errors.append(f"required global user service is not enabled: {unit}")
+
+    for unit in services.get("optional", []):
+        if unit_exists(unit) and not unit_enabled(unit):
+            errors.append(f"optional service is present but not enabled: {unit}")
 
     for error in errors:
         fail(error)

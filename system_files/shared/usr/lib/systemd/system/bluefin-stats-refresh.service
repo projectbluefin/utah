@@ -3,7 +3,10 @@ Description=Refresh Bluefin community stats for fastfetch
 Documentation=https://projectbluefin.io
 After=network-online.target
 Wants=network-online.target
-ConditionPathIsReadWrite=/var/cache/bluefin
+# /var/cache is intentionally removed from the immutable image during cleanup.
+# Check the writable /var mount instead; ExecStartPre creates the cache before
+# the first refresh, including after a fresh boot and on repeat boots.
+ConditionPathIsReadWrite=/var
 
 [Service]
 Type=oneshot

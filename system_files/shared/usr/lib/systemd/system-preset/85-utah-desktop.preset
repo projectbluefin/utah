@@ -4,6 +4,11 @@ enable gdm.service
 enable firewalld.service
 enable fwupd.service
 enable fwupd-refresh.timer
+enable brew-setup.service
+enable flatpak-nuke-fedora.service
+enable flatpak-preinstall.service
+enable input-remapper.service
+enable bluefin-stats-refresh.timer
 enable tailscaled.service
 enable uupd.timer
 enable ublue-system-setup.service
