@@ -22,6 +22,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          # workflow_run has no ref: default; without this, checkout resolves
+          # the default branch instead of the commit that produced the images
+          # being promoted, so the flavor count and the digests being
+          # promoted could come from two different commits.
+          ref: ${{ github.event.workflow_run.head_sha }}
       - name: Resolve the expected image count
         id: flavors
         run: echo "count=$(python3 scripts/flavors.py count)" >> "$GITHUB_OUTPUT"
