@@ -23,13 +23,58 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-# The same repositories the image installs from, in the same precedence order:
-# Hummingbird's own overlay plus the utah-packages factory (its Pages mirror,
-# since check-repos runs in CI before the OCI repo is copied into the image).
-REPOS = {
-    "public-hummingbird": "https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
-    "utah-packages": "https://projectbluefin.github.io/utah-packages/",
-}
+def install_repos(repo_dir: Path) -> dict[str, str]:
+    """The repositories the image's package transaction installs from.
+
+    Derived from packages/*.repo — the same files the build copies into
+    /etc/yum.repos.d — so a renamed or moved repository changes what this
+    check queries instead of leaving it validating a stale hardcoded copy.
+    A repo belongs to the install transaction when its section carries a
+    `# utah-install: true` marker; nvidia-container-toolkit is enabled on the
+    image but is consumed only by utah-install-nvidia, so it is unmarked.
+
+    A repo whose baseurl is a file:// path exists only inside the image (the
+    factory repository is copied in from a pinned OCI image). CI cannot query
+    that path, so such a section must also carry `# ci-mirror: <url>` naming
+    the published mirror to check instead.
+    """
+    repos: dict[str, str] = {}
+    for repo_file in sorted(repo_dir.glob("*.repo")):
+        section_name = None
+        baseurl = mirror = marked = None
+        for line in repo_file.read_text().splitlines():
+            line = line.strip()
+            if line.startswith("[") and line.endswith("]"):
+                if section_name and marked:
+                    repos[section_name] = _resolve(section_name, baseurl, mirror, repo_file)
+                section_name = line[1:-1]
+                baseurl = mirror = marked = None
+            elif line.startswith("#"):
+                comment = line.lstrip("# ")
+                if comment == "utah-install: true":
+                    marked = True
+                elif comment.startswith("ci-mirror:"):
+                    mirror = comment.split(":", 1)[1].strip()
+            elif line.startswith("baseurl="):
+                baseurl = line.split("=", 1)[1].strip()
+        if section_name and marked:
+            repos[section_name] = _resolve(section_name, baseurl, mirror, repo_file)
+    if not repos:
+        raise SystemExit(f"no repositories marked '# utah-install: true' under {repo_dir}")
+    return repos
+
+
+def _resolve(section_name: str, baseurl: str | None, mirror: str | None, repo_file: Path) -> str:
+    if not baseurl:
+        raise SystemExit(f"{repo_file}: [{section_name}] is marked utah-install but has no baseurl")
+    if baseurl.startswith("file://"):
+        if not mirror:
+            raise SystemExit(
+                f"{repo_file}: [{section_name}] has an in-image file:// baseurl; "
+                "add a '# ci-mirror: <url>' annotation naming the mirror CI should query"
+            )
+        return mirror
+    return baseurl
 
 
 def section(path: Path, name: str) -> list[str]:
@@ -90,8 +135,11 @@ def main() -> int:
         | set(section(overlay, "gnome"))
         | set(section(overlay, "build"))
     )
+    # The manifests live in packages/ beside the .repo files, so the manifest
+    # path locates the repository definitions — no second hardcoded path.
+    repos = install_repos(args.manifest.parent)
     names: set[str] = set()
-    for label, base in REPOS.items():
+    for label, base in repos.items():
         found = repo_package_names(base)
         print(f"{label}: {len(found)} binary packages")
         names |= found
