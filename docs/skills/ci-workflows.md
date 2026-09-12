@@ -122,6 +122,15 @@ Every push to `main` calls `reusable-sync-branches.yml@v1` (same SHA pin)
 with `contents: write` and nothing else -- there is no local logic to drift
 (workflow, `.github/workflows/sync-main-to-testing.yml`).
 
+## lifecycle-e2e
+
+`.github/workflows/lifecycle-e2e.yml` runs the Dakota-style bootc upgrade and
+rollback lifecycle gate. Triggered automatically following `Post-Testing E2E` or
+manually via `workflow_dispatch`, it exercises QEMU boot, bootc/uupd update
+staging, reboot into candidate digest with graphical validation, rollback, and
+restoration of the original baseline digest, publishing structured failure
+diagnostics and framebuffer screenshots.
+
 ## Verification
 
 ```bash

@@ -79,6 +79,11 @@ check:
          <(grep -m1 '^ARG BASE_IMAGE=' Containerfile.kernel)
     python3 -m py_compile scripts/flavors.py
     python3 scripts/flavors.py list >/dev/null
+    test -f scripts/verify-bootc-lifecycle.py
+    python3 -m py_compile scripts/verify-bootc-lifecycle.py
+    test -f scripts/bootc-lifecycle-e2e.sh
+    bash -n scripts/bootc-lifecycle-e2e.sh
+    python3 -m unittest tests/unit/test_bootc_lifecycle.py
     pip install --quiet pyyaml 2>/dev/null || true
     python3 scripts/check_workflow_outputs.py
     pip install --quiet jsonschema 2>/dev/null || true
@@ -405,3 +410,12 @@ secureboot base_name default_tag flavor:
     set -euo pipefail
     image_name="$(just image_name '{{ base_name }}' '{{ default_tag }}' '{{ flavor }}')"
     podman run --rm --entrypoint /bin/sh "localhost/$image_name:{{ default_tag }}" -c 'test -e /usr/lib/modules || test -e /boot'
+
+# Run the bootc upgrade and rollback lifecycle test in QEMU between two
+# immutable Utah digests. Asserts initial desktop boot, upgrade to candidate
+# digest, upgraded graphical desktop, rollback to initial digest, and produces
+# phase diagnostics and screenshots.
+lifecycle-e2e base_image="localhost/utah:testing" candidate_image="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    bash scripts/bootc-lifecycle-e2e.sh "{{ base_image }}" "{{ candidate_image }}"
