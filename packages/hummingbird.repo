@@ -2,6 +2,7 @@
 # and it takes precedence over Fedora via priority, which is how Hummingbird
 # composes its own buildroot (mock/mock.cfg in redhat/hummingbird/containers).
 [public-hummingbird-x86_64-rpms]
+# utah-install: true
 name=public-hummingbird-x86_64-rpms
 baseurl=https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/
 enabled=1

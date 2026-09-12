@@ -2,6 +2,8 @@
 # RPMs are authenticated by the pinned package image and its OCI provenance;
 # the repository itself does not carry an RPM GPG key.
 [utah-packages]
+# utah-install: true
+# ci-mirror: https://projectbluefin.github.io/utah-packages/
 name=Utah package factory
 baseurl=file:///etc/utah-packages
 enabled=1
