@@ -6,6 +6,11 @@ set -euo pipefail
 
 FLATPAK_CACHE=/var/cache/flatpak-dl
 INSTALLER_APP_ID=org.bootcinstaller.Installer
+# projectbluefin/bootc-installer and tuna-os/bootc-installer share tag history
+# through v3.0.9 (evidently a fork/mirror pair), but only
+# projectbluefin/bootc-installer currently publishes the pinned release below
+# (tuna-os/bootc-installer tops out at v3.0.14 on semver tags). See #50 for
+# the open question of which org is canonical going forward.
 INSTALLER_REPO=projectbluefin/bootc-installer
 FALLBACK_REPO=tuna-os/tuna-installer
 BUNDLE=org.bootcinstaller.Installer.flatpak

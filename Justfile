@@ -338,9 +338,8 @@ generate-bootable-image stream="testing":
     sync
     echo "Bootable disk ready: $disk"
 
-# Build a single-architecture UEFI live ISO. This first slice proves the
-# Utah live boot path; installer payload integration is intentionally the next
-# ISO milestone.
+# Build a single-architecture UEFI live ISO, including the offline installer
+# and Flatpak payload composed by iso/live/src/install-flatpaks.sh.
 iso stream="testing" debug="0":
     #!/usr/bin/env bash
     set -euo pipefail
