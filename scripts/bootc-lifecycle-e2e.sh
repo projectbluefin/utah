@@ -15,7 +15,9 @@
 #   UTAH_LIFECYCLE_WORK   Working directory (default: /var/tmp/utah-lifecycle-e2e)
 #   SSH_PORT              Host port for guest SSH (default: 2222)
 #   BOOT_TIMEOUT          Maximum seconds to wait for boot / SSH (default: 600)
-#   UPGRADE_TIMEOUT       Maximum seconds to wait for bootc upgrade (default: 900)
+#   UPGRADE_TIMEOUT       Maximum seconds to wait for bootc upgrade/switch/rollback
+#                         to complete (default: 1200; hosted runners fall back to
+#                         TCG emulation, which is much slower than KVM)
 #   QEMU_MEMORY           VM memory in MB (default: 8192)
 #   QEMU_CPUS             VM vCPUs (default: 4)
 #   QEMU_BINARY           QEMU binary (default: qemu-system-x86_64)
@@ -28,7 +30,7 @@ CANDIDATE_TARGET="${2:-}"
 WORK="${UTAH_LIFECYCLE_WORK:-/var/tmp/utah-lifecycle-e2e}"
 SSH_PORT="${SSH_PORT:-2222}"
 BOOT_TIMEOUT="${BOOT_TIMEOUT:-600}"
-UPGRADE_TIMEOUT="${UPGRADE_TIMEOUT:-900}"
+UPGRADE_TIMEOUT="${UPGRADE_TIMEOUT:-1200}"
 QEMU_MEMORY="${QEMU_MEMORY:-8192}"
 QEMU_CPUS="${QEMU_CPUS:-4}"
 
@@ -120,6 +122,15 @@ SSH_OPTS=(
 
 guest_ssh() {
     "${SSH}" "${SSH_OPTS[@]}" root@127.0.0.1 "$@"
+}
+
+# Bounds a guest command to UPGRADE_TIMEOUT from the client side: hosted
+# runners fall back to TCG (software) emulation, where `bootc upgrade`/
+# `bootc rollback` pulling and unpacking layers is much slower than under
+# KVM, so this needs real headroom -- but it must still fail the phase
+# instead of hanging until the job's default multi-hour timeout.
+guest_ssh_bounded() {
+    timeout "${UPGRADE_TIMEOUT}" "${SSH}" "${SSH_OPTS[@]}" root@127.0.0.1 "$@"
 }
 
 monitor_cmd() {
@@ -383,10 +394,12 @@ guest_ssh 'systemctl is-enabled uupd.timer' || true
 
 if [[ -n "${CANDIDATE_TARGET}" ]]; then
     echo "Switching to candidate image: ${CANDIDATE_TARGET}"
-    guest_ssh "bootc switch '${CANDIDATE_TARGET}'"
+    guest_ssh_bounded "bootc switch '${CANDIDATE_TARGET}'" \
+        || fail "bootc switch did not complete within UPGRADE_TIMEOUT=${UPGRADE_TIMEOUT}s"
 else
     echo "Executing bootc upgrade..."
-    guest_ssh 'bootc upgrade'
+    guest_ssh_bounded 'bootc upgrade' \
+        || fail "bootc upgrade did not complete within UPGRADE_TIMEOUT=${UPGRADE_TIMEOUT}s"
 fi
 
 guest_ssh 'bootc status --format=json' > "${WORK}/upgrade-staged-status.json"
@@ -437,7 +450,8 @@ guest_ssh 'cat /etc/os-release' > "${WORK}/upgraded-os-release.txt"
 # ---------------------------------------------------------------------------
 CURRENT_PHASE="rollback_staged"
 echo "=== Phase 4/5: Stage rollback via bootc rollback ==="
-guest_ssh 'bootc rollback'
+guest_ssh_bounded 'bootc rollback' \
+    || fail "bootc rollback did not complete within UPGRADE_TIMEOUT=${UPGRADE_TIMEOUT}s"
 
 guest_ssh 'bootc status --format=json' > "${WORK}/rollback-staged-status.json"
 

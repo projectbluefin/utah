@@ -18,8 +18,22 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 
+# `bootc status --format=json` is explicitly documented upstream as an
+# unstable schema. Pin the versions we know this tool's field paths are
+# compatible with and fail with a clear message on drift, rather than
+# letting a renamed/restructured field raise a raw KeyError deep inside a
+# phase handler. v1alpha1 was bootc's original schema name; current bootc
+# (1.16+) reports "org.containers.bootc/v1" for the same field layout this
+# tool reads (booted/staged/rollback.image.imageDigest) -- verified against
+# `bootc status --format=json` on a live bootc-1.16.7 host.
+KNOWN_API_VERSIONS = {
+    "org.containers.bootc/v1alpha1",
+    "org.containers.bootc/v1",
+}
+
+
 def parse_bootc_status(raw_json: str) -> Dict[str, Any]:
-    """Parse and validate bootc status JSON against v1alpha1 schema expectations."""
+    """Parse and validate bootc status JSON against known schema versions."""
     if not raw_json or not raw_json.strip():
         raise ValueError("bootc status output is empty")
 
@@ -30,6 +44,17 @@ def parse_bootc_status(raw_json: str) -> Dict[str, Any]:
 
     if not isinstance(data, dict):
         raise ValueError("bootc status root must be a JSON object")
+
+    api_version = data.get("apiVersion")
+    if api_version not in KNOWN_API_VERSIONS:
+        raise ValueError(
+            f"bootc status schema mismatch: expected apiVersion to be one "
+            f"of {sorted(KNOWN_API_VERSIONS)}, got {api_version!r}. The "
+            f"bootc version on the guest may have changed its status "
+            f"schema; add the new version to KNOWN_API_VERSIONS and "
+            f"re-verify the field paths below before trusting this tool's "
+            f"output."
+        )
 
     status = data.get("status")
     if not isinstance(status, dict):
@@ -472,6 +497,7 @@ def main() -> int:
             os_txt = "ID=utah\nIMAGE_ID=utah\nVERSION_ID=51\n"
 
             s_initial = json.dumps({
+                "apiVersion": "org.containers.bootc/v1alpha1",
                 "status": {
                     "booted": {"image": {"imageDigest": d1, "image": {"image": f"{img}:testing"}}, "pinned": False},
                     "staged": None,
@@ -481,6 +507,7 @@ def main() -> int:
             t.record_phase("initial_boot", s_initial, "PASS", desktop_ok=True, os_release_text=os_txt)
 
             s_up_staged = json.dumps({
+                "apiVersion": "org.containers.bootc/v1alpha1",
                 "status": {
                     "booted": {"image": {"imageDigest": d1, "image": {"image": f"{img}:testing"}}, "pinned": False},
                     "staged": {"image": {"imageDigest": d2, "image": {"image": f"{img}@sha256:2222..."}}, "pinned": False},
@@ -491,6 +518,7 @@ def main() -> int:
             t.assert_transition("initial_boot", "upgrade_staged", "upgrade_staged")
 
             s_up_booted = json.dumps({
+                "apiVersion": "org.containers.bootc/v1alpha1",
                 "status": {
                     "booted": {"image": {"imageDigest": d2, "image": {"image": f"{img}@sha256:2222..."}}, "pinned": False},
                     "staged": None,
@@ -501,6 +529,7 @@ def main() -> int:
             t.assert_transition("upgrade_staged", "upgraded_boot", "upgraded_boot")
 
             s_rb_staged = json.dumps({
+                "apiVersion": "org.containers.bootc/v1alpha1",
                 "status": {
                     "booted": {"image": {"imageDigest": d2, "image": {"image": f"{img}@sha256:2222..."}}, "pinned": False},
                     "staged": {"image": {"imageDigest": d1, "image": {"image": f"{img}:testing"}}, "pinned": False},
@@ -511,6 +540,7 @@ def main() -> int:
             t.assert_transition("upgraded_boot", "rollback_staged", "rollback_staged")
 
             s_rb_booted = json.dumps({
+                "apiVersion": "org.containers.bootc/v1alpha1",
                 "status": {
                     "booted": {"image": {"imageDigest": d1, "image": {"image": f"{img}:testing"}}, "pinned": False},
                     "staged": None,

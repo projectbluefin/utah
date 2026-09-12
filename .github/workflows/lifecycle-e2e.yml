@@ -33,6 +33,11 @@ jobs:
        github.event.workflow_run.event == 'push' &&
        github.event.workflow_run.head_branch == 'testing')
     runs-on: ubuntu-24.04
+    # Generous headroom for TCG (no KVM on hosted runners): base install,
+    # two guest reboots, an upgrade and a rollback. guest_ssh_bounded()
+    # in bootc-lifecycle-e2e.sh already fails the phase cleanly on a
+    # hung upgrade/rollback; this is only the outer backstop.
+    timeout-minutes: 90
     permissions:
       contents: read
       actions: read

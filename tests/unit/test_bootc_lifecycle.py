@@ -35,8 +35,8 @@ class BootcLifecycleTests(unittest.TestCase):
 
     def test_parse_valid_bootc_status(self) -> None:
         payload = {
+            "apiVersion": "org.containers.bootc/v1alpha1",
             "status": {
-                "apiVersion": "org.containers.bootc/v1alpha1",
                 "booted": {
                     "image": {
                         "imageDigest": self.d1,
@@ -83,6 +83,39 @@ class BootcLifecycleTests(unittest.TestCase):
                 }
             }))
 
+    def test_parse_bootc_status_accepts_current_v1_schema(self) -> None:
+        # Verified live against bootc-1.16.7: `bootc status --format=json`
+        # reports apiVersion "org.containers.bootc/v1", not "v1alpha1".
+        payload = {
+            "apiVersion": "org.containers.bootc/v1",
+            "status": {
+                "booted": {
+                    "image": {
+                        "imageDigest": self.d1,
+                        "image": {"image": f"{self.img}:testing"},
+                    },
+                    "pinned": False,
+                },
+                "staged": None,
+                "rollback": None,
+            }
+        }
+        status = parse_bootc_status(json.dumps(payload))
+        self.assertIn("booted", status)
+
+    def test_parse_bootc_status_rejects_unknown_schema_version(self) -> None:
+        payload = {
+            "apiVersion": "org.containers.bootc/v2",
+            "status": {
+                "booted": {
+                    "image": {"imageDigest": self.d1},
+                }
+            },
+        }
+        with self.assertRaises(ValueError) as ctx:
+            parse_bootc_status(json.dumps(payload))
+        self.assertIn("schema mismatch", str(ctx.exception))
+
     def test_parse_os_release_utah_identity(self) -> None:
         data = parse_os_release(self.utah_os_release)
         self.assertEqual(data.get("ID"), "utah")
@@ -96,6 +129,7 @@ class BootcLifecycleTests(unittest.TestCase):
 
             # Phase 1: Initial boot
             s1 = json.dumps({
+                "apiVersion": "org.containers.bootc/v1alpha1",
                 "status": {
                     "booted": {
                         "image": {"imageDigest": self.d1, "image": {"image": f"{self.img}:testing"}},
@@ -114,6 +148,7 @@ class BootcLifecycleTests(unittest.TestCase):
 
             # Phase 2: Upgrade staged
             s2 = json.dumps({
+                "apiVersion": "org.containers.bootc/v1alpha1",
                 "status": {
                     "booted": {
                         "image": {"imageDigest": self.d1, "image": {"image": f"{self.img}:testing"}},
@@ -132,6 +167,7 @@ class BootcLifecycleTests(unittest.TestCase):
 
             # Phase 3: Upgraded boot
             s3 = json.dumps({
+                "apiVersion": "org.containers.bootc/v1alpha1",
                 "status": {
                     "booted": {
                         "image": {"imageDigest": self.d2, "image": {"image": f"{self.img}@sha256:2222"}},
@@ -153,6 +189,7 @@ class BootcLifecycleTests(unittest.TestCase):
 
             # Phase 4: Rollback staged
             s4 = json.dumps({
+                "apiVersion": "org.containers.bootc/v1alpha1",
                 "status": {
                     "booted": {
                         "image": {"imageDigest": self.d2, "image": {"image": f"{self.img}@sha256:2222"}},
@@ -174,6 +211,7 @@ class BootcLifecycleTests(unittest.TestCase):
 
             # Phase 5: Rollback boot
             s5 = json.dumps({
+                "apiVersion": "org.containers.bootc/v1alpha1",
                 "status": {
                     "booted": {
                         "image": {"imageDigest": self.d1, "image": {"image": f"{self.img}:testing"}},
@@ -208,6 +246,7 @@ class BootcLifecycleTests(unittest.TestCase):
             tracker = LifecycleTracker(work_dir)
 
             s1 = json.dumps({
+                "apiVersion": "org.containers.bootc/v1alpha1",
                 "status": {
                     "booted": {
                         "image": {"imageDigest": self.d1, "image": {"image": f"{self.img}:testing"}},
@@ -236,6 +275,7 @@ class BootcLifecycleTests(unittest.TestCase):
             tracker = LifecycleTracker(work_dir)
 
             s1 = json.dumps({
+                "apiVersion": "org.containers.bootc/v1alpha1",
                 "status": {
                     "booted": {"image": {"imageDigest": self.d1, "image": {"image": self.img}}},
                     "staged": {"image": {"imageDigest": self.d2, "image": {"image": self.img}}},
@@ -245,6 +285,7 @@ class BootcLifecycleTests(unittest.TestCase):
 
             # Reboot resulted in the same old d1 instead of d2!
             s2 = json.dumps({
+                "apiVersion": "org.containers.bootc/v1alpha1",
                 "status": {
                     "booted": {"image": {"imageDigest": self.d1, "image": {"image": self.img}}},
                     "staged": None,
