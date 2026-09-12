@@ -6,7 +6,13 @@ set -euo pipefail
 
 FLATPAK_CACHE=/var/cache/flatpak-dl
 INSTALLER_APP_ID=org.bootcinstaller.Installer
-INSTALLER_REPO=tuna-os/bootc-installer
+# projectbluefin/bootc-installer and tuna-os/bootc-installer share tag history
+# through v3.0.9 (evidently a fork/mirror pair), but only
+# projectbluefin/bootc-installer currently publishes the pinned release below
+# (tuna-os/bootc-installer tops out at v3.0.14 on semver tags). See #50 for
+# the open question of which org is canonical going forward.
+INSTALLER_REPO=projectbluefin/bootc-installer
+FALLBACK_REPO=tuna-os/tuna-installer
 BUNDLE=org.bootcinstaller.Installer.flatpak
 # Pin the installer release so ISO composition is reproducible rather than
 # resolving a mutable `latest` during the build. Override with
@@ -26,9 +32,13 @@ flatpak remote-add --system --if-not-exists flathub https://dl.flathub.org/repo/
 
 # A bundle import needs a temporary local remote in an OCI build: direct
 # --bundle installs omit the deploy/active ref without flatpak-system-helper.
-curl --retry 3 --fail --location \
+if ! curl --retry 3 --fail --location \
     "https://github.com/${INSTALLER_REPO}/releases/download/${INSTALLER_VERSION}/${BUNDLE}" \
-    -o /tmp/bootc-installer.flatpak
+    -o /tmp/bootc-installer.flatpak; then
+    curl --retry 3 --fail --location \
+        "https://github.com/${FALLBACK_REPO}/releases/download/${INSTALLER_VERSION}/${BUNDLE}" \
+        -o /tmp/bootc-installer.flatpak
+fi
 local_repo=/tmp/bootc-installer-repo
 ostree init --repo="${local_repo}" --mode=archive-z2
 flatpak build-import-bundle "${local_repo}" /tmp/bootc-installer.flatpak
