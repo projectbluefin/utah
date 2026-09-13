@@ -26,7 +26,11 @@ each pinned to a SHA tagged `v1`:
 
 - `.github/workflows/build.yml` -- pull requests, pushes to `testing`, a
   nightly cron, and manual dispatch. Top-level `permissions: {}`; each job
-  grants its own. Cancels in-progress runs per workflow and ref.
+  grants its own. In accordance with Dakota topology, cancels in-progress runs
+  for pull requests only (`cancel-in-progress: ${{ github.event_name == 'pull_request' }}`),
+  ensuring scheduled and release builds queue safely. Pull requests run fast deterministic
+  contract validation without rebuilding container images, which build on `testing` pushes,
+  schedule, and dispatch. Jobs carry explicit timeouts.
 - `.github/workflows/promote-testing-to-main.yml` -- pushes to `testing`, a
   nightly cron, and manual dispatch.
 - `.github/workflows/sync-main-to-testing.yml` -- every push to `main`.
