@@ -25,6 +25,7 @@ FROM ${BASE_IMAGE} AS builder
 # buildroot. Fedora is builder-only; it is not copied into the runtime stage.
 COPY packages/hummingbird.repo /etc/yum.repos.d/hummingbird.repo
 COPY packages/fedora-44.repo /etc/yum.repos.d/fedora-44.repo
+RUN mkdir -p /usr/local/libexec
 COPY scripts/install-ogc-kernel.sh /usr/local/libexec/utah-install-ogc-kernel
 COPY scripts/install-nvidia.sh /usr/local/libexec/utah-install-nvidia
 
