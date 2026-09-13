@@ -1,5 +1,12 @@
 name: Promote testing to main
 
+# This promotes the testing BRANCH to main; it never moves an image tag on its
+# own. The image :testing pointer is advanced only by post-testing-e2e.yml,
+# which boots and tests the exact build digest before advancing it. Because
+# everything downstream (execute-release releases :testing -> :stable) resolves
+# digests from :testing, the gate in post-testing-e2e.yml sits on the critical
+# path -- this workflow, and the release it feeds, cannot advance an image that
+# did not pass it.
 on:
   push:
     branches: [testing]

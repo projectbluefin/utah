@@ -1,5 +1,12 @@
 name: Post-Testing E2E
 
+# Runs after "Build Utah" pushes to testing. The build publishes its images
+# with publish_stream_tag=false, so no :testing pointer exists yet -- the image
+# digests live only in the build's artifacts. This workflow is the gate that
+# advances :testing: it boots and tests the EXACT digest the build produced,
+# and only then promotes that same set of digests to :testing. Nothing else
+# writes :testing, so the branch/promotion chain (promote-testing-to-main,
+# execute-release) can never advance an image that did not pass this gate.
 on:
   workflow_run:
     workflows: ["Build Utah"]
@@ -9,31 +16,160 @@ on:
 permissions: read-all
 
 jobs:
-  promote-to-testing:
+  # Resolve the exact digests the Build Utah run pushed, straight from its
+  # artifacts. They all come from one build, so promotion is a single atomic
+  # set rather than four independent retags that could diverge.
+  resolve:
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'testing'
     runs-on: ubuntu-latest
     permissions:
-      packages: write
       actions: read
+      packages: read
+    outputs:
+      digests: ${{ steps.parse.outputs.digests }}
+      count: ${{ steps.parse.outputs.count }}
     steps:
       - name: Download all flavor digests
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh run download "${{ github.event.workflow_run.id }}" --repo "${{ github.repository }}" --pattern 'image-digest-testing-*' --dir /tmp/digests
-      - name: Promote verified images to testing
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REGISTRY: ghcr.io/${{ github.repository_owner }}
+
+      - name: Parse digests into a JSON map
+        id: parse
         run: |
           set -euo pipefail
-          echo "$GH_TOKEN" | skopeo login ghcr.io --username "${{ github.actor }}" --password-stdin
-          count=0
-          while IFS='=' read -r name digest; do
-            [[ -n "$name" && "$digest" == sha256:* ]] || continue
-            skopeo copy --all "docker://${REGISTRY}/${name}@${digest}" "docker://${REGISTRY}/${name}:testing"
-            count=$((count + 1))
-          done < <(find /tmp/digests -name '*.txt' -exec cat {} +)
+          # Each artifact carries "image=digest" (legacy) and
+          # "image|platform|digest" lines. Keep the "image=digest" form and
+          # collapse to {image: sha256:...}. A multi-arch manifest shares one
+          # digest across platforms, so repeated keys resolve to the same value.
+          digests="$(
+            find /tmp/digests -name '*.txt' -exec cat {} + 2>/dev/null \
+              | grep -E '^[^=]+=sha256:' \
+              | sed -E 's/^([^=]+)=(sha256:.*)$/\1 \2/' \
+              | jq -Rsc 'split("\n") | map(select(length > 0) | split(" ") | {(.[0]): .[1]}) | add // {}'
+          )"
+          count=$(jq -r 'keys | length' <<<"$digests")
+          echo "count=${count}" >> "$GITHUB_OUTPUT"
+          echo "digests=${digests}" >> "$GITHUB_OUTPUT"
+          echo "Resolved ${count} digests from the build run."
+          # Utah builds exactly four images. A different count means the build
+          # matrix and this gate disagree -- fail instead of promoting a partial
+          # set, which is what the old retag workflow silently allowed.
           test "$count" -eq 4
+
+  # Boot and test the exact digest for each flavor before any testing tag
+  # advances. The nvidia flavors run the nvidia suite on top of smoke+common so
+  # their kernel module and driver userspace are asserted; the gaming flavors
+  # run the bazzite suite to validate the gaming userspace. All flavors start
+  # with smoke,common so a broken boot is caught before the flavor-specific
+  # suites run.
+  e2e:
+    needs: resolve
+    if: always() && needs.resolve.result == 'success'
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: utah
+            suites: smoke,common
+          - image: utah-nvidia
+            suites: smoke,common,nvidia
+          - image: utah-gaming
+            suites: smoke,common,bazzite
+          - image: utah-nvidia-gaming
+            suites: smoke,common,nvidia,bazzite
+    uses: projectbluefin/testsuite/.github/workflows/e2e.yml@ee82d53a4f86617d807df831a60ad1deaa0d5366 # v1
+    with:
+      image: ${{ format('ghcr.io/{0}/{1}@{2}', github.repository_owner, matrix.image, fromJSON(needs.resolve.outputs.digests)[matrix.image]) }}
+      suites: ${{ matrix.suites }}
+      # projectbluefin/testsuite has no tests/ of its own; test it against the
+      # shared suite repo's main so test fixes land immediately.
+      test_repository: projectbluefin/testsuite
+      test_ref: main
+
+  # Only reached when every flavor's gate passed. Promote every digest to
+  # :testing in one transactional pass: attempt all, fail at the end if any
+  # failed, so one stuck flavor never leaves a partial :testing. --preserve-
+  # digests keeps the cosign signature attached to the tested digest.
+  promote:
+    needs: [resolve, e2e]
+    if: always() && needs.resolve.result == 'success' && needs.e2e.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      actions: read
+    env:
+      DIGESTS_JSON: ${{ needs.resolve.outputs.digests }}
+      REGISTRY: ghcr.io/${{ github.repository_owner }}
+    steps:
+      - name: Authenticate to GHCR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "$GH_TOKEN" | skopeo login ghcr.io --username "${{ github.actor }}" --password-stdin
+
+      - name: Promote every tested digest to :testing
+        run: |
+          set -uo pipefail
+          failed=()
+          count=0
+          while IFS= read -r row; do
+            [ -n "$row" ] || continue
+            image=${row%%=*}
+            digest=${row#*=}
+            count=$((count + 1))
+            echo "Promoting ${image}@${digest} -> :testing"
+            if ! skopeo copy --preserve-digests --all \
+              "docker://${REGISTRY}/${image}@${digest}" \
+              "docker://${REGISTRY}/${image}:testing"; then
+              failed+=("${image}")
+            fi
+          done < <(jq -r 'to_entries[] | "\(.key)=\(.value)"' <<<"$DIGESTS_JSON")
+          echo "Promoted ${count} digests to :testing."
+          test "${#failed[@]}" -eq 0 || {
+            echo "::error::Promotion failed for: ${failed[*]}"
+            exit 1
+          }
+
+  # Publish diagnostics when the gate did not pass, and leave :testing untouched
+  # (this job never runs skopeo, so no tag moves on failure).
+  diagnostics:
+    needs: [resolve, e2e]
+    if: always() && (needs.resolve.result != 'success' || needs.e2e.result != 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Write gate summary
+        run: |
+          set -euo pipefail
+          {
+            echo "## Post-Testing E2E — gate did not pass"
+            echo
+            echo "Build run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}"
+            echo
+            echo "| Check | Result |"
+            echo "|-------|--------|"
+            echo "| resolve | ${{ needs.resolve.result }} |"
+            echo "| e2e | ${{ needs.e2e.result }} |"
+            echo
+            echo "Resolved digests:"
+            echo
+            echo '```'
+            jq -r 'to_entries[] | "  \(.key): \(.value)"' <<<"${{ needs.resolve.outputs.digests }}" 2>/dev/null || echo "  (none)"
+            echo '```'
+          } > diagnostics.md
+          cat diagnostics.md
+
+      - name: Upload diagnostics
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: post-testing-e2e-diagnostics
+          path: diagnostics.md
+          retention-days: 30
