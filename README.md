@@ -3,20 +3,14 @@
 
 Bluefin built on Fedora Hummingbird. The more ... civilized murder machine.
 
-> Your day keeps getting worse.
-
-
-
-
-
-![alt](https://github.com/user-attachments/assets/962af585-6e2a-4038-ac14-8e54a3189420)
-
+> Your day keeps getting worse. Why are there more.
 
 ![alt](https://github.com/user-attachments/assets/56428338-54a0-4376-a53b-5f02f8b101a1)
 
-**Experimental pre-alpha** — this does not have users yet, it has a build. No
-image has been published, there is no installer and no ISO. Nothing here is
-ready to run on a machine you care about. [Filing
+**Experimental pre-alpha** — the image builds, boots, and reaches GDM in local
+QEMU validation. No image has been published to a registry, there is no
+installer payload, and no ISO has been released. Nothing here is ready to run on
+a machine you care about. [Filing
 issues](https://github.com/projectbluefin/utah/issues) is the whole point.
 
 ## What it is
@@ -26,6 +20,8 @@ Hummingbird](https://packages.redhat.com), which supplies a hardened, fast-movin
 bootable base and no desktop at all. Utah adds the desktop: Bluefin's package
 contract on top, and the GNOME 51 stack built from source because neither
 Hummingbird nor a Fedora release ships it.
+
+<img src="https://github.com/user-attachments/assets/962af585-6e2a-4038-ac14-8e54a3189420" alt="alt" width="40%">
 
 Two repositories, the way `common` and `brew` already work:
 
@@ -64,6 +60,8 @@ being noticed later.
 The install writes its resolved list to `/usr/share/utah/contract.txt` and the
 verify step asserts *that file*, so the two cannot disagree.
 
+
+
 ## Known gaps
 
 This is the honest list, and it is why the label above says pre-alpha.
@@ -86,8 +84,6 @@ This is the honest list, and it is why the label above says pre-alpha.
   this closes when Utah consumes that overlay.
 - **The image is still pre-alpha.** The digest-pinned `utah-packages` OCI
   repository is consumed and the local QEMU image reaches GDM and GNOME Shell.
-  Initial single-architecture live ISO bring-up is now scaffolded; installer
-  payload/offline installation integration is still pending.
 - **CUDA is deliberately excluded** — 7.68 GB installed. Use the NVIDIA
   container toolkit, which is included, and run CUDA in a container.
 
