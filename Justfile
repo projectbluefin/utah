@@ -66,6 +66,7 @@ check:
     python3 -m py_compile scripts/check-repo-availability.py
     python3 scripts/install-packages.py --check packages/bluefin.toml
     python3 scripts/verify-rpm-contract.py --check packages/bluefin.toml
+    python3 -m unittest discover -s tests
     grep -qE 'reusable-build\.yml@(v1|[0-9a-f]{40} # v1)$' .github/workflows/build.yml
     test -f Containerfile.kernel
     bash -n scripts/install-ogc-kernel.sh
