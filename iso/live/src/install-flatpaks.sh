@@ -6,6 +6,25 @@ set -euo pipefail
 
 FLATPAK_CACHE=/var/cache/flatpak-dl
 INSTALLER_APP_ID=org.bootcinstaller.Installer
+# #50 asks for this to point at tuna-os/bootc-installer. It does not yet,
+# and the reason is a VERSIONING change, not a missing artifact:
+#
+#   projectbluefin/bootc-installer  semver tags ... v3.0.13 v3.0.14 v3.0.16
+#   tuna-os/bootc-installer         semver tags ... v3.0.13 v3.0.14,
+#                                   then date tags  v2026.09.08-2684a1d, ...
+#
+# The two share tag history through v3.0.14, then tuna-os switched to
+# date-based tags. So v3.0.16 exists only here (verified: the flatpak asset
+# 200s from projectbluefin and 404s from tuna-os at that tag), while
+# tuna-os DOES publish the same org.bootcinstaller.Installer.flatpak asset at
+# its date tags (verified 200 at v2026.09.14-9a9a913).
+#
+# Repointing therefore also means re-pinning onto a different versioning
+# scheme, and #48 is open against these same lines proposing the opposite
+# direction (stay here, add a sha256 pin). Which org is canonical is the open
+# question in #50; whoever answers it should move INSTALLER_REPO and
+# INSTALLER_VERSION together, because moving the repo alone breaks the build
+# under `curl --fail`.
 INSTALLER_REPO=projectbluefin/bootc-installer
 FALLBACK_REPO=tuna-os/tuna-installer
 BUNDLE=org.bootcinstaller.Installer.flatpak

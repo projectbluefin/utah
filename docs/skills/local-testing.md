@@ -106,12 +106,14 @@ The local OCI ref is not available from the guest's localhost registry, so
 unified-storage service is skipped instead of retrying its registry repull
 forever. Published images omit that argument and keep the service enabled.
 
-## Live ISO (initial bring-up)
+## Live ISO
 
-The first ISO slice reuses Utah's own kernel, dracut-live, and GNOME image.
-`just iso` builds a single-architecture UEFI live ISO; this first slice proves
-the Utah live boot path, and installer payload integration is intentionally
-the next ISO milestone (comment above `iso` in `Justfile`):
+The ISO reuses Utah's own kernel, dracut-live, and GNOME image. `just iso`
+builds a single-architecture UEFI live ISO and runs
+`iso/live/src/install-flatpaks.sh` while composing it. That script fetches the
+version-pinned bootc-installer Flatpak bundle and the declared Flathub apps, so
+installer-source changes should be covered by `just check` plus a full
+`just iso testing` build when the build environment has network access:
 
 ```bash
 just iso testing
@@ -120,12 +122,10 @@ just iso testing 1   # optional live-session SSH diagnostics (debug=1)
 ```
 
 The result is `output/utah-live.iso`, assembled with systemd-boot, a
-`UTAH_LIVE` dmsquash-live root, and a serial `UTAH_LIVE_READY` marker. It is
-intended to prove live desktop boot first; bootc-installer/offline payload
-integration is the next ISO milestone. `just boot-iso` boots it with
-QEMU-for-Docker and exposes the noVNC console at the printed URL (comment
-above `boot-iso` in `Justfile`), with TPM, UEFI, and `-snapshot` so nothing
-persists.
+`UTAH_LIVE` dmsquash-live root, and a serial `UTAH_LIVE_READY` marker.
+`just boot-iso` boots it with QEMU-for-Docker and exposes the noVNC console at
+the printed URL (comment above `boot-iso` in `Justfile`), with TPM, UEFI, and
+`-snapshot` so nothing persists.
 
 ## Verification
 

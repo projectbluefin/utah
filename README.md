@@ -66,9 +66,8 @@ verify step asserts *that file*, so the two cannot disagree.
 
 This is the honest list, and it is why the label above says pre-alpha.
 
-- **Nothing is published.** No image, no ISO artifact, no installer. A live
-  ISO builds locally (`just iso`); installer payload integration is the next
-  ISO milestone.
+- **Nothing is published.** No image or ISO artifact is published; a live ISO
+  with its installer payload builds locally (`just iso`).
 - **The NVIDIA and gaming flavors are unproven.** The OGC kernel compiles with
   `sched_ext` and `binderfs` genuinely enabled, and the NVIDIA open module
   compiles for the base kernel. The module against the OGC kernel, the driver
