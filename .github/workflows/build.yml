@@ -10,9 +10,11 @@ on:
 
 permissions: {}
 
+# Only PR-validation runs may cancel a superseding run. Scheduled, release, and
+# manual builds must never be cancelled by a newer commit.
 concurrency:
   group: utah-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # Cheap, network-only gate. A contract package that none of Utah's
@@ -21,6 +23,7 @@ jobs:
   # costs seconds instead of the full matrix.
   contract:
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     permissions:
       contents: read
     outputs:
@@ -80,6 +83,7 @@ jobs:
     # Only the OGC and NVIDIA flavors unpack this. While the matrix is main-only
     # it is 45 minutes spent on an image nothing consumes.
     if: needs.contract.outputs.needs_kernel == 'true'
+    timeout-minutes: 120
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -115,7 +119,10 @@ jobs:
   # a cache miss cost main the same twenty minutes it cost nvidia-gaming.
   build_main:
     needs: contract
-    if: needs.contract.outputs.main_flavors != '[]'
+    # Skip the expensive image build for PR validation; flavors are only built
+    # on push/schedule/manual runs. `contract` still gates PRs via `just check`.
+    if: github.event_name != 'pull_request' && needs.contract.outputs.main_flavors != '[]'
+    timeout-minutes: 180
     uses: projectbluefin/actions/.github/workflows/reusable-build.yml@eb4c546389f19ad9e42f1af052623de73c620ebb # v1
     permissions:
       contents: read
@@ -142,7 +149,8 @@ jobs:
   # digest artifact, which post-testing-e2e matches by glob.
   build_kernel:
     needs: [contract, kernel_cache]
-    if: ${{ !cancelled() && needs.contract.result == 'success' && needs.kernel_cache.result == 'success' && needs.contract.outputs.kernel_flavors != '[]' }}
+    if: ${{ github.event_name != 'pull_request' && !cancelled() && needs.contract.result == 'success' && needs.kernel_cache.result == 'success' && needs.contract.outputs.kernel_flavors != '[]' }}
+    timeout-minutes: 240
     uses: projectbluefin/actions/.github/workflows/reusable-build.yml@eb4c546389f19ad9e42f1af052623de73c620ebb # v1
     permissions:
       contents: read
