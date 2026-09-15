@@ -134,7 +134,7 @@ def main() -> int:
         # DNF exits nonzero when --assumeno declines a valid transaction.
         # A missing package or dependency must never be accepted as that case.
         errors = r"No match for argument|nothing provides|conflicting requests|cannot install both|Error:|Failed to"
-        summary = r"(?m)^Transaction Summary\s*$|^Nothing to do\.?\s*$"
+        summary = r"(?m)^Transaction Summary:?\s*$|^Nothing to do\.?\s*$"
         if (result.returncode not in (0, 1)
                 or re.search(errors, result.stdout, re.IGNORECASE)
                 or not re.search(summary, result.stdout)):

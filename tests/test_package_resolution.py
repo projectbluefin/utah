@@ -89,7 +89,7 @@ class PackageResolutionTests(unittest.TestCase):
                 return rc, run.call_args.args[0]
 
     def test_valid_declined_transaction_includes_every_install_section(self):
-        rc, command = self.resolve("Transaction Summary\nInstall 12 Packages\nOperation aborted.\n")
+        rc, command = self.resolve("Transaction Summary:\nInstall 12 Packages\nOperation aborted.\n")
         self.assertEqual(rc, 0)
         self.assertEqual(command[command.index("install") + 1:],
                          ["base", "release-specific", "shell", "resolver", "compiler"])
