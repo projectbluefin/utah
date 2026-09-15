@@ -1,124 +1,108 @@
 #!/usr/bin/env python3
-"""Check the package contract against the repositories Utah actually installs from.
+"""Resolve Utah's real install transaction against its pinned OCI inputs.
 
-Every package Utah claims parity on is looked up in the repodata of the same
-repositories the image build enables: Hummingbird's own overlay and the
-utah-packages factory. A package that is neither available nor listed under
-[unavailable] in packages/utah.toml fails here, in the seconds-long preflight
-job, instead of twenty minutes into a container build.
-
-Checking Rawhide instead would be actively misleading: Rawhide has moved to
-OpenSSL 4 while the Hummingbird base pins 3.5.6, so a package being present
-in Rawhide says nothing about whether Utah can install it.
+A name lookup against Pages cannot verify the digest in Containerfile, library
+dependencies, or packages supplied only by the base image's RPM database.
+Use the same installer and repository files as the image, with --assumeno.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import io
+import json
 import re
-import sys
-import tomllib
+import subprocess
+import tarfile
+import tempfile
+import urllib.parse
 import urllib.request
-import xml.etree.ElementTree as ET
 from pathlib import Path
 
-# The same repositories the image installs from, in the same precedence order:
-# Hummingbird's own overlay plus the utah-packages factory (its Pages mirror,
-# since check-repos runs in CI before the OCI repo is copied into the image).
-REPOS = {
-    "public-hummingbird": "https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
-    "utah-packages": "https://projectbluefin.github.io/utah-packages/",
-}
+
+def pinned_inputs(containerfile: Path) -> tuple[str, str]:
+    args = dict(re.findall(r"^ARG ([A-Z_]+)=(\S+)$", containerfile.read_text(), re.M))
+    base = args["BASE_IMAGE"]
+    packages = f"{args['PACKAGE_IMAGE']}@{args['PACKAGE_IMAGE_SHA']}"
+    for image in (base, packages):
+        if not re.fullmatch(r"[a-zA-Z0-9./:_-]+@sha256:[0-9a-f]{64}", image):
+            raise ValueError(f"Expected a digest-pinned image, got {image!r}")
+    return base, packages
 
 
-def section(path: Path, name: str) -> list[str]:
-    data = tomllib.loads(path.read_text())
-    return list(data.get(name, {}).get("packages", []))
+def verified_bytes(raw: bytes, digest: str) -> bytes:
+    if digest != "sha256:" + hashlib.sha256(raw).hexdigest():
+        raise ValueError(f"Registry content does not match {digest}")
+    return raw
 
 
-def fetch(url: str) -> bytes:
-    with urllib.request.urlopen(url, timeout=120) as response:
-        return response.read()
+def repository_metadata(image: str, destination: Path) -> None:
+    registry, reference = image.split("/", 1)
+    if registry != "ghcr.io":
+        raise ValueError("The factory metadata reader currently supports ghcr.io images")
+    repository, digest = reference.split("@", 1)
+    query = urllib.parse.urlencode({"service": registry, "scope": f"repository:{repository}:pull"})
+    with urllib.request.urlopen(f"https://{registry}/token?{query}", timeout=120) as response:
+        token = json.load(response)["token"]
+
+    def fetch(kind: str, digest: str) -> bytes:
+        request = urllib.request.Request(
+            f"https://{registry}/v2/{repository}/{kind}/{digest}",
+            headers={"Authorization": f"Bearer {token}",
+                     "Accept": "application/vnd.oci.image.manifest.v1+json"},
+        )
+        with urllib.request.urlopen(request, timeout=120) as response:
+            return verified_bytes(response.read(), digest)
+
+    manifest = json.loads(fetch("manifests", digest))
+    # The factory publishes repodata first, separately from the large RPM
+    # payload. Do not silently fall back to Pages or another image tag.
+    layer = manifest["layers"][0]
+    if layer["size"] > 64 * 1024 * 1024:
+        raise ValueError("Package image lacks a small leading metadata layer; republish with repodata first")
+    unpack_metadata(fetch("blobs", layer["digest"]), destination)
 
 
-def repo_package_names(base: str) -> set[str]:
-    repomd = ET.fromstring(fetch(base + "repodata/repomd.xml"))
-    ns = {"repo": "http://linux.duke.edu/metadata/repo"}
-    href = next(
-        location.get("href")
-        for data in repomd.findall("repo:data", ns)
-        if data.get("type") == "primary"
-        for location in data.findall("repo:location", ns)
-    )
-    raw = fetch(base + href)
-    if href.endswith(".zst"):
-        try:
-            import zstandard
-        except ModuleNotFoundError:
-            print(
-                "ERROR: python3-zstandard is required to read Rawhide repodata",
-                file=sys.stderr,
-            )
-            raise SystemExit(2)
-        stream = zstandard.ZstdDecompressor().stream_reader(io.BytesIO(raw))
-    else:
-        import gzip
-
-        stream = gzip.GzipFile(fileobj=io.BytesIO(raw))
-
-    names = set()
-    # Stream the ~16 MiB of metadata rather than holding a parse tree for
-    # 66k packages; only <name> at package scope matters here.
-    for line in io.TextIOWrapper(stream, encoding="utf-8", errors="replace"):
-        match = re.match(r"\s*<name>([^<]+)</name>", line)
-        if match:
-            names.add(match.group(1))
-    return names
+def unpack_metadata(raw: bytes, destination: Path) -> None:
+    with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as archive:
+        for entry in archive:
+            path = Path(entry.name)
+            if path.is_absolute() or ".." in path.parts:
+                raise ValueError(f"Unsafe metadata path: {entry.name}")
+            if entry.isdir():
+                continue
+            if not entry.isfile() or path.parts[:2] != ("repository", "repodata"):
+                raise ValueError(f"Unexpected entry in metadata layer: {entry.name}")
+            target = destination / Path(*path.parts[1:])
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(archive.extractfile(entry).read())
+    if not (destination / "repodata/repomd.xml").is_file():
+        raise ValueError("Pinned metadata layer contains no repomd.xml")
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("manifest", type=Path)
     parser.add_argument("overlay", type=Path, nargs="?", default=None)
+    parser.add_argument("--engine", default="podman")
     args = parser.parse_args()
+    root = Path(__file__).resolve().parent.parent
     overlay = args.overlay or args.manifest.with_name("utah.toml")
-
-    unavailable = set(section(overlay, "unavailable"))
-    wanted = sorted(
-        set(section(args.manifest, "fedora"))
-        | set(section(overlay, "gnome"))
-        | set(section(overlay, "build"))
-    )
-    names: set[str] = set()
-    for label, base in REPOS.items():
-        found = repo_package_names(base)
-        print(f"{label}: {len(found)} binary packages")
-        names |= found
-
-    missing = [pkg for pkg in wanted if pkg not in names and pkg not in unavailable]
-    resolved = sorted(pkg for pkg in unavailable if pkg in names)
-
-    for pkg in resolved:
-        print(f"NOTE: {pkg} is now available and can be removed from [unavailable]")
-    if missing:
-        print(
-            f"ERROR: {len(missing)} contract packages are in none of the configured repositories.",
-            file=sys.stderr,
-        )
-        print(
-            "Add each to [unavailable] in packages/utah.toml with a tracking "
-            "issue, or fix the name:",
-            file=sys.stderr,
-        )
-        for pkg in missing:
-            print(f"  - {pkg}", file=sys.stderr)
-        return 1
-    print(
-        f"All {len(wanted) - len(unavailable)} contract packages are available "
-        f"({len(unavailable)} documented as unavailable)."
-    )
-    return 0
+    base, packages = pinned_inputs(root / "Containerfile")
+    print(f"Checking package repository {packages} on {base}", flush=True)
+    with tempfile.TemporaryDirectory(prefix="utah-repodata-") as tmp:
+        repository_metadata(packages, Path(tmp))
+        return subprocess.run([
+            args.engine, "run", "--rm", "--platform", "linux/amd64",
+            "-v", f"{tmp}:/etc/utah-packages:ro,Z",
+            "-v", f"{root / 'packages'}:/etc/yum.repos.d:ro,Z",
+            "-v", f"{args.manifest.resolve()}:/tmp/bluefin.toml:ro,Z",
+            "-v", f"{overlay.resolve()}:/tmp/utah.toml:ro,Z",
+            "-v", f"{root / 'scripts/install-packages.py'}:/tmp/install-packages.py:ro,Z",
+            base, "python3", "/tmp/install-packages.py", "--resolve",
+            "/tmp/bluefin.toml", "/tmp/utah.toml",
+        ], check=False).returncode
 
 
 if __name__ == "__main__":
