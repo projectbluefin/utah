@@ -32,11 +32,18 @@ fi
 EPOCH_FILE="${STATE_DIR}/epoch"
 LASTRUN_FILE="${STATE_DIR}/lastrun"
 
-# 1. Initialize epoch file on first run
+# 1. Read or initialize epoch file
 if [ ! -f "$EPOCH_FILE" ]; then
-    echo "$NOW" > "$EPOCH_FILE"
+    echo "$NOW" > "$EPOCH_FILE" || {
+        echo "utah-countme: cannot initialize epoch file; skipping telemetry" >&2
+        exit 0
+    }
 fi
-EPOCH=$(cat "$EPOCH_FILE" 2>/dev/null || echo "$NOW")
+
+if ! EPOCH=$(cat "$EPOCH_FILE" 2>/dev/null) || [ -z "$EPOCH" ] || ! [[ "$EPOCH" =~ ^[0-9]+$ ]]; then
+    echo "utah-countme: cannot read epoch file; skipping telemetry" >&2
+    exit 0
+fi
 
 # 2. Throttling: only run once per 7-day window
 if [ -f "$LASTRUN_FILE" ]; then

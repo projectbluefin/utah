@@ -171,3 +171,52 @@ def test_age_cohort_buckets(tmp_path):
         assert res.returncode == 0
         args = curl_args_log.read_text()
         assert f"countme={expected_bucket}" in args
+
+
+def test_corrupt_epoch_skips_telemetry_without_resetting(tmp_path):
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    (state_dir / "epoch").write_text("not-a-number")
+
+    mock_bin = tmp_path / "bin"
+    mock_bin.mkdir()
+    curl_invoked = tmp_path / "invoked.txt"
+    curl_mock = mock_bin / "curl"
+    curl_mock.write_text(f'#!/bin/sh\ntouch "{curl_invoked}"\nexit 0\n')
+    curl_mock.chmod(0o755)
+
+    env = os.environ.copy()
+    env["PATH"] = f"{mock_bin}:{env['PATH']}"
+    env["STATE_DIRECTORY"] = str(state_dir)
+    env["DISABLED_FILE"] = str(tmp_path / "nonexistent-disabled")
+
+    res = subprocess.run([str(SCRIPT_PATH)], env=env, capture_output=True, text=True)
+    assert res.returncode == 0
+    assert not curl_invoked.exists()
+    assert (state_dir / "epoch").read_text() == "not-a-number"
+    assert not (state_dir / "lastrun").exists()
+
+
+def test_curl_failure_does_not_update_lastrun(tmp_path):
+    state_dir = tmp_path / "state"
+    mock_bin = tmp_path / "bin"
+    mock_bin.mkdir()
+
+    curl_mock = mock_bin / "curl"
+    curl_mock.write_text("#!/bin/sh\nexit 1\n")
+    curl_mock.chmod(0o755)
+
+    image_info = tmp_path / "image-info.json"
+    image_info.write_text(json.dumps({"image-name": "utah", "image-flavor": "main", "image-tag": "latest"}))
+
+    env = os.environ.copy()
+    env["PATH"] = f"{mock_bin}:{env['PATH']}"
+    env["STATE_DIRECTORY"] = str(state_dir)
+    env["IMAGE_INFO"] = str(image_info)
+    env["DISABLED_FILE"] = str(tmp_path / "nonexistent-disabled")
+
+    res = subprocess.run([str(SCRIPT_PATH)], env=env, capture_output=True, text=True)
+    assert res.returncode == 0
+    assert (state_dir / "epoch").exists()
+    assert not (state_dir / "lastrun").exists()
+

@@ -108,9 +108,17 @@ Project Bluefin ADR 0006:
 - **Systemd isolation:** Runs as `DynamicUser=yes` with
   `StateDirectory=utah-countme` storing local installation `epoch` and
   `lastrun` timestamps.
-- **Reporting parameters:** Sends empty GET requests containing image `repo`,
-  `tag`, `flavor`, `arch`, and Fedora-style installation age bucket `countme`.
-- **Opt-out:** Honored whenever `/etc/projectbluefin/countme/disabled` exists.
+- **Reporting parameters & query string:** An empty HTTP GET request is sent to
+  `https://countme.projectbluefin.io/metalink?repo=${REPO}&tag=${IMAGE_TAG}&flavor=${IMAGE_FLAVOR}&arch=${ARCH}&countme=${BUCKET}`
+  - `repo`: image name (`utah` or custom variant)
+  - `tag`: OS image version / release tag
+  - `flavor`: desktop flavor (`main`, `nvidia`, `gaming`, etc.)
+  - `arch`: system architecture (`x86_64`)
+  - `countme`: installation age cohort bucket (1: first week, 2: 2–4 weeks, 3: 5–24 weeks, 4: >24 weeks)
+- **Data & logging policy:** No personal information or hardware identifiers are transmitted; requests contain no HTTP body. As with all HTTP requests, standard server connection metadata (including client IP address) is received by the endpoint for aggregate deduplication and cohort counting.
+- **Network & failure resilience:** Requests use an explicit `--max-time 10` timeout. If the server is unreachable or offline, the script exits cleanly without updating `lastrun`, allowing the ping to be retried on the next schedule without skipping a weekly reporting window.
+- **Persistent state integrity:** The install epoch is stored in `/var/lib/utah-countme/epoch`. If this file exists but cannot be read or is corrupted, execution degrades to a no-op (no ping sent and no epoch reset) to avoid resetting systems into bucket 1.
+- **Opt-out:** Honored whenever `/etc/projectbluefin/countme/disabled` exists, or by masking the timer (`systemctl mask utah-countme.timer`).
 
 ## The verifiers run twice
 
