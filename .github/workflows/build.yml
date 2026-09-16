@@ -128,6 +128,25 @@ jobs:
       # Testing is advanced only after post-testing-e2e validates the build.
       publish_stream_tag: "false"
 
+  dispatch-iso:
+    needs: [build_main, build_kernel]
+    if: >-
+      !cancelled() && github.ref == 'refs/heads/testing' &&
+      github.event_name != 'pull_request' &&
+      needs.build_main.result == 'success' &&
+      (needs.build_kernel.result == 'success' || needs.build_kernel.result == 'skipped')
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+    steps:
+      - name: Start ISO validation for this exact build run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          gh workflow run post-testing-e2e.yml --repo "$REPOSITORY" --ref main \
+            -f "build_run_id=$GITHUB_RUN_ID"
+
   # The flavors that take the kernel cache image as their base.
   #
   # brand_name differs from the call above on purpose. The reusable workflow

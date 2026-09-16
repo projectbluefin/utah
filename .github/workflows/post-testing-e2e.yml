@@ -1,10 +1,6 @@
 name: Post-Testing E2E
 
 on:
-  workflow_run:
-    workflows: ["Build Utah"]
-    types: [completed]
-    branches: [testing]
   workflow_dispatch:
     inputs:
       build_run_id:
@@ -20,11 +16,6 @@ concurrency:
 
 jobs:
   resolve:
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event != 'pull_request' &&
-       github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -41,10 +32,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-          BUILD_RUN: ${{ inputs.build_run_id || github.event.workflow_run.id }}
+          BUILD_RUN: ${{ inputs.build_run_id }}
         run: |
           set -euo pipefail
           [[ "$BUILD_RUN" =~ ^[0-9]+$ ]]
+          # The dispatch job is the source run's last job. Wait for its final
+          # conclusion before accepting artifacts; never resolve a partial run.
+          timeout 300 gh run watch "$BUILD_RUN" --repo "$REPOSITORY" --exit-status --interval 10
           gh api "repos/$REPOSITORY/actions/runs/$BUILD_RUN" > run.json
           gh run download "$BUILD_RUN" --repo "$REPOSITORY" \
             --pattern 'image-digest-testing-*' --dir digests

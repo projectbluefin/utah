@@ -61,6 +61,19 @@ class InputsTests(unittest.TestCase):
 
 
 class EvidenceTests(unittest.TestCase):
+    def test_build_explicitly_dispatches_iso_after_both_image_jobs(self):
+        import yaml
+        build = yaml.safe_load((ROOT / ".github/workflows/build.yml").read_text())
+        job = build["jobs"]["dispatch-iso"]
+        self.assertEqual(set(job["needs"]), {"build_main", "build_kernel"})
+        self.assertIn("refs/heads/testing", job["if"])
+        self.assertIn("needs.build_main.result == 'success'", job["if"])
+        self.assertIn("needs.build_kernel.result == 'success'", job["if"])
+        self.assertIn("build_run_id=$GITHUB_RUN_ID", job["steps"][0]["run"])
+        workflow = (ROOT / ".github/workflows/post-testing-e2e.yml").read_text()
+        self.assertNotIn("workflow_run:", workflow)
+        self.assertIn('timeout 300 gh run watch "$BUILD_RUN"', workflow)
+
     def test_readme_update_is_idempotent_and_preserves_other_text(self):
         update = load("update-e2e-readme").update
         proof = {"source_sha": "a" * 40, "e2e_run": "123"}

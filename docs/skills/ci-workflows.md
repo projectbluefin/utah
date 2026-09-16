@@ -33,7 +33,7 @@ each pinned to a SHA tagged `v1`:
   nightly cron, and manual dispatch; explicitly dispatches the testing build
   after syncing. Token-authenticated branch pushes alone do not start CI.
 - `.github/workflows/post-testing-e2e.yml` -- successful non-PR testing builds
-  and manual dispatch with a successful testing build run ID.
+  explicitly dispatch this, or manually supply a successful testing build run ID.
 
 CI delegates builds, vulnerability reporting, SBOMs, keyless signatures,
 provenance, caching, and rechunking to `projectbluefin/actions@v1` (originated
@@ -130,6 +130,11 @@ to avoid evidence-update build loops. Nightly runs still sync those changes.
 ## ISO LUKS gate and screenshots
 
 `post-testing-e2e.yml` downloads the originating build's digest artifacts.
+The final `dispatch-iso` build job invokes it with `workflow_dispatch`, not
+`workflow_run`: the latter did not fire after our GITHUB_TOKEN-dispatched
+build. Explicit dispatch is a documented exception to token recursion
+prevention. The resolver waits up to five minutes for the dispatching build
+to finish and still requires a successful conclusion before reading artifacts.
 `scripts/resolve-e2e-inputs.py` rejects PRs, foreign repositories, failed runs,
 wrong branches/workflows, mutable references, conflicting digests, and missing
 flavors. The expected set comes from `scripts/flavors.py images`.
