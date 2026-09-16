@@ -157,6 +157,12 @@ formats. Either changes the digest and breaks the embedded `image@sha256:...`
 reference. Local tag-based builds may export their local containers-storage.
 A digest-preserving copy failure must fail ISO composition, not fall back to
 a mutable tag.
+The live assembler selects a release from `/usr/lib/modules` and uses its
+matching initramfs. Kernel-core provides that release's `vmlinuz` in the module
+directory, while the OGC installer writes `/boot/vmlinuz-<release>`.
+`iso/scripts/live-kernel.py` supports both paths and resolves symlinks inside
+the mounted image, never against the host root. Do not use `/boot/vmlinuz` or
+another release as a fallback: that can silently pair mismatched boot files.
 It enables sshd through a boot argument on the disposable installed disk,
 never by rebuilding or changing the published image. `UTAH_E2E_RAM` and
 `UTAH_E2E_CPUS` control VM resources (defaults 8192 MiB and four CPUs).

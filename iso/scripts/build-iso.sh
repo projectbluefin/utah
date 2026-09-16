@@ -64,7 +64,7 @@ trap cleanup EXIT
 
 KERNEL="$(find "${MOUNT}/usr/lib/modules" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -V | tail -1)"
 [[ -n "${KERNEL}" ]] || { echo 'No kernel found in live image' >&2; exit 1; }
-VMLINUZ="${MOUNT}/usr/lib/modules/${KERNEL}/vmlinuz"
+VMLINUZ="$(python3 iso/scripts/live-kernel.py "${MOUNT}" "${KERNEL}")"
 INITRD="${MOUNT}/usr/lib/modules/${KERNEL}/initramfs.img"
 SYSTEMD_BOOT="${MOUNT}/usr/lib/systemd/boot/efi/systemd-bootx64.efi"
 for file in "${VMLINUZ}" "${INITRD}" "${SYSTEMD_BOOT}"; do
