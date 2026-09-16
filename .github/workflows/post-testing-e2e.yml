@@ -5,35 +5,204 @@ on:
     workflows: ["Build Utah"]
     types: [completed]
     branches: [testing]
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: Successful Build Utah run on testing to validate
+        required: true
+        type: string
 
-permissions: read-all
+permissions: {}
+
+concurrency:
+  group: utah-iso-e2e
+  cancel-in-progress: false
 
 jobs:
-  promote-to-testing:
+  resolve:
     if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'testing'
-    runs-on: ubuntu-latest
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event != 'pull_request' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-24.04
     permissions:
-      packages: write
+      contents: read
       actions: read
+    outputs:
+      matrix: ${{ steps.inputs.outputs.matrix }}
+      sha: ${{ steps.inputs.outputs.sha }}
+      run: ${{ steps.inputs.outputs.run }}
     steps:
-      - name: Download all flavor digests
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - id: inputs
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh run download "${{ github.event.workflow_run.id }}" --repo "${{ github.repository }}" --pattern 'image-digest-testing-*' --dir /tmp/digests
-      - name: Promote verified images to testing
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REGISTRY: ghcr.io/${{ github.repository_owner }}
+          REPOSITORY: ${{ github.repository }}
+          BUILD_RUN: ${{ inputs.build_run_id || github.event.workflow_run.id }}
         run: |
           set -euo pipefail
-          echo "$GH_TOKEN" | skopeo login ghcr.io --username "${{ github.actor }}" --password-stdin
-          count=0
-          while IFS='=' read -r name digest; do
-            [[ -n "$name" && "$digest" == sha256:* ]] || continue
-            skopeo copy --all "docker://${REGISTRY}/${name}@${digest}" "docker://${REGISTRY}/${name}:testing"
-            count=$((count + 1))
-          done < <(find /tmp/digests -name '*.txt' -exec cat {} +)
-          test "$count" -eq 4
+          [[ "$BUILD_RUN" =~ ^[0-9]+$ ]]
+          gh api "repos/$REPOSITORY/actions/runs/$BUILD_RUN" > run.json
+          gh run download "$BUILD_RUN" --repo "$REPOSITORY" \
+            --pattern 'image-digest-testing-*' --dir digests
+          matrix=$(python3 scripts/resolve-e2e-inputs.py run.json digests "$REPOSITORY")
+          {
+            echo "matrix=$matrix"
+            echo "sha=$(jq -r .head_sha run.json)"
+            echo "run=$BUILD_RUN"
+          } >> "$GITHUB_OUTPUT"
+
+  luks:
+    needs: resolve
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          persist-credentials: false
+      - name: Prepare ISO and QEMU host
+        run: |
+          set -euo pipefail
+          # These hosted-runner SDKs are unused by ISO composition.
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          sudo apt-get update
+          sudo apt-get install -y podman skopeo uidmap slirp4netns fuse-overlayfs \
+            squashfs-tools xorriso dosfstools mtools qemu-system-x86 qemu-utils \
+            ovmf sshpass ffmpeg tesseract-ocr
+          test -c /dev/kvm
+          sudo chmod a+rw /dev/kvm
+          test -r /dev/kvm && test -w /dev/kvm
+          mkdir -p output evidence
+          df -h .
+      - name: Pull exact published payload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE_REF: ${{ matrix.ref }}
+        run: |
+          set -euo pipefail
+          echo "$GH_TOKEN" | podman login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          podman pull "$IMAGE_REF"
+          podman logout ghcr.io
+      - name: Compose disposable debug ISO
+        env:
+          IMAGE_REF: ${{ matrix.ref }}
+          UTAH_ISO_WORKDIR: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          bash iso/scripts/build-iso.sh "$IMAGE_REF" "$PWD/output/utah-live.iso" \
+            "Utah CI Live" 1 "$IMAGE_REF" 2>&1 | tee evidence/iso-build.log
+      - name: Run existing LUKS install and desktop test
+        env:
+          IMAGE_REF: ${{ matrix.ref }}
+          UTAH_E2E_WORK: ${{ runner.temp }}/utah-luks-e2e
+          UTAH_E2E_REQUIRE_SCREENSHOTS: "1"
+          UTAH_E2E_REQUIRE_FASTFETCH: "1"
+          UTAH_E2E_RAM: "6144"
+          UTAH_E2E_CPUS: "2"
+        run: |
+          set -euo pipefail
+          bash iso/scripts/luks-e2e.sh "$PWD/output/utah-live.iso" "$IMAGE_REF" \
+            2>&1 | tee evidence/luks-test.log
+      - name: Record exact test provenance
+        env:
+          IMAGE_REF: ${{ matrix.ref }}
+          SOURCE_SHA: ${{ needs.resolve.outputs.sha }}
+          BUILD_RUN: ${{ needs.resolve.outputs.run }}
+        run: |
+          set -euo pipefail
+          sha256sum output/utah-live.iso > evidence/iso.sha256
+          jq -n --arg image "$IMAGE_REF" --arg sha "$SOURCE_SHA" \
+            --arg build "$BUILD_RUN" --arg run "$GITHUB_RUN_ID" \
+            '{image:$image,source_sha:$sha,build_run:$build,e2e_run:$run}' \
+            > docs/verification/provenance.json
+          cp evidence/iso.sha256 docs/verification/
+      - name: Preserve diagnostics even on failure
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: iso-diagnostics-${{ matrix.image }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            evidence/
+            ${{ runner.temp }}/utah-luks-e2e/*.log
+            ${{ runner.temp }}/utah-luks-e2e/fastfetch-ocr.txt
+            ${{ runner.temp }}/utah-luks-e2e/screenshots/
+      - name: Preserve passing verification record
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: iso-verified-${{ matrix.image }}
+          if-no-files-found: error
+          retention-days: 30
+          path: docs/verification/
+      # Never upload debug ISOs or test disks: they contain test passwords.
+
+  promote-to-testing:
+    needs: [resolve, luks]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Promote only the tested digests if still current
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          SOURCE_SHA: ${{ needs.resolve.outputs.sha }}
+          MATRIX: ${{ needs.resolve.outputs.matrix }}
+        run: |
+          set -euo pipefail
+          current=$(gh api "repos/$REPOSITORY/commits/testing" --jq .sha)
+          if [[ "$current" != "$SOURCE_SHA" ]]; then
+            echo "Superseded build: retaining evidence without moving tags."
+            exit 0
+          fi
+          sudo apt-get update && sudo apt-get install -y skopeo
+          echo "$GH_TOKEN" | skopeo login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          while IFS= read -r ref; do
+            skopeo copy --all --preserve-digests "docker://$ref" "docker://${ref%@*}:testing"
+          done < <(jq -r '.include[].ref' <<< "$MATRIX")
+
+  documentation:
+    needs: [resolve, luks]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: main
+      - name: Download passing main-desktop screenshots
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: iso-verified-utah
+          path: docs/verification
+      - name: Refresh README evidence link
+        run: python3 scripts/update-e2e-readme.py
+      - name: Propose updated verification record
+        uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
+        with:
+          branch: automation/iso-verification
+          title: 'docs: refresh verified ISO screenshots'
+          commit-message: 'docs: refresh verified ISO screenshots'
+          body: |
+            Screenshots from the existing LUKS ISO test, after every configured flavor passed.
+            Source commit: ${{ needs.resolve.outputs.sha }}
+            Build: https://github.com/${{ github.repository }}/actions/runs/${{ needs.resolve.outputs.run }}
+            ISO E2E: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            Exact image reference and ISO checksum are in docs/verification/.
+          add-paths: |
+            README.md
+            docs/verification/

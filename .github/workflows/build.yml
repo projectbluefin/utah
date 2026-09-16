@@ -4,8 +4,8 @@ on:
   pull_request:
   push:
     branches: [testing]
-  schedule:
-    - cron: "20 22 * * *"
+  # Nightly scheduling lives in sync-main-to-testing so signatures and E2E
+  # consistently refer to refs/heads/testing, not the default main branch.
   workflow_dispatch:
 
 permissions: {}

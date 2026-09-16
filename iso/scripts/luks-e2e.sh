@@ -25,6 +25,8 @@ ISO="${1:?live ISO path is required}"
 PAYLOAD_IMAGE="${2:?installed image reference is required}"
 PASSPHRASE="${3:-testpassphrase}"
 WORK="${UTAH_E2E_WORK:-/var/tmp/utah-luks-e2e}"
+VM_RAM="${UTAH_E2E_RAM:-8192}"
+VM_CPUS="${UTAH_E2E_CPUS:-4}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 # The account the installer creates, and the one phase 6 logs in as.
@@ -103,6 +105,8 @@ PY
 shot() {
     local label="$1" sock="$2"
     local ppm="${SHOTS}/${label}.ppm" png="${SHOTS}/${label}.png"
+    # A failed capture must not reuse evidence from an earlier attempt.
+    rm -f "${ppm}" "${png}"
     monitor "${sock}" "screendump ${ppm}" || return 0
     sleep 1
     if command -v ffmpeg >/dev/null 2>&1 && [[ -s "${ppm}" ]]; then
@@ -184,7 +188,7 @@ qemu-img create -f qcow2 "${INSTALL_DISK}" 64G >/dev/null
 cp -f "${OVMF_VARS_SRC}" "${VARS}"
 
 "${QEMU}" \
-    -machine q35 -cpu host -m 8192 -smp 4 ${ACCEL} \
+    -machine q35 -cpu host -m "${VM_RAM}" -smp "${VM_CPUS}" ${ACCEL} \
     -drive "if=pflash,format=raw,readonly=on,file=${OVMF_CODE}" \
     -drive "if=pflash,format=raw,file=${VARS}" \
     -drive "if=none,id=iso,file=${ISO},media=cdrom,readonly=on,format=raw" \
@@ -192,7 +196,7 @@ cp -f "${OVMF_VARS_SRC}" "${VARS}"
     -device scsi-cd,drive=iso \
     -drive "if=none,id=disk,file=${INSTALL_DISK},format=qcow2" \
     -device virtio-blk-pci,drive=disk \
-    -netdev "user,id=net0,hostfwd=tcp::${SSH_PORT}-:22" \
+    -netdev "user,id=net0,restrict=on,hostfwd=tcp:127.0.0.1:${SSH_PORT}-:22" \
     -device virtio-net-pci,netdev=net0 \
     -monitor "unix:${MONITOR_LIVE},server,nowait" \
     -serial "file:${SERIAL_LIVE}" \
@@ -305,6 +309,10 @@ ssh_live 'sudo bash -euc "
                 sed -i \"s|^options .*|& console=tty0 console=ttyS0|\" \"\$entry\"
             grep -q \"forward_to_console\" \"\$entry\" || \
                 sed -i \"s|^options .*|& systemd.journald.forward_to_console=yes|\" \"\$entry\"
+            # Enable diagnostics on this disposable installed disk only.
+            # The published payload keeps sshd disabled.
+            grep -q \"systemd.wants=sshd.service\" \"\$entry\" || \
+                sed -i \"s|^options .*|& systemd.wants=sshd.service|\" \"\$entry\"
             # Unlocking this LUKS2 volume costs ~30s of argon2 before userspace
             # starts, and on a loaded host udev can still be settling when
             # systemd gives up on /boot at its 45s default -- the installed
@@ -380,12 +388,12 @@ echo "=== Phase 4/6: boot the installed disk ==="
 # the passphrase at a firmware shell. Real hardware keeps its NVRAM; so do we.
 cp -f "${VARS}" "${WORK}/ovmf-vars-installed.fd"
 "${QEMU}" \
-    -machine q35 -cpu host -m 8192 -smp 4 ${ACCEL} \
+    -machine q35 -cpu host -m "${VM_RAM}" -smp "${VM_CPUS}" ${ACCEL} \
     -drive "if=pflash,format=raw,readonly=on,file=${OVMF_CODE}" \
     -drive "if=pflash,format=raw,file=${WORK}/ovmf-vars-installed.fd" \
     -drive "if=none,id=disk,file=${INSTALL_DISK},format=qcow2" \
     -device virtio-blk-pci,drive=disk \
-    -netdev "user,id=net0,hostfwd=tcp::${SSH_PORT_INSTALLED}-:22" \
+    -netdev "user,id=net0,restrict=on,hostfwd=tcp:127.0.0.1:${SSH_PORT_INSTALLED}-:22" \
     -device virtio-net-pci,netdev=net0 \
     -monitor "unix:${MONITOR_INSTALLED},server,nowait" \
     -serial "file:${SERIAL_INSTALLED}" \
@@ -460,7 +468,7 @@ shot installed-greeter "${MONITOR_INSTALLED}"
 # runs inside the session with a bus and a display of its own.
 echo "Arranging for a terminal to open in the session..."
 ssh_target "
-    grep -q 'utah-e2e fastfetch' ~/.bashrc 2>/dev/null || printf '%s\n' '[[ \$- == *i* ]] && fastfetch # utah-e2e fastfetch' >> ~/.bashrc
+    grep -q 'utah-e2e fastfetch' ~/.bashrc 2>/dev/null || printf '%s\n' '[[ \$- == *i* ]] && { fastfetch --logo none && echo UTAH-E2E-FASTFETCH; } # utah-e2e fastfetch' >> ~/.bashrc
     mkdir -p ~/.config/autostart
     cat > ~/.config/autostart/${TERMINAL_APP}.desktop <<EOF
 [Desktop Entry]
@@ -469,7 +477,7 @@ Name=Terminal
 Exec=flatpak --system run ${TERMINAL_APP}
 X-GNOME-Autostart-enabled=true
 EOF
-" 2>/dev/null || echo "  could not write the autostart entry" >&2
+" || fail "could not write the terminal autostart entry"
 
 # Type the password at the greeter. GDM offers the single account already
 # selected, so Enter opens the password field and the password submits it.
@@ -553,8 +561,31 @@ shot installed-desktop "${MONITOR_INSTALLED}"
 # shot a human actually reads: it names the OS, the kernel and the desktop
 # from inside the installed system, so one image carries what half a dozen
 # assertions above prove separately.
-sleep 20
-shot installed-fastfetch "${MONITOR_INSTALLED}"
+if [[ "${UTAH_E2E_REQUIRE_FASTFETCH:-0}" == 1 ]]; then
+    command -v tesseract >/dev/null || fail "tesseract is required for CI screenshot verification"
+    fastfetch_seen=0
+    for _ in $(seq 1 24); do
+        shot installed-fastfetch "${MONITOR_INSTALLED}"
+        if [[ -s "${SHOTS}/installed-fastfetch.png" ]]; then
+            tesseract "${SHOTS}/installed-fastfetch.png" "${WORK}/fastfetch-ocr" 2>/dev/null
+            if grep -qi 'UTAH.E2E.FASTFETCH' "${WORK}/fastfetch-ocr.txt" \
+                && grep -qi 'Kernel' "${WORK}/fastfetch-ocr.txt"; then
+                fastfetch_seen=1
+                break
+            fi
+        fi
+        sleep 5
+    done
+    (( fastfetch_seen )) || fail "fastfetch output was not visible in the desktop screenshot"
+else
+    sleep 20
+    shot installed-fastfetch "${MONITOR_INSTALLED}"
+fi
+if [[ "${UTAH_E2E_REQUIRE_SCREENSHOTS:-0}" == 1 ]]; then
+    for label in live-desktop installed-greeter installed-desktop installed-fastfetch; do
+        [[ -s "${SHOTS}/${label}.png" ]] || fail "missing required screenshot: ${label}"
+    done
+fi
 
 echo
 echo "PASS: Utah installed to an encrypted disk, unlocked, and ${TEST_USER} logged"

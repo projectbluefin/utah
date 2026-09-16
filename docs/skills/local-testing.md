@@ -141,9 +141,17 @@ accounts and requires local QEMU/KVM access, not a production installation.
 Passing runs refresh `docs/verification/README.md`, its screenshots, and the
 delimited verification block in the root README. These are historical local
 test records, not proof that the current commit passed CI. In particular,
-the fastfetch capture currently waits after terminal autostart; it does not
-independently assert that fastfetch rendered. Automated CI publication still
-needs to be wired up and must retain the tested commit/image digest.
+local fastfetch capture waits after terminal autostart by default. CI sets
+`UTAH_E2E_REQUIRE_FASTFETCH=1` to require OCR of its completion marker and
+kernel output, and `UTAH_E2E_REQUIRE_SCREENSHOTS=1` to reject missing PNGs.
+CI retains the tested commit/image digest and proposes evidence updates in a
+documentation PR only after all flavors pass. See [ci-workflows.md](ci-workflows.md).
+
+The harness blocks outbound guest networking while retaining loopback-only
+SSH forwards, so installation cannot silently fall back to an online pull.
+It enables sshd through a boot argument on the disposable installed disk,
+never by rebuilding or changing the published image. `UTAH_E2E_RAM` and
+`UTAH_E2E_CPUS` control VM resources (defaults 8192 MiB and four CPUs).
 
 When integrating this harness with newer image-build fixes, retain the
 currently verified package-image digest and available-package contract.

@@ -66,7 +66,9 @@ check:
     python3 -m py_compile scripts/check-repo-availability.py
     python3 scripts/install-packages.py --check packages/bluefin.toml
     python3 scripts/verify-rpm-contract.py --check packages/bluefin.toml
-    python3 -m unittest discover -s tests -p 'test_package_resolution.py'
+    pip install --quiet pyyaml 2>/dev/null || true
+    python3 -m unittest discover -s tests -p 'test_*.py'
+    bash -n iso/scripts/luks-e2e.sh
     grep -qE 'reusable-build\.yml@(v1|[0-9a-f]{40} # v1)$' .github/workflows/build.yml
     test -f Containerfile.kernel
     bash -n scripts/install-ogc-kernel.sh
@@ -80,7 +82,6 @@ check:
          <(grep -m1 '^ARG BASE_IMAGE=' Containerfile.kernel)
     python3 -m py_compile scripts/flavors.py
     python3 scripts/flavors.py list >/dev/null
-    pip install --quiet pyyaml 2>/dev/null || true
     python3 scripts/check_workflow_outputs.py
     pip install --quiet jsonschema 2>/dev/null || true
     bash scripts/check-skill-frontmatter.sh
