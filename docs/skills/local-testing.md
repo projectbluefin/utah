@@ -129,6 +129,26 @@ persists.
 
 ## Verification
 
+### Encrypted install and screenshot harness
+
+`just luks-test` runs `iso/scripts/luks-e2e.sh` against a debug live ISO
+(`just iso testing 1`). It checks the live GNOME session, installs to a
+disposable LUKS2 disk from the embedded payload, boots without the ISO,
+unlocks the disk, and checks graphical login and extension states.
+Read the recipe and script prerequisites before running it: it creates test
+accounts and requires local QEMU/KVM access, not a production installation.
+
+Passing runs refresh `docs/verification/README.md`, its screenshots, and the
+delimited verification block in the root README. These are historical local
+test records, not proof that the current commit passed CI. In particular,
+the fastfetch capture currently waits after terminal autostart; it does not
+independently assert that fastfetch rendered. Automated CI publication still
+needs to be wired up and must retain the tested commit/image digest.
+
+When integrating this harness with newer image-build fixes, retain the
+currently verified package-image digest and available-package contract.
+The older ISO branch's package pin and exclusions must not replace them.
+
 ```bash
 just check
 ```

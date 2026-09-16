@@ -66,6 +66,7 @@ check:
     python3 -m py_compile scripts/check-repo-availability.py
     python3 scripts/install-packages.py --check packages/bluefin.toml
     python3 scripts/verify-rpm-contract.py --check packages/bluefin.toml
+    python3 -m unittest discover -s tests -p 'test_package_resolution.py'
     grep -qE 'reusable-build\.yml@(v1|[0-9a-f]{40} # v1)$' .github/workflows/build.yml
     test -f Containerfile.kernel
     bash -n scripts/install-ogc-kernel.sh
@@ -105,7 +106,7 @@ check-desktop-contract image_ref="localhost/utah:testing":
 
 # Fail fast when a contract package is in none of the repositories the image
 # actually enables, instead of discovering it twenty minutes into a build.
-# Checks names only -- it does not assert versions.  Needs network access.
+# Resolves dependencies on the pinned base and package image. Needs podman and network.
 check-repos:
     python3 scripts/check-repo-availability.py packages/bluefin.toml packages/utah.toml
 

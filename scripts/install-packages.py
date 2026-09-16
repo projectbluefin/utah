@@ -9,6 +9,8 @@ utah-packages factory repository plus Hummingbird's own.
 from __future__ import annotations
 
 import argparse
+import os
+import re
 import shutil
 import subprocess
 import sys
@@ -91,6 +93,8 @@ def installed(packages: list[str]) -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true")
+    parser.add_argument("--resolve", action="store_true",
+                        help="resolve the full transaction without installing packages")
     parser.add_argument("manifest", type=Path)
     parser.add_argument(
         "overlay", type=Path, nargs="?", default=None,
@@ -117,6 +121,26 @@ def main() -> int:
     packages = contract(args.manifest, overlay, major)
     build_deps = section(overlay, "build")
     excluded = section(args.manifest, "excluded")
+
+    if args.resolve:
+        result = subprocess.run(
+            [dnf, "--assumeno", "--disablerepo=*",
+             *(f"--enablerepo={r}" for r in REPOS),
+             "-x", "PackageKit*", "install", *packages, *build_deps],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+            env={**os.environ, "LC_ALL": "C"}, check=False,
+        )
+        print(result.stdout, end="", flush=True)
+        # DNF exits nonzero when --assumeno declines a valid transaction.
+        # A missing package or dependency must never be accepted as that case.
+        errors = r"No match for argument|nothing provides|conflicting requests|cannot install both|Error:|Failed to"
+        summary = r"(?m)^Transaction Summary:?\s*$|^Nothing to do\.?\s*$"
+        if (result.returncode not in (0, 1)
+                or re.search(errors, result.stdout, re.IGNORECASE)
+                or not re.search(summary, result.stdout)):
+            return 1
+        print(f"Resolved {len(set(packages + build_deps))} runtime and build packages on the pinned base")
+        return 0
 
     # Record exactly what this run resolved, so the contract check asserts the
     # set that was actually asked for rather than recomputing it and drifting.
