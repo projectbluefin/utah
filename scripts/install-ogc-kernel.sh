@@ -16,6 +16,23 @@ set -euo pipefail
 CACHE_DIR="${UTAH_KERNEL_CACHE_DIR:-/utah-cache}"
 DNF="$(command -v dnf5 || command -v dnf)"
 
+# dracut's dmsquash-live requires overlayfs and reads a zstd squashfs through
+# a loop device. Installed OSTree roots and the LUKS ISO test need the other
+# filesystem/device-mapper features too; x86 defconfig is not a live-OS config.
+required_config=(SCHED_CLASS_EXT NTSYNC ANDROID_BINDERFS
+                 OVERLAY_FS SQUASHFS SQUASHFS_ZSTD EROFS_FS
+                 BLK_DEV_LOOP ISO9660_FS BLK_DEV_DM DM_SNAPSHOT DM_CRYPT
+                 CRYPTO_XTS FUSE_FS FS_VERITY)
+verify_config() {
+  local config="$1" symbol
+  for symbol in "${required_config[@]}"; do
+    if ! grep -Eq "^CONFIG_${symbol}=(y|m)$" "$config"; then
+      echo "OGC kernel config $config is missing CONFIG_${symbol}" >&2
+      return 1
+    fi
+  done
+}
+
 if [ -f "${CACHE_DIR}/ogc.tar" ]; then
   echo "Unpacking the prebuilt OGC kernel from ${CACHE_DIR}/ogc.tar"
   tar -C / -xf "${CACHE_DIR}/ogc.tar"
@@ -26,10 +43,7 @@ if [ -f "${CACHE_DIR}/ogc.tar" ]; then
   depmod -a "$release"
   ln -sfn "vmlinuz-${release}" /boot/vmlinuz
   test -s /usr/lib/utah/ogc-kernel-release
-  for want in '^CONFIG_SCHED_CLASS_EXT=y$' '^CONFIG_NTSYNC=(y|m)$' '^CONFIG_ANDROID_BINDERFS=y$'; do
-    grep -Eq "$want" /usr/lib/utah/ogc-kernel.config || {
-      echo "cached OGC config does not satisfy $want" >&2; exit 1; }
-  done
+  verify_config /usr/lib/utah/ogc-kernel.config
   exit 0
 fi
 
@@ -100,6 +114,10 @@ scripts/config --enable BPF_SYSCALL --enable BPF_JIT \
                --enable SCHED_CLASS_EXT \
                --enable ANDROID_BINDER_IPC --enable ANDROID_BINDERFS \
                --enable NTSYNC
+scripts/config --module OVERLAY_FS --module SQUASHFS --enable SQUASHFS_ZSTD \
+               --module EROFS_FS --enable BLK_DEV_LOOP --enable ISO9660_FS \
+               --enable BLK_DEV_DM --module DM_SNAPSHOT --module DM_CRYPT \
+               --module CRYPTO_XTS --module FUSE_FS --enable FS_VERITY
 scripts/config --set-str LOCALVERSION "-ogc1" --disable LOCALVERSION_AUTO
 make olddefconfig
 
@@ -119,6 +137,7 @@ require_config() {
 require_config '^CONFIG_SCHED_CLASS_EXT=y$' CONFIG_SCHED_CLASS_EXT
 require_config '^CONFIG_NTSYNC=(y|m)$' CONFIG_NTSYNC
 require_config '^CONFIG_ANDROID_BINDERFS=y$' CONFIG_ANDROID_BINDERFS
+verify_config .config
 
 make modules_prepare
 make -j"$(nproc)" bzImage modules
@@ -179,7 +198,4 @@ fi
 # fail once the pre-build check passes, which is the point: a failure here would
 # mean the config that shipped is not the config that was built.
 test -s /usr/lib/utah/ogc-kernel-release
-for want in '^CONFIG_SCHED_CLASS_EXT=y$' '^CONFIG_NTSYNC=(y|m)$' '^CONFIG_ANDROID_BINDERFS=y$'; do
-  grep -Eq "$want" /usr/lib/utah/ogc-kernel.config || {
-    echo "installed OGC config does not satisfy $want" >&2; exit 1; }
-done
+verify_config /usr/lib/utah/ogc-kernel.config

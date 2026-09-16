@@ -1,6 +1,7 @@
 """CI must test the complete exact-digest set before publication."""
 import importlib.util
 import json
+import subprocess
 from pathlib import Path
 import tempfile
 import unittest
@@ -61,6 +62,32 @@ class InputsTests(unittest.TestCase):
 
 
 class EvidenceTests(unittest.TestCase):
+    def test_ogc_config_gate_rejects_each_missing_live_boot_feature(self):
+        script = (ROOT / "scripts/install-ogc-kernel.sh").read_text()
+        # Execute only the pure config gate, never the package/kernel installer.
+        gate = "required_config=" + script.split("required_config=", 1)[1].split(
+            '\nif [ -f "${CACHE_DIR}/ogc.tar" ]; then', 1)[0]
+        names = gate.split("(", 1)[1].split(")", 1)[0].split()
+        for required in ["OVERLAY_FS", "SQUASHFS", "SQUASHFS_ZSTD", "EROFS_FS",
+                         "BLK_DEV_LOOP", "DM_SNAPSHOT", "DM_CRYPT", "CRYPTO_XTS",
+                         "FUSE_FS", "FS_VERITY"]:
+            self.assertIn(required, names)
+            self.assertRegex(script, rf"--(?:enable|module) {required}(?:\s|$)")
+        self.assertEqual(script.count("verify_config /usr/lib/utah/ogc-kernel.config"), 2)
+        self.assertIn("make olddefconfig", script.split("verify_config .config")[0])
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "config"
+            for missing in [None, *names]:
+                with self.subTest(missing=missing):
+                    config.write_text("".join(f"CONFIG_{name}=y\n"
+                                              for name in names if name != missing))
+                    result = subprocess.run(
+                        ["bash", "-eu", "-c", gate + '\nverify_config "$1"',
+                         "config-test", str(config)], capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0 if missing is None else 1)
+                    if missing:
+                        self.assertIn(f"CONFIG_{missing}", result.stderr)
+
     def test_offline_payload_preserves_manifest_digest(self):
         script = (ROOT / "iso/scripts/build-iso.sh").read_text()
         self.assertNotIn("oci-archive:", script)
