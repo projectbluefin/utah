@@ -116,6 +116,11 @@ because a multi-source COPY cannot rename, and installed by name into
    `utah-` prefix.
 3. Run `just check`.
 
+The destination directory may be absent in the Hummingbird base. Use
+`install -Dm 0755` in the loop, retaining `${pair%%:*}` for the source and
+`${pair##*:}` for the destination. `${pair##:*}` does not strip the source
+name: it installs a filename containing the entire colon-separated pair.
+
 ## Clean and lint share a layer
 
 Everything above writes build-time residue that bootc lint rejects: dnf logs

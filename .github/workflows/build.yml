@@ -15,10 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Cheap, network-only gate. A contract package that none of Utah's
-  # repositories provide used to
-  # surface as an opaque `exit status 71` from the image build; catching it here
-  # costs seconds instead of the full matrix.
+  # Resolve the complete transaction against the same pinned inputs as the
+  # image before starting the flavor matrix, including extension build tools.
   contract:
     runs-on: ubuntu-24.04
     permissions:
@@ -34,8 +32,6 @@ jobs:
           submodules: recursive
       - name: Install just
         uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3
-      - name: Install zstandard
-        run: pip install --quiet zstandard
       - name: Validate manifests
         run: just check
       - name: Check Bluefin parity

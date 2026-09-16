@@ -110,26 +110,25 @@ packages = [
 #   either a ruby exclusion in the buildroot or dropping the html subpackage.
 #
 # firefox
-#   Bluefin's desktop contract names Firefox, but this factory currently only
-#   carries mozjs140 (the embeddable JavaScript runtime), not the Firefox
-#   browser build. Keep this explicit until a Hummingbird-compatible Firefox
-#   recipe is added. Tracked by #35.
+#   Utah installs org.mozilla.firefox as a Flatpak through the desktop
+#   contract. The RPM browser is deliberately excluded, while mozjs140 is
+#   retained for GNOME Shell. Tracked by #35 and utah-packages#112.
 #
-# grub2-efi-x64-cdboot
-#   This boot-media subpackage is not present in either Hummingbird's overlay
-#   or the Utah package repository. The image uses Hummingbird's bootable base
-#   and does not build installer media here. Tracked by #35.
+# anaconda-live, slitherer
+#   Utah's ISO uses bootc-installer. Both alternative installer packages need
+#   anaconda-webui, which the factory excludes because Cockpit authentication
+#   needs a working GHmac backend in Hummingbird's GLib. Slitherer also lacks
+#   its Qt WebEngine dependency closure. Match the factory's installer policy
+#   until that path is supported; tracked by #83.
 #
-# pipewire-libs-extra
-#   Not published by Hummingbird or utah-packages. Bluefin obtains it from
-#   negativo17's fedora-multimedia repository, which Utah does not enable.
-#   Tracked by #35.
+# grub2-efi-x64-cdboot and pipewire-libs-extra are supplied by the pinned
+# September 10 factory candidate and return to the install contract (#35).
 packages = [
+    "anaconda-live",
     "evolution-ews-core",
     "firefox",
     "fish",
-    "grub2-efi-x64-cdboot",
-    "pipewire-libs-extra",
+    "slitherer",
     "zsh",
 ]
 

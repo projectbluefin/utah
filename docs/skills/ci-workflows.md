@@ -37,7 +37,7 @@ as a `docs/building.md` design bullet; now lives in this skill).
 
 ## contract: the cheap gate
 
-`build.yml` opens with a network-only gate so a contract package that none of
+`build.yml` opens with a container-based gate so a contract package that none of
 Utah's repositories provide fails in seconds instead of surfacing as an
 opaque `exit status 71` from the image build (comment,
 `.github/workflows/build.yml`). It runs three checks:
@@ -46,8 +46,8 @@ opaque `exit status 71` from the image build (comment,
   (`scripts/check_workflow_outputs.py`) and the ban on flavor literals in
   workflows.
 - `just check-parity` -- `packages/bluefin.toml` against Bluefin's upstream.
-- `just check-repos` -- contract package names against the enabled
-  repositories.
+- `just check-repos` -- the complete installation transaction against the
+  digest-pinned base and package repository, including extension build tools.
 
 The same job resolves the flavor set and splits it in two by what each
 flavor builds on -- `main` on the pristine Hummingbird base, the rest on the
