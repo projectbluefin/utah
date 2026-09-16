@@ -149,6 +149,14 @@ documentation PR only after all flavors pass. See [ci-workflows.md](ci-workflows
 
 The harness blocks outbound guest networking while retaining loopback-only
 SSH forwards, so installation cannot silently fall back to an online pull.
+For digest-pinned builds, the builder exports the original registry blobs
+through Skopeo's `dir` transport with `--preserve-digests` on both copies.
+Do not export from containers-storage or substitute an OCI archive: the
+former exports uncompressed layers, while the latter can convert manifest
+formats. Either changes the digest and breaks the embedded `image@sha256:...`
+reference. Local tag-based builds may export their local containers-storage.
+A digest-preserving copy failure must fail ISO composition, not fall back to
+a mutable tag.
 It enables sshd through a boot argument on the disposable installed disk,
 never by rebuilding or changing the published image. `UTAH_E2E_RAM` and
 `UTAH_E2E_CPUS` control VM resources (defaults 8192 MiB and four CPUs).

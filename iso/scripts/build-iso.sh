@@ -78,7 +78,7 @@ SQUASHFS_ROOT="${WORK}/squashfs-root"
 mkdir -p "${SQUASHFS_ROOT}"
 cp -a "${MOUNT}/." "${SQUASHFS_ROOT}/"
 
-PAYLOAD_ARCHIVE="${WORK}/utah-payload.oci.tar"
+PAYLOAD_EXPORT="${WORK}/utah-payload"
 PAYLOAD_STORE="${WORK}/payload-store"
 STORAGE_CONF="${WORK}/payload-storage.conf"
 mkdir -p "${PAYLOAD_STORE}"
@@ -92,17 +92,28 @@ mkdir -p "${PAYLOAD_STORE}"
 # does not find it and falls back to pulling from a registry.
 printf '[storage]\ndriver = "overlay"\nrunroot = "/tmp/cs-runroot"\ngraphroot = "/payload-store"\n' >"${STORAGE_CONF}"
 echo "Embedding ${PUBLISHED_IMAGE} for offline installation"
-skopeo copy --remove-signatures \
-    "containers-storage:${PAYLOAD_IMAGE}" \
-    "oci-archive:${PAYLOAD_ARCHIVE}:${PUBLISHED_IMAGE}"
+# Containers-storage exports uncompressed layers; recompression or OCI archive
+# conversion changes the manifest digest. For immutable CI inputs, export the
+# original registry blobs directly and retain their manifest bytes via dir.
+payload_source="containers-storage:${PAYLOAD_IMAGE}"
+copy_flags=(--remove-signatures)
+if [[ "${PUBLISHED_IMAGE}" == *@sha256:* ]]; then
+    [[ "${PAYLOAD_IMAGE}" == "${PUBLISHED_IMAGE}" ]] || {
+        echo 'Digest-pinned live image and offline payload must match' >&2; exit 1;
+    }
+    payload_source="docker://${PUBLISHED_IMAGE}"
+    copy_flags+=(--preserve-digests)
+fi
+skopeo copy "${copy_flags[@]}" "${payload_source}" \
+    "dir:${PAYLOAD_EXPORT}"
 podman run --rm --privileged \
-    -v "${PAYLOAD_ARCHIVE}:/payload.oci.tar:ro" \
+    -v "${PAYLOAD_EXPORT}:/payload:ro" \
     -v "${PAYLOAD_STORE}:/payload-store" \
     -v "${STORAGE_CONF}:/tmp/storage.conf:ro" \
-    "${LIVE_IMAGE}" sh -c "mkdir -p /tmp/cs-runroot /var/tmp && CONTAINERS_STORAGE_CONF=/tmp/storage.conf skopeo copy oci-archive:/payload.oci.tar:${PUBLISHED_IMAGE} containers-storage:${PUBLISHED_IMAGE}"
+    "${LIVE_IMAGE}" sh -c 'mkdir -p /tmp/cs-runroot /var/tmp && CONTAINERS_STORAGE_CONF=/tmp/storage.conf skopeo copy --preserve-digests dir:/payload "containers-storage:$1"' sh "${PUBLISHED_IMAGE}"
 mkdir -p "${SQUASHFS_ROOT}/usr/lib/containers/storage"
 cp -a "${PAYLOAD_STORE}/." "${SQUASHFS_ROOT}/usr/lib/containers/storage/"
-rm -rf "${PAYLOAD_ARCHIVE}" "${PAYLOAD_STORE}" "${STORAGE_CONF}"
+rm -rf "${PAYLOAD_EXPORT}" "${PAYLOAD_STORE}" "${STORAGE_CONF}"
 
 SQUASHFS="${WORK}/squashfs.img"
 echo "Creating live rootfs (${KERNEL})"

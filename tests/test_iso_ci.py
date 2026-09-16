@@ -61,6 +61,13 @@ class InputsTests(unittest.TestCase):
 
 
 class EvidenceTests(unittest.TestCase):
+    def test_offline_payload_preserves_manifest_digest(self):
+        script = (ROOT / "iso/scripts/build-iso.sh").read_text()
+        self.assertNotIn("oci-archive:", script)
+        self.assertEqual(script.count("--preserve-digests"), 2)
+        self.assertIn('"dir:${PAYLOAD_EXPORT}"', script)
+        self.assertIn('dir:/payload "containers-storage:$1"', script)
+
     def test_build_explicitly_dispatches_iso_after_both_image_jobs(self):
         import yaml
         build = yaml.safe_load((ROOT / ".github/workflows/build.yml").read_text())
