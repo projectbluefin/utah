@@ -117,6 +117,18 @@ class EvidenceTests(unittest.TestCase):
         self.assertIn("Keep this paragraph.", result)
         self.assertIn("actions/runs/123", result)
 
+    def test_bios_switch_and_uefi_fresh_install_documented(self):
+        readme = (ROOT / "README.md").read_text()
+        skill = (ROOT / "docs/skills/local-testing.md").read_text()
+        building = (ROOT / "docs/building.md").read_text()
+        self.assertIn("Legacy BIOS", readme)
+        self.assertIn("grub2-efi-x64", readme)
+        self.assertIn("bootc switch", readme)
+        self.assertIn("bootc install to-disk", skill)
+        self.assertIn("grub2-pc", skill)
+        self.assertIn("bootc switch", skill)
+        self.assertIn("bootc switch", building)
+
     def test_publication_needs_all_luks_jobs_and_debug_images_are_not_uploaded(self):
         import yaml
         jobs = yaml.safe_load((ROOT / ".github/workflows/post-testing-e2e.yml").read_text())["jobs"]

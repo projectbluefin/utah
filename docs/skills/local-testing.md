@@ -1,7 +1,7 @@
 ---
 name: local-testing
 version: "1.0"
-last_updated: "2026-09-05"
+last_updated: "2026-09-18"
 id: local-testing
 one_line_purpose: Build, install, and boot Utah locally in a VM or live ISO.
 entry_point: docs/skills/local-testing.md
@@ -13,8 +13,8 @@ dependencies: []
 tags: [qemu, bootc, iso, vm, testing]
 description: >-
   Local validation loop: build-ghcr, bootc install to-disk, QEMU/noVNC boot,
-  live ISO. Use when validating changes end-to-end or debugging boot, GDM, or
-  live-session failures.
+  live ISO, and firmware/bootloader compatibility. Use when validating
+  changes end-to-end or debugging boot, GDM, or live-session failures.
 metadata:
   type: runbook
 ---
@@ -126,6 +126,19 @@ integration is the next ISO milestone. `just boot-iso` boots it with
 QEMU-for-Docker and exposes the noVNC console at the printed URL (comment
 above `boot-iso` in `Justfile`), with TPM, UEFI, and `-snapshot` so nothing
 persists.
+
+## Firmware and bootloader compatibility (UEFI vs. BIOS)
+
+- **Fresh installs (`bootc install to-disk` / live ISO) are UEFI-only**:
+  Hummingbird base installs only `grub2-efi-x64`, `shim-x64`, and `efibootmgr`
+  with EFI bootupd metadata (`EFI.json`). Utah adds no `grub2-pc` or BIOS
+  payload; fresh disk installs on legacy BIOS cannot write an MBR bootloader.
+- **Switching existing installs (`bootc switch`) works on legacy BIOS**:
+  Switching a legacy-BIOS system (e.g. ThinkPad X230 with GPT/MBR and BIOS GRUB)
+  from Bluefin to Utah succeeds: the existing bootloader loads the new kernel,
+  and `bootc rollback` works cleanly. `bootupctl` reports `Boot method: BIOS`.
+- **Resolution path**: Fresh BIOS installs remain unsupported until the base
+  or contract ships `grub2-pc` and a BIOS payload (tracked in #102, links #22).
 
 ## Verification
 
