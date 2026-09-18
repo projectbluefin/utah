@@ -54,7 +54,8 @@ opaque `exit status 71` from the image build (comment,
   That is list against list. The image build itself runs
   `utah-check-image-parity`, which compares the installed RPM set with the
   inventory Bluefin's image publishes in its manifest, and writes the report
-  to `/usr/share/utah/parity-report.txt` in the image (report-only today).
+  to `/usr/share/utah/parity-report.txt` in the image, split into new gaps and
+  the known ones in `packages/parity-baseline.txt` (report-only today).
 - `just check-repos` -- the complete installation transaction against the
   digest-pinned base and package repository, including extension build tools.
 

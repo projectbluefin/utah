@@ -141,8 +141,12 @@ lists it under `[unavailable]` or `packages/parity-exceptions.toml` gives a
 reason for it; the report prints the reason. Both the inventory and the report
 ship in the image under `/usr/share/utah/`.
 
-- Report-only in the build today. `--strict` fails on an unexplained gap; it
-  is turned on once the exceptions file covers the deliberate differences.
+- `packages/parity-baseline.txt` is the debt register: the gaps already
+  known, grouped by where each name could come from today (Hummingbird's
+  repository, the pinned factory image, nowhere). The report separates a
+  **new** gap from a known one and names baseline entries that have closed,
+  so the file gets trimmed. Report-only in the build today; `--strict` fails
+  on a new gap and is a one-word change in the Containerfile.
 - `just check-image-parity IMAGE` runs the strict comparison against a built
   image locally.
 - Add to `parity-exceptions.toml` only a difference that is deliberate, with

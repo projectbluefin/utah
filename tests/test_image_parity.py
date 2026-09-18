@@ -109,25 +109,47 @@ class ComparisonTests(unittest.TestCase):
         parsed = parity.parse_rpm_list("nautilus\t51-1\ngpg-pubkey\t1-2\nglibc\n")
         self.assertEqual(parsed, {"nautilus": "51-1", "glibc": ""})
 
+    def test_a_baseline_separates_known_gaps_from_new_ones_and_reports_closed_ones(self):
+        baseline = {"glibc-all-langpacks", "nautilus"}
+        result = parity.compare(INVENTORY, {"nautilus": "51"}, set(), [], baseline)
+        self.assertEqual(result.known, ["glibc-all-langpacks"])
+        self.assertEqual(result.new, ["kmod-zfs"])
+        self.assertEqual(result.closed, ["nautilus"])
+        self.assertEqual(result.missing, ["glibc-all-langpacks", "kmod-zfs"])
+
+    def test_baseline_file_ignores_comments_and_blank_lines(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "baseline.txt"
+            path.write_text("# header\n\nnautilus  # trailing\n  7zip\n")
+            self.assertEqual(parity.load_baseline(path), {"nautilus", "7zip"})
+
+    def test_the_shipped_baseline_is_sorted_within_each_group_and_has_no_duplicates(self):
+        names = [l.split("#")[0].strip() for l in (ROOT / "packages/parity-baseline.txt").read_text().splitlines()]
+        names = [n for n in names if n]
+        self.assertEqual(len(names), len(set(names)))
+        self.assertEqual(len(names), 970)
+
     def test_the_shipped_exceptions_file_parses_and_every_entry_has_a_reason(self):
         for exc in parity.load_exceptions(ROOT / "packages/parity-exceptions.toml"):
             self.assertTrue(exc.pattern and exc.reason)
 
 
 class ExitCodeTests(unittest.TestCase):
-    def run_main(self, *extra, rpm_names=("nautilus",)):
+    def run_main(self, *extra, rpm_names=("nautilus",), baseline=""):
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             (tmp / "bluefin.json").write_text(json.dumps(INVENTORY))
             (tmp / "rpms.txt").write_text("\n".join(rpm_names) + "\n")
             (tmp / "utah.toml").write_text('[unavailable]\npackages = ["kmod-zfs"]\n')
             (tmp / "none.toml").write_text("")
+            (tmp / "baseline.txt").write_text(baseline)
             code = parity.main(
                 [
                     "--bluefin-inventory", str(tmp / "bluefin.json"),
                     "--rpm-list", str(tmp / "rpms.txt"),
                     "--overlay", str(tmp / "utah.toml"),
                     "--exceptions", str(tmp / "none.toml"),
+                    "--baseline", str(tmp / "baseline.txt"),
                     "--report", str(tmp / "report.txt"),
                     *extra,
                 ]
@@ -137,15 +159,21 @@ class ExitCodeTests(unittest.TestCase):
     def test_report_only_never_fails_but_names_the_gap(self):
         code, report = self.run_main()
         self.assertEqual(code, 0)
-        self.assertIn("UNEXPLAINED", report)
+        self.assertIn("NEW -- in Bluefin's image", report)
         self.assertIn("glibc-all-langpacks", report)
 
-    def test_strict_fails_on_an_unexplained_gap_and_passes_without_one(self):
+    def test_strict_fails_on_a_new_gap_and_passes_without_one(self):
         self.assertEqual(self.run_main("--strict")[0], 1)
         code, report = self.run_main("--strict", rpm_names=("nautilus", "glibc-all-langpacks"))
         self.assertEqual(code, 0)
-        self.assertNotIn("UNEXPLAINED", report)
+        self.assertNotIn("NEW --", report)
         self.assertIn("kmod-zfs: documented under [unavailable]", report)
+
+    def test_strict_tolerates_a_gap_the_baseline_already_records(self):
+        code, report = self.run_main("--strict", baseline="glibc-all-langpacks\n")
+        self.assertEqual(code, 0)
+        self.assertIn("known gap (baseline):", report)
+        self.assertNotIn("NEW --", report)
 
     def test_an_unreadable_registry_is_not_evidence_about_the_image(self):
         with tempfile.TemporaryDirectory() as tmp:

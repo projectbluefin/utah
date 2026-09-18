@@ -18,8 +18,11 @@ inside the image build, after the last package step.
 
 The comparison is by name. A name Bluefin has that this image does not is a
 gap, unless packages/utah.toml already documents it under [unavailable] or
-packages/parity-exceptions.toml explains it. Without --strict the result is a
-report; with --strict an unexplained gap fails the build.
+packages/parity-exceptions.toml explains it. The remaining gaps are the debt:
+packages/parity-baseline.txt records the ones already known, so the report
+separates a NEW gap (Bluefin started shipping something this image lacks)
+from a known one, and --strict fails only on the new ones. Shrinking the
+baseline is how parity is paid down; growing it is a decision.
 """
 
 from __future__ import annotations
@@ -144,6 +147,18 @@ def load_exceptions(path: Path) -> list[Exception_]:
     return exceptions
 
 
+def load_baseline(path: Path) -> set[str]:
+    """Known gaps, one name per line; # starts a comment."""
+    if not path.exists():
+        return set()
+    names = set()
+    for line in path.read_text().splitlines():
+        line = line.split("#", 1)[0].strip()
+        if line:
+            names.add(line)
+    return names
+
+
 def unavailable_names(overlay: Path) -> set[str]:
     if not overlay.exists():
         return set()
@@ -153,9 +168,15 @@ def unavailable_names(overlay: Path) -> set[str]:
 
 @dataclass
 class Comparison:
-    missing: list[str] = field(default_factory=list)
+    new: list[str] = field(default_factory=list)
+    known: list[str] = field(default_factory=list)
     explained: list[tuple[str, str]] = field(default_factory=list)
     extra: list[str] = field(default_factory=list)
+    closed: list[str] = field(default_factory=list)
+
+    @property
+    def missing(self) -> list[str]:
+        return sorted(self.new + self.known)
 
 
 def compare(
@@ -163,6 +184,7 @@ def compare(
     utah: dict[str, str],
     unavailable: set[str],
     exceptions: list[Exception_],
+    baseline: set[str] = frozenset(),
 ) -> Comparison:
     result = Comparison()
     for name in sorted(bluefin):
@@ -176,8 +198,11 @@ def compare(
                 result.explained.append((name, exc.reason))
                 break
         else:
-            result.missing.append(name)
+            (result.known if name in baseline else result.new).append(name)
     result.extra = sorted(name for name in utah if name not in bluefin)
+    # A baseline entry this image now has, or Bluefin no longer ships, is
+    # paid-down debt: say so, so the file gets trimmed.
+    result.closed = sorted(name for name in baseline if name in utah or name not in bluefin)
     return result
 
 
@@ -185,14 +210,24 @@ def render(ref: str, bluefin: dict[str, str], utah: dict[str, str], result: Comp
     lines = [
         f"image parity against {ref}",
         f"  Bluefin installs {len(bluefin)} packages, this image {len(utah)}",
-        f"  in Bluefin, not here, unexplained: {len(result.missing)}",
-        f"  in Bluefin, not here, explained:   {len(result.explained)}",
-        f"  here, not in Bluefin:              {len(result.extra)}",
+        f"  in Bluefin, not here, NEW (not in the baseline): {len(result.new)}",
+        f"  in Bluefin, not here, known gap (baseline):      {len(result.known)}",
+        f"  in Bluefin, not here, explained:                 {len(result.explained)}",
+        f"  baseline entries now closed:                     {len(result.closed)}",
+        f"  here, not in Bluefin:                            {len(result.extra)}",
     ]
-    if result.missing:
+    if result.new:
         lines.append("")
-        lines.append("UNEXPLAINED -- in Bluefin's image and not in this one:")
-        lines += [f"  {name}  ({bluefin[name]})" for name in result.missing]
+        lines.append("NEW -- in Bluefin's image, not in this one, not in the baseline:")
+        lines += [f"  {name}  ({bluefin[name]})" for name in result.new]
+    if result.closed:
+        lines.append("")
+        lines.append("closed -- in the baseline but no longer a gap; remove from parity-baseline.txt:")
+        lines += [f"  {name}" for name in result.closed]
+    if result.known:
+        lines.append("")
+        lines.append("known gap (baseline):")
+        lines += [f"  {name}  ({bluefin[name]})" for name in result.known]
     if result.explained:
         lines.append("")
         lines.append("explained:")
@@ -221,9 +256,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--exceptions", type=Path, default=Path("/usr/share/utah/parity-exceptions.toml")
     )
+    parser.add_argument(
+        "--baseline", type=Path, default=Path("/usr/share/utah/parity-baseline.txt")
+    )
     parser.add_argument("--report", type=Path, help="also write the report here")
     parser.add_argument(
-        "--strict", action="store_true", help="exit 1 when an unexplained gap remains"
+        "--strict", action="store_true", help="exit 1 on a gap that is not in the baseline"
     )
     args = parser.parse_args(argv)
 
@@ -244,14 +282,23 @@ def main(argv: list[str] | None = None) -> int:
         return 1 if args.strict else 0
 
     utah = parse_rpm_list(args.rpm_list.read_text()) if args.rpm_list else installed_inventory()
-    result = compare(bluefin, utah, unavailable_names(args.overlay), load_exceptions(args.exceptions))
+    result = compare(
+        bluefin,
+        utah,
+        unavailable_names(args.overlay),
+        load_exceptions(args.exceptions),
+        load_baseline(args.baseline),
+    )
     report = render(args.bluefin_image, bluefin, utah, result)
     print(report, end="")
     if args.report:
         args.report.parent.mkdir(parents=True, exist_ok=True)
         args.report.write_text(report)
-    if result.missing and args.strict:
-        print(f"{len(result.missing)} package(s) Bluefin ships are missing and unexplained", file=sys.stderr)
+    if result.new and args.strict:
+        print(
+            f"{len(result.new)} package(s) Bluefin ships are missing here and not in the baseline",
+            file=sys.stderr,
+        )
         return 1
     return 0
 

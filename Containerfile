@@ -39,7 +39,7 @@ FROM ${BASE_IMAGE}
 # transaction reads. These, the pinned package image and the install script
 # are the whole input to the expensive layer, so everything else waits its
 # turn below them.
-COPY packages/bluefin.toml packages/utah.toml packages/parity-exceptions.toml contracts/bluefin-desktop.toml /usr/share/utah/
+COPY packages/bluefin.toml packages/utah.toml packages/parity-exceptions.toml packages/parity-baseline.txt contracts/bluefin-desktop.toml /usr/share/utah/
 COPY packages/hummingbird.repo packages/nvidia-container.repo packages/utah-packages.repo /etc/yum.repos.d/
 # The package image is an RPM repository, not a runtime dependency. Its
 # contents are intentionally copied into the image so the package transaction
@@ -190,9 +190,9 @@ RUN case "${IMAGE_FLAVOR}" in \
 # that sees what Bluefin's base supplied without ever listing it
 # (glibc-all-langpacks, linux-firmware: #114, #97). The inventory and the
 # report ship in the image under /usr/share/utah so any published image can be
-# asked what it has. Report-only for now; --strict turns an unexplained gap
-# into a build failure once packages/parity-exceptions.toml covers the
-# deliberate ones.
+# asked what it has. packages/parity-baseline.txt holds the gaps already
+# known, so the report separates a NEW gap from a known one. Report-only for
+# now; --strict makes a new gap a build failure and is a one-word change.
 
 # Everything above writes build-time residue that bootc lint rejects: dnf logs
 # under /var/log, cockpit and dnf state under /run, and ~45 /var directories
