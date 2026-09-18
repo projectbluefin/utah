@@ -133,6 +133,23 @@ packages = [
 #   its Qt WebEngine dependency closure. Match the factory's installer policy
 #   until that path is supported; tracked by #83.
 #
+# libgda, libgda-sqlite
+#   Upstream added both as runtime dependencies for the maintained Copyous
+#   extension (bluefin#1210). Neither is in the pinned factory image or in
+#   public-hummingbird-x86_64-rpms -- Hummingbird carries no package whose
+#   name contains gda at all. One factory recipe would cover both, because
+#   libgda-sqlite is a subpackage of the libgda SRPM rather than its own
+#   source. Tracked by #106.
+#
+# ppp
+#   In neither repository, and nothing in either Provides it. This one costs
+#   more than dial-up: Hummingbird ships NetworkManager-ppp (1.58.0-1.hum1
+#   and 1.58.1-1.hum1) whose metadata carries Requires: ppp, so that plugin
+#   is uninstallable from their own repository and NetworkManager's PPPoE and
+#   PPTP paths cannot be installed at all. The same shape as avahi (#104) and
+#   nautilus (#100): a plugin shipped without the daemon behind it.
+#   Tracked by #107.
+#
 # grub2-efi-x64-cdboot and pipewire-libs-extra are supplied by the pinned
 # September 10 factory candidate and return to the install contract (#35).
 packages = [
@@ -140,6 +157,9 @@ packages = [
     "evolution-ews-core",
     "firefox",
     "fish",
+    "libgda",
+    "libgda-sqlite",
+    "ppp",
     "slitherer",
     "zsh",
 ]
