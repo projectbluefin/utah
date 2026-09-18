@@ -41,10 +41,16 @@ FROM ${BASE_IMAGE}
 # turn below them.
 COPY packages/bluefin.toml packages/utah.toml contracts/bluefin-desktop.toml /usr/share/utah/
 COPY packages/hummingbird.repo packages/nvidia-container.repo packages/utah-packages.repo /etc/yum.repos.d/
-# The package image is an RPM repository, not a runtime dependency. Its
-# contents are intentionally copied into the image so the package transaction
-# is reproducible and does not depend on a mutable Pages mirror.
-COPY --from=packages /repository /etc/utah-packages
+# Hummingbird signs its RPMs with Red Hat's release key 2 (fd431d51); the key
+# lets packages/hummingbird.repo run with gpgcheck=1 here and in the live ISO
+# build on top of this image.
+COPY packages/RPM-GPG-KEY-redhat-release-2 /etc/pki/rpm-gpg/
+# The package image is an RPM repository, not a runtime dependency. It is bind
+# mounted into the two RUN steps that install from it and never copied: a COPY
+# used to put the whole 4 GB repository at /etc/utah-packages, nothing removed
+# it, and it was two thirds of every published image and of every ISO (#130).
+# Reproducibility comes from the digest-pinned `packages` stage, which is
+# still the only source the transaction can see.
 # One layer for all of Utah's scripts. They are staged under /tmp and installed
 # by name in the RUN below, because a multi-source COPY cannot rename and
 # every downstream path expects the utah- prefix.
@@ -112,7 +118,8 @@ RUN for pair in install-packages.py:utah-install-packages \
 # The package lists live in the manifests, not here.  When they were spelled
 # out in this RUN as well, the two copies drifted and the contract check was
 # asserting a different set than the install had asked for.
-RUN /usr/local/libexec/utah-install-packages \
+RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages,ro \
+    /usr/local/libexec/utah-install-packages \
       /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
     IMAGE_FLAVOR=main /usr/local/libexec/utah-verify-rpm-contract \
       /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
@@ -180,7 +187,8 @@ RUN mkdir -p /tmp/uupd && \
 
 # Dakota-compatible flavors: OGC is built and asserted before NVIDIA so the
 # NVIDIA path can bind its module to the exact kernel tree it will boot.
-RUN case "${IMAGE_FLAVOR}" in \
+RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages,ro \
+    case "${IMAGE_FLAVOR}" in \
       gaming|nvidia-gaming) /usr/local/libexec/utah-install-ogc-kernel ;; \
       main|nvidia) ;; \
       *) echo "Unknown Utah image flavor: ${IMAGE_FLAVOR}" >&2; exit 2 ;; \
@@ -190,7 +198,8 @@ RUN case "${IMAGE_FLAVOR}" in \
       main|gaming) ;; \
     esac && \
     IMAGE_FLAVOR="${IMAGE_FLAVOR}" /usr/local/libexec/utah-verify-rpm-contract \
-      /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml
+      /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
+    sed -i 's/^enabled=1$/enabled=0/' /etc/yum.repos.d/utah-packages.repo
 
 # Everything above writes build-time residue that bootc lint rejects: dnf logs
 # under /var/log, cockpit and dnf state under /run, and ~45 /var directories

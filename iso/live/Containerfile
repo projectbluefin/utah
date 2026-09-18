@@ -50,10 +50,23 @@ RUN chmod 0755 /tmp/utah-live-src/configure-live.sh && \
 # to open; the installed system boots the payload image's own initramfs, which
 # this build never touches. Revisit if Utah ever wants TPM-bound LUKS, which
 # needs tpm2-tools in the installed image, not in the live overlay.
-RUN set -eux; \
+# /root is a symlink to /var/roothome in a bootc image and the target does not
+# exist at build time, so dracut's install of /root failed on every build:
+#     dracut-install: ERROR: installing '/root' to '/root'
+#     dracut[E]: FAILED: /usr/lib/dracut/dracut-install ... -f /root /root
+# and dracut still exited 0, so the failure never stopped the build (#132).
+# Give the symlink a target for the duration of the build, and treat any
+# dracut[E] FAILED line as the error it is.
+RUN set -euxo pipefail; \
+    mkdir -p /var/roothome; \
     kernel="$(ls /usr/lib/modules | sort -V | tail -1)"; \
     dracut --force --reproducible --no-hostonly \
       --add dmsquash-live \
       --omit 'tpm2-tss pcsc' \
       --add-drivers 'squashfs overlay loop iso9660 sr_mod cdrom' \
-      "/usr/lib/modules/${kernel}/initramfs.img" "${kernel}"
+      "/usr/lib/modules/${kernel}/initramfs.img" "${kernel}" 2>&1 | tee /tmp/dracut.log; \
+    if grep -q 'dracut\[E\]: FAILED' /tmp/dracut.log; then \
+      echo 'dracut reported a failed install; refusing to ship the initramfs' >&2; exit 1; \
+    fi; \
+    rm -f /tmp/dracut.log; \
+    rmdir /var/roothome || true

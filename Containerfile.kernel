@@ -24,6 +24,8 @@ FROM ${BASE_IMAGE} AS builder
 # itself installs from: Hummingbird's overlay plus the pinned Fedora 44
 # buildroot. Fedora is builder-only; it is not copied into the runtime stage.
 COPY packages/hummingbird.repo /etc/yum.repos.d/hummingbird.repo
+# hummingbird.repo runs with gpgcheck=1; the key it names has to exist here too.
+COPY packages/RPM-GPG-KEY-redhat-release-2 /etc/pki/rpm-gpg/
 COPY packages/fedora-44.repo /etc/yum.repos.d/fedora-44.repo
 RUN mkdir -p /usr/local/libexec
 COPY scripts/install-ogc-kernel.sh /usr/local/libexec/utah-install-ogc-kernel
