@@ -133,6 +133,22 @@ packages = [
 #   its Qt WebEngine dependency closure. Match the factory's installer policy
 #   until that path is supported; tracked by #83.
 #
+# libgda, libgda-sqlite
+#   Runtime dependencies of the maintained Copyous extension, added upstream
+#   in projectbluefin/bluefin#1210. Neither name exists in the pinned factory
+#   image or in public-hummingbird-x86_64-rpms, and Hummingbird carries no
+#   package whose name contains "gda" at all. Both come from one SRPM --
+#   libgda-sqlite is the %package sqlite subpackage of Fedora's libgda.spec --
+#   so a single factory recipe with the sqlite provider enabled yields both.
+#   Tracked by #106.
+#
+# ppp
+#   Absent from both repositories, and nothing in either Provides: ppp, so no
+#   alternate name satisfies it. This also leaves Hummingbird's own
+#   NetworkManager-ppp uninstallable, since its metadata Requires: ppp --
+#   NetworkManager's PPPoE, PPTP and mobile-broadband paths cannot be
+#   installed at all rather than merely being absent. Tracked by #107.
+#
 # grub2-efi-x64-cdboot and pipewire-libs-extra are supplied by the pinned
 # September 10 factory candidate and return to the install contract (#35).
 packages = [
@@ -140,6 +156,9 @@ packages = [
     "evolution-ews-core",
     "firefox",
     "fish",
+    "libgda",
+    "libgda-sqlite",
+    "ppp",
     "slitherer",
     "zsh",
 ]
