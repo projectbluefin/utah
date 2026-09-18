@@ -39,7 +39,7 @@ FROM ${BASE_IMAGE}
 # transaction reads. These, the pinned package image and the install script
 # are the whole input to the expensive layer, so everything else waits its
 # turn below them.
-COPY packages/bluefin.toml packages/utah.toml contracts/bluefin-desktop.toml /usr/share/utah/
+COPY packages/bluefin.toml packages/utah.toml packages/parity-exceptions.toml contracts/bluefin-desktop.toml /usr/share/utah/
 COPY packages/hummingbird.repo packages/nvidia-container.repo packages/utah-packages.repo /etc/yum.repos.d/
 # The package image is an RPM repository, not a runtime dependency. Its
 # contents are intentionally copied into the image so the package transaction
@@ -58,6 +58,7 @@ COPY scripts/install-packages.py \
      scripts/configure-branding.sh \
      scripts/verify-desktop-contract.py \
      scripts/verify-gnome-extensions.py \
+     scripts/check-image-parity.py \
      /tmp/utah-scripts/
 # Common publishes Bluefin artwork, desktop defaults, Brewfiles, and setup
 # hooks in a separate profile from its shared system files. Both are required:
@@ -78,7 +79,8 @@ RUN for pair in install-packages.py:utah-install-packages \
                 configure-services.sh:utah-configure-services \
                 configure-branding.sh:utah-configure-branding \
                 verify-desktop-contract.py:utah-verify-desktop-contract \
-                verify-gnome-extensions.py:utah-verify-gnome-extensions; do \
+                verify-gnome-extensions.py:utah-verify-gnome-extensions \
+                check-image-parity.py:utah-check-image-parity; do \
       install -Dm 0755 "/tmp/utah-scripts/${pair%%:*}" "/usr/local/libexec/${pair##*:}" || exit 1; \
     done && \
     cp -a /tmp/utah-common/. / && \
@@ -177,7 +179,20 @@ RUN case "${IMAGE_FLAVOR}" in \
       main|gaming) ;; \
     esac && \
     IMAGE_FLAVOR="${IMAGE_FLAVOR}" /usr/local/libexec/utah-verify-rpm-contract \
-      /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml
+      /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
+    rpm -qa --qf '%{NAME}\t%{VERSION}-%{RELEASE}\n' | sort > /usr/share/utah/packages.txt && \
+    /usr/local/libexec/utah-check-image-parity --report /usr/share/utah/parity-report.txt
+
+# The contract above checks the list Bluefin asks for. The image parity check
+# just after it compares what this image actually installed with what
+# Bluefin's image actually installed, read from the inventory every rechunked
+# Bluefin image publishes in its manifest -- no pull. That is the only view
+# that sees what Bluefin's base supplied without ever listing it
+# (glibc-all-langpacks, linux-firmware: #114, #97). The inventory and the
+# report ship in the image under /usr/share/utah so any published image can be
+# asked what it has. Report-only for now; --strict turns an unexplained gap
+# into a build failure once packages/parity-exceptions.toml covers the
+# deliberate ones.
 
 # Everything above writes build-time residue that bootc lint rejects: dnf logs
 # under /var/log, cockpit and dnf state under /run, and ~45 /var directories

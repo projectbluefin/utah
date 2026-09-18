@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-05",
+  "generated_at": "2026-09-18",
   "schema_version": "1.0",
   "skills": [
     {
@@ -125,7 +125,7 @@
       ],
       "description": "Bluefin parity contract: verbatim bluefin.toml, utah.toml overlay, [unavailable] rules, repository policy. Use when adding, removing, or debugging packages or parity/check-repos failures.",
       "version": "1.0",
-      "last_updated": "2026-09-05",
+      "last_updated": "2026-09-18",
       "doc_type": "policy"
     },
     {

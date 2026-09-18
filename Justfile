@@ -117,6 +117,13 @@ check-parity:
       exit 1
     fi
 
+# Compare a built image's installed RPMs with Bluefin's, by name. Bluefin's
+# inventory is read from its manifest annotation, so nothing is pulled but the
+# image under test, which is usually already local.
+check-image-parity image bluefin="ghcr.io/ublue-os/bluefin:stable":
+    podman run --rm --entrypoint /usr/local/libexec/utah-check-image-parity \
+      "{{image}}" --strict --bluefin-image "{{bluefin}}"
+
 image_name base_name stream flavor:
     #!/usr/bin/env bash
     set -euo pipefail
