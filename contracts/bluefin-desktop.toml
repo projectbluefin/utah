@@ -53,7 +53,6 @@ files = [
   "/etc/dconf/db/distro.d/02-bluefin-keybindings",
   "/etc/dconf/db/distro.d/03-bluefin-ptyxis-palette",
   "/etc/dconf/db/distro.d/04-bluefin-custom-command-menu",
-  "/etc/dconf/db/distro.d/05-bluefin-searchlight-extension",
   "/etc/dconf/db/distro.d/locks/01-bluefin-locked-settings",
 ]
 

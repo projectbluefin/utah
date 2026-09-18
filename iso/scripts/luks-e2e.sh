@@ -504,8 +504,8 @@ echo "  gnome-shell: running as ${TEST_USER}"
 
 # A shell session that started is not the same as one whose extensions loaded.
 # Assert the enabled extensions raised no load-time error this boot -- the
-# GNOME-51 breaks this test exists to catch (GSConnect's clipboard final-type,
-# Search Light's dropped shader API) surface here as "Error"/"TypeError" lines
+# GNOME-51 breaks this test exists to catch (GSConnect's clipboard final-type;
+# Search Light's dropped shader API, before it was removed) surface here as "Error"/"TypeError" lines
 # against the extension uuid. UTAH_E2E_EXTENSIONS lists the ones that must load
 # clean; empty to skip.
 #
@@ -516,7 +516,7 @@ echo "  gnome-shell: running as ${TEST_USER}"
 # GSConnect clipboard final-type and Search Light's dropped shader API, which
 # are separate fixes) takes two runs to learn what one run already knew. The
 # run still fails; it just says everything it found.
-EXT_CHECK="${UTAH_E2E_EXTENSIONS-gsconnect@andyholmes.github.io search-light@icedman.github.com}"
+EXT_CHECK="${UTAH_E2E_EXTENSIONS-gsconnect@andyholmes.github.io}"
 if [[ -n "${EXT_CHECK}" ]]; then
     ext_failures=()
     for uuid in ${EXT_CHECK}; do

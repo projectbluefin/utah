@@ -85,7 +85,12 @@ RUN for pair in install-packages.py:utah-install-packages \
     cp -a /tmp/utah-bluefin/. / && \
     cp -a /tmp/utah-brew/. / && \
     cp -a /tmp/utah-local/. / && \
-    rm -rf /tmp/utah-scripts /tmp/utah-common /tmp/utah-bluefin /tmp/utah-brew /tmp/utah-local
+    rm -rf /tmp/utah-scripts /tmp/utah-common /tmp/utah-bluefin /tmp/utah-brew /tmp/utah-local && \
+    rm -f /etc/dconf/db/distro.d/05-bluefin-searchlight-extension
+# The last line drops Common's settings for the Search Light extension. Utah no
+# longer ships that extension: its shader code calls set_shader_source, which
+# GNOME 51 removed, so it errored at load and failed the ISO end-to-end test.
+# Settings for an extension the image does not carry are noise in dconf.
 
 # This first check covers the flavor-independent contract only, which is why it
 # pins IMAGE_FLAVOR=main. verify-rpm-contract.py reads IMAGE_FLAVOR from the

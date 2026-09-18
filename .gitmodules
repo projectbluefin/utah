@@ -26,10 +26,6 @@
 	path = system_files/shared/usr/share/gnome-shell/extensions/gsconnect@andyholmes.github.io
 	url = https://github.com/projectbluefin/gnome-shell-extension-gsconnect.git
 	branch = main
-[submodule "system_files/shared/usr/share/gnome-shell/extensions/search-light@icedman.github.com"]
-	path = system_files/shared/usr/share/gnome-shell/extensions/search-light@icedman.github.com
-	url = https://github.com/projectbluefin/search-light.git
-	branch = main
 [submodule "system_files/shared/usr/share/gnome-shell/extensions/custom-command-list@storageb.github.com"]
 	path = system_files/shared/usr/share/gnome-shell/extensions/custom-command-list@storageb.github.com
 	url = https://github.com/projectbluefin/custom-command-menu.git

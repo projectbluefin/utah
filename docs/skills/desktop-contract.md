@@ -62,10 +62,13 @@ The TOML's sections are the contract's table of contents:
 ## GNOME extensions are pinned submodules
 
 Bluefin's GNOME extension submodules are retained with their normal build
-step. `.gitmodules` pins nine of them by URL and branch under
+step. `.gitmodules` pins eight of them by URL and branch under
 `system_files/shared/usr/share/gnome-shell/extensions/` — appindicator,
 bazaar-integration, blur-my-shell, caffeine, custom-command-list,
-dash-to-dock, gradia-integration, gsconnect, and search-light.
+dash-to-dock, gradia-integration, and gsconnect. Search Light was dropped:
+its shader code calls `set_shader_source`, which GNOME 51 removed, so the
+extension errored at load and failed the ISO end-to-end test on every
+flavor.
 
 `scripts/verify-gnome-extensions.py` asserts every one declares GNOME 51 in
 its `metadata.json`. It runs in two modes from the same script:
