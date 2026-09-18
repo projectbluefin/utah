@@ -84,6 +84,14 @@ disable_unit flatpak-add-fedora-repos.service
 disable_unit rpm-ostree.service
 systemctl mask bootc-fetch-apply-updates.timer bootc-fetch-apply-updates.service
 
+# Desktop hardware rarely has a serial console; agetty on ttyS0 loops forever
+# logging I/O errors and preventing CPU sleep. Drop the console karg and mask the unit.
+if [ -f /usr/lib/bootc/kargs.d/00-base.toml ]; then
+    sed -i 's/, "console=ttyS0,115200n8"//; s/"console=ttyS0,115200n8", //; s/"console=ttyS0,115200n8"//' /usr/lib/bootc/kargs.d/00-base.toml
+fi
+disable_unit serial-getty@ttyS0.service
+systemctl mask serial-getty@ttyS0.service
+
 # SSH follows TunaOS's convention: closed in published images, opt-in for a
 # local debug build. The preset must agree or first-boot preset-all will undo
 # the build-time enablement.

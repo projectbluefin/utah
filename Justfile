@@ -34,6 +34,10 @@ check:
     test -f system_files/shared/usr/lib/systemd/system/bootc-unified-storage.service.d/10-utah-local-test.conf
     grep -q 'enable gdm.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
     grep -q 'enable ublue-system-setup.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
+    grep -q 'disable serial-getty@ttyS0.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
+    test -f system_files/shared/usr/lib/bootc/kargs.d/00-base.toml
+    ! grep -q 'console=ttyS0' system_files/shared/usr/lib/bootc/kargs.d/00-base.toml
+    grep -q 'console=tty0' system_files/shared/usr/lib/bootc/kargs.d/00-base.toml
     test -f scripts/configure-services.sh
     test -f scripts/configure-branding.sh
     test -f scripts/verify-desktop-contract.py

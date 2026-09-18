@@ -46,18 +46,19 @@ The TOML's sections are the contract's table of contents:
   flavor pattern `(main|nvidia|gaming|nvidia-gaming)` and the matching
   `ostree-image-signed` ref pattern.
 - **`[configuration]`** — the dconf distro databases and locks under
-  `/etc/dconf/db/distro.d/` must exist, and `file_contains` pins their
-  content: the gschema override references Bazaar and the Bluefin background
-  path, the custom command menu points at `docs.projectbluefin.io`, the
-  keybindings set `xdg-terminal-exec`.
+  `/etc/dconf/db/distro.d/` and bootc kargs under `/usr/lib/bootc/kargs.d/` must
+  exist. `file_contains` pins required content (Bazaar references, background
+  path, custom command menu, keybindings, `console=tty0`), and
+  `file_not_contains` forbids server kargs like `console=ttyS0`.
 - **`[flatpak]`** — first-boot policy: the Flathub remote
   (`https://dl.flathub.org/repo/`), the Bazaar preinstall, the
   `99-flatpaks.sh` privileged-setup hook, and the system-flatpaks Brewfile
   whose app list the contract enumerates.
-- **`[services]`** — systemd units the preset must enable: `gdm.service`,
+- **`[services]`** — systemd units the preset must enable (`gdm.service`,
   `ublue-system-setup.service`, `flatpak-preinstall.service`,
   `flatpak-nuke-fedora.service`, `brew-setup.service`, `dconf-update.service`,
-  `bootc-unified-storage.service`, `uupd.timer`.
+  `bootc-unified-storage.service`, `uupd.timer`) and units that must be masked
+  (`serial-getty@ttyS0.service`).
 
 ## GNOME extensions are pinned submodules
 
@@ -103,6 +104,15 @@ Hummingbird's base does not include `systemd-resolved` by default; it is listed
 under `[services]` in `packages/utah.toml` and configured in
 `scripts/configure-services.sh`, which also disables `PrivateTmp` on
 `systemd-resolved.service` for bootc early-boot DNS resolution.
+
+Hummingbird's server base configures `console=ttyS0,115200n8` in
+`/usr/lib/bootc/kargs.d/00-base.toml`. On desktop and laptop hardware without a
+physical serial console, `systemd-getty-generator` spawns `serial-getty@ttyS0`,
+which loops every 10 seconds logging I/O errors and preventing CPU idle sleep.
+Utah overrides `/usr/lib/bootc/kargs.d/00-base.toml` to retain only
+`console=tty0`, disables `serial-getty@ttyS0.service` in
+`85-utah-desktop.preset`, and masks `serial-getty@ttyS0.service` in
+`scripts/configure-services.sh`.
 
 ## The verifiers run twice
 

@@ -64,6 +64,13 @@ def unit_enabled(unit: str) -> bool:
     return result.returncode == 0 and result.stdout.strip() in {"enabled", "enabled-runtime"}
 
 
+def unit_masked(unit: str) -> bool:
+    result = subprocess.run(
+        ["systemctl", "is-enabled", unit], capture_output=True, text=True, check=False
+    )
+    return result.stdout.strip() == "masked"
+
+
 def validate_contract(contract: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     for section in ("branding", "configuration", "flatpak", "services"):
@@ -144,6 +151,15 @@ def main() -> int:
             if expected not in content:
                 errors.append(f"{file_name} is missing required setting: {expected!r}")
 
+    for file_name, forbidden_lines in configuration.get("file_not_contains", {}).items():
+        path = Path(file_name)
+        if not path.is_file():
+            continue
+        content = path.read_text()
+        for forbidden in forbidden_lines:
+            if forbidden in content:
+                errors.append(f"{file_name} contains forbidden setting: {forbidden!r}")
+
     brewfile = Path(flatpak["brewfile"])
     if brewfile.is_file():
         actual_apps = parse_brewfile(brewfile)
@@ -163,6 +179,10 @@ def main() -> int:
     for unit in services.get("enabled", []):
         if not unit_enabled(unit):
             errors.append(f"required service is not enabled: {unit}")
+
+    for unit in services.get("masked", []):
+        if not unit_masked(unit):
+            errors.append(f"required service is not masked: {unit}")
 
     for error in errors:
         fail(error)

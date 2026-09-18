@@ -172,6 +172,27 @@ class UnitEnabledTests(unittest.TestCase):
         self.assertFalse(self.run_with(1, "enabled\n"))
 
 
+class UnitMaskedTests(unittest.TestCase):
+    def run_with(self, returncode, stdout):
+        result = type("R", (), {"returncode": returncode, "stdout": stdout})()
+        with patch.object(desktop.subprocess, "run", return_value=result) as runner:
+            masked = desktop.unit_masked("serial-getty@ttyS0.service")
+        runner.assert_called_once()
+        self.assertEqual(
+            runner.call_args[0][0],
+            ["systemctl", "is-enabled", "serial-getty@ttyS0.service"],
+        )
+        return masked
+
+    def test_masked_passes(self):
+        self.assertTrue(self.run_with(1, "masked\n"))
+
+    def test_enabled_and_disabled_and_static_fail(self):
+        self.assertFalse(self.run_with(0, "enabled\n"))
+        self.assertFalse(self.run_with(1, "disabled\n"))
+        self.assertFalse(self.run_with(0, "static\n"))
+
+
 class CheckModeTests(unittest.TestCase):
     def run_check(self, text):
         with tempfile.TemporaryDirectory() as tmp:
@@ -192,7 +213,7 @@ class CheckModeTests(unittest.TestCase):
     def test_check_does_not_touch_the_image_filesystem(self):
         with patch.object(desktop, "read_os_release") as reader, patch.object(
             desktop, "unit_enabled"
-        ) as unit:
+        ) as unit, patch.object(desktop, "unit_masked") as unit_masked:
             with patch.object(
                 desktop.sys,
                 "argv",
@@ -201,6 +222,43 @@ class CheckModeTests(unittest.TestCase):
                 self.assertEqual(desktop.main(), 0)
         reader.assert_not_called()
         unit.assert_not_called()
+        unit_masked.assert_not_called()
+
+
+class SerialConsoleTests(unittest.TestCase):
+    def test_base_kargs_drops_serial_console(self):
+        kargs_file = ROOT / "system_files/shared/usr/lib/bootc/kargs.d/00-base.toml"
+        self.assertTrue(kargs_file.is_file())
+        content = kargs_file.read_text()
+        self.assertIn("console=tty0", content)
+        self.assertNotIn("console=ttyS0", content)
+
+    def test_preset_disables_serial_getty(self):
+        preset_file = (
+            ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset"
+        )
+        self.assertTrue(preset_file.is_file())
+        content = preset_file.read_text()
+        self.assertIn("disable serial-getty@ttyS0.service", content)
+
+    def test_shipped_contract_requires_masked_serial_getty(self):
+        import tomllib
+
+        data = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        self.assertIn(
+            "serial-getty@ttyS0.service",
+            data.get("services", {}).get("masked", []),
+        )
+        self.assertIn(
+            "/usr/lib/bootc/kargs.d/00-base.toml",
+            data.get("configuration", {}).get("files", []),
+        )
+        self.assertIn(
+            "console=ttyS0",
+            data.get("configuration", {})
+            .get("file_not_contains", {})
+            .get("/usr/lib/bootc/kargs.d/00-base.toml", []),
+        )
 
 
 class GnomeExtensionTests(unittest.TestCase):

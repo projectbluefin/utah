@@ -12,3 +12,4 @@ enable bootc-unified-storage.service
 enable dconf-update.service
 disable sshd.service
 disable rpm-ostree.service
+disable serial-getty@ttyS0.service

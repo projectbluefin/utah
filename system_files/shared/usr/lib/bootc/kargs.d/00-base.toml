@@ -1,0 +1,6 @@
+# Utah is a desktop workstation OS and does not expose a serial console.
+# The server base configured a serial console, which spammed the
+# journal with agetty I/O errors on hardware without a serial port.
+# Keep only the virtual console.
+kargs = ["console=tty0"]
+match-architectures = ["x86_64", "aarch64"]

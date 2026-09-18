@@ -54,6 +54,7 @@ files = [
   "/etc/dconf/db/distro.d/03-bluefin-ptyxis-palette",
   "/etc/dconf/db/distro.d/04-bluefin-custom-command-menu",
   "/etc/dconf/db/distro.d/locks/01-bluefin-locked-settings",
+  "/usr/lib/bootc/kargs.d/00-base.toml",
 ]
 
 [configuration.file_contains]
@@ -67,6 +68,14 @@ files = [
 ]
 "/etc/dconf/db/distro.d/02-bluefin-keybindings" = [
   "xdg-terminal-exec",
+]
+"/usr/lib/bootc/kargs.d/00-base.toml" = [
+  "console=tty0",
+]
+
+[configuration.file_not_contains]
+"/usr/lib/bootc/kargs.d/00-base.toml" = [
+  "console=ttyS0",
 ]
 
 [flatpak]
@@ -138,4 +147,7 @@ enabled = [
   "gdm.service",
   "ublue-system-setup.service",
   "uupd.timer",
+]
+masked = [
+  "serial-getty@ttyS0.service",
 ]
