@@ -46,6 +46,17 @@ packages = [
     "mutter",
     "xdg-desktop-portal",
     "xdg-desktop-portal-gnome",
+    # Locale data. Hummingbird's base carries only glibc-minimal-langpack,
+    # which provides C and C.UTF-8 and nothing else, so any LANG or LC_*
+    # value a user sets -- through gnome-control-center, localectl, or a
+    # /etc/locale.conf carried over from another install -- names a locale
+    # that does not exist. Every setlocale() then warns, on every command
+    # (#114). /etc/profile.d/lang.sh is meant to fall back to C.UTF-8 but
+    # its reset is clobbered by its own locale.conf re-export, so the noise
+    # is unrecoverable from inside the image. Bluefin's Silverblue base
+    # ships glibc-all-langpacks; matching it is what makes Region & Language
+    # a working control rather than a way to break the terminal.
+    "glibc-all-langpacks",
 ]
 
 [build]
