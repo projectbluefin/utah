@@ -149,7 +149,7 @@ class ComparisonTests(unittest.TestCase):
         names = [l.split("#")[0].strip() for l in (ROOT / "packages/parity-baseline.txt").read_text().splitlines()]
         names = [n for n in names if n]
         self.assertEqual(len(names), len(set(names)))
-        self.assertEqual(len(names), 969)
+        self.assertEqual(len(names), 944)
 
     def test_the_shipped_exceptions_file_parses_and_every_entry_has_a_reason(self):
         for exc in parity.load_exceptions(ROOT / "packages/parity-exceptions.toml"):

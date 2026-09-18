@@ -4,6 +4,9 @@
 # Generated from the first report scripts/check-image-parity.py produced, in the
 # build of utah#117 on 2026-09-18 against ghcr.io/ublue-os/bluefin:stable
 # (44.20260915): Bluefin installs 1817 packages, Utah 892, leaving 969 gaps.
+# 25 of those closed when #116 (glibc-all-langpacks) and #129 (the [parity]
+# section) landed on main, so the register now holds 944; the Utah count
+# above is from the pre-#129 build and is refreshed from the next report.
 # Both counts exclude gpg-pubkey, which is RPM key material rather than a
 # package. This file is the debt register. check-image-parity --strict fails
 # on a gap that is NOT here, so a new Bluefin package forces a decision; a
@@ -15,16 +18,13 @@
 # Many names in the last group are dependencies that arrive on their own once
 # their top-level package has a recipe.
 
-# --- in Hummingbird's repository today (277): installable by adding to the contract
+# --- in Hummingbird's repository today (253): installable by adding to the contract
 NetworkManager-adsl
 NetworkManager-bluetooth
-NetworkManager-config-connectivity-fedora
 NetworkManager-ppp
 NetworkManager-wifi
 NetworkManager-wwan
-abattis-cantarell-fonts
 acl
-alsa-ucm
 apr
 apr-util
 apr-util-lmdb
@@ -33,9 +33,7 @@ attr
 avahi
 avahi-gobject
 avahi-tools
-bash-completion
 bind-libs
-bind-utils
 boost-filesystem
 boost-program-options
 buildah
@@ -45,14 +43,12 @@ capstone
 coreutils
 coreutils-common
 cracklib-dicts
-crypto-policies-scripts
 cups
 cups-client
 cups-ipptool
 cyrus-sasl-gssapi
 cyrus-sasl-plain
 dbus-daemon
-dbus-tools
 dbus-x11
 default-fonts-am
 default-fonts-ar
@@ -68,8 +64,6 @@ default-fonts-cjk-mono
 default-fonts-cjk-serif
 default-fonts-core-emoji
 default-fonts-core-math
-default-fonts-core-mono
-default-fonts-core-serif
 default-fonts-dv
 default-fonts-dz
 default-fonts-el
@@ -140,7 +134,6 @@ gd
 gdbm
 git
 git-core-doc
-glibc-all-langpacks
 gnulib-l10n
 gnutls-dane
 google-noto-naskh-arabic-vf-fonts
@@ -161,15 +154,12 @@ google-noto-sans-javanese-fonts
 google-noto-sans-kannada-vf-fonts
 google-noto-sans-khmer-vf-fonts
 google-noto-sans-lao-vf-fonts
-google-noto-sans-math-fonts
 google-noto-sans-meetei-mayek-vf-fonts
-google-noto-sans-mono-vf-fonts
 google-noto-sans-nko-fonts
 google-noto-sans-ol-chiki-vf-fonts
 google-noto-sans-oriya-vf-fonts
 google-noto-sans-sinhala-vf-fonts
 google-noto-sans-sundanese-fonts
-google-noto-sans-symbols-2-fonts
 google-noto-sans-symbols-vf-fonts
 google-noto-sans-syriac-vf-fonts
 google-noto-sans-tamil-vf-fonts
@@ -193,24 +183,18 @@ google-noto-serif-sinhala-vf-fonts
 google-noto-serif-tamil-vf-fonts
 google-noto-serif-telugu-vf-fonts
 google-noto-serif-thai-vf-fonts
-google-noto-serif-vf-fonts
 gpgmepp
 graphviz-libs
 hiredis
-hostname
 httpd
 httpd-core
 httpd-filesystem
 httpd-tools
 hwloc-libs
 ima-evm-utils-libs
-iptables-nft
-keyutils
 krb5-pkinit
 krb5-workstation
 langpacks-core-en
-langpacks-en
-langpacks-fonts-en
 libXpm
 libb2
 libbabeltrace
@@ -235,7 +219,6 @@ libzip
 libzstd-devel
 llhttp
 m4
-man-db
 mod_lua
 ncurses-term
 openssl-devel
@@ -256,7 +239,6 @@ python3-charset-normalizer
 python3-cryptography
 python3-file-magic
 python3-idna
-python3-pip
 python3-pycparser
 python3-pyyaml
 python3-requests
@@ -275,24 +257,20 @@ rpm-plugin-dbus-announce
 rpm-sign-libs
 spdlog
 sudo-python-plugin
-systemd-container
 systemd-networkd
 systemd-oomd-defaults
 tcl
 tpm2-tss-fapi
 unbound-anchor
 unbound-libs
-unzip
 uriparser
 userspace-rcu
 vim-common
 vim-enhanced
 xmlsec1
 xmlsec1-openssl
-xxd
 xxhash-libs
 zeromq
-zip
 
 # --- in the pinned factory image only (61): installable, needs the closure to resolve
 ModemManager
