@@ -47,7 +47,8 @@ opaque `exit status 71` from the image build (comment,
 `.github/workflows/build.yml`). It runs three checks:
 
 - `just check` -- manifest validation, including the workflow output check
-  (`scripts/check_workflow_outputs.py`) and the ban on flavor literals in
+  (`scripts/check_workflow_outputs.py`), the syntax gate
+  (`scripts/check-script-syntax.py`), and the ban on flavor literals in
   workflows.
 - `just check-parity` -- `packages/bluefin.toml` against Bluefin's upstream.
 - `just check-repos` -- the complete installation transaction against the
