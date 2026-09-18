@@ -64,7 +64,7 @@ check:
     grep -q 'ENABLE_SSHD="${ENABLE_SSHD:-0}"' Justfile
     grep -q 'ARG PACKAGE_IMAGE_SHA=' Containerfile
     grep -q 'ARG PACKAGE_IMAGE_REF=' Containerfile
-    grep -q '--mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages,ro' Containerfile
+    grep -q -e '--mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages,ro' Containerfile
     ! grep -q 'COPY --from=packages' Containerfile
     test -f packages/RPM-GPG-KEY-redhat-release-2
     # Every executable release asset fetched during composition must be pinned
