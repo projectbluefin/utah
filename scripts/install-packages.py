@@ -54,6 +54,9 @@ def contract(base: Path, overlay: Path, major: str | None) -> list[str]:
     if major:
         packages += section(base, f"fedora_v{major}")
     packages += section(overlay, "gnome")
+    # Parity with what Bluefin inherits from Fedora's base image and Hummingbird
+    # has in its repository but not in its bootable base.
+    packages += section(overlay, "parity")
     # Service packages are part of the desktop contract as well: 40-services.sh
     # cannot enable what the server base never installed.
     packages += section(overlay, "services")
