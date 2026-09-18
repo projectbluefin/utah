@@ -129,6 +129,48 @@ persists.
 
 ## Verification
 
+### Encrypted install and screenshot harness
+
+`just luks-test` runs `iso/scripts/luks-e2e.sh` against a debug live ISO
+(`just iso testing 1`). It checks the live GNOME session, installs to a
+disposable LUKS2 disk from the embedded payload, boots without the ISO,
+unlocks the disk, and checks graphical login and extension states.
+Read the recipe and script prerequisites before running it: it creates test
+accounts and requires local QEMU/KVM access, not a production installation.
+
+Passing runs refresh `docs/verification/README.md`, its screenshots, and the
+delimited verification block in the root README. These are historical local
+test records, not proof that the current commit passed CI. In particular,
+local fastfetch capture waits after terminal autostart by default. CI sets
+`UTAH_E2E_REQUIRE_FASTFETCH=1` to require OCR of its completion marker and
+kernel output, and `UTAH_E2E_REQUIRE_SCREENSHOTS=1` to reject missing PNGs.
+CI retains the tested commit/image digest and proposes evidence updates in a
+documentation PR only after all flavors pass. See [ci-workflows.md](ci-workflows.md).
+
+The harness blocks outbound guest networking while retaining loopback-only
+SSH forwards, so installation cannot silently fall back to an online pull.
+For digest-pinned builds, the builder exports the original registry blobs
+through Skopeo's `dir` transport with `--preserve-digests` on both copies.
+Do not export from containers-storage or substitute an OCI archive: the
+former exports uncompressed layers, while the latter can convert manifest
+formats. Either changes the digest and breaks the embedded `image@sha256:...`
+reference. Local tag-based builds may export their local containers-storage.
+A digest-preserving copy failure must fail ISO composition, not fall back to
+a mutable tag.
+The live assembler selects a release from `/usr/lib/modules` and uses its
+matching initramfs. Kernel-core provides that release's `vmlinuz` in the module
+directory, while the OGC installer writes `/boot/vmlinuz-<release>`.
+`iso/scripts/live-kernel.py` supports both paths and resolves symlinks inside
+the mounted image, never against the host root. Do not use `/boot/vmlinuz` or
+another release as a fallback: that can silently pair mismatched boot files.
+It enables sshd through a boot argument on the disposable installed disk,
+never by rebuilding or changing the published image. `UTAH_E2E_RAM` and
+`UTAH_E2E_CPUS` control VM resources (defaults 8192 MiB and four CPUs).
+
+When integrating this harness with newer image-build fixes, retain the
+currently verified package-image digest and available-package contract.
+The older ISO branch's package pin and exclusions must not replace them.
+
 ```bash
 just check
 ```

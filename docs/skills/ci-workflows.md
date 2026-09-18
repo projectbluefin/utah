@@ -25,11 +25,15 @@ Three workflows, all thin callers into `projectbluefin/actions@v1` reusables,
 each pinned to a SHA tagged `v1`:
 
 - `.github/workflows/build.yml` -- pull requests, pushes to `testing`, a
-  nightly cron, and manual dispatch. Top-level `permissions: {}`; each job
+  manual dispatch. Top-level `permissions: {}`; each job
   grants its own. Cancels in-progress runs per workflow and ref.
 - `.github/workflows/promote-testing-to-main.yml` -- pushes to `testing`, a
   nightly cron, and manual dispatch.
-- `.github/workflows/sync-main-to-testing.yml` -- every push to `main`.
+- `.github/workflows/sync-main-to-testing.yml` -- source pushes to `main`,
+  nightly cron, and manual dispatch; explicitly dispatches the testing build
+  after syncing. Token-authenticated branch pushes alone do not start CI.
+- `.github/workflows/post-testing-e2e.yml` -- successful non-PR testing builds
+  explicitly dispatch this, or manually supply a successful testing build run ID.
 
 CI delegates builds, vulnerability reporting, SBOMs, keyless signatures,
 provenance, caching, and rechunking to `projectbluefin/actions@v1` (originated
@@ -37,7 +41,7 @@ as a `docs/building.md` design bullet; now lives in this skill).
 
 ## contract: the cheap gate
 
-`build.yml` opens with a network-only gate so a contract package that none of
+`build.yml` opens with a container-based gate so a contract package that none of
 Utah's repositories provide fails in seconds instead of surfacing as an
 opaque `exit status 71` from the image build (comment,
 `.github/workflows/build.yml`). It runs three checks:
@@ -46,8 +50,8 @@ opaque `exit status 71` from the image build (comment,
   (`scripts/check_workflow_outputs.py`) and the ban on flavor literals in
   workflows.
 - `just check-parity` -- `packages/bluefin.toml` against Bluefin's upstream.
-- `just check-repos` -- contract package names against the enabled
-  repositories.
+- `just check-repos` -- the complete installation transaction against the
+  digest-pinned base and package repository, including extension build tools.
 
 The same job resolves the flavor set and splits it in two by what each
 flavor builds on -- `main` on the pristine Hummingbird base, the rest on the
@@ -118,9 +122,47 @@ and confusingly, so this reads the same list (comment,
 
 ## sync-main-to-testing
 
-Every push to `main` calls `reusable-sync-branches.yml@v1` (same SHA pin)
-with `contents: write` and nothing else -- there is no local logic to drift
-(workflow, `.github/workflows/sync-main-to-testing.yml`).
+Source pushes to `main` and the nightly schedule call
+`reusable-sync-branches.yml@v1`, then explicitly dispatch `build.yml` on
+`testing` with `actions: write`. README/verification-only pushes are excluded
+to avoid evidence-update build loops. Nightly runs still sync those changes.
+
+## ISO LUKS gate and screenshots
+
+`post-testing-e2e.yml` downloads the originating build's digest artifacts.
+The final `dispatch-iso` build job invokes it with `workflow_dispatch`, not
+`workflow_run`: the latter did not fire after our GITHUB_TOKEN-dispatched
+build. Explicit dispatch is a documented exception to token recursion
+prevention. The resolver waits up to five minutes for the dispatching build
+to finish and still requires a successful conclusion before reading artifacts.
+`scripts/resolve-e2e-inputs.py` rejects PRs, foreign repositories, failed runs,
+wrong branches/workflows, mutable references, conflicting digests, and missing
+flavors. The expected set comes from `scripts/flavors.py images`.
+
+Each configured image is pulled by digest, composed into a disposable debug
+ISO, and passed to the existing `iso/scripts/luks-e2e.sh`. Both guests have
+restricted networking. CI requires KVM, PNG screenshots, and OCR evidence
+that fastfetch ran in the graphical terminal. Test credentials are confined
+to the disposable ISO/disk; neither is uploaded or released.
+
+Every matrix job preserves build/test logs, serial logs, and screenshots,
+including on failure. Only passing jobs upload `docs/verification` with the
+source commit, original build run, E2E run, image digest and ISO checksum.
+The promotion job depends on the entire matrix; a superseded testing commit
+cannot move tags. Registry tag copies are sequential, not an atomic multi-tag
+transaction: a registry failure can interrupt promotion after a partial copy.
+
+A separate least-privilege job proposes the main desktop's screenshots in
+`automation/iso-verification`, a documentation PR. It updates only the README
+evidence block and `docs/verification/`, preserving the current README's other
+content. The repository must allow Actions to create pull requests; a denied
+write fails this job visibly, without deleting test artifacts. It does not
+auto-merge the evidence PR or imply a fresh pass for a different commit.
+
+For a deliberate rerun, dispatch Post-Testing E2E with `build_run_id` from a
+successful testing build containing the current harness. Do not pass a PR
+build: PRs do not publish immutable images. This matrix validates emulated
+UEFI desktop installation, not Secure Boot, TPM unlock, or physical GPUs.
 
 ## Verification
 

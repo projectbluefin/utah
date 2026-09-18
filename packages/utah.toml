@@ -72,11 +72,23 @@ packages = [
 # enables their units. uupd is downloaded separately because it is published
 # as a release binary rather than an RPM in the Hummingbird repositories.
 #
-# systemd-resolved is not in the Bluefin contract because Fedora's base image
-# already carries it. Hummingbird's bootable base does not: the package exists
-# in their repository but is not installed, so the image had no resolver and
-# configure-services stopped on a unit file that was never there.
+# systemd-resolved and flatpak are not in the Bluefin contract because Fedora's
+# base image already carries them. Hummingbird's bootable base does not.
+# systemd-resolved exists in their repository but is not installed, so the
+# image had no resolver and configure-services stopped on a unit file that was
+# never there. flatpak is not in their repository at all -- the factory builds
+# it now -- and without it the image declares a Flatpak contract it has no way
+# to install, and the live ISO build stops at "flatpak: command not found".
+#
+# cryptsetup is the same shape again: Hummingbird ships cryptsetup-libs but not
+# the tool, so the installer could not create an encrypted volume --
+#   fisherman: fatal: missing required host tool: "cryptsetup" not found
+# -- and an installed system whose disk is encrypted could not manage its own
+# keys. The initramfs already carries the crypt and systemd-cryptsetup dracut
+# modules, so unlocking was never the gap; creating the volume was.
 packages = [
+    "cryptsetup",
+    "flatpak",
     "fwupd",
     "systemd-resolved",
     "tailscale",
@@ -110,26 +122,25 @@ packages = [
 #   either a ruby exclusion in the buildroot or dropping the html subpackage.
 #
 # firefox
-#   Bluefin's desktop contract names Firefox, but this factory currently only
-#   carries mozjs140 (the embeddable JavaScript runtime), not the Firefox
-#   browser build. Keep this explicit until a Hummingbird-compatible Firefox
-#   recipe is added. Tracked by #35.
+#   Utah installs org.mozilla.firefox as a Flatpak through the desktop
+#   contract. The RPM browser is deliberately excluded, while mozjs140 is
+#   retained for GNOME Shell. Tracked by #35 and utah-packages#112.
 #
-# grub2-efi-x64-cdboot
-#   This boot-media subpackage is not present in either Hummingbird's overlay
-#   or the Utah package repository. The image uses Hummingbird's bootable base
-#   and does not build installer media here. Tracked by #35.
+# anaconda-live, slitherer
+#   Utah's ISO uses bootc-installer. Both alternative installer packages need
+#   anaconda-webui, which the factory excludes because Cockpit authentication
+#   needs a working GHmac backend in Hummingbird's GLib. Slitherer also lacks
+#   its Qt WebEngine dependency closure. Match the factory's installer policy
+#   until that path is supported; tracked by #83.
 #
-# pipewire-libs-extra
-#   Not published by Hummingbird or utah-packages. Bluefin obtains it from
-#   negativo17's fedora-multimedia repository, which Utah does not enable.
-#   Tracked by #35.
+# grub2-efi-x64-cdboot and pipewire-libs-extra are supplied by the pinned
+# September 10 factory candidate and return to the install contract (#35).
 packages = [
+    "anaconda-live",
     "evolution-ews-core",
     "firefox",
     "fish",
-    "grub2-efi-x64-cdboot",
-    "pipewire-libs-extra",
+    "slitherer",
     "zsh",
 ]
 

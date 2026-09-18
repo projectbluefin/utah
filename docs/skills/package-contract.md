@@ -103,12 +103,18 @@ about installation.
 
 ## Failure semantics
 
-- A contract package missing from every repository the image enables is a
-  **build failure**: the dnf transaction in `install-packages.py` exits
-  non-zero and the Containerfile RUN step fails. `just check-repos` exists to
-  fail fast on that case — names only, no versions — instead of discovering
-  it twenty minutes into a build (recipe comment, `Justfile`, `check-repos`;
-  needs network access).
+- A contract package or dependency missing from the installation transaction
+  is a **build failure**. `just check-repos` reads the base and package-image
+  digests from `Containerfile`, copies the same repository configuration, and
+  runs `install-packages.py --resolve` inside that base. This includes the
+  release-specific Bluefin section, GNOME, services, and extension build tools.
+  It needs Podman and network access. A name lookup on GitHub Pages is not
+  evidence that the pinned OCI repository is complete or ABI-compatible.
+  The factory's leading metadata layer is checked against the pinned manifest
+  and blob hashes, then mounted for resolution without downloading RPMs. The
+  factory must copy the same repodata into the leading layer and payload layer.
+  DNF's `--assumeno` may return 1 for a valid declined transaction; the checker
+  requires a transaction summary and rejects dependency and repository errors.
 - `[unavailable]` entries still present in the install set are a validation
   error (`install-packages.py --check`).
 - Drift in `packages/bluefin.toml` from upstream is a CI failure

@@ -66,6 +66,9 @@ check:
     python3 -m py_compile scripts/check-repo-availability.py
     python3 scripts/install-packages.py --check packages/bluefin.toml
     python3 scripts/verify-rpm-contract.py --check packages/bluefin.toml
+    pip install --quiet pyyaml 2>/dev/null || true
+    python3 -m unittest discover -s tests -p 'test_*.py'
+    bash -n iso/scripts/luks-e2e.sh
     grep -qE 'reusable-build\.yml@(v1|[0-9a-f]{40} # v1)$' .github/workflows/build.yml
     test -f Containerfile.kernel
     bash -n scripts/install-ogc-kernel.sh
@@ -79,7 +82,6 @@ check:
          <(grep -m1 '^ARG BASE_IMAGE=' Containerfile.kernel)
     python3 -m py_compile scripts/flavors.py
     python3 scripts/flavors.py list >/dev/null
-    pip install --quiet pyyaml 2>/dev/null || true
     python3 scripts/check_workflow_outputs.py
     pip install --quiet jsonschema 2>/dev/null || true
     bash scripts/check-skill-frontmatter.sh
@@ -105,7 +107,7 @@ check-desktop-contract image_ref="localhost/utah:testing":
 
 # Fail fast when a contract package is in none of the repositories the image
 # actually enables, instead of discovering it twenty minutes into a build.
-# Checks names only -- it does not assert versions.  Needs network access.
+# Resolves dependencies on the pinned base and package image. Needs podman and network.
 check-repos:
     python3 scripts/check-repo-availability.py packages/bluefin.toml packages/utah.toml
 
@@ -250,6 +252,18 @@ build-local stream="testing" package_image="localhost/utah-packages:local-merged
       --build-arg ENABLE_SSHD="${ENABLE_SSHD:-1}" \
       --tag "localhost/{{ image }}:{{ stream }}" \
       --file Containerfile .
+
+# Install Utah from its live ISO onto an encrypted disk in QEMU, boot the
+# result, answer Plymouth's passphrase prompt, and confirm it comes up. Needs a
+# debug ISO -- `just iso testing 1` -- because the install phase drives the
+# installer over SSH.
+luks-test iso_path="output/utah-live.iso" image="ghcr.io/projectbluefin/utah:testing":
+    bash iso/scripts/luks-e2e.sh "{{ iso_path }}" "{{ image }}"
+
+# Boot the disk luks-test installed, with VNC and a browser console, so the
+# verified result can be driven by hand instead of only asserted about.
+try-installed:
+    bash iso/scripts/boot-installed.sh
 
 generate-build-tags base_name stream flavor kernel_pin build_number version event_name event_number:
     @echo "{{ stream }} {{ version }}"

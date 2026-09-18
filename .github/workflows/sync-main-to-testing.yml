@@ -3,12 +3,31 @@ name: Sync main to testing
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - README.md
+      - docs/verification/**
+  schedule:
+    - cron: "20 22 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   sync:
     uses: projectbluefin/actions/.github/workflows/reusable-sync-branches.yml@eb4c546389f19ad9e42f1af052623de73c620ebb # v1
     permissions:
       contents: write
+
+  build:
+    needs: sync
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+    steps:
+      - name: Start the testing build explicitly after token-authenticated sync
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: gh workflow run build.yml --repo "$REPOSITORY" --ref testing

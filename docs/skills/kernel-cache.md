@@ -83,6 +83,16 @@ and one for the OGC kernel, so a single cache image serves all three flavors
 
 ## Verification
 
+The OGC kernel must satisfy the live ISO and installed-root contract, not only
+gaming features. `x86_64_defconfig` omits OverlayFS and SquashFS; dracut's
+`dmsquash-live` depends on `overlayfs`, and Utah's live image uses zstd SquashFS.
+The installer also exercises LUKS/device-mapper, while OSTree needs its
+filesystem support. `install-ogc-kernel.sh` enables these explicitly and checks
+the same `required_config` list after `olddefconfig`, after installation, and
+on cache extraction. Never omit a dracut module to work around a missing kernel
+feature. Changes to this contract invalidate the cache through the existing
+script hash and require a real kernel rebuild plus the ISO boot tests.
+
 ```bash
 just kernel-cache-tag
 just check

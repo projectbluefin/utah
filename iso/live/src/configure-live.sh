@@ -77,14 +77,16 @@ EOF
 systemctl enable var-tmp.mount || true
 
 # Utah is a conventional bootc image rather than Dakota's composefs runtime.
-# The ISO builder embeds its OCI payload as a VFS containers-storage graphroot.
-mkdir -p /var/lib/containers/storage /etc/containers
-cat >/etc/containers/storage.conf <<'EOF'
-[storage]
-driver = "vfs"
-runroot = "/run/containers/storage"
-graphroot = "/var/lib/containers/storage"
-EOF
+# The ISO builder embeds its OCI payload into /usr/lib/containers/storage, the
+# image store this platform already resolves to.
+#
+# There is deliberately no /etc/containers/storage.conf here. One used to
+# write driver = "vfs" and a graphroot under /var, and it did nothing:
+# Hummingbird ships /usr/share/containers/storage.conf.d/00-vendor.conf, and
+# drop-ins are read after /etc, so the driver stayed overlay and podman kept
+# looking in the vendor image store. The payload now lives where the platform
+# looks, which needs no override and cannot drift from one.
+mkdir -p /etc/containers
 mkdir -p /var/fisherman-tmp
 
 # Installer branding/configuration. The custom recipe must reference the same
