@@ -1,7 +1,7 @@
 ---
 name: desktop-contract
 version: "1.0"
-last_updated: "2026-09-05"
+last_updated: "2026-09-16"
 id: desktop-contract
 one_line_purpose: Maintain Utah identity, Bluefin desktop defaults, and first-boot Flatpak policy.
 entry_point: docs/skills/desktop-contract.md
@@ -81,7 +81,10 @@ Building GSConnect runs meson install. Because `desktop-file-utils` is not
 published by Hummingbird or Utah's repository, `scripts/build-gnome-extensions.sh`
 disables GSConnect's `update_desktop_database` meson post-install hook to avoid
 failing on the missing utility. MIME and schema databases are handled by the
-system and glib-compile-schemas.
+system and glib-compile-schemas. Additionally, `scripts/build-gnome-extensions.sh`
+guards `src/shell/clipboard.js` against GNOME 48+ final GTypes: wrapping
+`GSConnectShellClipboard` registration in a try/catch prevents module load failures
+on `GjsPrivate.DBusImplementation`, gracefully degrading to an inert portal on GNOME 51.
 
 ## Services and login defaults
 
