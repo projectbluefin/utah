@@ -70,7 +70,7 @@ class EvidenceTests(unittest.TestCase):
         names = gate.split("(", 1)[1].split(")", 1)[0].split()
         for required in ["OVERLAY_FS", "SQUASHFS", "SQUASHFS_ZSTD", "EROFS_FS",
                          "BLK_DEV_LOOP", "DM_SNAPSHOT", "DM_CRYPT", "CRYPTO_XTS",
-                         "FUSE_FS", "FS_VERITY"]:
+                         "FUSE_FS", "FS_VERITY", "SYSFB_SIMPLEFB", "DRM_SIMPLEDRM"]:
             self.assertIn(required, names)
             self.assertRegex(script, rf"--(?:enable|module) {required}(?:\s|$)")
         self.assertEqual(script.count("verify_config /usr/lib/utah/ogc-kernel.config"), 2)
