@@ -20,7 +20,7 @@ jobs:
   # or releasing an image the build matrix no longer produces fails late and
   # confusingly, so this reads the same list the build does.
   variants:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
     outputs:

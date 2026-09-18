@@ -18,7 +18,7 @@ jobs:
   # Resolve the complete transaction against the same pinned inputs as the
   # image before starting the flavor matrix, including extension build tools.
   contract:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
     outputs:
@@ -76,7 +76,7 @@ jobs:
     # Only the OGC and NVIDIA flavors unpack this. While the matrix is main-only
     # it is 45 minutes spent on an image nothing consumes.
     if: needs.contract.outputs.needs_kernel == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       packages: write
@@ -135,7 +135,7 @@ jobs:
       github.event_name != 'pull_request' &&
       needs.build_main.result == 'success' &&
       (needs.build_kernel.result == 'success' || needs.build_kernel.result == 'skipped')
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       actions: write
     steps:
