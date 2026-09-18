@@ -3,10 +3,12 @@
 #
 # Generated from the first report scripts/check-image-parity.py produced, in the
 # build of utah#117 on 2026-09-18 against ghcr.io/ublue-os/bluefin:stable
-# (44.20260915): Bluefin installs 1818 packages, Utah 892. This file is the
-# debt register. check-image-parity --strict fails on a gap that is NOT here,
-# so a new Bluefin package forces a decision; a name that stops being a gap is
-# reported as closed and should be removed. Shrinking this file is progress.
+# (44.20260915): Bluefin installs 1817 packages, Utah 892, leaving 969 gaps.
+# Both counts exclude gpg-pubkey, which is RPM key material rather than a
+# package. This file is the debt register. check-image-parity --strict fails
+# on a gap that is NOT here, so a new Bluefin package forces a decision; a
+# name that stops being a gap is reported as closed and should be removed.
+# Shrinking this file is progress.
 #
 # The groups say where each name could come from today, measured against
 # public-hummingbird-x86_64-rpms and the pinned factory image, not guessed.

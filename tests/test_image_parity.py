@@ -83,6 +83,28 @@ class ManifestTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             parity.bluefin_inventory("ghcr.io/ublue-os/bluefin:stable", fetch)
 
+    def test_gpg_pubkey_is_filtered_out_of_bluefins_inventory(self):
+        """Both sides must exclude it, or it is reported as a gap forever.
+
+        Utah's side drops gpg-pubkey in parse_rpm_list. It is RPM key material,
+        not a package, and there is one pseudo-entry per imported key, so if
+        only one side filters it the comparison invents a gap that can never
+        be closed.
+        """
+        annotation = json.dumps(
+            {
+                "version": 2,
+                "packages": dict(INVENTORY, **{"gpg-pubkey": "abcd1234-65fe8891"}),
+            }
+        )
+        fetch = registry({self.base + "stable": {"annotations": {parity.RECHUNK_ANNOTATION: annotation}}})
+        inventory = parity.bluefin_inventory("ghcr.io/ublue-os/bluefin:stable", fetch)
+        self.assertEqual(inventory, INVENTORY)
+        self.assertNotIn("gpg-pubkey", inventory)
+        # and so it never reaches the comparison as a missing package
+        result = parity.compare(inventory, parity.parse_rpm_list("gpg-pubkey\tabcd1234-65fe8891\n"), set(), [])
+        self.assertNotIn("gpg-pubkey", result.missing)
+
 
 class ComparisonTests(unittest.TestCase):
     def test_a_missing_name_is_a_gap_unless_explained(self):
