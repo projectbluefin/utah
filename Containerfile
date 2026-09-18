@@ -8,7 +8,7 @@ ARG PACKAGE_IMAGE_SHA=sha256:ca320b39b5f40bea9516f6f1c11e70d352c35f1c3d109b3aaf0
 # in containers-storage, where no registry digest is available.
 ARG PACKAGE_IMAGE_REF=${PACKAGE_IMAGE}@${PACKAGE_IMAGE_SHA}
 ARG COMMON_IMAGE=ghcr.io/projectbluefin/common
-ARG COMMON_IMAGE_SHA=sha256:fb943c87866292fb74eb74610e9cd08a1a91fe42e763e28473f3f57cf18f26a5
+ARG COMMON_IMAGE_SHA=sha256:507abcb5be69af93dcf351f69b03f4fbc08bba2eb8f58db62f8e5d0060b69b95
 ARG BREW_IMAGE=ghcr.io/ublue-os/brew
 ARG BREW_IMAGE_SHA=sha256:60ada2d65891d8797beef49d8b43f2108519cbbaf04c9c7363e1a008677fcd35
 
@@ -87,7 +87,12 @@ RUN for pair in install-packages.py:utah-install-packages \
     cp -a /tmp/utah-bluefin/. / && \
     cp -a /tmp/utah-brew/. / && \
     cp -a /tmp/utah-local/. / && \
-    rm -rf /tmp/utah-scripts /tmp/utah-common /tmp/utah-bluefin /tmp/utah-brew /tmp/utah-local
+    rm -rf /tmp/utah-scripts /tmp/utah-common /tmp/utah-bluefin /tmp/utah-brew /tmp/utah-local && \
+    rm -f /etc/dconf/db/distro.d/05-bluefin-searchlight-extension
+# The last line drops Common's settings for the Search Light extension. Utah no
+# longer ships that extension: its shader code calls set_shader_source, which
+# GNOME 51 removed, so it errored at load and failed the ISO end-to-end test.
+# Settings for an extension the image does not carry are noise in dconf.
 
 # This first check covers the flavor-independent contract only, which is why it
 # pins IMAGE_FLAVOR=main. verify-rpm-contract.py reads IMAGE_FLAVOR from the
@@ -135,6 +140,12 @@ ARG ENABLE_SSHD=0
 # is otherwise unverified. Both move together, so Renovate updates both.
 ARG UUPD_VERSION=v1.4.0
 ARG UUPD_SHA256=c7463f193cd35b92cde2ee05496501d6ac13808899bd26e17e027b7ee9ee1acc
+# The two systemd units come from raw.githubusercontent at the same tag, and a
+# git tag move changes what raw.* serves for them without touching the release
+# asset the checksum above covers. uupd.service runs as root on a timer, so
+# verify the units against their own digests too; all four ARGs move together.
+ARG UUPD_SERVICE_SHA256=65dd2b64dcb6a9f77227612aa624ef17fe43b32eb835b51d7d22a22755dc21a8
+ARG UUPD_TIMER_SHA256=bbb5f098ec33d047bdef571e0bc112364df157e0f92d73e0febab703c4a3c099
 
 # Hummingbird defaults to a server preset and disables unlisted services.
 # configure-services is the Utah equivalent of bluefin-lts's 40-services.sh:
@@ -156,6 +167,8 @@ RUN mkdir -p /tmp/uupd && \
       -o /tmp/uupd/uupd.service && \
     curl -fsSL "https://raw.githubusercontent.com/ublue-os/uupd/${UUPD_VERSION}/uupd.timer" \
       -o /tmp/uupd/uupd.timer && \
+    echo "${UUPD_SERVICE_SHA256}  /tmp/uupd/uupd.service" | sha256sum --check --strict && \
+    echo "${UUPD_TIMER_SHA256}  /tmp/uupd/uupd.timer" | sha256sum --check --strict && \
     /usr/local/libexec/utah-build-gnome-extensions && \
     /usr/local/libexec/utah-verify-gnome-extensions && \
     glib-compile-schemas /usr/share/glib-2.0/schemas && \

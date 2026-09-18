@@ -40,6 +40,10 @@ policy for changing them.
   - `[gnome]` — GNOME 51 desktop contract Hummingbird does not ship.
   - `[build]` — toolchain needed to build the pinned GNOME extensions
     (`scripts/build-gnome-extensions.sh`).
+  - `[parity]` — what Bluefin inherits from Fedora's base image and Hummingbird
+    has in its repository but not in its bootable base; CI's package
+    availability step resolves the real transaction and is the gate on every
+    name there.
   - `[services]` — desktop services Bluefin adds on top of the server base.
   - `[unavailable]` — Bluefin contract packages none of Utah's repositories
     provide.

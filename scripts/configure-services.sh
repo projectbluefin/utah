@@ -122,8 +122,9 @@ sed -i 's|uupd|& --disable-module-distrobox|' /usr/lib/systemd/system/uupd.servi
 sed -i 's@^PrivateTmp=.*@PrivateTmp=no@' /usr/lib/systemd/system/systemd-resolved.service
 rm -rf /tmp/uupd
 
-# Build-only extension tooling is not part of the desktop image.
+# Build-only extension tooling is not part of the desktop image. unzip stays:
+# it is in [parity] as well as [build], because Bluefin ships it to users.
 DNF="$(command -v dnf5 || command -v dnf)"
-"$DNF" -y remove --no-autoremove dbus-devel glib2-devel meson sassc unzip
+"$DNF" -y remove --no-autoremove dbus-devel glib2-devel meson sassc
 
 echo "Utah desktop service configuration complete"

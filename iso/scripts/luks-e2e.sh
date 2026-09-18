@@ -545,12 +545,21 @@ echo "  gnome-shell: running as ${TEST_USER}"
 
 # A shell session that started is not the same as one whose extensions loaded.
 # Assert the enabled extensions raised no load-time error this boot -- the
-# GNOME-51 breaks this test exists to catch (GSConnect's clipboard final-type,
-# Search Light's dropped shader API) surface here as "Error"/"TypeError" lines
+# GNOME-51 breaks this test exists to catch (GSConnect's clipboard final-type;
+# Search Light's dropped shader API, before it was removed) surface here as "Error"/"TypeError" lines
 # against the extension uuid. UTAH_E2E_EXTENSIONS lists the ones that must load
 # clean; empty to skip.
-EXT_CHECK="${UTAH_E2E_EXTENSIONS-gsconnect@andyholmes.github.io search-light@icedman.github.com}"
+#
+# Every listed extension is evaluated before the test gives its verdict, and
+# the failures are reported together. Stopping at the first one costs a whole
+# run per broken extension -- this check is the last step of a ~35-minute
+# six-phase test, so serially discovering two known GNOME 51 breaks (the
+# GSConnect clipboard final-type and Search Light's dropped shader API, which
+# are separate fixes) takes two runs to learn what one run already knew. The
+# run still fails; it just says everything it found.
+EXT_CHECK="${UTAH_E2E_EXTENSIONS-gsconnect@andyholmes.github.io}"
 if [[ -n "${EXT_CHECK}" ]]; then
+    ext_failures=()
     for uuid in ${EXT_CHECK}; do
         # State is the authoritative signal: an extension that threw at enable
         # is ERROR/OUT_OF_DATE, one that loaded is ACTIVE. Grepping the journal
@@ -576,17 +585,25 @@ if [[ -n "${EXT_CHECK}" ]]; then
             # while asserting nothing.) Fail, and print the raw output.
             echo "  extension ${uuid}: state could not be read" >&2
             ssh_target "env BASH_ENV=/dev/null bash --noprofile --norc -c \"gnome-extensions info '${uuid}' 2>&1 | head -20\"" >&2 2>/dev/null || true
-            shot installed-ext-unreadable "${MONITOR_INSTALLED}" || true
-            fail "could not read the state of extension ${uuid}"
+            shot "installed-ext-unreadable-${uuid%%@*}" "${MONITOR_INSTALLED}" || true
+            ext_failures+=("${uuid}: state could not be read")
+            continue
         fi
         if [[ "${state}" != "ACTIVE" && "${state}" != "ENABLED" ]]; then
             echo "  extension ${uuid}: state=${state}" >&2
             ssh_target "env BASH_ENV=/dev/null bash --noprofile --norc -c \"journalctl --user -b --no-pager 2>/dev/null | grep -F '${uuid}' | grep -iE 'Error|TypeError|Exception|not a function' | tail -5\"" >&2 2>/dev/null || true
-            shot installed-ext-error "${MONITOR_INSTALLED}" || true
-            fail "extension ${uuid} did not reach ACTIVE on GNOME 51 (state=${state})"
+            shot "installed-ext-error-${uuid%%@*}" "${MONITOR_INSTALLED}" || true
+            ext_failures+=("${uuid}: state=${state}")
+            continue
         fi
         echo "  extension ${uuid}: ${state}"
     done
+    if (( ${#ext_failures[@]} > 0 )); then
+        for failure in "${ext_failures[@]}"; do
+            echo "  FAILED: ${failure}" >&2
+        done
+        fail "${#ext_failures[@]} extension(s) did not reach ACTIVE on GNOME 51"
+    fi
 fi
 
 # Ask for the user's *graphical* session by id rather than taking the first

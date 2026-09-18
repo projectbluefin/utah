@@ -17,7 +17,6 @@ SOURCE_EXTENSIONS = {
     "dash-to-dock@micxgx.gmail.com": "dash-to-dock@micxgx.gmail.com/metadata.json",
     "gradia-integration@alexandervanhee.github.io": "gradia-integration@alexandervanhee.github.io/src/metadata.json",
     "gsconnect@andyholmes.github.io": "gsconnect@andyholmes.github.io/data/metadata.json.in",
-    "search-light@icedman.github.com": "search-light@icedman.github.com/metadata.json",
 }
 
 

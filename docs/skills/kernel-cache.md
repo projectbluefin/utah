@@ -93,6 +93,20 @@ on cache extraction. Never omit a dracut module to work around a missing kernel
 feature. Changes to this contract invalidate the cache through the existing
 script hash and require a real kernel rebuild plus the ISO boot tests.
 
+The contract also covers the display. `x86_64_defconfig` enables DRM and the
+Intel i915 driver and nothing else, so on any other GPU, QEMU's included, the
+OGC kernel registered no DRM device: GDM started, mutter had no KMS device to
+open, and the gaming flavors failed the ISO test on a black screen with
+`no gnome-shell running for liveuser` while `main`, on the distribution
+kernel, came up through `simpledrm`. The script enables `SYSFB_SIMPLEFB` and
+`DRM_SIMPLEDRM` (the firmware framebuffer as a KMS device on any hardware),
+plus `DRM_VIRTIO_GPU` and `DRM_BOCHS` for VMs, and gates on `DRM_SIMPLEDRM`
+like the filesystem options. Native drivers for real gaming GPUs (amdgpu, xe)
+are not enabled yet: they need linux-firmware in the image, which the install
+set does not carry (projectbluefin/utah#97). When diagnosing a black live
+session, compare `live-serial.log` for `[drm] Initialized` lines between the
+`main` and `gaming` diagnostics artifacts before reading GDM logs.
+
 ```bash
 just kernel-cache-tag
 just check

@@ -7,6 +7,7 @@
 #
 # Sections:
 #   [gnome]        GNOME 51 desktop contract Hummingbird does not ship
+#   [parity]       what Bluefin gets from Fedora's base image and Hummingbird has
 #   [build]        toolchain needed to build the pinned GNOME extensions
 #   [unavailable]  Bluefin contract packages none of Utah's repositories provide
 #
@@ -57,6 +58,75 @@ packages = [
     # ships glibc-all-langpacks; matching it is what makes Region & Language
     # a working control rather than a way to break the terminal.
     "glibc-all-langpacks",
+]
+
+[parity]
+# Packages Bluefin's image carries without naming them in bluefin.toml, because
+# Fedora's Silverblue base supplies them, and which Hummingbird's repository
+# has but its server-shaped bootable base leaves out. Measured, not guessed:
+# the image-level parity report (#117, scripts/check-image-parity.py) listed
+# 277 such names against public-hummingbird-x86_64-rpms. CI's "Check package
+# availability" step resolves the real transaction against the pinned images,
+# and is the gate on every name here; a first-level Requires check is not
+# enough, as the three ModemManager-shaped exclusions below proved.
+# Aligned with Dakota where it ships the same piece: the connectivity check,
+# ALSA use-case profiles, the language pack and the core font set.
+#
+# Left out, with the dependency the pinned repositories do not carry:
+#   NetworkManager-wwan        requires ModemManager, whose factory build
+#                              needs libmbim, libqmi and libqrtr-glib that
+#                              nothing provides -- a factory gap
+#   NetworkManager-bluetooth   requires libnm-wwan.so from the wwan plugin,
+#                              so it falls with it
+#   poppler-utils              Hummingbird's poppler requires poppler-data,
+#                              which Hummingbird does not ship
+#   cups, cups-client          need cups-filters (utah-packages#144)
+#   vim-enhanced               needs libgpm.so.2 (vim-minimal is in the base)
+#   default-fonts-core-emoji   needs google-noto-emoji-color-fonts
+#   default-fonts-core-math    needs stix-fonts (both utah-packages#147)
+#   fprintd, fprintd-pam       in no repository (utah-packages#145)
+#   alsa-utils                 in no repository (utah-packages#146)
+#
+# NetworkManager-wifi is deliberately not here yet: its supplicant and the
+# regulatory database are being built by utah-packages#133, and it joins this
+# list when the factory image that carries them is pinned (#126).
+#
+# unzip is also in [build]; it is listed here because configure-services.sh
+# removes the build tooling after the extension build, and Bluefin ships
+# unzip to users. The removal line skips it for that reason.
+packages = [
+    # Networking
+    "NetworkManager-config-connectivity-fedora",
+    "bind-utils",
+    "iptables-nft",
+    # Audio
+    "alsa-ucm",
+    # Locale and fonts
+    "langpacks-en",
+    "langpacks-fonts-en",
+    "abattis-cantarell-fonts",
+    "default-fonts-core-sans",
+    "default-fonts-core-serif",
+    "default-fonts-core-mono",
+    "google-noto-sans-mono-vf-fonts",
+    "google-noto-serif-vf-fonts",
+    "google-noto-sans-symbols-2-fonts",
+    "google-noto-sans-math-fonts",
+    # Shell and tooling Bluefin users reach for
+    "bash-completion",
+    "man-db",
+    "less",
+    "which",
+    "file",
+    "hostname",
+    "xxd",
+    "unzip",
+    "zip",
+    "dbus-tools",
+    "keyutils",
+    "crypto-policies-scripts",
+    "python3-pip",
+    "systemd-container",
 ]
 
 [build]

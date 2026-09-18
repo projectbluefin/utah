@@ -109,9 +109,6 @@ fi
 # Custom Command Menu
 glib-compile-schemas --strict /usr/share/gnome-shell/extensions/custom-command-list@storageb.github.com/schemas
 
-# Search Light
-glib-compile-schemas --strict /usr/share/gnome-shell/extensions/search-light@icedman.github.com/schemas
-
 rm -rf /usr/share/gnome-shell/extensions/tmp
 
 echo "::endgroup::"

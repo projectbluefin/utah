@@ -77,6 +77,7 @@ class PackageResolutionTests(unittest.TestCase):
             base.write_text('[fedora]\npackages=["base", "unavailable"]\n'
                             '[fedora_v44]\npackages=["release-specific"]\n')
             overlay.write_text('[gnome]\npackages=["shell"]\n'
+                               '[parity]\npackages=["manpages"]\n'
                                '[services]\npackages=["resolver"]\n'
                                '[build]\npackages=["compiler"]\n'
                                '[unavailable]\npackages=["unavailable"]\n')
@@ -92,7 +93,8 @@ class PackageResolutionTests(unittest.TestCase):
         rc, command = self.resolve("Transaction Summary:\nInstall 12 Packages\nOperation aborted.\n")
         self.assertEqual(rc, 0)
         self.assertEqual(command[command.index("install") + 1:],
-                         ["base", "release-specific", "shell", "resolver", "compiler"])
+                         ["base", "release-specific", "shell", "manpages", "resolver",
+                          "compiler"])
         self.assertIn("--assumeno", command)
         self.assertIn("--disablerepo=*", command)
         for repo in installer.REPOS:
@@ -123,6 +125,39 @@ class PackageResolutionTests(unittest.TestCase):
                             f"ARG PACKAGE_IMAGE_SHA=sha256:{'1' * 64}\n")
             with self.assertRaises(ValueError):
                 checker.pinned_inputs(path)
+
+
+class ParityContractTests(unittest.TestCase):
+    OVERLAY = ROOT / "packages/utah.toml"
+
+    def test_parity_section_reaches_the_install_set(self):
+        contract = installer.contract(ROOT / "packages/bluefin.toml", self.OVERLAY, "44")
+        for pkg in installer.section(self.OVERLAY, "parity"):
+            with self.subTest(package=pkg):
+                self.assertIn(pkg, contract)
+
+    def test_parity_section_duplicates_nothing_but_the_build_tooling_it_keeps(self):
+        # A name both in [parity] and in bluefin.toml or another overlay section
+        # is a duplicate claim the verifier rejects. unzip is the one deliberate
+        # overlap with [build]: configure-services.sh removes the build tooling
+        # after the extension build and has to keep unzip for the same reason
+        # it is listed here.
+        parity = installer.section(self.OVERLAY, "parity")
+        self.assertEqual(len(set(parity)), len(parity))
+        others = set(installer.section(ROOT / "packages/bluefin.toml", "fedora"))
+        for name in ("gnome", "services", "unavailable"):
+            others |= set(installer.section(self.OVERLAY, name))
+        self.assertEqual(sorted(set(parity) & others), [])
+        self.assertEqual(sorted(set(parity) & set(installer.section(self.OVERLAY, "build"))), ["unzip"])
+        removal = [line for line in (ROOT / "scripts/configure-services.sh").read_text().splitlines()
+                   if "remove --no-autoremove" in line]
+        self.assertEqual(len(removal), 1)
+        self.assertNotIn("unzip", removal[0])
+
+    def test_verifier_asserts_the_parity_section(self):
+        source = (ROOT / "scripts/verify-rpm-contract.py").read_text()
+        self.assertIn('parity = section(overlay, "parity")', source)
+        self.assertIn("*parity,", source)
 
 
 if __name__ == "__main__":

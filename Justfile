@@ -8,6 +8,15 @@ vm_cpus := env_var_or_default("VM_CPUS", "4")
 default:
     @just --list
 
+# Host-side unit tests for the helper scripts under scripts/. No image is
+# needed, so they run inside `just check` rather than waiting for a build to
+# fail on a wrong matrix.
+test:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    pip install --quiet pyyaml 2>/dev/null || true
+    python3 -m unittest discover -s tests -p 'test_*.py'
+
 check:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -62,8 +71,8 @@ check:
     grep -q '"utah-packages"' scripts/install-packages.py
     python3 scripts/install-packages.py --check packages/bluefin.toml
     python3 scripts/verify-rpm-contract.py --check packages/bluefin.toml
-    pip install --quiet pyyaml 2>/dev/null || true
-    python3 -m unittest discover -s tests -p 'test_*.py'
+    # run the host-side unit suite (tests/test_*.py) via its dedicated recipe
+    just test
     grep -qE 'reusable-build\.yml@(v1|[0-9a-f]{40} # v1)$' .github/workflows/build.yml
     test -f Containerfile.kernel
     # The cache image must be built from the same base the image is, or the

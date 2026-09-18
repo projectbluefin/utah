@@ -49,10 +49,11 @@ def check() -> list[str]:
             if "releases/latest/download" in stripped:
                 problems.append(f"{path}:{number}: resolves a mutable latest release")
             # A raw github release/CDN download of an executable asset must be
-            # verified. Flag fetches of .run/.tar.gz/.tgz/.rpm/.flatpak that do
+            # verified. Flag fetches of .run/.tar.gz/.tgz/.rpm/.flatpak and of
+            # systemd units (.service/.timer run their payload as root) that do
             # not have an accompanying digest or signature check in the file.
             if re.search(r"(curl|wget)\b", stripped) and not is_allowed(stripped):
-                if re.search(r"\.(run|tar\.gz|tgz|rpm|flatpak)\b", stripped):
+                if re.search(r"\.(run|tar\.gz|tgz|rpm|flatpak|service|timer)\b", stripped):
                     verified = any(
                         token in text
                         for token in ("sha256sum", "sha512sum", "--check", "cosign", "gpg --verify")
