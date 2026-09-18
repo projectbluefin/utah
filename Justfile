@@ -11,6 +11,12 @@ default:
 check:
     #!/usr/bin/env bash
     set -euo pipefail
+    # Every tracked shell and Python script is syntax-checked by enumeration,
+    # not by a list maintained here by hand. That list had fallen six scripts
+    # behind the tree -- including scripts/resolve-e2e-inputs.py, which decides
+    # the E2E matrix, and iso/scripts/live-kernel.py, which runs mid-ISO-build
+    # -- so a parse error in them surfaced minutes into a build instead of here.
+    python3 scripts/check-script-syntax.py
     test -f Containerfile
     test -f packages/bluefin.toml
     test -f packages/utah.toml
@@ -20,9 +26,7 @@ check:
     grep -q 'enable gdm.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
     grep -q 'enable ublue-system-setup.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
     test -f scripts/configure-services.sh
-    bash -n scripts/configure-services.sh
     test -f scripts/configure-branding.sh
-    bash -n scripts/configure-branding.sh
     test -f scripts/verify-desktop-contract.py
     test -f scripts/verify-gnome-extensions.py
     test -f contracts/bluefin-desktop.toml
@@ -31,7 +35,6 @@ check:
     # otherwise CI reports every extension as missing while a developer clone
     # (or the contract workflow's recursive checkout) passes.
     git submodule update --init --recursive
-    python3 -m py_compile scripts/verify-desktop-contract.py scripts/verify-gnome-extensions.py
     python3 scripts/verify-desktop-contract.py --check contracts/bluefin-desktop.toml
     python3 scripts/verify-gnome-extensions.py --source
     grep -q '/system_files/bluefin' Containerfile
@@ -43,9 +46,6 @@ check:
     test -f iso/live/src/etc/bootc-installer/images.json
     test -f iso/live/src/etc/bootc-installer/recipe.json
     test -f iso/scripts/build-iso.sh
-    bash -n iso/live/src/configure-live.sh
-    bash -n iso/live/src/install-flatpaks.sh
-    bash -n iso/scripts/build-iso.sh
     python3 -m json.tool iso/live/src/etc/bootc-installer/images.json >/dev/null
     python3 -m json.tool iso/live/src/etc/bootc-installer/recipe.json >/dev/null
     grep -q 'org.bootcinstaller.Installer' iso/live/src/install-flatpaks.sh
@@ -58,29 +58,19 @@ check:
     grep -q 'COPY --from=packages /repository /etc/utah-packages' Containerfile
     # Every executable release asset fetched during composition must be pinned
     # and verified; no build may resolve a mutable latest release.
-    python3 -m py_compile scripts/check-download-integrity.py
     python3 scripts/check-download-integrity.py
     grep -q '"utah-packages"' scripts/install-packages.py
-    python3 -m py_compile scripts/install-packages.py
-    python3 -m py_compile scripts/verify-rpm-contract.py
-    python3 -m py_compile scripts/check-repo-availability.py
     python3 scripts/install-packages.py --check packages/bluefin.toml
     python3 scripts/verify-rpm-contract.py --check packages/bluefin.toml
     pip install --quiet pyyaml 2>/dev/null || true
     python3 -m unittest discover -s tests -p 'test_*.py'
-    bash -n iso/scripts/luks-e2e.sh
     grep -qE 'reusable-build\.yml@(v1|[0-9a-f]{40} # v1)$' .github/workflows/build.yml
     test -f Containerfile.kernel
-    bash -n scripts/install-ogc-kernel.sh
-    bash -n scripts/install-nvidia.sh
-    bash -n scripts/clean-stage.sh
-    bash -n scripts/kernel-cache-tag.sh
     # The cache image must be built from the same base the image is, or the
     # prebuilt NVIDIA module would be linked against a kernel this image never
     # boots.  Two literals, one invariant, so assert it rather than trust it.
     diff <(grep -m1 '^ARG BASE_IMAGE=' Containerfile) \
          <(grep -m1 '^ARG BASE_IMAGE=' Containerfile.kernel)
-    python3 -m py_compile scripts/flavors.py
     python3 scripts/flavors.py list >/dev/null
     python3 scripts/check_workflow_outputs.py
     pip install --quiet jsonschema 2>/dev/null || true
