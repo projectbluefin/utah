@@ -104,7 +104,14 @@ def bluefin_inventory(ref: str, fetch: Fetch = http_get) -> dict[str, str]:
     packages = json.loads(annotation).get("packages")
     if not isinstance(packages, dict) or not packages:
         raise ValueError(f"{ref}: {RECHUNK_ANNOTATION} has no package inventory")
-    return dict(packages)
+    # Same exclusion parse_rpm_list applies to Utah's side. gpg-pubkey is RPM
+    # key material, not a package, and there is one pseudo-entry per imported
+    # key; leaving it on only one side reports a permanent false gap.
+    return {
+        name: version
+        for name, version in packages.items()
+        if not name.startswith("gpg-pubkey")
+    }
 
 
 def installed_inventory() -> dict[str, str]:

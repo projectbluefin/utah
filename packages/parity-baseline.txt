@@ -487,7 +487,6 @@ google-noto-color-emoji-fonts
 google-noto-emoji-fonts
 google-noto-sans-cjk-fonts
 google-noto-serif-cjk-vf-fonts
-gpg-pubkey
 gpm-libs
 gssproxy
 gst-editing-services
