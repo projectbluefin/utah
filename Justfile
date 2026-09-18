@@ -11,11 +11,16 @@ default:
 # Host-side unit tests for the helper scripts under scripts/. No image is
 # needed, so they run inside `just check` rather than waiting for a build to
 # fail on a wrong matrix.
+#
+# Discovery is delegated to tests/run_suite.py, which runs every directory
+# under tests/ that holds test modules. Bare `unittest discover` rooted at
+# tests/ skipped subdirectories such as tests/unit/ silently -- it reported
+# OK whether the tests there passed, failed, or never ran.
 test:
     #!/usr/bin/env bash
     set -euo pipefail
     pip install --quiet pyyaml 2>/dev/null || true
-    python3 -m unittest discover -s tests -p 'test_*.py'
+    python3 tests/run_suite.py
 
 check:
     #!/usr/bin/env bash
