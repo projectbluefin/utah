@@ -66,6 +66,10 @@ the build before expensive compilation or container builds run:
   or `wget` is verified against a digest (`sha256sum`, `sha512sum`, `--check`) or
   signature (`cosign`, `gpg --verify`). Clearance is per-file. Flathub descriptor
   downloads (`flathub.flatpakrepo`, `appstream`) and comment lines are exempt.
+  Scanning is per *logical* line: backslash continuations are joined before
+  matching, so a `curl` whose URL sits on a continuation line is still inspected
+  and is reported at the line the command starts on. Matching raw lines instead
+  made every multi-line download invisible to the gate.
   Exercised by black-box tests in `tests/test_check_download_integrity.py`.
 - `scripts/check_workflow_outputs.py`: parses workflows under `.github/workflows/`
   and ensures that every job output referencing `steps.<id>.outputs` points to a

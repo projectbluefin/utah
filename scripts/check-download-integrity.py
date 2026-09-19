@@ -36,14 +36,41 @@ def is_allowed(line: str) -> bool:
     return any(marker in line for marker in ALLOWED_UNPINNED)
 
 
+def logical_lines(text: str) -> list[tuple[int, str]]:
+    """Join backslash continuations so a download is inspected as one command.
+
+    `curl` and `wget` invocations in Containerfiles and shell scripts routinely
+    carry their URL on a continuation line. Matching raw lines therefore sees a
+    bare `curl -fsSL \\` with no URL and no asset suffix, and the download slips
+    through unexamined. Each joined line is reported at the line number it
+    starts on, which is where a reader looks for the command.
+    """
+    joined: list[tuple[int, str]] = []
+    start: int | None = None
+    parts: list[str] = []
+    for number, line in enumerate(text.splitlines(), start=1):
+        if start is None:
+            start = number
+        stripped = line.strip()
+        if stripped.endswith("\\"):
+            parts.append(stripped[:-1].strip())
+            continue
+        parts.append(stripped)
+        joined.append((start, " ".join(part for part in parts if part)))
+        start = None
+        parts = []
+    if start is not None:
+        joined.append((start, " ".join(part for part in parts if part)))
+    return joined
+
+
 def check() -> list[str]:
     problems: list[str] = []
     for path in FILES:
         if not path.is_file():
             continue
         text = path.read_text()
-        for number, line in enumerate(text.splitlines(), start=1):
-            stripped = line.strip()
+        for number, stripped in logical_lines(text):
             if stripped.startswith("#"):
                 continue
             if "releases/latest/download" in stripped:
