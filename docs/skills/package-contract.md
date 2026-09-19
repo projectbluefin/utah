@@ -138,6 +138,35 @@ Current counts, per the README "Package parity" section: 61 Bluefin contract
 packages installed, 12 Utah additions (GNOME 51, desktop services), 4
 genuinely unavailable.
 
+## Image-level parity
+
+`packages/bluefin.toml` is the list Bluefin *asks* for. It never names what
+Bluefin's Silverblue base already had before that list was applied, and that
+is where the gaps that reached users hid: `glibc-all-langpacks` (#114),
+`linux-firmware` and the iwlwifi blobs (#97). A list-to-list diff cannot see
+them; only the two images can.
+
+`scripts/check-image-parity.py` runs inside the image build after the last
+package step. It reads Bluefin's complete inventory from the
+`dev.hhd.rechunk.info` annotation every rechunked Bluefin image carries (one
+registry GET, no pull), compares it with `rpm -qa` by name, and reports every
+name Bluefin has that this image lacks. A name is explained if `utah.toml`
+lists it under `[unavailable]` or `packages/parity-exceptions.toml` gives a
+reason for it; the report prints the reason. Both the inventory and the report
+ship in the image under `/usr/share/utah/`.
+
+- `packages/parity-baseline.txt` is the debt register: the gaps already
+  known, grouped by where each name could come from today (Hummingbird's
+  repository, the pinned factory image, nowhere). The report separates a
+  **new** gap from a known one and names baseline entries that have closed,
+  so the file gets trimmed. Report-only in the build today; `--strict` fails
+  on a new gap and is a one-word change in the Containerfile.
+- `just check-image-parity IMAGE` runs the strict comparison against a built
+  image locally.
+- Add to `parity-exceptions.toml` only a difference that is deliberate, with
+  a reason written for the person reading a build log. A real gap goes to
+  `utah.toml` with a tracking issue, like every `[unavailable]` entry.
+
 ## Verification
 
 ```bash

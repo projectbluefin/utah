@@ -1,0 +1,27 @@
+# Packages Bluefin's image installs that Utah's does not, on purpose.
+#
+# scripts/check-image-parity.py compares this image's rpm -qa with the
+# inventory Bluefin's image publishes in its manifest, and reports every name
+# Bluefin has that Utah lacks. A name listed under [unavailable] in utah.toml
+# is already explained there. Everything else that is a deliberate difference
+# rather than a gap belongs here, with the reason -- the report prints it, so
+# write it for the person reading a build log.
+#
+# pattern is a shell glob matched against the package name. Keep each entry
+# as narrow as the reason allows: a broad pattern hides the next real gap.
+
+[[exception]]
+pattern = "ublue-os-akmods-addons"
+reason = """
+Universal Blue's akmods bundle publishes nothing for Hummingbird's kernel, so
+none of its packages can be installed here; NVIDIA is built from source by
+install-nvidia.sh instead (see NVIDIA_PACKAGES in verify-rpm-contract.py).
+"""
+
+[[exception]]
+pattern = "kmod-v4l2loopback"
+reason = "Out-of-tree module from the ublue akmods bundle, which has no Hummingbird kernel build."
+
+[[exception]]
+pattern = "kmod-zfs"
+reason = "Out-of-tree module from the ublue akmods bundle, which has no Hummingbird kernel build."
