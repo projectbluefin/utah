@@ -47,11 +47,13 @@ opaque `exit status 71` from the image build (comment,
 `.github/workflows/build.yml`). It runs three checks:
 
 - `just check` -- manifest validation, including the workflow output check
+- `just check` -- manifest validation, including the workflow output check
   (`scripts/check_workflow_outputs.py`), the download integrity guard
   (`scripts/check-download-integrity.py`), the syntax gate
   (`scripts/check-script-syntax.py`), host-side unit tests (`just test`),
   and the ban on flavor literals in workflows.
-- `just check-parity` -- `packages/bluefin.toml` against Bluefin's upstream.
+- `just check-parity` -- `packages/bluefin.toml` against Bluefin's upstream
+  pinned at `packages/.bluefin-parity-ref`.
 - `just check-repos` -- the complete installation transaction against the
   digest-pinned base and package repository, including extension build tools.
 
@@ -186,11 +188,9 @@ build: PRs do not publish immutable images. This matrix validates emulated
 UEFI desktop installation, not Secure Boot, TPM unlock, or physical GPUs.
 
 The ISO size is bounded in `iso/scripts/build-iso.sh`: it fails closed above
-`ISO_MAX_GB` (override per-run with `UTAH_ISO_MAX_GB`) once the ISO is written,
-so a drift like the 7.7G -> 8.6G jump in #128 fails the job instead of landing
-silently. The guard lives in the build script, so it holds for every caller
-(local `just iso`, the CI LUKS job, and any deliberate rerun), not just one
-workflow.
+`ISO_MAX_GB` (override with `UTAH_ISO_MAX_GB`) once written, so an unexpected
+jump fails the job instead of landing silently. The guard holds for every caller
+(local `just iso`, CI LUKS job, deliberate rerun), not just one workflow.
 
 ## Verification
 

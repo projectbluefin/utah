@@ -231,6 +231,25 @@ class ParityContractTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn(f"  - {target}\n", stderr.getvalue())
 
+    def test_parity_ref_exists_and_contains_valid_commit_sha(self):
+        ref_file = ROOT / "packages/.bluefin-parity-ref"
+        self.assertTrue(ref_file.is_file(), "packages/.bluefin-parity-ref must exist")
+        ref = ref_file.read_text().strip()
+        self.assertRegex(
+            ref,
+            r"^[0-9a-f]{40}$",
+            "packages/.bluefin-parity-ref must contain a 40-character commit SHA",
+        )
+
+    def test_check_parity_recipe_uses_pinned_ref(self):
+        justfile = (ROOT / "Justfile").read_text()
+        self.assertIn("packages/.bluefin-parity-ref", justfile)
+        self.assertIn("${ref}", justfile)
+        self.assertNotIn(
+            "https://raw.githubusercontent.com/projectbluefin/bluefin/main/build_files/packages/base.toml",
+            justfile,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

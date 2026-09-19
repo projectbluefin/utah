@@ -28,10 +28,12 @@ policy for changing them.
 ## The two manifests
 
 - **`packages/bluefin.toml`** — the parity contract. It is a byte-for-byte
-  copy of projectbluefin/bluefin's `build_files/packages/base.toml` and must
-  stay that way. **Never hand-edit it.** Sync it verbatim from upstream; any
-  drift is a parity bug. `just check-parity` diffs it against upstream on
-  every CI run so drift fails the build rather than accumulating quietly
+  copy of projectbluefin/bluefin's `build_files/packages/base.toml` pinned to
+  the revision in `packages/.bluefin-parity-ref` and must stay that way.
+  **Never hand-edit it.** Sync it verbatim from upstream; any drift is a
+  parity bug. `just check-parity` diffs it against upstream at that pinned SHA
+  on every CI run so drift fails the build rather than accumulating quietly,
+  while preventing unpinned upstream promotions from breaking unrelated PRs
   (recipe comment: `Justfile`, `check-parity`).
 - **`packages/utah.toml`** — Utah's overlay. Everything Utah needs *in
   addition to* or *instead of* the contract lives here. The full rules are in
@@ -131,8 +133,17 @@ about installation.
   requires a transaction summary and rejects dependency and repository errors.
 - `[unavailable]` entries still present in the install set are a validation
   error (`install-packages.py --check`).
-- Drift in `packages/bluefin.toml` from upstream is a CI failure
-  (`just check-parity`).
+- Drift in `packages/bluefin.toml` from upstream at `packages/.bluefin-parity-ref`
+  is a CI failure (`just check-parity`).
+
+## Pinned upstream parity reference
+
+The upstream revision of `projectbluefin/bluefin` is recorded in
+`packages/.bluefin-parity-ref` as a full 40-character commit SHA. `just check-parity`
+fetches `base.toml` at that exact revision. To adopt an upstream package change,
+update both `.bluefin-parity-ref` and `packages/bluefin.toml` (and any required
+`packages/utah.toml` overlay changes) in a single reviewable PR, preventing
+unexpected CI breaks across other PRs when upstream merges changes.
 
 Current counts, per the README "Package parity" section: 61 Bluefin contract
 packages installed, 12 Utah additions (GNOME 51, desktop services), 4
