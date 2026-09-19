@@ -70,7 +70,8 @@ class EvidenceTests(unittest.TestCase):
         names = gate.split("(", 1)[1].split(")", 1)[0].split()
         for required in ["OVERLAY_FS", "SQUASHFS", "SQUASHFS_ZSTD", "EROFS_FS",
                          "BLK_DEV_LOOP", "DM_SNAPSHOT", "DM_CRYPT", "CRYPTO_XTS",
-                         "FUSE_FS", "FS_VERITY", "SYSFB_SIMPLEFB", "DRM_SIMPLEDRM"]:
+                         "FUSE_FS", "FS_VERITY", "SYSFB_SIMPLEFB", "DRM_SIMPLEDRM",
+                         "BTRFS_FS"]:
             self.assertIn(required, names)
             self.assertRegex(script, rf"--(?:enable|module) {required}(?:\s|$)")
         self.assertEqual(script.count("verify_config /usr/lib/utah/ogc-kernel.config"), 2)
@@ -139,3 +140,17 @@ class EvidenceTests(unittest.TestCase):
         self.assertIn("systemd.wants=sshd.service", script)
         self.assertIn("fastfetch output was not visible", script)
         self.assertIn("missing required screenshot", script)
+
+    def test_the_fastfetch_ocr_gate_avoids_the_leftmost_column(self):
+        # A run whose screenshot showed the whole fastfetch panel still failed
+        # this gate: tesseract read "TAH-E2E-FASTFETCH" and dropped every
+        # fastfetch label while reading their values perfectly, because the
+        # leftmost column of the terminal does not OCR reliably. The marker is
+        # framed so it does not start at column 0, and the second assertion
+        # matches the kernel version rather than the "Kernel" label.
+        script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
+        self.assertIn("echo ===UTAH-E2E-FASTFETCH===", script)
+        self.assertIn("grep -qi 'UTAH.E2E.FASTFETCH'", script)
+        self.assertIn(r"grep -qiE 'Linux [0-9]+\.[0-9]+'", script)
+        self.assertNotIn("&& grep -qi 'Kernel' ", script)
+
