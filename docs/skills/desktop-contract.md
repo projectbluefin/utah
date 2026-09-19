@@ -57,7 +57,14 @@ The TOML's sections are the contract's table of contents:
 - **`[services]`** — systemd units the preset must enable: `gdm.service`,
   `bluetooth.service`, `ublue-system-setup.service`, `flatpak-preinstall.service`,
   `flatpak-nuke-fedora.service`, `brew-setup.service`, `dconf-update.service`,
-  `bootc-unified-storage.service`, `uupd.timer`. Update policy delegates
+  `bootc-unified-storage.service`, `uupd.timer`. User units are separate:
+  `user-preset/85-utah-desktop.preset` enables `pipewire.socket`,
+  `pipewire-pulse.socket`, and `wireplumber.service`, and
+  `scripts/configure-services.sh` enables the same three `--global`.
+  Socket activation is the Fedora default, so the `.service` units stay
+  triggered rather than enabled. Hummingbird's server user preset disables
+  everything unlisted, so without these the PipeWire socket never appears
+  and GNOME screencast fails. Update policy delegates
   background updates to `uupd.timer`; `bootc-fetch-apply-updates.timer` and
   `bootc-fetch-apply-updates.service` are masked in `/etc` and `/usr/lib` (and
   disabled in `85-utah-desktop.preset`) so cross-vendor `/etc` 3-way merges
