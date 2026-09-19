@@ -59,6 +59,12 @@ class ValidateContractTests(unittest.TestCase):
         data = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
         self.assertEqual(desktop.validate_contract(data), [])
 
+    def test_shipped_contract_enables_input_remapper(self):
+        import tomllib
+
+        data = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        self.assertIn("input-remapper.service", data.get("services", {}).get("enabled", []))
+
     def test_every_missing_section_is_named(self):
         errors = desktop.validate_contract({})
         for section in ("branding", "configuration", "flatpak", "services"):

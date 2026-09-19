@@ -232,5 +232,80 @@ class ParityContractTests(unittest.TestCase):
         self.assertIn(f"  - {target}\n", stderr.getvalue())
 
 
+class DesktopUnitEnablementTests(unittest.TestCase):
+    """A build-time enablement with no preset line behind it does not survive.
+
+    bootc applies systemd presets on first boot, so `systemctl enable` at
+    build time is undone unless 85-utah-desktop.preset agrees. That trap is
+    documented in configure-services.sh's sshd branch and was confirmed from
+    the other side by projectbluefin/utah#98 and #99. Hold the two files in
+    agreement so units enabled at build time cannot silently omit the preset.
+    """
+
+    PRESET = ROOT / (
+        "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset"
+    )
+    SERVICES = ROOT / "scripts/configure-services.sh"
+
+    def preset_directives(self, verb):
+        return {
+            line.split()[1]
+            for line in self.PRESET.read_text().splitlines()
+            if line.startswith(f"{verb} ")
+        }
+
+    def script_units(self, function):
+        # Leading whitespace matters: sshd is enabled inside a conditional
+        # block, so an anchored pattern misses it and the allowlist below
+        # would look stale when it is not.
+        return set(
+            re.findall(rf"^[ \t]*{function} (\S+)$", self.SERVICES.read_text(), re.M)
+        )
+
+    # sshd is deliberately excluded: configure-services.sh rewrites the preset
+    # in place for the opt-in debug build rather than shipping it enabled,
+    # which is the one case where the two files may legitimately disagree.
+    #
+    # The other three predate this test and are NOT asserted to be correct.
+    # They come from ublue packages that may ship their own vendor presets, in
+    # which case Utah's preset has nothing to add -- but that was not verified
+    # here, because it needs the built image rather than the source tree. They
+    # are listed so the guard below can be exact about what it does not yet
+    # cover, instead of being weakened into passing for everything. If one of
+    # them turns out to have no preset behind it either, it is the same bug as
+    # #98 and belongs in the preset.
+    WITHOUT_PRESET = {
+        "sshd.service",
+        "brew-setup.service",
+        "flatpak-nuke-fedora.service",
+        "flatpak-preinstall.service",
+    }
+
+    def test_no_new_unit_is_enabled_without_a_preset_entry(self):
+        enabled = self.script_units("enable_unit") - self.WITHOUT_PRESET
+        missing = sorted(enabled - self.preset_directives("enable"))
+        self.assertEqual(
+            missing,
+            [],
+            "enabled at build time with no preset entry, so bootc's first-boot "
+            f"preset application will undo it: {missing}",
+        )
+
+    def test_the_exception_list_does_not_cover_absent_units(self):
+        # A stale allowlist silently widens the hole above. Every name in it
+        # must still be a unit configure-services.sh actually enables.
+        enabled = self.script_units("enable_unit")
+        stale = sorted(self.WITHOUT_PRESET - enabled)
+        self.assertEqual(stale, [], f"allowlisted but no longer enabled: {stale}")
+
+    def test_the_reported_desktop_units_are_enabled(self):
+        # projectbluefin/utah#99: input-remapper package was installed and its
+        # unit never started. Name them so a refactor cannot drop one.
+        for unit in ("input-remapper.service",):
+            with self.subTest(unit=unit):
+                self.assertIn(unit, self.script_units("enable_unit"))
+                self.assertIn(unit, self.preset_directives("enable"))
+
+
 if __name__ == "__main__":
     unittest.main()

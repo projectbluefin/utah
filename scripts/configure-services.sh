@@ -73,6 +73,10 @@ enable_unit uupd.timer
 enable_unit ublue-system-setup.service
 enable_unit systemd-resolved.service
 enable_unit bootc-unified-storage.service
+# input-remapper is installed by Bluefin's package set, but without its root
+# daemon running, udev autoload fails on input devices and the GUI prompts for
+# root credentials on launch. Enable it next to the desktop units; see #99.
+enable_unit input-remapper.service
 
 # Bluefin's Brewfile and Bazaar preinstall hook need the Flathub remote before
 # first boot. Keep this as a .flatpakrepo descriptor so the remote is available

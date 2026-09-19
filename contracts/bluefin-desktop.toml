@@ -137,6 +137,7 @@ enabled = [
   "flatpak-nuke-fedora.service",
   "flatpak-preinstall.service",
   "gdm.service",
+  "input-remapper.service",
   "ublue-system-setup.service",
   "uupd.timer",
 ]

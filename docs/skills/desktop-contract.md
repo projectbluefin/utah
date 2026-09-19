@@ -55,7 +55,7 @@ The TOML's sections are the contract's table of contents:
   `99-flatpaks.sh` privileged-setup hook, and the system-flatpaks Brewfile
   whose app list the contract enumerates.
 - **`[services]`** — systemd units the preset must enable: `gdm.service`,
-  `bluetooth.service`, `ublue-system-setup.service`, `flatpak-preinstall.service`,
+  `bluetooth.service`, `input-remapper.service`, `ublue-system-setup.service`, `flatpak-preinstall.service`,
   `flatpak-nuke-fedora.service`, `brew-setup.service`, `dconf-update.service`,
   `bootc-unified-storage.service`, `uupd.timer`. Update policy delegates
   background updates to `uupd.timer`; `bootc-fetch-apply-updates.timer` and
@@ -100,7 +100,7 @@ on `GjsPrivate.DBusImplementation`, gracefully degrading to an inert portal on G
 Hummingbird defaults to a server preset and disables unlisted services, so
 the desktop policy is applied explicitly. `scripts/configure-services.sh`
 mirrors bluefin-lts's `40-services.sh`: it applies the desktop presets,
-enables GDM, firmware updates, Tailscale, uupd, user setup and resolved,
+enables GDM, input-remapper, firmware updates, Tailscale, uupd, user setup and resolved,
 configures authselect, and removes the extension build toolchain before
 cleanup (Containerfile RUN comment; originated in `docs/building.md`'s former
 design section and now lives in this skill).
