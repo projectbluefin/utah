@@ -142,10 +142,10 @@ scripts/config --enable BPF_SYSCALL --enable BPF_JIT \
                --enable ANDROID_BINDER_IPC --enable ANDROID_BINDERFS \
                --enable NTSYNC
 scripts/config --module OVERLAY_FS --module SQUASHFS --enable SQUASHFS_ZSTD \
-               --module EROFS_FS --module BTRFS_FS \
-               --enable BLK_DEV_LOOP --enable ISO9660_FS \
-               --enable BLK_DEV_DM --module DM_SNAPSHOT --module DM_CRYPT \
-               --module CRYPTO_XTS --module FUSE_FS --enable FS_VERITY
+               --module EROFS_FS --module BTRFS_FS --enable BLK_DEV_LOOP \
+               --enable ISO9660_FS --enable BLK_DEV_DM --module DM_SNAPSHOT \
+               --module DM_CRYPT --module CRYPTO_XTS --module FUSE_FS \
+               --enable FS_VERITY
 # The firmware framebuffer as a KMS device (see required_config above), plus
 # the two paravirtual GPUs QEMU offers, so a VM gets a proper display rather
 # than the boot framebuffer. Native GPU drivers for real gaming hardware

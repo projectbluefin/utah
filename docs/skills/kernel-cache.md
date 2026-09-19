@@ -125,8 +125,20 @@ The installer also exercises LUKS/device-mapper, while OSTree needs its
 filesystem support. `install-ogc-kernel.sh` enables these explicitly and checks
 the same `required_config` list after `olddefconfig`, after installation, and
 on cache extraction. Never omit a dracut module to work around a missing kernel
-feature. Changes to this contract invalidate the cache through the existing
-script hash and require a real kernel rebuild plus the ISO boot tests.
+feature.
+
+The installer also needs btrfs: the LUKS ISO test formats and mounts the root
+on `btrfs`, and the OGC kernel's `x86_64_defconfig` omits `CONFIG_BTRFS_FS`, so
+the gaming flavors' live kernel had no btrfs module -- `mkfs.btrfs` succeeded
+and the mount then failed with `unknown filesystem type 'btrfs'`, the same
+missing `/dev/btrfs-control` as a bare module, which looked like a bad
+filesystem at install time. `install-ogc-kernel.sh` enables `BTRFS_FS` as a
+module beside SquashFS/EROFS and asserts it in `required_config`, so the
+absence fails the build rather than the install. `iso/scripts/luks-e2e.sh`
+adds a `modprobe btrfs` pre-check before the installer runs, turning a repeat
+into a one-line diagnosis. Changes to this contract invalidate the cache
+through the existing script hash and require a real kernel rebuild plus the ISO
+boot tests.
 
 The contract also covers the display. `x86_64_defconfig` enables DRM and the
 Intel i915 driver and nothing else, so on any other GPU, QEMU's included, the
