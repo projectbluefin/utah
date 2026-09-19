@@ -70,7 +70,7 @@
       ],
       "description": "config/flavors.json is the single source for build, promote, and release matrices. Use when changing the flavor set or debugging a matrix that names an image nothing builds.",
       "version": "1.0",
-      "last_updated": "2026-09-05",
+      "last_updated": "2026-09-18",
       "doc_type": "procedure"
     },
     {

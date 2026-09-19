@@ -47,8 +47,9 @@ checks (`scripts/check-skill-frontmatter.sh`, `scripts/check-skill-index.sh`,
   tracking issue. A missing contract package is a build failure, never a
   silent skip.
 - **`config/flavors.json` is the single source of the flavor set.** No
-  workflow may name `utah-nvidia` or `utah-gaming` literally — `just check`
-  fails on it. Retire a flavor by moving it under `retired` with the reason.
+  workflow or Justfile recipe may name `utah-nvidia` or `utah-gaming`
+  literally — `just check` fails on it. Retire a flavor by moving it under
+  `retired` with the reason.
 - **Containerfile ARG digests are Renovate-managed pins** (`BASE_IMAGE`,
   `PACKAGE_IMAGE_SHA`, `COMMON_IMAGE_SHA`, `BREW_IMAGE_SHA`). Do not bump them
   by hand unless the task is exactly that. `Containerfile` and

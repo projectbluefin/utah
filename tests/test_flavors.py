@@ -72,6 +72,30 @@ class QueryTests(unittest.TestCase):
             {"image": "utah-nvidia-gaming"},
         ])
 
+    def test_image_maps_every_flavor_to_its_image_name(self):
+        cli = build_tree({"flavors": ALL_FLAVORS, "retired": {}})
+        for flavor, expected in (
+            ("main", "utah"),
+            ("nvidia", "utah-nvidia"),
+            ("gaming", "utah-gaming"),
+            ("nvidia-gaming", "utah-nvidia-gaming"),
+        ):
+            result = run(cli, "image", flavor)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.strip(), expected)
+
+    def test_image_fails_without_flavor_argument(self):
+        cli = build_tree({"flavors": ALL_FLAVORS, "retired": {}})
+        result = run(cli, "image")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("usage: flavors.py image FLAVOR", result.stderr)
+
+    def test_image_fails_for_unknown_flavor(self):
+        cli = build_tree({"flavors": ALL_FLAVORS, "retired": {}})
+        result = run(cli, "image", "unknown-flavor")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("unknown flavor: unknown-flavor", result.stderr)
+
     def test_releases_promotes_testing_to_stable_for_every_flavor(self):
         cli = build_tree({"flavors": ["main", "gaming"], "retired": {}})
         result = run(cli, "releases")
@@ -107,7 +131,7 @@ class QueryTests(unittest.TestCase):
 
     def test_unknown_flavor_in_config_fails_every_query(self):
         cli = build_tree({"flavors": ["main", "utah-nvidia"], "retired": {}})
-        for query in ("list", "images", "releases", "needs-kernel", "list-kernel"):
+        for query in ("list", "images", "releases", "needs-kernel", "list-kernel", "image"):
             result = run(cli, query)
             self.assertNotEqual(result.returncode, 0, f"{query} accepted it")
             self.assertIn("unknown flavor", result.stderr)
@@ -148,6 +172,10 @@ class ShippedConfigTests(unittest.TestCase):
         self.assertEqual(
             run(SCRIPT, "needs-kernel").stdout.strip(),
             "true" if kernel else "false",
+        )
+        self.assertEqual(
+            [run(SCRIPT, "image", f).stdout.strip() for f in flavors],
+            [i["image"] for i in images],
         )
 
 

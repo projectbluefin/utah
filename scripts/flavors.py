@@ -16,6 +16,7 @@ next to the list rather than in a commit message.
     flavors.py needs-kernel   true / false
     flavors.py list-main      ["main"]            flavors that build on the pristine base
     flavors.py list-kernel    ["nvidia", ...]     flavors that build on the kernel cache
+    flavors.py image FLAVOR   utah / utah-nvidia  published image name for flavor
 """
 import json
 import sys
@@ -54,5 +55,12 @@ elif what == "list-main":
     print(json.dumps([f for f in flavors if f == "main"]))
 elif what == "list-kernel":
     print(json.dumps([f for f in flavors if f != "main"]))
+elif what == "image":
+    if len(sys.argv) < 3:
+        raise SystemExit("usage: flavors.py image FLAVOR")
+    flavor = sys.argv[2]
+    if flavor not in IMAGE:
+        raise SystemExit(f"unknown flavor: {flavor}")
+    print(IMAGE[flavor])
 else:
     raise SystemExit(f"unknown query: {what}")

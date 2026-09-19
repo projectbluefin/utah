@@ -1,7 +1,7 @@
 ---
 name: flavors
 version: "1.0"
-last_updated: "2026-09-05"
+last_updated: "2026-09-18"
 id: flavors
 one_line_purpose: Add, remove, or retire an image flavor safely.
 entry_point: docs/skills/flavors.md
@@ -29,6 +29,7 @@ kernel cache image is built at all.
 
 ```bash
 python3 scripts/flavors.py list          # ["main", "nvidia", "gaming", "nvidia-gaming"]
+python3 scripts/flavors.py image nvidia  # utah-nvidia
 python3 scripts/flavors.py needs-kernel  # true
 ```
 
@@ -41,16 +42,17 @@ stages, and the cache image all stay put either way. `retired` is not
 commentary -- it is what a flavor moves to when it is switched off
 (docstring, `scripts/flavors.py`).
 
-## No workflow literals
+## No workflow or Justfile literals
 
-`just check` fails if any workflow names `utah-nvidia` or `utah-gaming`
-directly (`Justfile`, `check` recipe; the guard is
-`! grep -rn 'utah-nvidia\|utah-gaming' .github/workflows/`). No workflow may
-carry its own copy of the flavor list -- that drift is what
-`config/flavors.json` exists to stop. The literals were previously duplicated
-across three workflows, so narrowing the build matrix while promote and
-release still named images nothing produces failed late (recipe comment,
-`Justfile`, `check`).
+`just check` fails if any workflow or Justfile recipe names `utah-nvidia` or
+`utah-gaming` directly (`Justfile`, `check` recipe; the guards are
+`! grep -rnE 'utah-(nvidia|gaming)' .github/workflows/` and
+`! grep -nE '(utah|\{\{ image \}\})-(nvidia|gaming)' Justfile`). No workflow
+or recipe may carry its own copy of the flavor list or image names -- that drift
+is what `config/flavors.json` and `scripts/flavors.py` exist to stop. Image
+names are resolved centrally by delegating to `just image_name`, which queries
+`scripts/flavors.py image <flavor>`, ensuring build, promote, and release always
+agree on published image names.
 
 ## The matrix is split in two, by what each flavor builds on
 
@@ -76,6 +78,9 @@ group on that name; Utah's Justfile ignores it when naming images.
   building the cache is 45 minutes spent on nothing.
 - `images` / `releases` -- the same set shaped for the promote and release
   matrices (docstring, `scripts/flavors.py`).
+- `image FLAVOR` -- the published image name for a flavor (e.g. `utah` or
+  `utah-nvidia`), queried by `just image_name` and recipes that tag or publish
+  images.
 
 Unknown names in `flavors` are a hard error at read time, so a typo in the
 config fails before any matrix is built from it.
