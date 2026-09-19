@@ -69,6 +69,23 @@ kernel the image never boots. Two literals, one invariant, so `just check`
 asserts it with a diff of both `ARG BASE_IMAGE=` lines rather than trusting
 it (recipe comment, `Justfile`, `check`).
 
+That hashed list used to be maintained by hand against a second list --
+what `Containerfile.kernel` actually builds from -- with nothing tying the
+two together. A `COPY` added there without a matching line in the hash
+script yields a key that does not move when that input does, and because CI
+skips the rebuild whenever the tag is already published, the three flavors
+that consume the cache keep unpacking a kernel and a module built from the
+old input for as long as the tag stays put.
+
+`tests/test_kernel_cache_key.py` closes that: it derives the input set from
+`Containerfile.kernel` (the `ARG BASE_IMAGE=` line and every non-`--from`
+`COPY` source) rather than restating it, then mutates a copy of the tree and
+re-runs `scripts/kernel-cache-tag.sh` to assert each derived input moves the
+key, that an unrelated file (`scripts/flavors.py`) does not, and that the key
+is deterministic. Add a `COPY` to `Containerfile.kernel` and the suite fails
+until `scripts/kernel-cache-tag.sh` hashes it too. It runs in `just test`,
+and so in `just check`.
+
 ## Unpack or compile
 
 The cache image is the same base image plus a `/utah-cache` directory of
