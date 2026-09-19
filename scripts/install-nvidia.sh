@@ -101,13 +101,13 @@ fi
 # attempt at a source build. It is needed only to compile against, so it goes in
 # here and comes out again below.
 #
-# It is not in the repositories this image enables either. The base kernel is a
-# Fedora 43 build, 7.1.8-100.fc43, and Utah enables only Hummingbird plus its
-# own package factory:
+# It may not be in the repositories this image enables either. Utah enables only
+# Hummingbird plus its own package factory, and when the base kernel is not in
+# those:
 #
-#   No match for argument: kernel-devel-7.1.8-100.fc43.x86_64
+#   No match for argument: kernel-devel-<nevr>
 #
-# Adding the Fedora 43 repository would not fix it for long, because a
+# Adding the matching Fedora repository would not fix it for long, because a
 # repository only carries the current kernel and this image is pinned to a base
 # whose kernel will not move. Fedora own build system keeps every build
 # indefinitely, so that is where this comes from, addressed by exact NEVR.
@@ -115,7 +115,17 @@ fi
 # Those RPMs are unsigned at that path, so the download is checked against a
 # hash recorded here instead. It is a constant because the base image is pinned
 # by digest: the kernel cannot change without BASE_IMAGE changing.
-KERNEL_DEVEL_SHA256="${UTAH_KERNEL_DEVEL_SHA256:-b2b504c42b94875af88d666d64ca91000ff30439e74157723a188f54ceebc5ca}"
+#
+# Which is exactly why the hash has to move with BASE_IMAGE, and why it is
+# recorded here beside the kernel it was taken from rather than on its own. The
+# 7.2 base bump left this pinned to 7.1.8-100.fc43 for one revision: the dnf
+# path above satisfied 7.2 and the fallback never ran, so nothing failed and
+# nothing said the constant had gone stale. It would have failed the first time
+# the enabled repositories dropped the kernel -- the precise situation this
+# fallback exists for. Pairing the two makes that mismatch loud and immediate
+# instead of latent, and costs nothing when they agree.
+KERNEL_DEVEL_NEVR="7.2.5-200.fc44.x86_64"
+KERNEL_DEVEL_SHA256="${UTAH_KERNEL_DEVEL_SHA256:-02467ce35055d553db0babd680aa429c2d0b8d514469768730e03b89326a0703}"
 
 build_tree="/usr/lib/modules/${kernel}/build"
 installed_kernel_devel=""
@@ -144,6 +154,13 @@ ensure_toolchain() {
       installed_kernel_devel="kernel-devel-${kernel}"
     else
       local arch nv ver rel koji rpmfile actual
+      if [ "${kernel}" != "${KERNEL_DEVEL_NEVR}" ]; then
+        echo "KERNEL_DEVEL_SHA256 was recorded for kernel ${KERNEL_DEVEL_NEVR}," >&2
+        echo "but this image boots ${kernel}. The hash cannot match, so the" >&2
+        echo "download below would fail after fetching 60 MB. Re-record both" >&2
+        echo "constants for ${kernel} when bumping BASE_IMAGE." >&2
+        exit 1
+      fi
       arch="${kernel##*.}"; nv="${kernel%.*}"; ver="${nv%%-*}"; rel="${nv#*-}"
       koji="https://kojipkgs.fedoraproject.org/packages/kernel/${ver}/${rel}/${arch}"
       rpmfile="kernel-devel-${ver}-${rel}.${arch}.rpm"
