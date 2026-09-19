@@ -59,13 +59,30 @@ def write_overlay(
     parity: list[str] | None = None,
     services: list[str] | None = None,
     unavailable: list[str] | None = None,
+    gnome_versions: dict[str, str] | None = None,
+    allowed_repos: list[str] | None = None,
+    factory: list[str] | None = None,
 ) -> Path:
     path = directory / "utah.toml"
+    gnome_pkgs = gnome or []
+    versions = gnome_versions if gnome_versions is not None else {p: "51" for p in gnome_pkgs}
+    repos = allowed_repos if allowed_repos is not None else [
+        "public-hummingbird-x86_64-rpms",
+        "utah-packages",
+        "nvidia-container-toolkit",
+    ]
+    factory_pkgs = factory if factory is not None else list(parity or [])
+    versions_toml = "\n".join(f'"{k}" = "{v}"' for k, v in versions.items())
+    repos_toml = ", ".join(f'"{r}"' for r in repos)
+    factory_toml = ", ".join(f'"{f}"' for f in factory_pkgs)
     path.write_text(
-        toml_section("gnome", gnome or [])
+        toml_section("gnome", gnome_pkgs)
+        + (f"[gnome.versions]\n{versions_toml}\n" if versions_toml else "[gnome.versions]\n")
         + toml_section("parity", parity or [])
         + toml_section("services", services or [])
         + toml_section("unavailable", unavailable or [])
+        + f"[repositories]\nallowed = [{repos_toml}]\n"
+        + f"[factory]\npackages = [{factory_toml}]\n"
     )
     return path
 
@@ -433,6 +450,9 @@ class NvidiaImageAssertionTests(unittest.TestCase):
         def fake_run(cmd, *args, **kwargs):
             if list(cmd[:3]) == ["rpm", "-q", "kernel"]:
                 return subprocess.CompletedProcess(cmd, 0, stdout=rpm_kernel_stdout)
+            if list(cmd[:3]) == ["rpm", "-q", "--qf"]:
+                lines = [f"{pkg}|0|1.17.4|1.hum1.bfin|x86_64\n" for pkg in cmd[3:]]
+                return subprocess.CompletedProcess(cmd, 0, stdout="".join(lines))
             raise AssertionError(f"unexpected subprocess call: {cmd}")
 
         argv = ["verify-rpm-contract.py", str(self.manifest), str(self.overlay)]

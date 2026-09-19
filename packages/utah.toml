@@ -60,6 +60,98 @@ packages = [
     "glibc-all-langpacks",
 ]
 
+[gnome.versions]
+# Required major versions for GNOME contract packages
+gnome-control-center = "51"
+gnome-session = "51"
+gnome-settings-daemon = "51"
+gnome-shell = "51"
+gsettings-desktop-schemas = "51"
+gtk4 = "4"
+libadwaita = "1"
+mutter = "51"
+xdg-desktop-portal = "1"
+xdg-desktop-portal-gnome = "51"
+glibc-all-langpacks = "2"
+
+[repositories]
+# Explicitly allowed runtime RPM repositories
+allowed = [
+    "public-hummingbird-x86_64-rpms",
+    "utah-packages",
+    "nvidia-container-toolkit",
+]
+
+[factory]
+# Packages expected to resolve from the utah-packages factory rebuild with .bfin release identity
+packages = [
+    # Core GNOME desktop components
+    "gnome-control-center",
+    "gnome-session",
+    "gnome-settings-daemon",
+    "gnome-shell",
+    "gsettings-desktop-schemas",
+    "gtk4",
+    "libadwaita",
+    "mutter",
+    "xdg-desktop-portal",
+    "xdg-desktop-portal-gnome",
+    # Service packages from factory
+    "flatpak",
+    "fwupd",
+    "tailscale",
+    # Bluefin parity packages from factory
+    "adw-gtk3-theme",
+    "adwaita-fonts-all",
+    "alsa-firmware",
+    "alsa-tools-firmware",
+    "containerd",
+    "ddcutil",
+    "distrobox",
+    "evtest",
+    "fastfetch",
+    "flatpak-spawn",
+    "fzf",
+    "gnome-ponytail-daemon",
+    "gnome-tweaks",
+    "google-noto-sans-cjk-vf-fonts",
+    "grub2-efi-x64-cdboot",
+    "gum",
+    "gvfs-nfs",
+    "ibus-mozc",
+    "ibus-unikey",
+    "igt-gpu-tools",
+    "input-remapper",
+    "isomd5sum",
+    "just",
+    "libappindicator-gtk3",
+    "libayatana-appindicator-gtk3",
+    "libblockdev-btrfs",
+    "libblockdev-dm",
+    "libblockdev-lvm",
+    "libblockdev-mpath",
+    "libcamera-gstreamer",
+    "libcamera-tools",
+    "libratbag-ratbagd",
+    "libva-utils",
+    "livesys-scripts",
+    "make",
+    "mesa-libGLU",
+    "mozc",
+    "nautilus-gsconnect",
+    "openrgb-udev-rules",
+    "pipewire-libs-extra",
+    "python3-gnome-ponytail-daemon",
+    "squashfs-tools",
+    "switcheroo-control",
+    "waypipe",
+    "wireguard-tools",
+    "wl-clipboard",
+    "xdg-terminal-exec",
+    "xorriso",
+    "zenity",
+]
+
 [parity]
 # Packages Bluefin's image carries without naming them in bluefin.toml, because
 # Fedora's Silverblue base supplies them, and which Hummingbird's repository

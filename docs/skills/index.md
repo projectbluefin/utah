@@ -13,5 +13,5 @@ Generated: 2026-09-19 · schema 1.0 · 8 skills
 | [flavors](flavors.md) | image-build | active | Add, remove, or retire an image flavor safely. |
 | [kernel-cache](kernel-cache.md) | image-build | active | Understand and rebuild the OGC kernel and NVIDIA module cache image. |
 | [local-testing](local-testing.md) | testing | active | Build, install, and boot Utah locally in a VM or live ISO. |
-| [package-contract](package-contract.md) | contracts | active | Maintain Bluefin package parity and Utah's overlay manifest. |
+| [package-contract](package-contract.md) | contracts | active | Maintain Bluefin package parity, supply-chain attestation, and repository policy. |
 | [skill-improvement](skill-improvement.md) | meta | active | Capture durable agent learnings in maintained docs. |
