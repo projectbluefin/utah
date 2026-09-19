@@ -4,6 +4,34 @@
 # Flatpak repository is part of the ISO and is available offline to fisherman.
 set -euo pipefail
 
+# Flathub pulls are the largest network operation in the whole ISO build --
+# Firefox alone is ~200 MB -- and one timed-out object fails the compose, which
+# fails the flavor's entire end-to-end run. It is not hypothetical: run
+# 35432516418 lost utah-gaming to
+#
+#   Failed to install org.mozilla.firefox: While pulling
+#   app/org.mozilla.firefox/x86_64/stable from remote flathub: While fetching
+#   .../88680ed7...commitmeta: [28] Timeout was reached
+#
+# after 3m44s, with nothing wrong in the image. The curl above already retries
+# for the same reason. flatpak resumes a partial pull from the local repository,
+# so a retry re-fetches only what is still missing, and every install below
+# passes --or-update, which makes a retry a no-op for refs already complete.
+retry_flatpak() {
+    local attempt
+    for attempt in 1 2 3; do
+        if flatpak "$@"; then
+            return 0
+        fi
+        echo "flatpak $1 attempt ${attempt} of 3 failed" >&2
+        if (( attempt < 3 )); then
+            sleep $(( attempt * 15 ))
+        fi
+    done
+    echo "ERROR: flatpak $1 failed after 3 attempts: $*" >&2
+    return 1
+}
+
 FLATPAK_CACHE=/var/cache/flatpak-dl
 INSTALLER_APP_ID=org.bootcinstaller.Installer
 INSTALLER_REPO=projectbluefin/bootc-installer
@@ -69,7 +97,12 @@ ostree init --repo="${local_repo}" --mode=archive-z2
 flatpak build-import-bundle "${local_repo}" /tmp/bootc-installer.flatpak
 rm -f /tmp/bootc-installer.flatpak
 flatpak remote-add --system --no-gpg-verify installer-local "file://${local_repo}"
-flatpak install --system --noninteractive installer-local "${INSTALLER_APP_ID}"
+# --or-update for the same reason the Flathub installs below carry it: a retry
+# must be a no-op for a ref that already completed. Without it, an attempt
+# that installed the app but still exited nonzero would make attempts 2 and 3
+# fail with "already installed", turning a flaky success into a hard failure.
+retry_flatpak install --system --noninteractive --or-update installer-local \
+    "${INSTALLER_APP_ID}"
 flatpak remote-delete --system --force installer-local || true
 rm -rf "${local_repo}"
 
@@ -94,7 +127,7 @@ if (( ${#apps[@]} == 0 )); then
     echo "No flatpaks listed in /tmp/flatpaks-list; the Brewfile conversion is broken" >&2
     exit 1
 fi
-flatpak install --system --noninteractive --no-related --or-update flathub "${apps[@]}"
+retry_flatpak install --system --noninteractive --no-related --or-update flathub "${apps[@]}"
 
 # Ghostty, from the TunaOS OCI remote.
 #
@@ -109,7 +142,7 @@ flatpak install --system --noninteractive --no-related --or-update flathub "${ap
 # This is Utah's own addition and does not belong in it.
 flatpak remote-add --system --if-not-exists tuna-os \
     https://tunaos.org/flatpak/tuna-os.flatpakrepo
-flatpak install --system --noninteractive --no-related --or-update \
+retry_flatpak install --system --noninteractive --no-related --or-update \
     tuna-os com.mitchellh.ghostty
 flatpak uninstall --system --noninteractive --unused || true
 

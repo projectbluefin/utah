@@ -2,6 +2,7 @@
 import importlib.util
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 import tempfile
@@ -228,6 +229,136 @@ Mutter (Wayland)
         self.assertNotIn("grep -qi 'UTAH.E2E.FASTFETCH'", script)
         self.assertIn("last OCR transcript", script)
 
+
+class FlatpakRetryTests(unittest.TestCase):
+    """A Flathub timeout must not fail a whole flavor's end-to-end run.
+
+    Run 35432516418 lost utah-gaming to a single timed-out object while pulling
+    Firefox, three minutes into composing the ISO, with nothing wrong in the
+    image. The installs are the largest network operation in the build and had
+    no retry, while the curl beside them has had one all along.
+    """
+
+    SCRIPT = ROOT / "iso/live/src/install-flatpaks.sh"
+
+    def drive(self, stub: str) -> subprocess.CompletedProcess:
+        """Run the real retry_flatpak against a stub flatpak, with sleep off."""
+        harness = f"""
+        set -uo pipefail
+        eval "$(sed -n '/^retry_flatpak() {{/,/^}}/p' {self.SCRIPT})"
+        sleep() {{ :; }}
+        attempts=0
+        {stub}
+        retry_flatpak install org.example.App >/dev/null 2>&1
+        echo "rc=$? attempts=$attempts"
+        """
+        return subprocess.run(["bash", "-c", harness], capture_output=True, text=True,
+                              cwd=ROOT)
+
+    def test_a_transient_failure_is_retried_and_succeeds(self):
+        result = self.drive('flatpak() { attempts=$((attempts+1)); [ "$attempts" -ge 3 ]; }')
+        self.assertEqual(result.stdout.strip(), "rc=0 attempts=3", result.stderr)
+
+    def test_a_persistent_failure_still_fails_after_three_attempts(self):
+        # The point is resilience, not swallowing errors: a repository that is
+        # genuinely gone must still fail the build.
+        result = self.drive("flatpak() { attempts=$((attempts+1)); return 1; }")
+        self.assertEqual(result.stdout.strip(), "rc=1 attempts=3", result.stderr)
+
+    def test_every_network_install_goes_through_the_retry(self):
+        script = self.SCRIPT.read_text()
+        installs = [line for line in script.splitlines()
+                    if line.startswith("flatpak install")
+                    or line.startswith("retry_flatpak install")]
+        self.assertTrue(installs)
+        for line in installs:
+            with self.subTest(line=line):
+                self.assertTrue(line.startswith("retry_flatpak install"),
+                                f"unretried network install: {line}")
+
+    def test_every_retried_install_is_idempotent(self):
+        # The retry is only safe if re-running it is a no-op for a ref that
+        # already completed. Without --or-update, an attempt that installed the
+        # app but still exited nonzero makes the next attempt fail with
+        # "already installed" -- the retry would turn a flaky success into a
+        # hard failure, which is the opposite of why it was added.
+        script = self.SCRIPT.read_text()
+        calls = re.findall(r"^retry_flatpak install.*?(?=\n\S|\Z)", script,
+                           re.MULTILINE | re.DOTALL)
+        self.assertTrue(calls)
+        for call in calls:
+            with self.subTest(call=call.splitlines()[0]):
+                self.assertIn("--or-update", call)
+
+
+class OgcKernelConfigGateTests(unittest.TestCase):
+    """The OGC kernel must be rejected if it cannot mount Utah's root filesystem.
+
+    Utah installs to btrfs on LUKS, and x86_64_defconfig has no BTRFS_FS -- I
+    checked upstream's own defconfig, where DM_CRYPT is likewise absent and
+    VFAT_FS is present. The gaming flavors therefore formatted a root volume and
+    then failed to mount it, in run 35432516418:
+
+        mkfs.btrfs -f -L root /dev/mapper/fisherman-root       (ok)
+        mount -t btrfs /dev/mapper/fisherman-root /mnt/...
+        mount: unknown filesystem type 'btrfs'
+
+    A full kernel build is the only complete proof, and it takes 45 minutes. The
+    gate itself is a shell function, so its contract can be tested in
+    milliseconds: it must reject a config missing any required symbol, and name
+    the one it rejected.
+    """
+
+    SCRIPT = ROOT / "scripts/install-ogc-kernel.sh"
+
+    def gate(self, config_body: str) -> subprocess.CompletedProcess:
+        """Run the real required_config/verify_config against a fake .config."""
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / ".config"
+            config.write_text(config_body)
+            harness = f"""
+            set -uo pipefail
+            eval "$(sed -n '/^required_config=(/,/)$/p' {self.SCRIPT})"
+            eval "$(sed -n '/^verify_config() {{/,/^}}/p' {self.SCRIPT})"
+            verify_config "{config}"
+            """
+            return subprocess.run(["bash", "-c", harness],
+                                  capture_output=True, text=True)
+
+    def required_symbols(self) -> list[str]:
+        block = self.SCRIPT.read_text().split("required_config=(", 1)[1]
+        block = block.split(")", 1)[0]
+        return block.split()
+
+    def test_btrfs_is_required(self):
+        self.assertIn("BTRFS_FS", self.required_symbols())
+
+    def test_a_config_missing_btrfs_is_rejected_by_name(self):
+        body = "".join(f"CONFIG_{s}=y\n" for s in self.required_symbols()
+                       if s != "BTRFS_FS")
+        result = self.gate(body)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("missing CONFIG_BTRFS_FS", result.stderr)
+
+    def test_a_complete_config_passes(self):
+        body = "".join(f"CONFIG_{s}=y\n" for s in self.required_symbols())
+        self.assertEqual(self.gate(body).returncode, 0, self.gate(body).stderr)
+
+    def test_a_module_satisfies_the_gate_as_well_as_builtin(self):
+        # BTRFS_FS is enabled with --module, so =m has to count.
+        body = "".join(f"CONFIG_{s}=m\n" for s in self.required_symbols())
+        self.assertEqual(self.gate(body).returncode, 0, self.gate(body).stderr)
+
+    def test_every_required_symbol_is_actually_checked(self):
+        # A symbol in the list that verify_config never looks at would be
+        # documentation pretending to be a gate.
+        for symbol in self.required_symbols():
+            with self.subTest(symbol=symbol):
+                body = "".join(f"CONFIG_{s}=y\n" for s in self.required_symbols()
+                               if s != symbol)
+                result = self.gate(body)
+                self.assertEqual(result.returncode, 1, f"{symbol} is not gated")
+                self.assertIn(f"missing CONFIG_{symbol}", result.stderr)
 
 class ForkPullRequestKernelCacheTests(unittest.TestCase):
     """A fork PR cannot publish the kernel cache, and must not go red for it.
