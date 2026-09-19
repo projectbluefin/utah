@@ -1,0 +1,65 @@
+name: Update Bluefin parity
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: utah-bluefin-parity-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: main
+
+      - name: Compare with Bluefin main
+        id: parity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          current_ref=$(tr -d '[:space:]' < packages/.bluefin-parity-ref)
+          upstream_ref=$(gh api repos/projectbluefin/bluefin/commits/main --jq .sha)
+          [[ "$current_ref" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$upstream_ref" =~ ^[0-9a-f]{40}$ ]]
+          curl -fsSL -o "$RUNNER_TEMP/base.toml" \
+            "https://raw.githubusercontent.com/projectbluefin/bluefin/${upstream_ref}/build_files/packages/base.toml"
+          if cmp -s "$RUNNER_TEMP/base.toml" packages/bluefin.toml; then
+            echo "Bluefin package contract is current at ${upstream_ref}"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          cp "$RUNNER_TEMP/base.toml" packages/bluefin.toml
+          printf '%s\n' "$upstream_ref" > packages/.bluefin-parity-ref
+          {
+            printf "Updates the Bluefin package contract from \`%s\` to \`%s\`.\n\n" \
+              "$current_ref" "$upstream_ref"
+            printf 'This PR intentionally does not auto-merge; review any required Utah overlay changes before adopting the upstream package set.\n\n'
+            printf '## Upstream diff\n\n```diff\n'
+            git diff --no-ext-diff --unified=3 -- packages/bluefin.toml
+            printf '\n```\n'
+          } > "$RUNNER_TEMP/bluefin-parity-pr.md"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Propose Bluefin parity update
+        if: steps.parity.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        with:
+          branch: automation/bluefin-parity
+          title: 'ci(parity): update pinned Bluefin package contract'
+          commit-message: 'ci(parity): update pinned Bluefin package contract'
+          body-path: ${{ runner.temp }}/bluefin-parity-pr.md
+          add-paths: |
+            packages/.bluefin-parity-ref
+            packages/bluefin.toml

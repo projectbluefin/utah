@@ -120,19 +120,25 @@ check-desktop-contract image_ref="localhost/utah:testing":
 check-repos:
     python3 scripts/check-repo-availability.py packages/bluefin.toml packages/utah.toml
 
-# packages/bluefin.toml is a verbatim copy of Bluefin's base.toml.  Drift here
-# is a parity bug, so make it loud rather than letting it accumulate quietly.
+# packages/bluefin.toml is a verbatim copy of Bluefin's base.toml pinned to
+# the revision in packages/.bluefin-parity-ref. Drift here is a parity bug,
+# so make it loud rather than letting it accumulate quietly.
 check-parity:
     #!/usr/bin/env bash
     set -euo pipefail
+    ref=$(tr -d '[:space:]' < packages/.bluefin-parity-ref)
+    if [[ ! "$ref" =~ ^[0-9a-f]{40}$ ]]; then
+      echo "packages/.bluefin-parity-ref must contain a 40-character commit SHA" >&2
+      exit 1
+    fi
     upstream=$(mktemp)
     trap 'rm -f "$upstream"' EXIT
     curl -fsSL -o "$upstream" \
-      https://raw.githubusercontent.com/projectbluefin/bluefin/main/build_files/packages/base.toml
+      "https://raw.githubusercontent.com/projectbluefin/bluefin/${ref}/build_files/packages/base.toml"
     if diff -u "$upstream" packages/bluefin.toml; then
-      echo "packages/bluefin.toml matches projectbluefin/bluefin"
+      echo "packages/bluefin.toml matches projectbluefin/bluefin@${ref}"
     else
-      echo "packages/bluefin.toml has drifted from projectbluefin/bluefin" >&2
+      echo "packages/bluefin.toml has drifted from projectbluefin/bluefin@${ref}" >&2
       exit 1
     fi
 
