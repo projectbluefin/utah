@@ -139,3 +139,10 @@ class EvidenceTests(unittest.TestCase):
         self.assertIn("systemd.wants=sshd.service", script)
         self.assertIn("fastfetch output was not visible", script)
         self.assertIn("missing required screenshot", script)
+
+    def test_live_initramfs_gates_on_dracut_errors_and_prepares_roothome(self):
+        containerfile = (ROOT / "iso/live/Containerfile").read_text()
+        self.assertIn("mkdir -m 0700 -p /var/roothome", containerfile)
+        self.assertIn("sysloglvl=0", containerfile)
+        self.assertIn("--stdlog 4", containerfile)
+        self.assertIn("grep -q 'dracut\\[E\\]'", containerfile)

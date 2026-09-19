@@ -1,7 +1,7 @@
 ---
 name: local-testing
 version: "1.0"
-last_updated: "2026-09-05"
+last_updated: "2026-09-18"
 id: local-testing
 one_line_purpose: Build, install, and boot Utah locally in a VM or live ISO.
 entry_point: docs/skills/local-testing.md
@@ -120,8 +120,14 @@ just iso testing 1   # optional live-session SSH diagnostics (debug=1)
 ```
 
 The result is `output/utah-live.iso`, assembled with systemd-boot, a
-`UTAH_LIVE` dmsquash-live root, and a serial `UTAH_LIVE_READY` marker. It is
-intended to prove live desktop boot first; bootc-installer/offline payload
+`UTAH_LIVE` dmsquash-live root, and a serial `UTAH_LIVE_READY` marker. The live
+initramfs is generated in `iso/live/Containerfile` via `dracut`. Because `/root`
+in bootc images is a symlink to `/var/roothome`, `/var/roothome` is created
+before running dracut so symlink installation succeeds without dropping
+modules. Syslog logging is disabled (`sysloglvl=0`) in container build context,
+and the build runs with `--stdlog 4` and gates on `dracut[E]` errors to ensure
+no module drops or dracut install errors are silently ignored.
+It is intended to prove live desktop boot first; bootc-installer/offline payload
 integration is the next ISO milestone. `just boot-iso` boots it with
 QEMU-for-Docker and exposes the noVNC console at the printed URL (comment
 above `boot-iso` in `Justfile`), with TPM, UEFI, and `-snapshot` so nothing

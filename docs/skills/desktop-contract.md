@@ -1,7 +1,7 @@
 ---
 name: desktop-contract
 version: "1.0"
-last_updated: "2026-09-16"
+last_updated: "2026-09-18"
 id: desktop-contract
 one_line_purpose: Maintain Utah identity, Bluefin desktop defaults, and first-boot Flatpak policy.
 entry_point: docs/skills/desktop-contract.md
@@ -34,10 +34,14 @@ itself and `scripts/verify-gnome-extensions.py` for the bundled extensions.
 The TOML's sections are the contract's table of contents:
 
 - **`[branding]`** — files that must exist (Bluefin logos, backgrounds, the
-  `zz0-bluefin-modifications` gschema override, fastfetch and Bazaar count
-  files) plus the os-release identity. The identity fields are exact values:
+  `zz0-bluefin-modifications` gschema override, `/usr/lib/fedora-release`,
+  fastfetch and Bazaar count files) plus the os-release identity. The identity
+  fields are exact values:
   `NAME=Utah`, `ID=utah`, `ID_LIKE=fedora`, `VERSION_CODENAME=Utahraptor`,
   `DEFAULT_HOSTNAME=utah`, `IMAGE_ID=utah`, and the projectbluefin.io URLs.
+  `/usr/lib/fedora-release` and `/etc/fedora-release` provide the upstream OS
+  family and version markers required by vulnerability scanners (e.g. Trivy)
+  to inspect installed RPMs against Fedora CVE data.
   `[branding.os_release_patterns]` shapes the fields the build generates:
   `PRETTY_NAME` is `Utah (Version: ...)`, `VERSION` carries `(Hummingbird)`,
   `VARIANT_ID` starts with `utah`. The verifier reads `/usr/lib/os-release`.

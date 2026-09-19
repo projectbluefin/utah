@@ -59,6 +59,18 @@ class ValidateContractTests(unittest.TestCase):
         data = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
         self.assertEqual(desktop.validate_contract(data), [])
 
+    def test_shipped_contract_requires_fedora_release(self):
+        import tomllib
+
+        data = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        self.assertIn("/usr/lib/fedora-release", data.get("branding", {}).get("files", []))
+
+    def test_configure_branding_sets_fedora_release(self):
+        branding_script = (ROOT / "scripts/configure-branding.sh").read_text()
+        self.assertIn("Fedora release ${FEDORA_MAJOR_VERSION}", branding_script)
+        self.assertIn("/usr/lib/fedora-release", branding_script)
+        self.assertIn("/etc/fedora-release", branding_script)
+
     def test_every_missing_section_is_named(self):
         errors = desktop.validate_contract({})
         for section in ("branding", "configuration", "flatpak", "services"):

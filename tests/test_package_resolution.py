@@ -160,5 +160,12 @@ class ParityContractTests(unittest.TestCase):
         self.assertIn("*parity,", source)
 
 
+class RepositoryPolicyTests(unittest.TestCase):
+    def test_hummingbird_repository_enforces_gpg_signatures(self):
+        content = (ROOT / "packages/hummingbird.repo").read_text()
+        self.assertIn("gpgcheck=1", content)
+        self.assertIn("gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-hummingbird-release", content)
+
+
 if __name__ == "__main__":
     unittest.main()

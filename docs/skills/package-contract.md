@@ -1,7 +1,7 @@
 ---
 name: package-contract
 version: "1.0"
-last_updated: "2026-09-05"
+last_updated: "2026-09-18"
 id: package-contract
 one_line_purpose: Maintain Bluefin package parity and Utah's overlay manifest.
 entry_point: docs/skills/package-contract.md
@@ -85,7 +85,11 @@ comment, `Containerfile` ~L94; repo files copied at `Containerfile` L40).
 
 The pinned package image is an RPM repository, not a runtime dependency: its
 contents are copied into the image so the package transaction is reproducible
-and does not depend on a mutable mirror (`Containerfile` L41-44).
+and does not depend on a mutable mirror (`Containerfile` L41-44). Its packages
+are authenticated through the pinned OCI image digest and provenance.
+Hummingbird's repository (`packages/hummingbird.repo`) enforces OpenPGP package
+signature verification (`gpgcheck=1`) using Hummingbird's published release
+key (`file:///etc/pki/rpm-gpg/RPM-GPG-KEY-hummingbird-release`).
 
 ## Supply-chain download verification
 

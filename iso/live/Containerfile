@@ -35,9 +35,17 @@ COPY src/ /tmp/utah-live-src/
 RUN chmod 0755 /tmp/utah-live-src/configure-live.sh && \
     /tmp/utah-live-src/configure-live.sh
 
-# Rebuild against Utah's own kernel and userspace. Hummingbird's dracut emits
-# a harmless /root install warning in the container build context but still
-# returns a successful image with dmsquash-live included.
+# Rebuild against Utah's own kernel and userspace.
+#
+# /root is a symlink to /var/roothome in bootc images, but /var/roothome does
+# not exist at container build time, causing dracut-install to fail copying it.
+# We create /var/roothome so dracut-install can resolve the symlink target.
+#
+# In container build contexts, syslog logging is disabled via sysloglvl=0 so
+# dracut does not emit /dev/log errors.
+#
+# dracut is run with --stdlog 4 and output is monitored so any logged error
+# (dracut[E]) immediately fails the live initramfs build step.
 #
 # tpm2-tss and pcsc are omitted because they cannot be satisfied. Hummingbird's
 # dracut config adds "fido2 tpm2-tss pkcs11 pcsc" unconditionally, and a module
@@ -50,10 +58,18 @@ RUN chmod 0755 /tmp/utah-live-src/configure-live.sh && \
 # to open; the installed system boots the payload image's own initramfs, which
 # this build never touches. Revisit if Utah ever wants TPM-bound LUKS, which
 # needs tpm2-tools in the installed image, not in the live overlay.
-RUN set -eux; \
+RUN set -eoux pipefail; \
     kernel="$(ls /usr/lib/modules | sort -V | tail -1)"; \
-    dracut --force --reproducible --no-hostonly \
+    mkdir -m 0700 -p /var/roothome; \
+    mkdir -p /etc/dracut.conf.d; \
+    printf 'sysloglvl=0\n' > /etc/dracut.conf.d/00-no-syslog.conf; \
+    dracut --force --reproducible --no-hostonly --stdlog 4 \
       --add dmsquash-live \
       --omit 'tpm2-tss pcsc' \
       --add-drivers 'squashfs overlay loop iso9660 sr_mod cdrom' \
-      "/usr/lib/modules/${kernel}/initramfs.img" "${kernel}"
+      "/usr/lib/modules/${kernel}/initramfs.img" "${kernel}" 2>&1 | tee /tmp/dracut.log; \
+    if grep -q 'dracut\[E\]' /tmp/dracut.log; then \
+      echo "dracut reported errors during live initramfs generation" >&2; \
+      exit 1; \
+    fi; \
+    rm -f /tmp/dracut.log /etc/dracut.conf.d/00-no-syslog.conf
