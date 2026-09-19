@@ -519,6 +519,20 @@ class ParityContractTests(unittest.TestCase):
         )
 
 
+    def test_parity_ref_exists_and_contains_valid_commit_sha(self):
+        ref = (ROOT / "packages/.bluefin-parity-ref").read_text().strip()
+        self.assertRegex(ref, r"^[0-9a-f]{40}$")
+
+    def test_check_parity_recipe_uses_pinned_ref(self):
+        justfile = (ROOT / "Justfile").read_text()
+        self.assertIn("packages/.bluefin-parity-ref", justfile)
+        self.assertIn("${ref}", justfile)
+        self.assertNotIn(
+            "https://raw.githubusercontent.com/projectbluefin/bluefin/main/build_files/packages/base.toml",
+            justfile,
+        )
+
+
 class ImageSizeTests(unittest.TestCase):
     MOUNT = "--mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages,ro"
 
