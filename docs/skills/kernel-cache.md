@@ -1,7 +1,7 @@
 ---
 name: kernel-cache
 version: "1.0"
-last_updated: "2026-09-05"
+last_updated: "2026-09-19"
 id: kernel-cache
 one_line_purpose: Understand and rebuild the OGC kernel and NVIDIA module cache image.
 entry_point: docs/skills/kernel-cache.md
@@ -48,20 +48,30 @@ The tag must change whenever anything the cache image contains would change,
 and not otherwise, so it is a hash of exactly those inputs (header comment,
 `scripts/kernel-cache-tag.sh`):
 
-- The `ARG BASE_IMAGE=` line of `Containerfile.kernel` -- the base image the
-  cache is built from.
+- `Containerfile.kernel`, whole file -- the recipe that builds the cache. Its
+  `ARG BASE_IMAGE=` line names the base image, but its body is what decides
+  what the image ends up containing: the repo files copied into the builder,
+  and the single `RUN` that fills `/cache-out`, and the final stage's
+  `COPY --from=builder`. Hashing only the `ARG` line would leave an edit to
+  any of that invisible to the key, and since CI builds the cache image only
+  when its tag is not already published, the three cached flavors would
+  silently take an image built from the previous recipe.
 - `scripts/install-ogc-kernel.sh` and `scripts/install-nvidia.sh`, whole
   files, comments included -- the two scripts that do the building.
 - `packages/hummingbird.repo` and `packages/fedora-44.repo` -- the repositories
   the toolchain comes from (Fedora 44 is builder-only); a different compiler
   produces a different kernel.
 
-Editing either script changes the hash and forces a rebuild, comment-only
+Editing any of them changes the hash and forces a rebuild, comment-only
 edits included. That is deliberate: the key can only ever rebuild something
 that did not need rebuilding, never reuse something stale. A cheaper key
 that hashed just the version pins would miss a change to how the kernel is
 configured or how the module is linked (header comment,
 `scripts/kernel-cache-tag.sh`).
+
+`tests/test_kernel_cache_tag.py` holds the key to that contract: it asserts
+that mutating a non-`ARG` line of `Containerfile.kernel`, or any of the four
+other hashed files, moves the tag.
 
 The `BASE_IMAGE` in `Containerfile.kernel` must match the one in
 `Containerfile`, or the prebuilt NVIDIA module would be linked against a

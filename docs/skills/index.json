@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-18",
+  "generated_at": "2026-09-19",
   "schema_version": "1.0",
   "skills": [
     {
@@ -88,7 +88,7 @@
       ],
       "description": "The kernel cache image, its content-hash tag, and unpack-or-compile behavior. Use when touching install-ogc-kernel.sh, install-nvidia.sh, Containerfile.kernel, or debugging flavored builds.",
       "version": "1.0",
-      "last_updated": "2026-09-05",
+      "last_updated": "2026-09-19",
       "doc_type": "reference"
     },
     {
