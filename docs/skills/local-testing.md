@@ -1,7 +1,7 @@
 ---
 name: local-testing
 version: "1.0"
-last_updated: "2026-09-05"
+last_updated: "2026-09-18"
 id: local-testing
 one_line_purpose: Build, install, and boot Utah locally in a VM or live ISO.
 entry_point: docs/skills/local-testing.md
@@ -72,6 +72,16 @@ renders in the noVNC web console.
 
 Override `BASE_DIR`, `VM_RAM`, or `VM_CPUS` when needed -- they are Justfile
 variables read from the environment (defaults `output`, `8192`, `4`).
+
+## Upgrade and rollback lifecycle
+
+Utah manages immutable image updates through `uupd.timer` rather than legacy
+`rpm-ostree` or background `bootc-fetch-apply-updates.timer`. When testing
+lifecycle upgrades or switches (such as switching from Bluefin via `bootc switch`),
+`bootc-fetch-apply-updates.timer` must remain masked: an active fetch-apply timer
+stages candidate images automatically in the background outside uupd policy,
+which can inadvertently undo a user rollback (`bootc rollback`) upon subsequent
+reboot (links #17, #101).
 
 ## Composing with local packages
 

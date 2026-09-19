@@ -52,11 +52,15 @@ modules_only="${UTAH_NVIDIA_MODULES_ONLY:-}"
 driver_version="${UTAH_NVIDIA_DRIVER_VERSION:-595.84}"
 run="NVIDIA-Linux-x86_64-${driver_version}.run"
 url="https://download.nvidia.com/XFree86/Linux-x86_64/${driver_version}/${run}"
-# NVIDIA publishes a SHA-256 beside every installer. The vendor `.run` is
-# executed during composition, so it is verified against that published digest
-# rather than trusted from a plain HTTPS fetch. It is fetched from the same
-# directory the installer comes from and pinned per driver version.
-sha_url="${url}.sha256sum"
+# The vendor `.run` is executed as root during composition, so it is verified
+# against a digest committed here, the same arrangement as KERNEL_DEVEL_SHA256
+# below. This used to fetch `${url}.sha256sum` at build time instead, but that
+# file lives in the same directory on the same server as the installer:
+# whoever can substitute one can substitute both, so the fetch added no trust
+# beyond the TLS channel it was meant to backstop. The constant is NVIDIA's
+# published SHA-256 for the pinned driver version; the two move together, as
+# does UTAH_NVIDIA_RUN_SHA256 when UTAH_NVIDIA_DRIVER_VERSION is overridden.
+NVIDIA_RUN_SHA256="${UTAH_NVIDIA_RUN_SHA256:-99c404e52131bf27bca6da0268dcce3ebedc7a73ab174071a995cf1a6c5eba06}"
 
 ogc_release=""
 [ -f /usr/lib/utah/ogc-kernel-release ] && ogc_release="$(cat /usr/lib/utah/ogc-kernel-release)"
@@ -165,19 +169,15 @@ if [ -f "${CACHE_DIR}/nvidia-installer.run" ]; then
 else
   run_path="/tmp/${run}"
   curl --retry 3 --retry-all-errors -fsSLo "$run_path" "$url"
-  # Verify the installer against NVIDIA's published SHA-256. The digest file is
-  # `<sha>  <run>`; check with the local filename so the comparison holds
-  # regardless of the temp path.
-  expected="$(curl --retry 3 --retry-all-errors -fsSL "$sha_url" | awk 'NR==1{print $1}')"
-  if [ -z "$expected" ]; then
-    echo "Could not fetch NVIDIA installer SHA-256 from ${sha_url}" >&2
-    exit 1
-  fi
-  actual="$(sha256sum "$run_path" | cut -d' ' -f1)"
-  if [ "$actual" != "$expected" ]; then
-    echo "NVIDIA installer SHA-256 is $actual, expected $expected" >&2
-    exit 1
-  fi
+fi
+# Verify against the committed digest on both paths. The cache image is
+# addressed by an input-hash tag, not an immutable digest, so the cached
+# installer is no more self-evidently trustworthy than a fresh download.
+actual="$(sha256sum "$run_path" | cut -d' ' -f1)"
+if [ "$actual" != "$NVIDIA_RUN_SHA256" ]; then
+  echo "NVIDIA installer SHA-256 is $actual, expected $NVIDIA_RUN_SHA256" >&2
+  echo "If the pinned driver version moved, update NVIDIA_RUN_SHA256 with it." >&2
+  exit 1
 fi
 # Unpacking the installer is only needed in order to compile, so do it on
 # demand: when every module comes from the cache, this never runs.

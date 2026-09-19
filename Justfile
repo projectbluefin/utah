@@ -39,6 +39,9 @@ check:
     test -f system_files/shared/usr/lib/systemd/system/bootc-unified-storage.service.d/10-utah-local-test.conf
     grep -q 'enable gdm.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
     grep -q 'enable ublue-system-setup.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
+    grep -q 'disable bootc-fetch-apply-updates.timer' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
+    grep -q 'disable bootc-fetch-apply-updates.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
+    grep -q 'bootc-fetch-apply-updates.timer' scripts/configure-services.sh
     test -f scripts/configure-services.sh
     test -f scripts/configure-branding.sh
     test -f scripts/verify-desktop-contract.py
@@ -69,15 +72,17 @@ check:
     grep -q 'ENABLE_SSHD="${ENABLE_SSHD:-0}"' Justfile
     grep -q 'ARG PACKAGE_IMAGE_SHA=' Containerfile
     grep -q 'ARG PACKAGE_IMAGE_REF=' Containerfile
-    grep -q 'COPY --from=packages /repository /etc/utah-packages' Containerfile
+    grep -q -- '--mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages,ro' Containerfile
+    # The package repository is bind mounted, never committed; a COPY would ship
+    # the whole ~4 GB RPM repository in every image and of every ISO (#128).
+    ! grep -q 'COPY --from=packages' Containerfile
     # Every executable release asset fetched during composition must be pinned
     # and verified; no build may resolve a mutable latest release.
     python3 scripts/check-download-integrity.py
     # The status page's package grid is generated from the manifests; a stale
     # committed copy would publish a list the image no longer installs.
     python3 scripts/generate-site-data.py --check
-    grep -q '"utah-packages"' scripts/install-packages.py
-    python3 scripts/install-packages.py --check packages/bluefin.toml
+    python3 scripts/install-packages.py --check --repos-dir packages packages/bluefin.toml
     python3 scripts/verify-rpm-contract.py --check packages/bluefin.toml
     # run the host-side unit suite (tests/test_*.py) via its dedicated recipe
     just test

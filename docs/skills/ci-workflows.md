@@ -185,6 +185,13 @@ successful testing build containing the current harness. Do not pass a PR
 build: PRs do not publish immutable images. This matrix validates emulated
 UEFI desktop installation, not Secure Boot, TPM unlock, or physical GPUs.
 
+The ISO size is bounded in `iso/scripts/build-iso.sh`: it fails closed above
+`ISO_MAX_GB` (override per-run with `UTAH_ISO_MAX_GB`) once the ISO is written,
+so a drift like the 7.7G -> 8.6G jump in #128 fails the job instead of landing
+silently. The guard lives in the build script, so it holds for every caller
+(local `just iso`, the CI LUKS job, and any deliberate rerun), not just one
+workflow.
+
 ## Verification
 
 ```bash

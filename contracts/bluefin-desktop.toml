@@ -140,3 +140,7 @@ enabled = [
   "ublue-system-setup.service",
   "uupd.timer",
 ]
+masked = [
+  "bootc-fetch-apply-updates.service",
+  "bootc-fetch-apply-updates.timer",
+]

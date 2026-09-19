@@ -13,3 +13,5 @@ enable bootc-unified-storage.service
 enable dconf-update.service
 disable sshd.service
 disable rpm-ostree.service
+disable bootc-fetch-apply-updates.timer
+disable bootc-fetch-apply-updates.service

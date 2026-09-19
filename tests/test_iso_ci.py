@@ -1,6 +1,7 @@
 """CI must test the complete exact-digest set before publication."""
 import importlib.util
 import json
+import os
 import subprocess
 from pathlib import Path
 import tempfile
@@ -94,6 +95,38 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(script.count("--preserve-digests"), 2)
         self.assertIn('"dir:${PAYLOAD_EXPORT}"', script)
         self.assertIn('dir:/payload "containers-storage:$1"', script)
+
+    def test_iso_budget_guard_fails_closed_above_ceiling(self):
+        # The budget guard (#128) is the whole point of the size drift this PR
+        # closes. Extract the real block and run it with du stubbed so we can
+        # drive both the byte count (-b) and the human size (-sh) without a
+        # real ISO on disk -- the test exercises the logic, not a copy of it.
+        script = (ROOT / "iso/scripts/build-iso.sh").read_text()
+        # The guard must receive ISO_MAX_GB the way the real script delivers it:
+        # as a positional arg into the <<'ASSEMBLY' heredoc, not from the outer
+        # shell's environment. Assert that plumbing exists so a regression back
+        # to an unexported, unpassed variable (which dies under set -u inside
+        # the assembly) is caught here before it breaks every ISO build.
+        self.assertRegex(script, r"podman unshare bash -s -- .*\$\{ISO_MAX_GB\}")
+        self.assertIn('ISO_MAX_GB="$8"', script)
+        start = script.index("iso_max_bytes=$(( ISO_MAX_GB")
+        end = script.index("\nfi\n", start) + len("\nfi\n")
+        guard = script[start:end]
+        run = (
+            "du() { if [ \"$1\" = \"-b\" ]; then echo \"$DU_BYTES\"; "
+            "else echo \"$DU_HUMAN\"; fi; };\n"
+            "OUTPUT_ISO=/tmp/utah-fakeiso\n"
+            + guard
+        )
+        under = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+                 "ISO_MAX_GB": "8", "DU_BYTES": str(7 * 1024 ** 3), "DU_HUMAN": "7.0G"}
+        result = subprocess.run(["bash", "-eu", "-c", run], capture_output=True, text=True, env=under)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        over = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+                "ISO_MAX_GB": "8", "DU_BYTES": str(8 * 1024 ** 3 + 512 * 1024 ** 2), "DU_HUMAN": "8.5G"}
+        result = subprocess.run(["bash", "-eu", "-c", run], capture_output=True, text=True, env=over)
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn("exceeds 8 GB budget", result.stderr)
 
     def test_build_explicitly_dispatches_iso_after_both_image_jobs(self):
         import yaml

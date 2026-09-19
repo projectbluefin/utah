@@ -1,7 +1,7 @@
 ---
 name: containerfile
 version: "1.0"
-last_updated: "2026-09-05"
+last_updated: "2026-09-18"
 id: containerfile
 one_line_purpose: Edit the Containerfile without regressing layer count or cache hits.
 entry_point: docs/skills/containerfile.md
@@ -46,6 +46,16 @@ In summary:
 - External executable release assets (such as `uupd`) are pinned by version
   and verified with explicit sha256 checksums (`UUPD_SHA256`) before
   extraction.
+- The digest-pinned `packages` stage is the package factory's RPM repository,
+  and it is **bind mounted, never copied**: `RUN --mount=type=bind,
+  from=packages,source=/repository,target=/etc/utah-packages,ro` feeds it to the
+  two RUN steps that install from it. A `COPY --from=packages /repository
+  /etc/utah-packages` committed the whole ~4 GB repository to a layer that
+  nothing removed -- two thirds of every published image and of every live ISO
+  (#128). The mount costs no layer. The flavor step flips `utah-packages.repo`
+  to `enabled=0` last, so later dnf calls on the image (the live ISO build's
+  included) do not fail on a `file://` baseurl that is no longer present. `just
+  check` asserts the mount and refuses a `COPY --from=packages`.
 
 ## Where the build time goes
 
@@ -138,5 +148,6 @@ just check
 grep -c '^COPY\|^RUN' Containerfile
 ```
 
-The count stays at its current value (13 as of 2026-09-05) unless the change
-justifies a new layer against the timings table above.
+The count stays at its current value (12 as of 2026-09-18) unless the change
+justifies a new layer against the timings table above. Removing the package
+repository COPY dropped it from 13 to 12; a later change must earn its layer.
