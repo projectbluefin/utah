@@ -80,6 +80,10 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      # Whether the flavored builds can pull the cache image. False on a fork
+      # pull request, where the kernel is compiled but cannot be published.
+      available: ${{ steps.cache.outputs.available }}
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -91,20 +95,46 @@ jobs:
       - name: Log in to GHCR
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: echo "$GITHUB_TOKEN" | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+        run: |
+          # Anonymous pulls are enough to check whether the tag is published;
+          # only the push needs credentials, and a fork PR has none to give.
+          echo "$GITHUB_TOKEN" | podman login ghcr.io -u "${{ github.actor }}" --password-stdin \
+            || echo "::warning title=ghcr login failed::continuing; a cache hit can still be read anonymously"
       - name: Build the kernel cache image if it is not published yet
+        id: cache
         env:
           REPO_ORGANIZATION: ${{ github.repository_owner }}
+          # Empty head repository means this is not a pull request at all, so
+          # the comparison holds for pushes, schedules and dispatches too.
+          CAN_PUBLISH: ${{ github.event.pull_request.head.repo.full_name == ''
+            || github.event.pull_request.head.repo.full_name == github.repository }}
         run: |
           set -euo pipefail
           ref="ghcr.io/${REPO_ORGANIZATION,,}/utah-kernel-cache:$(./scripts/kernel-cache-tag.sh)"
           if podman pull -q "$ref" >/dev/null 2>&1; then
             echo "Cache hit: $ref is already published"
+            echo "available=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           echo "Cache miss: building $ref"
           podman build --tag "$ref" --file Containerfile.kernel .
+          # A pull request from a fork gets a read-only GITHUB_TOKEN, so the
+          # push fails no matter how well the kernel built:
+          #
+          #   denied: installation not allowed to Write organization package
+          #
+          # That is what #154, #157 and #158 have been red for -- all three
+          # compiled the kernel and died publishing it, twenty minutes in, on a
+          # permission no contributor can be granted from a fork. The compile is
+          # the part that validates their change, so run it and say plainly that
+          # the flavored images cannot be built from here.
+          if [ "${CAN_PUBLISH}" != "true" ]; then
+            echo "::notice title=kernel cache not published::The kernel compiled, but a fork pull request cannot write to ghcr.io/${REPO_ORGANIZATION,,}. The flavored images are not built for this PR; push the branch to projectbluefin/utah to validate them."
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           podman push "$ref"
+          echo "available=true" >> "$GITHUB_OUTPUT"
 
   # main starts the moment the contract check passes. It never pulls the kernel
   # cache, so there is no reason for it to wait on that job; before this split
@@ -157,7 +187,7 @@ jobs:
   # digest artifact, which post-testing-e2e matches by glob.
   build_kernel:
     needs: [contract, kernel_cache]
-    if: ${{ !cancelled() && needs.contract.result == 'success' && needs.kernel_cache.result == 'success' && needs.contract.outputs.kernel_flavors != '[]' }}
+    if: ${{ !cancelled() && needs.contract.result == 'success' && needs.kernel_cache.result == 'success' && needs.kernel_cache.outputs.available == 'true' && needs.contract.outputs.kernel_flavors != '[]' }}
     uses: projectbluefin/actions/.github/workflows/reusable-build.yml@8895d09342174927b950abc75dccd6da2c8ba36f # v1
     permissions:
       contents: read

@@ -227,3 +227,54 @@ Mutter (Wayland)
         self.assertIn("fastfetch-ocr-match.sh", script)
         self.assertNotIn("grep -qi 'UTAH.E2E.FASTFETCH'", script)
         self.assertIn("last OCR transcript", script)
+
+
+class ForkPullRequestKernelCacheTests(unittest.TestCase):
+    """A fork PR cannot publish the kernel cache, and must not go red for it.
+
+    #154, #157 and #158 were all red on the same thing: the kernel compiled and
+    the push then failed with "denied: installation not allowed to Write
+    organization package", twenty minutes in, on a permission no contributor can
+    be granted from a fork. Three PRs blocked by CI plumbing rather than by
+    anything in their diffs.
+    """
+
+    WORKFLOW = ROOT / ".github/workflows/build.yml"
+
+    def setUp(self):
+        import yaml
+        self.text = self.WORKFLOW.read_text()
+        self.jobs = yaml.safe_load(self.text)["jobs"]
+
+    def test_the_push_is_conditional_but_the_build_is_not(self):
+        step = next(s for s in self.jobs["kernel_cache"]["steps"]
+                    if s.get("id") == "cache")
+        run = step["run"]
+        # The compile is what validates a kernel change, so it always runs.
+        self.assertIn("podman build --tag", run)
+        build = run.index("podman build --tag")
+        guard = run.index('if [ "${CAN_PUBLISH}" != "true" ]')
+        push = run.index("podman push")
+        self.assertLess(build, guard, "the build must not be behind the guard")
+        self.assertLess(guard, push, "the push must be behind the guard")
+
+    def test_can_publish_is_true_for_everything_that_is_not_a_fork_pr(self):
+        step = next(s for s in self.jobs["kernel_cache"]["steps"]
+                    if s.get("id") == "cache")
+        env = step["env"]["CAN_PUBLISH"]
+        # An empty head repository is a push, a schedule or a dispatch.
+        self.assertIn("github.event.pull_request.head.repo.full_name == ''", env)
+        self.assertIn("== github.repository", env)
+
+    def test_the_flavored_builds_are_skipped_rather_than_left_to_fail(self):
+        # Without this they would try to pull an image that was never pushed.
+        self.assertIn("needs.kernel_cache.outputs.available == 'true'",
+                      self.jobs["build_kernel"]["if"])
+        self.assertEqual(self.jobs["kernel_cache"]["outputs"]["available"],
+                         "${{ steps.cache.outputs.available }}")
+
+    def test_a_cache_hit_still_reports_the_image_as_available(self):
+        step = next(s for s in self.jobs["kernel_cache"]["steps"]
+                    if s.get("id") == "cache")
+        hit = step["run"].index("Cache hit")
+        self.assertIn("available=true", step["run"][hit:hit + 200])
