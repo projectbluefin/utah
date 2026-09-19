@@ -11,6 +11,8 @@ enable ublue-system-setup.service
 enable systemd-resolved.service
 enable bootc-unified-storage.service
 enable dconf-update.service
+enable input-remapper.service
+enable bluefin-stats-refresh.timer
 disable sshd.service
 disable rpm-ostree.service
 disable bootc-fetch-apply-updates.timer

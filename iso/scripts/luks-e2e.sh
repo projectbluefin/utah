@@ -650,6 +650,129 @@ if [[ "${UTAH_E2E_REQUIRE_SCREENSHOTS:-0}" == 1 ]]; then
     done
 fi
 
+echo "=== Validating Bluefin first-boot services and hooks at runtime ==="
+
+# 1. Assert no failed setup units or services on first boot
+echo "Checking first-boot units for failure..."
+failed_setup_units="$(ssh_target "systemctl list-units --state=failed --no-legend 2>/dev/null | grep -E 'ublue|setup|dconf-update' || true")"
+if [[ -n "${failed_setup_units}" ]]; then
+    echo "Failed setup units found on first boot:" >&2
+    echo "${failed_setup_units}" >&2
+    fail "first boot completed with failed setup units: ${failed_setup_units}"
+fi
+echo "  first-boot setup units: clean (no failures)"
+
+# 2. Flathub and default Flatpaks
+echo "Checking Flathub remote and default Flatpaks..."
+ssh_target 'flatpak remotes | grep -qw flathub' \
+    || fail "Flathub remote is not configured in flatpak remotes"
+echo "  flatpak remote: flathub is configured"
+
+flatpak_status="$(ssh_target '
+    installed="$(flatpak list --app --columns=application 2>/dev/null | grep -v "^$" || true)"
+    if [[ -n "${installed}" ]]; then
+        echo "installed: $(echo "${installed}" | wc -l) flatpaks present"
+    else
+        unit_state="$(systemctl is-active flatpak-preinstall.service 2>/dev/null || systemctl is-failed flatpak-preinstall.service 2>/dev/null || echo "unknown")"
+        if [[ "${unit_state}" == "failed" ]]; then
+            echo "failed: flatpak-preinstall.service failed"
+            exit 1
+        fi
+        echo "retryable-state: flatpak-preinstall.service state=${unit_state}"
+    fi
+')" || fail "Flatpak installation check failed: ${flatpak_status}"
+echo "  flatpak status: ${flatpak_status}"
+
+# 3. Input-remapper and Bluefin statistics enablement policy
+echo "Checking enablement policy for input-remapper and statistics..."
+ssh_target 'systemctl is-enabled input-remapper.service 2>/dev/null' | grep -qE 'enabled|enabled-runtime' \
+    || fail "input-remapper.service is not enabled"
+echo "  input-remapper.service: enabled"
+
+ssh_target 'systemctl is-enabled bluefin-stats-refresh.timer 2>/dev/null' | grep -qE 'enabled|enabled-runtime' \
+    || fail "bluefin-stats-refresh.timer is not enabled"
+echo "  bluefin-stats-refresh.timer: enabled"
+
+# Exercise statistics script (non-fatal, external API call)
+if ssh_target 'sudo /usr/libexec/bluefin-refresh-stats'; then
+    echo "  bluefin-refresh-stats: executed cleanly"
+else
+    echo "  bluefin-refresh-stats: warning: execution failed (non-fatal API call)"
+fi
+
+# 4. Update service enablement
+ssh_target 'systemctl is-enabled uupd.timer 2>/dev/null' | grep -qE 'enabled|enabled-runtime' \
+    || fail "uupd.timer is not enabled"
+echo "  uupd.timer: enabled"
+
+# 5. Tailscale hook: never invokes missing binary; deferred state is explicit
+echo "Checking Tailscale setup hook..."
+if ssh_target 'command -v tailscale >/dev/null 2>&1'; then
+    ssh_target 'sudo /usr/share/ublue-os/privileged-setup.hooks.d/10-tailscale.sh' \
+        || fail "10-tailscale.sh failed execution when tailscale binary is present"
+    echo "  tailscale binary present: hook executed cleanly"
+else
+    tailscale_hook_out="$(ssh_target 'sudo /usr/share/ublue-os/privileged-setup.hooks.d/10-tailscale.sh 2>&1' || true)"
+    echo "${tailscale_hook_out}" | grep -qi "deferred" \
+        || fail "10-tailscale.sh did not explicitly indicate deferred state when tailscale is missing: ${tailscale_hook_out}"
+    echo "  tailscale binary missing: deferred state confirmed"
+fi
+
+# 6. Privileged and user setup execution
+echo "Exercising ublue-privileged-setup and ublue-user-setup..."
+ssh_target 'sudo /usr/bin/ublue-privileged-setup' \
+    || fail "ublue-privileged-setup execution failed"
+echo "  ublue-privileged-setup: OK"
+
+ssh_target '/usr/bin/ublue-user-setup' \
+    || fail "ublue-user-setup execution failed"
+echo "  ublue-user-setup: OK"
+
+# 7. Repeat boot idempotency
+if [[ "${UTAH_E2E_REPEAT_BOOT:-0}" == "1" ]]; then
+    echo "Rebooting installed system to verify repeat-boot idempotency..."
+    cp "${SERIAL_INSTALLED}" "${WORK}/installed-serial-boot1.log" 2>/dev/null || true
+    : > "${SERIAL_INSTALLED}"
+
+    ssh_target 'sudo systemctl reboot' 2>/dev/null || true
+    sleep 5
+
+    status=0
+    python3 "${ROOT}/iso/scripts/luks-unlock.py" qemu \
+        "${MONITOR_INSTALLED}" "${PASSPHRASE}" "${SERIAL_INSTALLED}" || status=$?
+    if [[ ${status} -ne 0 ]]; then
+        shot luks-failed-repeat "${MONITOR_INSTALLED}" || true
+        fail "repeat boot LUKS unlock failed (exit ${status})"
+    fi
+
+    echo "Waiting for the installed system to reach graphical target on repeat boot..."
+    for i in $(seq 1 90); do
+        if grep -qa "Reached target.*Graphical" "${SERIAL_INSTALLED}" 2>/dev/null; then
+            echo "  serial: reached graphical target on repeat boot"; break
+        fi
+        [[ "$i" -eq 90 ]] && { diagnose_boot "${SERIAL_INSTALLED}"; fail "repeat boot: no graphical target after 7m30s"; }
+        sleep 5
+    done
+
+    for i in $(seq 1 60); do
+        if ssh_target true 2>/dev/null; then break; fi
+        [[ "$i" -eq 60 ]] && fail "cannot log in over SSH after repeat boot"
+        sleep 5
+    done
+    echo "  ssh: logged in after repeat boot"
+
+    failed_repeat="$(ssh_target "systemctl list-units --state=failed --no-legend 2>/dev/null | grep -E 'ublue|setup|dconf-update' || true")"
+    if [[ -n "${failed_repeat}" ]]; then
+        echo "Failed setup units found on repeat boot:" >&2
+        echo "${failed_repeat}" >&2
+        fail "repeat boot completed with failed setup units: ${failed_repeat}"
+    fi
+
+    ssh_target 'sudo /usr/bin/ublue-privileged-setup' || fail "repeat boot: ublue-privileged-setup failed"
+    ssh_target '/usr/bin/ublue-user-setup' || fail "repeat boot: ublue-user-setup failed"
+    echo "  repeat boot: idempotent and clean"
+fi
+
 echo
 echo "PASS: Utah installed to an encrypted disk, unlocked, and ${TEST_USER} logged"
 echo "      in to a GNOME session on it."

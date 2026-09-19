@@ -8,8 +8,9 @@ Before=flatpak-add-fedora-repos.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/bin/flatpak remote-delete --system fedora
-ExecStart=/usr/bin/flatpak remote-delete --system fedora-testing
+ExecStartPre=/usr/bin/mkdir -p /var/lib/flatpak
+ExecStart=-/usr/bin/flatpak remote-delete --force --system fedora
+ExecStart=-/usr/bin/flatpak remote-delete --force --system fedora-testing
 # Make sure even if flatpak-add-fedora-repos.service  exists, it
 # won't run.
 ExecStart=/usr/bin/touch /var/lib/flatpak/.fedora-initialized

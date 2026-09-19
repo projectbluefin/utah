@@ -3,7 +3,7 @@ Description=Refresh Bluefin community stats for fastfetch
 Documentation=https://projectbluefin.io
 After=network-online.target
 Wants=network-online.target
-ConditionPathIsReadWrite=/var/cache/bluefin
+ConditionPathIsReadWrite=/var/cache
 
 [Service]
 Type=oneshot
