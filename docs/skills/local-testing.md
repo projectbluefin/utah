@@ -13,8 +13,8 @@ dependencies: []
 tags: [qemu, bootc, iso, vm, testing]
 description: >-
   Local validation loop: build-ghcr, bootc install to-disk, QEMU/noVNC boot,
-  live ISO. Use when validating changes end-to-end or debugging boot, GDM, or
-  live-session failures.
+  live ISO boot paths, and Secure Boot strategy. Use when validating changes
+  end-to-end or debugging boot, GDM, or live-session failures.
 metadata:
   type: runbook
 ---
@@ -136,6 +136,58 @@ integration is the next ISO milestone. `just boot-iso` boots it with
 QEMU-for-Docker and exposes the noVNC console at the printed URL (comment
 above `boot-iso` in `Justfile`), with TPM, UEFI, and `-snapshot` so nothing
 persists.
+
+### Supported and unsupported boot paths
+
+- **UEFI x86_64 (Supported)**: The live ISO is built strictly for UEFI boot
+  using `systemd-boot` located at `EFI/BOOT/BOOTX64.EFI` on the FAT32 ESP.
+  Dracut locates the live squashfs root via `root=live:LABEL=UTAH_LIVE`.
+  This is the only supported and tested live boot path.
+- **Legacy BIOS/CSM (Unsupported)**: Legacy MBR boot is unsupported. The ISO
+  omits MBR boot sectors and isolinux binaries.
+- **File-backed / Ventoy ISO loopback (Unsupported)**: Tools such as Ventoy
+  or GRUB loopback rely on initramfs hooks to mount the ISO container file from
+  a host filesystem before pivoting to the live root. Utah does not implement
+  custom dracut loopback handlers or a `rd.utah.isofile` locator; `loopback.cfg`
+  is deliberately omitted from the ISO to avoid advertising a non-functional
+  boot path. Media must be written directly to physical drives (e.g. via
+  Fedora Media Writer, `dd`, or balenaEtcher).
+
+### Kernel arguments and SELinux enforcement
+
+Production live boot entries configure:
+`root=live:LABEL=UTAH_LIVE rd.live.image rd.live.overlay.overlayfs=1 enforcing=0 console=ttyS0,115200n8`
+
+- Every kernel argument corresponds to an implemented and tested dracut boot
+  path (`dmsquash-live`, `overlayfs`, and serial console logging).
+- **SELinux policy (Documented Exception)**: The live session runs with
+  SELinux in **Permissive** mode (`enforcing=0`) as an approved documented
+  exception (Issue #22). The squashfs live rootfs is assembled rootless inside
+  `podman unshare`, where `security.selinux` extended attributes cannot be
+  written without root privilege, leaving rootfs files unlabeled. Booting an
+  unlabeled live root in Enforcing mode causes denials in systemd and GDM that
+  hang the live session. Permissive mode remains in place for live media until
+  xattr-preserving squashfs build tooling lands. Installed target systems boot
+  in **Enforcing** mode.
+
+### Secure Boot strategy
+
+- **Live ISO bootloader**: The live image installs `systemd-boot-unsigned`.
+  On hardware with Microsoft UEFI Secure Boot enabled, firmware will reject the
+  unsigned EFI loader unless Secure Boot is temporarily disabled in UEFI setup.
+  Production releases will incorporate Fedora's signed shim (`shimx64.efi`) and
+  a signed bootloader binary.
+- **Custom flavor kernels (`gaming`, `nvidia-gaming`)**: The OGC gaming kernel
+  (`linux-ogc`) is compiled from source and unsigned. Secure Boot systems
+  require either disabling Secure Boot or manually enrolling a Machine Owner Key
+  (MOK) into UEFI NVRAM using `mokutil` (planned tooling; no automated helper
+  currently exists in-tree).
+- **Custom flavor modules (`nvidia`, `nvidia-gaming`)**: Out-of-tree NVIDIA
+  kernel modules compiled against the base or OGC kernel run under kernel
+  lockdown when Secure Boot is active. Unsigned modules fail to load; signing
+  modules with an enrolled MOK key (e.g. via the kernel's `sign-file` utility)
+  is planned for future release pipelines, but currently module signing is not
+  implemented in-tree and Secure Boot must remain disabled.
 
 ## Verification
 

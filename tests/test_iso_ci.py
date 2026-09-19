@@ -96,6 +96,16 @@ class EvidenceTests(unittest.TestCase):
         self.assertIn('"dir:${PAYLOAD_EXPORT}"', script)
         self.assertIn('dir:/payload "containers-storage:$1"', script)
 
+    def test_production_boot_args_and_unsupported_paths(self):
+        script = (ROOT / "iso/scripts/build-iso.sh").read_text()
+        self.assertIn("enforcing=0", script)
+        self.assertIn("Documented exception (Issue #22)", script)
+        self.assertNotIn("rd.utah.isofile", script)
+        self.assertNotIn("loopback.cfg", script)
+        self.assertIn("root=live:LABEL=${LABEL}", script)
+        self.assertIn("rd.live.image", script)
+        self.assertIn("rd.live.overlay.overlayfs=1", script)
+
     def test_iso_budget_guard_fails_closed_above_ceiling(self):
         # The budget guard (#128) is the whole point of the size drift this PR
         # closes. Extract the real block and run it with du stubbed so we can

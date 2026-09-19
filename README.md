@@ -76,6 +76,16 @@ This is the honest list, and it is why the label above says pre-alpha.
 - **Nothing is published.** No image, no ISO artifact, no installer. A live
   ISO builds locally (`just iso`); installer payload integration is the next
   ISO milestone.
+- **Live media boot paths and Secure Boot.** Live media requires UEFI boot;
+  legacy BIOS and file-backed/Ventoy booting are explicitly unsupported (flash
+  directly using Fedora Media Writer or `dd`). As a documented exception
+  (Issue #22), live media runs SELinux in Permissive mode (`enforcing=0`)
+  because rootless container squashfs generation cannot preserve SELinux xattrs;
+  installed target systems boot Enforcing normally. Because the live environment
+  currently uses `systemd-boot-unsigned`, Secure Boot must be disabled in firmware
+  to boot the live media until signed shim integration is complete. Custom OGC
+  kernels and NVIDIA modules similarly require MOK enrollment or Secure Boot
+  disabled.
 - **Cross-vendor switch and update timers (`bootc-fetch-apply-updates`).**
   Switching to Utah from Bluefin or other bootc images carries Bluefin's
   `/etc/systemd/system/timers.target.wants/bootc-fetch-apply-updates.timer`

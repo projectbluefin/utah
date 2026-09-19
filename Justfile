@@ -68,6 +68,9 @@ check:
     grep -q 'org.bootcinstaller.Installer' iso/live/src/install-flatpaks.sh
     grep -q 'containers-storage' iso/scripts/build-iso.sh
     grep -q 'UTAH_LIVE' iso/scripts/build-iso.sh
+    grep -q 'Documented exception (Issue #22)' iso/scripts/build-iso.sh
+    if grep -q 'rd.utah.isofile' iso/scripts/build-iso.sh; then echo "rd.utah.isofile found in build-iso.sh" >&2; exit 1; fi
+    if grep -q 'loopback.cfg' iso/scripts/build-iso.sh; then echo "loopback.cfg found in build-iso.sh" >&2; exit 1; fi
     grep -q 'ENABLE_SSHD' Containerfile
     grep -q 'ENABLE_SSHD="${ENABLE_SSHD:-0}"' Justfile
     grep -q 'ARG PACKAGE_IMAGE_SHA=' Containerfile
