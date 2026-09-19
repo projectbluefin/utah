@@ -1,7 +1,7 @@
 ---
 name: skill-improvement
 version: "1.0"
-last_updated: "2026-09-05"
+last_updated: "2026-09-19"
 id: skill-improvement
 one_line_purpose: Capture durable agent learnings in maintained docs.
 entry_point: docs/skills/skill-improvement.md
@@ -45,6 +45,11 @@ it, or create a new skill file, add it to the router table in
 (`python3 scripts/generate_skill_index.py --write`). Code-adjacent comments —
 the Containerfile comment blocks, manifest headers, and script headers —
 remain the place for mechanism detail beside the code.
+
+The generated catalog (`docs/skills/index.json` and `docs/skills/index.md`) is
+a pure function of skill front matter and carries no timestamps, so two PRs
+modifying different skills produce disjoint diffs and can merge concurrently
+without colliding on a generated date.
 
 Factory-wide learnings go to `projectbluefin/common` as an issue with the
 learning, affected component, and evidence.

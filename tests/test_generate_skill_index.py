@@ -7,8 +7,7 @@ and `docs/skills/index.md`. Before this suite no test named the script at all --
 coverage reported 0% of its 106 statements -- so every refusal it is supposed to
 make (missing front matter, missing required keys, an `entry_point` that does
 not match the file's own path, a catalog the schema rejects, a stale committed
-index) was unproven, and so was the `generated_at` pinning that keeps `--check`
-from failing on pure calendar drift.
+index) was unproven.
 
 These tests execute the script. The module reads its inputs through module-level
 path constants, so each test points those constants at a temporary skills tree
@@ -26,7 +25,6 @@ import sys
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
-from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
@@ -266,7 +264,7 @@ class BuildSkillEntryTests(SkillsTreeTestCase):
 
 
 class BuildCatalogTests(SkillsTreeTestCase):
-    def test_sorts_skills_by_id_and_stamps_today(self):
+    def test_sorts_skills_by_id_without_timestamp(self):
         self.write_skill("zeta.md", id="zeta")
         self.write_skill("alpha.md", id="alpha")
 
@@ -274,79 +272,12 @@ class BuildCatalogTests(SkillsTreeTestCase):
 
         self.assertEqual([s["id"] for s in catalog["skills"]], ["alpha", "zeta"])
         self.assertEqual(catalog["schema_version"], self.module.SCHEMA_VERSION)
-        self.assertEqual(catalog["generated_at"], date.today().isoformat())
+        self.assertNotIn("generated_at", catalog)
 
     def test_an_empty_skills_tree_produces_an_empty_catalog(self):
         catalog = self.module.build_catalog()
 
         self.assertEqual(catalog["skills"], [])
-
-
-class LoadExistingCatalogTests(SkillsTreeTestCase):
-    def test_returns_none_when_the_index_is_absent(self):
-        self.assertIsNone(self.module.load_existing_catalog())
-
-    def test_returns_none_when_the_index_does_not_parse(self):
-        self.module.INDEX_PATH.write_text("{not json")
-
-        self.assertIsNone(self.module.load_existing_catalog())
-
-    def test_returns_the_committed_catalog(self):
-        self.module.INDEX_PATH.write_text(json.dumps({"skills": []}))
-
-        self.assertEqual(self.module.load_existing_catalog(), {"skills": []})
-
-
-class PinGeneratedAtTests(SkillsTreeTestCase):
-    def catalog(self, skills, generated_at="2026-05-05"):
-        return {
-            "generated_at": generated_at,
-            "schema_version": self.module.SCHEMA_VERSION,
-            "skills": skills,
-        }
-
-    def test_reuses_the_committed_date_when_content_is_unchanged(self):
-        skills = [{"id": "alpha"}]
-        fresh = self.catalog(skills, generated_at="2026-09-19")
-        existing = self.catalog(skills, generated_at="2026-01-01")
-
-        self.module.pin_unchanged_generated_at(fresh, existing)
-
-        self.assertEqual(fresh["generated_at"], "2026-01-01")
-
-    def test_advances_the_date_when_a_skill_changed(self):
-        fresh = self.catalog([{"id": "alpha"}], generated_at="2026-09-19")
-        existing = self.catalog([{"id": "beta"}], generated_at="2026-01-01")
-
-        self.module.pin_unchanged_generated_at(fresh, existing)
-
-        self.assertEqual(fresh["generated_at"], "2026-09-19")
-
-    def test_advances_the_date_when_the_schema_version_changed(self):
-        skills = [{"id": "alpha"}]
-        fresh = self.catalog(skills, generated_at="2026-09-19")
-        existing = {"generated_at": "2026-01-01", "schema_version": "0.9",
-                    "skills": skills}
-
-        self.module.pin_unchanged_generated_at(fresh, existing)
-
-        self.assertEqual(fresh["generated_at"], "2026-09-19")
-
-    def test_no_committed_catalog_leaves_the_fresh_date_alone(self):
-        fresh = self.catalog([{"id": "alpha"}], generated_at="2026-09-19")
-
-        self.module.pin_unchanged_generated_at(fresh, None)
-
-        self.assertEqual(fresh["generated_at"], "2026-09-19")
-
-    def test_a_committed_catalog_without_a_date_leaves_the_fresh_date(self):
-        skills = [{"id": "alpha"}]
-        fresh = self.catalog(skills, generated_at="2026-09-19")
-        existing = {"schema_version": self.module.SCHEMA_VERSION, "skills": skills}
-
-        self.module.pin_unchanged_generated_at(fresh, existing)
-
-        self.assertEqual(fresh["generated_at"], "2026-09-19")
 
 
 class ValidateCatalogTests(SkillsTreeTestCase):
@@ -368,7 +299,7 @@ class ValidateCatalogTests(SkillsTreeTestCase):
         self.assertIn("id", stderr.getvalue())
 
     def test_reports_the_root_when_a_top_level_key_is_wrong(self):
-        catalog = {"schema_version": "1.0", "skills": []}  # no generated_at
+        catalog = {"skills": []}  # missing schema_version
 
         stderr = io.StringIO()
         with redirect_stderr(stderr), self.assertRaises(SystemExit):
@@ -396,8 +327,7 @@ class RenderMarkdownTests(SkillsTreeTestCase):
         markdown = self.module.render_markdown(catalog)
 
         self.assertIn(
-            f"Generated: {catalog['generated_at']} · schema "
-            f"{self.module.SCHEMA_VERSION} · 1 skills",
+            f"schema {self.module.SCHEMA_VERSION} · 1 skills",
             markdown,
         )
 
@@ -480,14 +410,12 @@ class MainTests(SkillsTreeTestCase):
         self.assertFalse(self.module.INDEX_PATH.exists())
         self.assertFalse(self.md_path.exists())
 
-    def test_check_survives_a_branch_cut_before_today(self):
-        """`generated_at` drift alone must not fail the gate."""
+    def test_catalog_is_deterministic_without_timestamp(self):
+        """The catalog contains no timestamp, ensuring deterministic --check."""
         self.write_skill("alpha.md", id="alpha")
         self.run_main("--write")
         committed = json.loads(self.module.INDEX_PATH.read_text())
-        committed["generated_at"] = "2020-01-01"
-        self.module.INDEX_PATH.write_text(json.dumps(committed, indent=2) + "\n")
-        self.md_path.write_text(self.module.render_markdown(committed))
+        self.assertNotIn("generated_at", committed)
 
         code, _, stderr = self.run_main("--check")
 
