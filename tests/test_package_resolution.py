@@ -231,6 +231,14 @@ class ParityContractTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn(f"  - {target}\n", stderr.getvalue())
 
+    def test_services_section_includes_avahi_and_preset_enables_it(self):
+        services = installer.section(self.OVERLAY, "services")
+        self.assertIn("avahi", services)
+        preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset").read_text()
+        self.assertIn("enable avahi-daemon.service", preset)
+        configure_services = (ROOT / "scripts/configure-services.sh").read_text()
+        self.assertIn("enable_unit avahi-daemon.service", configure_services)
+
 
 if __name__ == "__main__":
     unittest.main()

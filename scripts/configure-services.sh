@@ -72,6 +72,7 @@ enable_unit tailscaled.service
 enable_unit uupd.timer
 enable_unit ublue-system-setup.service
 enable_unit systemd-resolved.service
+enable_unit avahi-daemon.service
 enable_unit bootc-unified-storage.service
 
 # Bluefin's Brewfile and Bazaar preinstall hook need the Flathub remote before

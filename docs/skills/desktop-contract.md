@@ -105,9 +105,10 @@ configures authselect, and removes the extension build toolchain before
 cleanup (Containerfile RUN comment; originated in `docs/building.md`'s former
 design section and now lives in this skill).
 
-Hummingbird's base does not include `systemd-resolved` by default; it is listed
-under `[services]` in `packages/utah.toml` and configured in
-`scripts/configure-services.sh`, which also disables `PrivateTmp` on
+Hummingbird's base does not include `systemd-resolved` or `avahi` by default;
+they are listed under `[services]` in `packages/utah.toml` and configured in
+`scripts/configure-services.sh`, which enables `avahi-daemon.service` for mDNS
+and geoclue WiFi location, and disables `PrivateTmp` on
 `systemd-resolved.service` for bootc early-boot DNS resolution.
 
 ## The verifiers run twice

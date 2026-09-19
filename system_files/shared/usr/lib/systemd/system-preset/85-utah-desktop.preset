@@ -9,6 +9,7 @@ enable tailscaled.service
 enable uupd.timer
 enable ublue-system-setup.service
 enable systemd-resolved.service
+enable avahi-daemon.service
 enable bootc-unified-storage.service
 enable dconf-update.service
 disable sshd.service
