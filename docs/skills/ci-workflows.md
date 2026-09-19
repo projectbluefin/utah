@@ -1,7 +1,7 @@
 ---
 name: ci-workflows
-version: "1.0"
-last_updated: "2026-09-05"
+version: "1.1"
+last_updated: "2026-09-18"
 id: ci-workflows
 one_line_purpose: Navigate Utah's build, promote, and sync workflow topology.
 entry_point: docs/skills/ci-workflows.md
@@ -12,8 +12,8 @@ status: active
 dependencies: []
 tags: [ci, workflows, actions, promotion]
 description: >-
-  build.yml contract gate, kernel-cache job, main/kernel matrix split,
-  promote-testing-to-main and sync-main-to-testing, actions@v1 delegation.
+  build.yml contract gate, Dakota PR and merge-queue build topology,
+  kernel-cache job, matrix split, promote and sync, actions@v1 delegation.
   Use when changing .github/workflows/ or debugging a red run.
 metadata:
   type: reference
@@ -21,23 +21,52 @@ metadata:
 
 # CI Workflows
 
-Three workflows, all thin callers into `projectbluefin/actions@v1` reusables,
-each pinned to a SHA tagged `v1`:
+Workflows are thin callers into `projectbluefin/actions@v1` reusables, each
+pinned to a SHA tagged `v1`:
 
-- `.github/workflows/build.yml` -- pull requests, pushes to `testing`, a
-  manual dispatch. Top-level `permissions: {}`; each job
-  grants its own. Cancels in-progress runs per workflow and ref.
-- `.github/workflows/promote-testing-to-main.yml` -- pushes to `testing`, a
-  nightly cron, and manual dispatch.
-- `.github/workflows/sync-main-to-testing.yml` -- source pushes to `main`,
-  nightly cron, and manual dispatch; explicitly dispatches the testing build
-  after syncing. Token-authenticated branch pushes alone do not start CI.
-- `.github/workflows/post-testing-e2e.yml` -- successful non-PR testing builds
-  explicitly dispatch this, or manually supply a successful testing build run ID.
+- `.github/workflows/build.yml` -- pull requests, merge queue (`merge_group`),
+  pushes to `testing`, and manual dispatch. Top-level `permissions: {}`; each
+  job grants its own. Cancels in-progress runs for pull requests only
+  (`cancel-in-progress: ${{ github.event_name == 'pull_request' }}`), ensuring
+  merge queue, scheduled, and release builds queue safely without dropping work.
+- `.github/workflows/promote-testing-to-main.yml` -- pushes to `testing`,
+  nightly cron, manual dispatch. Serialized via `utah-promote-testing`.
+- `.github/workflows/sync-main-to-testing.yml` -- pushes to `main`, nightly
+  cron, manual dispatch; dispatches testing build. Serialized via `utah-sync-main-to-testing`.
+- `.github/workflows/post-testing-e2e.yml` -- testing build verification.
+  Serialized via `utah-iso-e2e`.
+- `.github/workflows/execute-release.yml` -- promotion and release dispatch.
+  Serialized via `utah-execute-release`.
 
 CI delegates builds, vulnerability reporting, SBOMs, keyless signatures,
 provenance, caching, and rechunking to `projectbluefin/actions@v1` (originated
 as a `docs/building.md` design bullet; now lives in this skill).
+
+## PR validation and merge-queue build topology
+
+In accordance with Dakota's CI topology:
+
+1. **PR validation protects core image builds without kernel compile overhead:**
+   PRs run the cheap `contract` job (`just check`, `just check-parity`, `just check-repos`, and
+   flavor resolution) and primary `build_main` image build, validating container
+   composition and package transactions without waiting for the 45-minute kernel cache compile.
+   PRs skip the secondary-flavor kernel builds (`kernel_cache`, `build_kernel`).
+2. **Merge queue performs full release-candidate builds:** When a PR enters the
+   merge queue, GitHub fires `merge_group`. Merge queue builds execute the full
+   matrix including secondary flavors: `contract`, `build_main`, `kernel_cache`, and `build_kernel`.
+3. **Release-oriented concurrency:** `cancel-in-progress` is active only for
+   pull requests (`${{ github.event_name == 'pull_request' }}`). Merge queue,
+   testing pushes, scheduled runs, and promotion workflows queue safely instead
+   of being superseded and discarded mid-run.
+4. **Explicit timeouts and log preservation:** Every standalone runner job defines an explicit
+   `timeout-minutes` (reusable workflows inherit timeout configuration from the reusable workflow).
+   Long-running tasks capture build output and upload logs as artifacts on completion or failure
+   (e.g. `kernel-cache-build-logs`).
+5. **Transient push retries and explicit secondary-flavor policy:** Registry
+   pushes (`podman push` for kernel cache and `skopeo copy` for testing tag
+   promotion) retry transient failures up to three times with backoff. Secondary
+   flavors (`nvidia`, `gaming`, `nvidia-gaming`) build in `build_kernel` on top
+   of the kernel cache; their configuration is owned strictly by `config/flavors.json`.
 
 ## contract: the cheap gate
 

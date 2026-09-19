@@ -17,6 +17,7 @@ concurrency:
 jobs:
   resolve:
     runs-on: ubuntu-26.04
+    timeout-minutes: 15
     permissions:
       contents: read
       actions: read
@@ -144,6 +145,7 @@ jobs:
   promote-to-testing:
     needs: [resolve, luks]
     runs-on: ubuntu-26.04
+    timeout-minutes: 15
     permissions:
       contents: read
       packages: write
@@ -164,12 +166,19 @@ jobs:
           sudo apt-get update && sudo apt-get install -y skopeo
           echo "$GH_TOKEN" | skopeo login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           while IFS= read -r ref; do
-            skopeo copy --all --preserve-digests "docker://$ref" "docker://${ref%@*}:testing"
+            PUSH_OK=false
+            for attempt in 1 2 3; do
+              skopeo copy --all --preserve-digests "docker://$ref" "docker://${ref%@*}:testing" && { PUSH_OK=true; break; }
+              echo "skopeo copy attempt ${attempt} failed for ${ref}, retrying in 5s..."
+              [ "$attempt" -lt 3 ] && sleep 5
+            done
+            $PUSH_OK || { echo "ERROR: all skopeo copy attempts failed for ${ref}"; exit 1; }
           done < <(jq -r '.include[].ref' <<< "$MATRIX")
 
   documentation:
     needs: [resolve, luks]
     runs-on: ubuntu-26.04
+    timeout-minutes: 10
     permissions:
       contents: write
       pull-requests: write

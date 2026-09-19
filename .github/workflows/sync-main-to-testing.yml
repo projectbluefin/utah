@@ -14,6 +14,10 @@ permissions:
   contents: write
   actions: write
 
+concurrency:
+  group: utah-sync-main-to-testing
+  cancel-in-progress: false
+
 jobs:
   sync:
     uses: projectbluefin/actions/.github/workflows/reusable-sync-branches.yml@8895d09342174927b950abc75dccd6da2c8ba36f # v1
@@ -23,6 +27,7 @@ jobs:
   build:
     needs: sync
     runs-on: ubuntu-26.04
+    timeout-minutes: 10
     permissions:
       actions: write
     steps:

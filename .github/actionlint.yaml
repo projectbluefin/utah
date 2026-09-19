@@ -1,0 +1,8 @@
+# actionlint ships a hardcoded table of GitHub-hosted runner labels. ubuntu-26.04
+# went GA on 2026-09-17 (actions/runner-images#14747) and is newer than any
+# actionlint release, including v1.7.12, so the linter reports it as unknown.
+# Declaring it here tells actionlint the label exists; it is not a self-hosted
+# runner. Drop this block once an actionlint release knows the label natively.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04
