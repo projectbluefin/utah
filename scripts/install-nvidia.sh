@@ -49,7 +49,16 @@ modules_only="${UTAH_NVIDIA_MODULES_ONLY:-}"
 
 # NVIDIA's own designation of the current driver, not a hand-picked directory
 # listing: https://download.nvidia.com/XFree86/Linux-x86_64/latest.txt
-driver_version="${UTAH_NVIDIA_DRIVER_VERSION:-595.84}"
+#
+# 595.84 stopped compiling when Hummingbird's base moved to kernel 7.2:
+#
+#     os-interface.c:764: error: implicit declaration of function 'strncpy'
+#
+# The kernel completed its strscpy migration and removed strncpy, and upstream
+# followed in 595.99.02, which replaces that call with strscpy and is what
+# latest.txt designates today. So this is the pin policy above doing its job
+# rather than a workaround: read latest.txt, take the digest beside it (#173).
+driver_version="${UTAH_NVIDIA_DRIVER_VERSION:-595.99.02}"
 run="NVIDIA-Linux-x86_64-${driver_version}.run"
 url="https://download.nvidia.com/XFree86/Linux-x86_64/${driver_version}/${run}"
 # The vendor `.run` is executed as root during composition, so it is verified
@@ -60,7 +69,7 @@ url="https://download.nvidia.com/XFree86/Linux-x86_64/${driver_version}/${run}"
 # beyond the TLS channel it was meant to backstop. The constant is NVIDIA's
 # published SHA-256 for the pinned driver version; the two move together, as
 # does UTAH_NVIDIA_RUN_SHA256 when UTAH_NVIDIA_DRIVER_VERSION is overridden.
-NVIDIA_RUN_SHA256="${UTAH_NVIDIA_RUN_SHA256:-99c404e52131bf27bca6da0268dcce3ebedc7a73ab174071a995cf1a6c5eba06}"
+NVIDIA_RUN_SHA256="${UTAH_NVIDIA_RUN_SHA256:-e87477958bf763070549324bd5ad6c948eba6ed210e44005b3eff84940f6e1ec}"
 
 ogc_release=""
 [ -f /usr/lib/utah/ogc-kernel-release ] && ogc_release="$(cat /usr/lib/utah/ogc-kernel-release)"
