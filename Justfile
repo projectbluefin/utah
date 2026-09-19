@@ -39,6 +39,10 @@ check:
     test -f system_files/shared/usr/lib/systemd/system/bootc-unified-storage.service.d/10-utah-local-test.conf
     grep -q 'enable gdm.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
     grep -q 'enable ublue-system-setup.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
+    grep -q 'enable utah-countme.timer' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
+    test -f system_files/shared/usr/lib/systemd/system/utah-countme.service
+    test -f system_files/shared/usr/lib/systemd/system/utah-countme.timer
+    test -f system_files/shared/usr/libexec/utah-countme
     grep -q 'disable bootc-fetch-apply-updates.timer' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
     grep -q 'disable bootc-fetch-apply-updates.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
     grep -q 'bootc-fetch-apply-updates.timer' scripts/configure-services.sh

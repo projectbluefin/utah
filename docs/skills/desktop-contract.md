@@ -1,20 +1,20 @@
 ---
 name: desktop-contract
-version: "1.0"
+version: "1.1"
 last_updated: "2026-09-18"
 id: desktop-contract
-one_line_purpose: Maintain Utah identity, Bluefin desktop defaults, and first-boot Flatpak policy.
+one_line_purpose: Maintain Utah identity, Bluefin desktop defaults, telemetry, and first-boot Flatpak policy.
 entry_point: docs/skills/desktop-contract.md
 category: contracts
 mcp_compliance_level: partial
 optimization_status: draft
 status: active
 dependencies: []
-tags: [desktop, branding, gnome, flatpak]
+tags: [desktop, branding, gnome, flatpak, telemetry, countme]
 description: >-
   The runtime desktop contract in contracts/bluefin-desktop.toml and its
   in-image verifiers. Use when changing branding, os-release, service
-  presets, GNOME extensions, or first-boot Flatpak behavior.
+  presets, GNOME extensions, countme telemetry, or first-boot Flatpak behavior.
 metadata:
   type: policy
 ---
@@ -57,7 +57,7 @@ The TOML's sections are the contract's table of contents:
 - **`[services]`** — systemd units the preset must enable: `gdm.service`,
   `bluetooth.service`, `ublue-system-setup.service`, `flatpak-preinstall.service`,
   `flatpak-nuke-fedora.service`, `brew-setup.service`, `dconf-update.service`,
-  `bootc-unified-storage.service`, `uupd.timer`. Update policy delegates
+  `bootc-unified-storage.service`, `utah-countme.timer`, `uupd.timer`. Update policy delegates
   background updates to `uupd.timer`; `bootc-fetch-apply-updates.timer` and
   `bootc-fetch-apply-updates.service` are masked in `/etc` and `/usr/lib` (and
   disabled in `85-utah-desktop.preset`) so cross-vendor `/etc` 3-way merges
@@ -100,15 +100,37 @@ on `GjsPrivate.DBusImplementation`, gracefully degrading to an inert portal on G
 Hummingbird defaults to a server preset and disables unlisted services, so
 the desktop policy is applied explicitly. `scripts/configure-services.sh`
 mirrors bluefin-lts's `40-services.sh`: it applies the desktop presets,
-enables GDM, firmware updates, Tailscale, uupd, user setup and resolved,
-configures authselect, and removes the extension build toolchain before
-cleanup (Containerfile RUN comment; originated in `docs/building.md`'s former
-design section and now lives in this skill).
+enables GDM, firmware updates, Tailscale, uupd, user setup, resolved, and
+the weekly `utah-countme.timer` client reporting, configures authselect, and
+removes the extension build toolchain before cleanup (Containerfile RUN comment;
+originated in `docs/building.md`'s former design section and now lives in this
+skill).
 
 Hummingbird's base does not include `systemd-resolved` by default; it is listed
 under `[services]` in `packages/utah.toml` and configured in
 `scripts/configure-services.sh`, which also disables `PrivateTmp` on
 `systemd-resolved.service` for bootc early-boot DNS resolution.
+
+## Countme telemetry
+
+Utah reports weekly anonymous telemetry to `countme.projectbluefin.io` matching
+Project Bluefin ADR 0006:
+- **Client implementation:** `/usr/libexec/utah-countme` executed via
+  `utah-countme.service` and scheduled by `utah-countme.timer`.
+- **Systemd isolation:** Runs as `DynamicUser=yes` with
+  `StateDirectory=utah-countme` storing local installation `epoch` and
+  `lastrun` timestamps.
+- **Reporting parameters & query string:** An empty HTTP GET request is sent to
+  `https://countme.projectbluefin.io/metalink?repo=${REPO}&tag=${IMAGE_TAG}&flavor=${IMAGE_FLAVOR}&arch=${ARCH}&countme=${BUCKET}`
+  - `repo`: image name (`utah` or custom variant)
+  - `tag`: OS image version / release tag
+  - `flavor`: desktop flavor (`main`, `nvidia`, `gaming`, etc.)
+  - `arch`: system architecture (`x86_64`)
+  - `countme`: installation age cohort bucket (1: first week, 2: 2–4 weeks, 3: 5–24 weeks, 4: >24 weeks)
+- **Data & logging policy:** No personal information or hardware identifiers are transmitted; requests contain no HTTP body. As with all HTTP requests, standard server connection metadata (including client IP address) is received by the endpoint for aggregate deduplication and cohort counting.
+- **Network & failure resilience:** Requests use an explicit `--max-time 10` timeout. `lastrun` is updated unconditionally before the request so network or endpoint outages do not trigger daily retry storms on reboot; failed reports are simply dropped.
+- **Persistent state integrity:** The install epoch is stored in `/var/lib/utah-countme/epoch`. If this file exists but cannot be read or is corrupted, execution degrades to a no-op (no ping sent and no epoch reset) to avoid resetting systems into bucket 1.
+- **Opt-out:** Honored whenever `/etc/projectbluefin/countme/disabled` exists, or by masking the timer (`systemctl mask utah-countme.timer`).
 
 ## The verifiers run twice
 

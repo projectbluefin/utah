@@ -1,0 +1,16 @@
+[Unit]
+Description=Weekly Utah Count Me telemetry reporting
+Documentation=https://docs.projectbluefin.io
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/run/ostree-booted
+ConditionPathExists=/usr/share/ublue-os/image-info.json
+ConditionPathExists=!/etc/projectbluefin/countme/disabled
+
+[Service]
+Type=oneshot
+DynamicUser=yes
+StateDirectory=utah-countme
+ExecStart=/usr/libexec/utah-countme
+StandardOutput=journal
+StandardError=journal

@@ -9,7 +9,7 @@ Generated: 2026-09-19 · schema 1.0 · 8 skills
 |---|---|---|---|
 | [ci-workflows](ci-workflows.md) | ci-ops | active | Navigate Utah's build, promote, and sync workflow topology. |
 | [containerfile](containerfile.md) | image-build | active | Edit the Containerfile without regressing layer count or cache hits. |
-| [desktop-contract](desktop-contract.md) | contracts | active | Maintain Utah identity, Bluefin desktop defaults, and first-boot Flatpak policy. |
+| [desktop-contract](desktop-contract.md) | contracts | active | Maintain Utah identity, Bluefin desktop defaults, telemetry, and first-boot Flatpak policy. |
 | [flavors](flavors.md) | image-build | active | Add, remove, or retire an image flavor safely. |
 | [kernel-cache](kernel-cache.md) | image-build | active | Understand and rebuild the OGC kernel and NVIDIA module cache image. |
 | [local-testing](local-testing.md) | testing | active | Build, install, and boot Utah locally in a VM or live ISO. |

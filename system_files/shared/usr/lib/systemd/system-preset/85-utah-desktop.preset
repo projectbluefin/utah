@@ -6,6 +6,7 @@ enable firewalld.service
 enable fwupd.service
 enable fwupd-refresh.timer
 enable tailscaled.service
+enable utah-countme.timer
 enable uupd.timer
 enable ublue-system-setup.service
 enable systemd-resolved.service

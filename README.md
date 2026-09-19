@@ -104,6 +104,10 @@ This is the honest list, and it is why the label above says pre-alpha.
   repository is consumed and the local QEMU image reaches GDM and GNOME Shell.
 - **CUDA is deliberately excluded** — 7.68 GB installed. Use the NVIDIA
   container toolkit, which is included, and run CUDA in a container.
+- **Telemetry (countme).** Utah includes a weekly countme client reporting
+  to `countme.projectbluefin.io` following Bluefin ADR 0006. Users can opt out
+  by running `sudo touch /etc/projectbluefin/countme/disabled` or by masking
+  the timer: `sudo systemctl mask utah-countme.timer`.
 
 See the [open issues](https://github.com/projectbluefin/utah/issues) for where
 things stand.
