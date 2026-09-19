@@ -47,12 +47,32 @@ opaque `exit status 71` from the image build (comment,
 `.github/workflows/build.yml`). It runs three checks:
 
 - `just check` -- manifest validation, including the workflow output check
-  (`scripts/check_workflow_outputs.py`), the syntax gate
-  (`scripts/check-script-syntax.py`), and the ban on flavor literals in
-  workflows.
+  (`scripts/check_workflow_outputs.py`), the download integrity guard
+  (`scripts/check-download-integrity.py`), the syntax gate
+  (`scripts/check-script-syntax.py`), host-side unit tests (`just test`),
+  and the ban on flavor literals in workflows.
 - `just check-parity` -- `packages/bluefin.toml` against Bluefin's upstream.
 - `just check-repos` -- the complete installation transaction against the
   digest-pinned base and package repository, including extension build tools.
+
+### CI guard scripts and test coverage
+
+The fast gate relies on pure-verdict Python scripts under `scripts/` to halt
+the build before expensive compilation or container builds run:
+
+- `scripts/check-download-integrity.py`: enforces that composition recipes do
+  not resolve mutable `releases/latest` URLs, and that any executable download
+  (`.run`, `.tar.gz`, `.tgz`, `.rpm`, `.flatpak`, `.service`, `.timer`) via `curl`
+  or `wget` is verified against a digest (`sha256sum`, `sha512sum`, `--check`) or
+  signature (`cosign`, `gpg --verify`). Clearance is per-file. Flathub descriptor
+  downloads (`flathub.flatpakrepo`, `appstream`) and comment lines are exempt.
+  Exercised by black-box tests in `tests/test_check_download_integrity.py`.
+- `scripts/check_workflow_outputs.py`: parses workflows under `.github/workflows/`
+  and ensures that every job output referencing `steps.<id>.outputs` points to a
+  step id defined in that same job. Step ids never leak across jobs, non-step
+  expressions (`inputs.*`, `github.*`, `env.*`) are accepted, and all dangling
+  references across all workflow files are reported.
+  Exercised by black-box tests in `tests/test_check_workflow_outputs.py`.
 
 The same job resolves the flavor set and splits it in two by what each
 flavor builds on -- `main` on the pristine Hummingbird base, the rest on the
@@ -164,6 +184,13 @@ For a deliberate rerun, dispatch Post-Testing E2E with `build_run_id` from a
 successful testing build containing the current harness. Do not pass a PR
 build: PRs do not publish immutable images. This matrix validates emulated
 UEFI desktop installation, not Secure Boot, TPM unlock, or physical GPUs.
+
+The ISO size is bounded in `iso/scripts/build-iso.sh`: it fails closed above
+`ISO_MAX_GB` (override per-run with `UTAH_ISO_MAX_GB`) once the ISO is written,
+so a drift like the 7.7G -> 8.6G jump in #128 fails the job instead of landing
+silently. The guard lives in the build script, so it holds for every caller
+(local `just iso`, the CI LUKS job, and any deliberate rerun), not just one
+workflow.
 
 ## Verification
 

@@ -1,6 +1,7 @@
 """CI must test the complete exact-digest set before publication."""
 import importlib.util
 import json
+import os
 import subprocess
 from pathlib import Path
 import tempfile
@@ -95,6 +96,38 @@ class EvidenceTests(unittest.TestCase):
         self.assertIn('"dir:${PAYLOAD_EXPORT}"', script)
         self.assertIn('dir:/payload "containers-storage:$1"', script)
 
+    def test_iso_budget_guard_fails_closed_above_ceiling(self):
+        # The budget guard (#128) is the whole point of the size drift this PR
+        # closes. Extract the real block and run it with du stubbed so we can
+        # drive both the byte count (-b) and the human size (-sh) without a
+        # real ISO on disk -- the test exercises the logic, not a copy of it.
+        script = (ROOT / "iso/scripts/build-iso.sh").read_text()
+        # The guard must receive ISO_MAX_GB the way the real script delivers it:
+        # as a positional arg into the <<'ASSEMBLY' heredoc, not from the outer
+        # shell's environment. Assert that plumbing exists so a regression back
+        # to an unexported, unpassed variable (which dies under set -u inside
+        # the assembly) is caught here before it breaks every ISO build.
+        self.assertRegex(script, r"podman unshare bash -s -- .*\$\{ISO_MAX_GB\}")
+        self.assertIn('ISO_MAX_GB="$8"', script)
+        start = script.index("iso_max_bytes=$(( ISO_MAX_GB")
+        end = script.index("\nfi\n", start) + len("\nfi\n")
+        guard = script[start:end]
+        run = (
+            "du() { if [ \"$1\" = \"-b\" ]; then echo \"$DU_BYTES\"; "
+            "else echo \"$DU_HUMAN\"; fi; };\n"
+            "OUTPUT_ISO=/tmp/utah-fakeiso\n"
+            + guard
+        )
+        under = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+                 "ISO_MAX_GB": "8", "DU_BYTES": str(7 * 1024 ** 3), "DU_HUMAN": "7.0G"}
+        result = subprocess.run(["bash", "-eu", "-c", run], capture_output=True, text=True, env=under)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        over = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+                "ISO_MAX_GB": "8", "DU_BYTES": str(8 * 1024 ** 3 + 512 * 1024 ** 2), "DU_HUMAN": "8.5G"}
+        result = subprocess.run(["bash", "-eu", "-c", run], capture_output=True, text=True, env=over)
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn("exceeds 8 GB budget", result.stderr)
+
     def test_build_explicitly_dispatches_iso_after_both_image_jobs(self):
         import yaml
         build = yaml.safe_load((ROOT / ".github/workflows/build.yml").read_text())
@@ -139,3 +172,58 @@ class EvidenceTests(unittest.TestCase):
         self.assertIn("systemd.wants=sshd.service", script)
         self.assertIn("fastfetch output was not visible", script)
         self.assertIn("missing required screenshot", script)
+
+
+class FastfetchOcrGateTests(unittest.TestCase):
+    """The gate runs against tesseract output, which drops and mangles glyphs."""
+
+    GATE = ROOT / "iso/scripts/fastfetch-ocr-match.sh"
+
+    # Verbatim from _temp/utah-luks-e2e/fastfetch-ocr.txt in the
+    # iso-diagnostics-utah artifact of run 35374557822, whose screenshot showed
+    # fastfetch but which the previous gate rejected.
+    REAL_TRANSCRIPT = """TAH-E2E-FASTFETCH
+[utahtest@utah-luks-test ~]$
+
+utah: testing-20260918-2216657 &
+Utah (Version: testing-20260918-2216657)
+Linux 7.1.8-100.fc43.x86_64
+
+2 mins
+
+KVM/QEMU Standard PC (Q35 + ICH9, 2009) (pc-q35-10.2)
+GNOME 51.beta
+Mutter (Wayland)
+"""
+
+    def matches(self, transcript):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "fastfetch-ocr.txt"
+            path.write_text(transcript)
+            return subprocess.run(["bash", str(self.GATE), str(path)]).returncode == 0
+
+    def test_accepts_the_transcript_that_previously_failed_a_good_screenshot(self):
+        self.assertTrue(self.matches(self.REAL_TRANSCRIPT))
+
+    def test_accepts_a_clean_transcript_with_readable_field_labels(self):
+        self.assertTrue(self.matches("UTAH-E2E-FASTFETCH\nKernel: 7.1.8-100.fc43.x86_64\n"))
+
+    def test_rejects_a_desktop_with_no_terminal_on_it(self):
+        self.assertFalse(self.matches("Activities\nSep 18  19:04\nutahtest\n"))
+
+    def test_rejects_the_sentinel_without_any_fastfetch_body(self):
+        self.assertFalse(self.matches("UTAH-E2E-FASTFETCH\n[utahtest@utah-luks-test ~]$\n"))
+
+    def test_rejects_fastfetch_body_without_the_sentinel(self):
+        self.assertFalse(self.matches("Kernel: 7.1.8-100.fc43.x86_64\nGNOME 51.beta\n"))
+
+    def test_rejects_an_empty_or_missing_transcript(self):
+        self.assertFalse(self.matches(""))
+        self.assertFalse(
+            subprocess.run(["bash", str(self.GATE), "/nonexistent/ocr.txt"]).returncode == 0)
+
+    def test_harness_delegates_the_decision_and_prints_the_transcript_on_failure(self):
+        script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
+        self.assertIn("fastfetch-ocr-match.sh", script)
+        self.assertNotIn("grep -qi 'UTAH.E2E.FASTFETCH'", script)
+        self.assertIn("last OCR transcript", script)

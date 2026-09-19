@@ -58,7 +58,7 @@ checks (`scripts/check-skill-frontmatter.sh`, `scripts/check-skill-index.sh`,
   before editing it: sources arrive in as few COPYs as origins allow, small
   RUN steps fold into neighbours, and per-image ARGs are declared late because
   an ARG is part of the cache key of every layer below it.
-- **The kernel cache tag** is a hash of `Containerfile.kernel`'s base image,
+- **The kernel cache tag** is a hash of `Containerfile.kernel` (whole file),
   `scripts/install-ogc-kernel.sh`, `scripts/install-nvidia.sh`, and
   `packages/hummingbird.repo` (`scripts/kernel-cache-tag.sh`). Any edit to
   those files — comments included — forces a ~45-minute cache rebuild. That is

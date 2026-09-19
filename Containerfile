@@ -45,12 +45,15 @@ COPY packages/hummingbird.repo packages/nvidia-container.repo packages/utah-pack
 # lets packages/hummingbird.repo run with gpgcheck=1 here and in the live ISO
 # build on top of this image.
 COPY packages/RPM-GPG-KEY-redhat-release-2 /etc/pki/rpm-gpg/
-# The package image is an RPM repository, not a runtime dependency. It is bind
-# mounted into the two RUN steps that install from it and never copied: a COPY
-# used to put the whole 4 GB repository at /etc/utah-packages, nothing removed
-# it, and it was two thirds of every published image and of every ISO (#130).
-# Reproducibility comes from the digest-pinned `packages` stage, which is
-# still the only source the transaction can see.
+# The package image is an RPM repository, not a runtime dependency. It is
+# bind mounted into the two RUN steps that install from it and never copied
+# into a layer: a COPY used to put the whole ~4 GB repository at
+# /etc/utah-packages, nothing ever removed it, and it was two thirds of every
+# published image and of every live ISO, whose squashfs holds the image (#128).
+# Reproducibility still comes from the digest-pinned `packages` stage, which is
+# the only source the package transaction can see -- that is what the old
+# comment meant by "does not depend on a mutable Pages mirror." The mount is a
+# BuildKit RUN --mount, so it costs no layer and leaves nothing on disk.
 # One layer for all of Utah's scripts. They are staged under /tmp and installed
 # by name in the RUN below, because a multi-source COPY cannot rename and
 # every downstream path expects the utah- prefix.
@@ -199,7 +202,12 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
     esac && \
     IMAGE_FLAVOR="${IMAGE_FLAVOR}" /usr/local/libexec/utah-verify-rpm-contract \
       /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
-    sed -i 's/^enabled=1$/enabled=0/' /etc/yum.repos.d/utah-packages.repo
+    # The package repository is now only ever bind mounted, so it is absent from
+    # the committed image. Flip it disabled here -- the last step that installs
+    # anything -- so later dnf calls on the image (the live ISO build's included)
+    # do not fail on a file:// baseurl that no longer exists.
+    sed -i 's/^enabled=1$/enabled=0/' /etc/yum.repos.d/utah-packages.repo \
+      && grep -q '^enabled=0$' /etc/yum.repos.d/utah-packages.repo
 
 # Everything above writes build-time residue that bootc lint rejects: dnf logs
 # under /var/log, cockpit and dnf state under /run, and ~45 /var directories

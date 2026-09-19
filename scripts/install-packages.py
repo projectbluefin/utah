@@ -17,6 +17,70 @@ import sys
 import tomllib
 from pathlib import Path
 
+def install_repos(repo_dir: Path | None = None) -> tuple[str, ...]:
+    """The repositories the package transaction installs from.
+
+    Derived from packages/*.repo (or /etc/yum.repos.d in-image) — the same
+    files copied into /etc/yum.repos.d — so a renamed repository changes what
+    is enabled instead of leaving a stale hardcoded copy.
+    A repository belongs to the install transaction when its section carries a
+    `# utah-install: true` annotation. Repositories are ordered by priority
+    (ascending, lowest number first) so rebuilds in utah-packages (priority=1) win
+    over base Hummingbird packages (priority=10).
+    """
+    search_dirs: list[Path] = []
+    if repo_dir:
+        search_dirs.append(repo_dir)
+    else:
+        search_dirs.append(Path("/etc/yum.repos.d"))
+        search_dirs.append(Path(__file__).resolve().parent.parent / "packages")
+
+    for directory in search_dirs:
+        if not directory.is_dir():
+            continue
+        repos: list[tuple[int, str]] = []
+        for repo_file in sorted(directory.glob("*.repo")):
+            section_name: str | None = None
+            marked = False
+            pending_marker = False
+            priority = 99
+            for line in repo_file.read_text().splitlines():
+                line = line.strip()
+                if line.startswith("[") and line.endswith("]"):
+                    if section_name and marked:
+                        repos.append((priority, section_name))
+                    section_name = line[1:-1]
+                    marked = pending_marker
+                    pending_marker = False
+                    priority = 99
+                elif line.startswith("#"):
+                    comment = line.lstrip("#").strip()
+                    if comment == "utah-install: true":
+                        pending_marker = True
+                elif "=" in line:
+                    if pending_marker:
+                        marked = True
+                        pending_marker = False
+                    key, val = line.split("=", 1)
+                    if key.strip() == "priority":
+                        try:
+                            priority = int(val.strip())
+                        except ValueError:
+                            pass
+            if pending_marker:
+                marked = True
+            if section_name and marked:
+                repos.append((priority, section_name))
+
+        if repos:
+            repos.sort()
+            return tuple(name for _, name in repos)
+
+    if repo_dir:
+        raise ValueError(f"no repositories marked '# utah-install: true' under {repo_dir}")
+    raise ValueError("no repositories marked '# utah-install: true' found in search paths")
+
+
 # Utah installs only from its Hummingbird base plus the utah-packages
 # factory, which publishes every GNOME 51 and Bluefin-parity binary this
 # image needs rebuilt against Hummingbird. Fedora repositories are never
@@ -25,7 +89,10 @@ from pathlib import Path
 # The factory is first so its Hummingbird-targeted rebuilds win over an
 # equally-versioned Hummingbird package. The repository is copied from the
 # digest-pinned OCI package image by Containerfile.
-REPOS = ("utah-packages", "public-hummingbird-x86_64-rpms")
+def __getattr__(name: str):
+    if name == "REPOS":
+        return install_repos()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def section(path: Path, name: str) -> list[str]:
@@ -98,6 +165,8 @@ def main() -> int:
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--resolve", action="store_true",
                         help="resolve the full transaction without installing packages")
+    parser.add_argument("--repos-dir", type=Path, default=None,
+                        help="directory containing .repo files (defaults to /etc/yum.repos.d or packages/)")
     parser.add_argument("manifest", type=Path)
     parser.add_argument(
         "overlay", type=Path, nargs="?", default=None,
@@ -105,6 +174,7 @@ def main() -> int:
     )
     args = parser.parse_args()
     overlay = args.overlay or args.manifest.with_name("utah.toml")
+    repos = install_repos(args.repos_dir)
 
     if args.check:
         # No rpmdb to consult off-image, so validate the manifests only.
@@ -115,8 +185,13 @@ def main() -> int:
         overlap = sorted(set(unavailable) & set(packages))
         if overlap:
             raise ValueError(f"[unavailable] packages still in install set: {overlap}")
+        if "utah-packages" not in repos:
+            raise ValueError("utah-packages repository not found in install repositories")
+        if "public-hummingbird-x86_64-rpms" not in repos:
+            raise ValueError("public-hummingbird-x86_64-rpms repository not found in install repositories")
         print(f"validated {len(packages)} Bluefin parity packages")
         print(f"documented as unavailable: {len(unavailable)}")
+        print(f"install repositories: {', '.join(repos)}")
         return 0
 
     dnf = dnf_path()
@@ -128,7 +203,7 @@ def main() -> int:
     if args.resolve:
         result = subprocess.run(
             [dnf, "--assumeno", "--disablerepo=*",
-             *(f"--enablerepo={r}" for r in REPOS),
+             *(f"--enablerepo={r}" for r in repos),
              "-x", "PackageKit*", "install", *packages, *build_deps],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
             env={**os.environ, "LC_ALL": "C"}, check=False,
@@ -165,7 +240,7 @@ def main() -> int:
     # must not carry a second package manager that can write to /usr.
     rc = run(
         dnf, "-y", "--disablerepo=*",
-        *(f"--enablerepo={r}" for r in REPOS),
+        *(f"--enablerepo={r}" for r in repos),
         "-x", "PackageKit*", "install", *packages, *build_deps,
     )
     if rc:

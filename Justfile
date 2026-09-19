@@ -11,11 +11,16 @@ default:
 # Host-side unit tests for the helper scripts under scripts/. No image is
 # needed, so they run inside `just check` rather than waiting for a build to
 # fail on a wrong matrix.
+#
+# Discovery is delegated to tests/run_suite.py, which runs every directory
+# under tests/ that holds test modules. Bare `unittest discover` rooted at
+# tests/ skipped subdirectories such as tests/unit/ silently -- it reported
+# OK whether the tests there passed, failed, or never ran.
 test:
     #!/usr/bin/env bash
     set -euo pipefail
     pip install --quiet pyyaml 2>/dev/null || true
-    python3 -m unittest discover -s tests -p 'test_*.py'
+    python3 tests/run_suite.py
 
 check:
     #!/usr/bin/env bash
@@ -34,6 +39,9 @@ check:
     test -f system_files/shared/usr/lib/systemd/system/bootc-unified-storage.service.d/10-utah-local-test.conf
     grep -q 'enable gdm.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
     grep -q 'enable ublue-system-setup.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
+    grep -q 'disable bootc-fetch-apply-updates.timer' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
+    grep -q 'disable bootc-fetch-apply-updates.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
+    grep -q 'bootc-fetch-apply-updates.timer' scripts/configure-services.sh
     test -f scripts/configure-services.sh
     test -f scripts/configure-branding.sh
     test -f scripts/verify-desktop-contract.py
@@ -64,10 +72,12 @@ check:
     grep -q 'ENABLE_SSHD="${ENABLE_SSHD:-0}"' Justfile
     grep -q 'ARG PACKAGE_IMAGE_SHA=' Containerfile
     grep -q 'ARG PACKAGE_IMAGE_REF=' Containerfile
-    grep -q -e '--mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages,ro' Containerfile
+    grep -q -- '--mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages,ro' Containerfile
+    # The package repository is bind mounted, never committed; a COPY would ship
+    # the whole ~4 GB RPM repository in every image and of every ISO (#128).
     # `! cmd` is exempt from errexit, so a bare `! grep` neither stops this
-    # script nor changes its status unless it happens to be the last line: the
-    # guard reads as a gate and enforces nothing. Use an explicit exit.
+    # script nor changes its exit status unless it happens to be the last line
+    # of the recipe: it reads as a gate and enforces nothing. Use an explicit if.
     if grep -q 'COPY --from=packages' Containerfile; then
       echo 'Containerfile must bind-mount the package repository, not COPY it' >&2
       exit 1
@@ -76,8 +86,7 @@ check:
     # Every executable release asset fetched during composition must be pinned
     # and verified; no build may resolve a mutable latest release.
     python3 scripts/check-download-integrity.py
-    grep -q '"utah-packages"' scripts/install-packages.py
-    python3 scripts/install-packages.py --check packages/bluefin.toml
+    python3 scripts/install-packages.py --check --repos-dir packages packages/bluefin.toml
     python3 scripts/verify-rpm-contract.py --check packages/bluefin.toml
     # run the host-side unit suite (tests/test_*.py) via its dedicated recipe
     just test
