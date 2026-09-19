@@ -49,7 +49,16 @@ modules_only="${UTAH_NVIDIA_MODULES_ONLY:-}"
 
 # NVIDIA's own designation of the current driver, not a hand-picked directory
 # listing: https://download.nvidia.com/XFree86/Linux-x86_64/latest.txt
-driver_version="${UTAH_NVIDIA_DRIVER_VERSION:-595.84}"
+#
+# 595.84 stopped compiling when Hummingbird's base moved to kernel 7.2:
+#
+#     os-interface.c:764: error: implicit declaration of function 'strncpy'
+#
+# The kernel completed its strscpy migration and removed strncpy, and upstream
+# followed in 595.99.02, which replaces that call with strscpy and is what
+# latest.txt designates today. So this is the pin policy above doing its job
+# rather than a workaround: read latest.txt, take the digest beside it (#173).
+driver_version="${UTAH_NVIDIA_DRIVER_VERSION:-595.99.02}"
 run="NVIDIA-Linux-x86_64-${driver_version}.run"
 url="https://download.nvidia.com/XFree86/Linux-x86_64/${driver_version}/${run}"
 # The vendor `.run` is executed as root during composition, so it is verified
@@ -60,7 +69,7 @@ url="https://download.nvidia.com/XFree86/Linux-x86_64/${driver_version}/${run}"
 # beyond the TLS channel it was meant to backstop. The constant is NVIDIA's
 # published SHA-256 for the pinned driver version; the two move together, as
 # does UTAH_NVIDIA_RUN_SHA256 when UTAH_NVIDIA_DRIVER_VERSION is overridden.
-NVIDIA_RUN_SHA256="${UTAH_NVIDIA_RUN_SHA256:-99c404e52131bf27bca6da0268dcce3ebedc7a73ab174071a995cf1a6c5eba06}"
+NVIDIA_RUN_SHA256="${UTAH_NVIDIA_RUN_SHA256:-e87477958bf763070549324bd5ad6c948eba6ed210e44005b3eff84940f6e1ec}"
 
 ogc_release=""
 [ -f /usr/lib/utah/ogc-kernel-release ] && ogc_release="$(cat /usr/lib/utah/ogc-kernel-release)"
@@ -92,13 +101,13 @@ fi
 # attempt at a source build. It is needed only to compile against, so it goes in
 # here and comes out again below.
 #
-# It is not in the repositories this image enables either. The base kernel is a
-# Fedora 43 build, 7.1.8-100.fc43, and Utah enables only Hummingbird plus its
-# own package factory:
+# It may not be in the repositories this image enables either. Utah enables only
+# Hummingbird plus its own package factory, and when the base kernel is not in
+# those:
 #
-#   No match for argument: kernel-devel-7.1.8-100.fc43.x86_64
+#   No match for argument: kernel-devel-<nevr>
 #
-# Adding the Fedora 43 repository would not fix it for long, because a
+# Adding the matching Fedora repository would not fix it for long, because a
 # repository only carries the current kernel and this image is pinned to a base
 # whose kernel will not move. Fedora own build system keeps every build
 # indefinitely, so that is where this comes from, addressed by exact NEVR.
@@ -106,7 +115,23 @@ fi
 # Those RPMs are unsigned at that path, so the download is checked against a
 # hash recorded here instead. It is a constant because the base image is pinned
 # by digest: the kernel cannot change without BASE_IMAGE changing.
-KERNEL_DEVEL_SHA256="${UTAH_KERNEL_DEVEL_SHA256:-b2b504c42b94875af88d666d64ca91000ff30439e74157723a188f54ceebc5ca}"
+#
+# Which is exactly why the hash has to move with BASE_IMAGE, and why it is
+# recorded here beside the kernel it was taken from rather than on its own. The
+# 7.2 base bump left this pinned to 7.1.8-100.fc43 for one revision: the dnf
+# path above satisfied 7.2 and the fallback never ran, so nothing failed and
+# nothing said the constant had gone stale. It would have failed the first time
+# the enabled repositories dropped the kernel -- the precise situation this
+# fallback exists for. Pairing the two makes that mismatch loud and immediate
+# instead of latent, and costs nothing when they agree.
+#
+# Both are overridable together, and that pairing is the point. The override on
+# the hash exists for exactly one situation -- validating a kernel this file has
+# not been re-recorded for -- so a guard that refused to proceed whenever the
+# kernel differed from the recorded NEVR would make the override unreachable in
+# the only case it is for. Override both, or neither.
+KERNEL_DEVEL_NEVR="${UTAH_KERNEL_DEVEL_NEVR:-7.2.5-200.fc44.x86_64}"
+KERNEL_DEVEL_SHA256="${UTAH_KERNEL_DEVEL_SHA256:-02467ce35055d553db0babd680aa429c2d0b8d514469768730e03b89326a0703}"
 
 build_tree="/usr/lib/modules/${kernel}/build"
 installed_kernel_devel=""
@@ -135,6 +160,15 @@ ensure_toolchain() {
       installed_kernel_devel="kernel-devel-${kernel}"
     else
       local arch nv ver rel koji rpmfile actual
+      if [ "${kernel}" != "${KERNEL_DEVEL_NEVR}" ]; then
+        echo "KERNEL_DEVEL_SHA256 was recorded for kernel ${KERNEL_DEVEL_NEVR}," >&2
+        echo "but this image boots ${kernel}. The hash cannot match, so the" >&2
+        echo "download below would fail after fetching 60 MB. Re-record both" >&2
+        echo "constants for ${kernel} when bumping BASE_IMAGE, or set both" >&2
+        echo "UTAH_KERNEL_DEVEL_NEVR and UTAH_KERNEL_DEVEL_SHA256 to validate" >&2
+        echo "a kernel this file has not been re-recorded for." >&2
+        exit 1
+      fi
       arch="${kernel##*.}"; nv="${kernel%.*}"; ver="${nv%%-*}"; rel="${nv#*-}"
       koji="https://kojipkgs.fedoraproject.org/packages/kernel/${ver}/${rel}/${arch}"
       rpmfile="kernel-devel-${ver}-${rel}.${arch}.rpm"

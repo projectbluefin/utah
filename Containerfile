@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=quay.io/hummingbird-community/bootc-os:latest@sha256:c5539f9ed4d93aab6bd41e4f5aef8ab83055f3f9e855a47b69fadb7420d0d1df
+ARG BASE_IMAGE=quay.io/hummingbird-community/bootc-os:latest@sha256:db1007fdcda076f2d7fd0e2adfe998141dd1908b8f66c732654f762c6a8b2728
 # The package factory publishes a complete, digest-addressable RPM repository.
 # Keep this pin in Utah so an image build is reproducible and can be reviewed
 # against the exact package set it consumes.
@@ -63,6 +63,7 @@ COPY scripts/install-packages.py \
      scripts/configure-branding.sh \
      scripts/verify-desktop-contract.py \
      scripts/verify-gnome-extensions.py \
+     scripts/mirror-shim.sh \
      /tmp/utah-scripts/
 # Common publishes Bluefin artwork, desktop defaults, Brewfiles, and setup
 # hooks in a separate profile from its shared system files. Both are required:
@@ -83,7 +84,8 @@ RUN for pair in install-packages.py:utah-install-packages \
                 configure-services.sh:utah-configure-services \
                 configure-branding.sh:utah-configure-branding \
                 verify-desktop-contract.py:utah-verify-desktop-contract \
-                verify-gnome-extensions.py:utah-verify-gnome-extensions; do \
+                verify-gnome-extensions.py:utah-verify-gnome-extensions \
+                mirror-shim.sh:utah-mirror-shim; do \
       install -Dm 0755 "/tmp/utah-scripts/${pair%%:*}" "/usr/local/libexec/${pair##*:}" || exit 1; \
     done && \
     cp -a /tmp/utah-common/. / && \
@@ -156,12 +158,10 @@ ARG UUPD_TIMER_SHA256=bbb5f098ec33d047bdef571e0bc112364df157e0f92d73e0febab703c4
 # it applies the desktop service policy, login defaults, update policy, and
 # removes the extension build toolchain before the final cleanup.
 #
-# The shim mirroring at the end belongs to the same step. Fedora's shim package
-# stages its EFI payload under bootupd's update tree, while bootupd discovers
-# image-provided EFI components under /usr/lib/efi. Mirroring the signed
-# payload into bootupd's component layout lets bootc create a generic disk
-# image without depending on the build host's ESP. It was a layer of its own
-# and cost forty seconds to commit a few megabytes.
+# The shim mirroring at the end belongs to the same step: it was a layer of its
+# own and cost forty seconds to commit a few megabytes. It lives in
+# scripts/mirror-shim.sh rather than inline, because as a bare && chain a
+# failure printed nothing at all -- see the comment at the top of that script.
 RUN mkdir -p /tmp/uupd && \
     curl -fsSL "https://github.com/ublue-os/uupd/releases/download/${UUPD_VERSION}/uupd_Linux_x86_64.tar.gz" \
       -o /tmp/uupd/uupd_Linux_x86_64.tar.gz && \
@@ -179,10 +179,7 @@ RUN mkdir -p /tmp/uupd && \
     ENABLE_SSHD="${ENABLE_SSHD}" /usr/local/libexec/utah-configure-services && \
     /usr/local/libexec/utah-configure-branding && \
     /usr/local/libexec/utah-verify-desktop-contract /usr/share/utah/bluefin-desktop.toml && \
-    shim_version="$(rpm -q --qf '%{VERSION}-%{RELEASE}' shim-x64)" && \
-    test -d /usr/lib/bootupd/updates/EFI/fedora && \
-    install -d "/usr/lib/efi/shim/${shim_version}/EFI/fedora" && \
-    cp -a /usr/lib/bootupd/updates/EFI/fedora/. "/usr/lib/efi/shim/${shim_version}/EFI/fedora/"
+    /usr/local/libexec/utah-mirror-shim
 
 # Dakota-compatible flavors: OGC is built and asserted before NVIDIA so the
 # NVIDIA path can bind its module to the exact kernel tree it will boot.
