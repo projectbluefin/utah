@@ -10,6 +10,17 @@ DEBUG="${4:-0}"
 # SOURCE_IMAGE may be localhost for development, but the embedded store and
 # installer recipe use this stable, publishable reference.
 PUBLISHED_IMAGE="${5:-ghcr.io/projectbluefin/utah:testing}"
+# Live-ISO size budget (#128). The ISO embeds the full container store for
+# offline install, so image growth shows up doubled on the ISO. The last fully
+# passing run (2026-09-06) was 7.7G; the 2026-09-18 run was 8.6G once the
+# ~4 GB package repository stopped being removed from the image. The ceiling
+# sits between those two: 8 GB is above the last passing run so a clean build
+# passes, but below the grown size, so the exact #128 regression fails the job
+# instead of landing silently. Raise N only after the real fix -- unmount,
+# never COPY, the package repository (#128) -- lands; #105 adds linux-firmware
+# and ~30 parity packages on top, so expect to revisit N.
+# Override per-run with UTAH_ISO_MAX_GB (GB) without editing this script.
+ISO_MAX_GB="${UTAH_ISO_MAX_GB:-8}"
 LABEL="UTAH_LIVE"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 mkdir -p "$(dirname "${OUTPUT_ISO}")"
@@ -46,7 +57,7 @@ podman build --layers \
 # Image mounts live in rootless Podman's user namespace. Keep the complete
 # mount/copy/assembly operation inside podman unshare rather than leaking a
 # namespace-private mount path back to the host shell.
-podman unshare bash -s -- "${LIVE_IMAGE}" "${IMAGE}" "${PUBLISHED_IMAGE}" "${OUTPUT_ISO}" "${TITLE}" "${LABEL}" "${WORK}" <<'ASSEMBLY'
+podman unshare bash -s -- "${LIVE_IMAGE}" "${IMAGE}" "${PUBLISHED_IMAGE}" "${OUTPUT_ISO}" "${TITLE}" "${LABEL}" "${WORK}" "${ISO_MAX_GB}" <<'ASSEMBLY'
 set -euo pipefail
 LIVE_IMAGE="$1"
 PAYLOAD_IMAGE="$2"
@@ -55,6 +66,7 @@ OUTPUT_ISO="$4"
 TITLE="$5"
 LABEL="$6"
 WORK="$7"
+ISO_MAX_GB="$8"
 MOUNT="$(podman image mount "${LIVE_IMAGE}")"
 cleanup() {
     set +e
@@ -159,4 +171,13 @@ xorriso -as mkisofs -iso-level 3 -r -J --joliet-long -V "${LABEL}" \
     --efi-boot EFI/efi.img -efi-boot-part --efi-boot-image \
     -o "${OUTPUT_ISO}" "${ISO_ROOT}"
 echo "ISO ready: ${OUTPUT_ISO} ($(du -sh "${OUTPUT_ISO}" | cut -f1))"
+# Budget guard: a silent drift of nearly a gigabyte in twelve days (#128) is
+# exactly what this fails closed against. Compare byte counts so the GB ceiling
+# is exact regardless of how `du -h` rounds.
+iso_max_bytes=$(( ISO_MAX_GB * 1024 * 1024 * 1024 ))
+iso_size_bytes=$(du -b "${OUTPUT_ISO}" | cut -f1)
+if [ "${iso_size_bytes}" -gt "${iso_max_bytes}" ]; then
+    echo "ERROR: live ISO ($(du -sh "${OUTPUT_ISO}" | cut -f1)) exceeds ${ISO_MAX_GB} GB budget (#128)" >&2
+    exit 1
+fi
 ASSEMBLY

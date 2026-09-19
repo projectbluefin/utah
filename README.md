@@ -76,6 +76,17 @@ This is the honest list, and it is why the label above says pre-alpha.
 - **Nothing is published.** No image, no ISO artifact, no installer. A live
   ISO builds locally (`just iso`); installer payload integration is the next
   ISO milestone.
+- **Cross-vendor switch and update timers (`bootc-fetch-apply-updates`).**
+  Switching to Utah from Bluefin or other bootc images carries Bluefin's
+  `/etc/systemd/system/timers.target.wants/bootc-fetch-apply-updates.timer`
+  symlink across ostree's 3-way `/etc` merge. Utah masks
+  `bootc-fetch-apply-updates.timer` and `bootc-fetch-apply-updates.service` in
+  both `/etc` and `/usr/lib/systemd/system/` (and presets them to disabled) so
+  background auto-updates do not bypass `uupd` policy or silently undo a
+  rollback (`bootc rollback`). Switchers should verify with
+  `systemctl is-enabled bootc-fetch-apply-updates.timer` and can re-assert the
+  mask (`systemctl mask --now bootc-fetch-apply-updates.timer bootc-fetch-apply-updates.service`)
+  if a merged `/etc` wants symlink remains on disk (links #17, #101).
 - **The NVIDIA and gaming flavors are unproven.** The OGC kernel compiles with
   `sched_ext` and `binderfs` genuinely enabled, and the NVIDIA open module
   compiles for the base kernel. The module against the OGC kernel, the driver

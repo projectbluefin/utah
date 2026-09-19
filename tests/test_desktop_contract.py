@@ -258,5 +258,105 @@ class GnomeExtensionTests(unittest.TestCase):
             )
 
 
+class ServiceMaskParityTests(unittest.TestCase):
+    def test_bootc_fetch_apply_updates_masked_and_disabled(self):
+        preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset").read_text()
+        self.assertIn("disable bootc-fetch-apply-updates.timer", preset)
+        self.assertIn("disable bootc-fetch-apply-updates.service", preset)
+
+        config_services = (ROOT / "scripts/configure-services.sh").read_text()
+        self.assertIn("systemctl mask bootc-fetch-apply-updates.timer bootc-fetch-apply-updates.service", config_services)
+        self.assertIn("ln -sf /dev/null /usr/lib/systemd/system/bootc-fetch-apply-updates.timer", config_services)
+        self.assertIn("ln -sf /dev/null /usr/lib/systemd/system/bootc-fetch-apply-updates.service", config_services)
+        self.assertIn("bootc-fetch-apply-updates", config_services)
+
+    def test_cross_vendor_merge_and_switch_mask_documented(self):
+        readme = (ROOT / "README.md").read_text()
+        desktop_skill = (ROOT / "docs/skills/desktop-contract.md").read_text()
+        testing_skill = (ROOT / "docs/skills/local-testing.md").read_text()
+
+        self.assertIn("bootc-fetch-apply-updates", readme)
+        self.assertIn("3-way", readme)
+        self.assertIn("rollback", readme)
+        self.assertIn("systemctl is-enabled bootc-fetch-apply-updates.timer", readme)
+
+        self.assertIn("bootc-fetch-apply-updates.timer", desktop_skill)
+        self.assertIn("bootc-fetch-apply-updates.service", desktop_skill)
+        self.assertIn("uupd.timer", desktop_skill)
+
+        self.assertIn("bootc-fetch-apply-updates.timer", testing_skill)
+        self.assertIn("uupd.timer", testing_skill)
+        self.assertIn("rollback", testing_skill)
+
+    def test_desktop_contract_declares_masked_services(self):
+        import tomllib
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        masked = contract.get("services", {}).get("masked", [])
+        self.assertIn("bootc-fetch-apply-updates.timer", masked)
+        self.assertIn("bootc-fetch-apply-updates.service", masked)
+
+    def test_unit_masked_helper_verifies_dev_null_symlink(self):
+        import tempfile
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "verify_desktop_contract", ROOT / "scripts/verify-desktop-contract.py"
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            lib_dir = root / "usr/lib/systemd/system"
+            lib_dir.mkdir(parents=True)
+            unit_symlink = lib_dir / "bootc-fetch-apply-updates.timer"
+            unit_symlink.symlink_to("/dev/null")
+
+            self.assertTrue(module.unit_masked("bootc-fetch-apply-updates.timer", root=root))
+            self.assertFalse(module.unit_masked("bootc-fetch-apply-updates.service", root=root))
+
+    def test_unit_masked_helper_systemctl_fallback(self):
+        import importlib.util
+        from unittest.mock import patch
+        import subprocess
+        spec = importlib.util.spec_from_file_location(
+            "verify_desktop_contract", ROOT / "scripts/verify-desktop-contract.py"
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        # systemctl is-enabled returns exit code 1 with stdout "masked\n" when a unit is masked
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(
+                args=["systemctl", "is-enabled", "masked-sample.service"],
+                returncode=1,
+                stdout="masked\n",
+                stderr="",
+            )
+            # When root is "/", fallback to systemctl queries host and returns True
+            self.assertTrue(module.unit_masked("masked-sample.service", root=Path("/")))
+            mock_run.assert_called_once_with(
+                ["systemctl", "is-enabled", "masked-sample.service"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        # When unit is not masked (e.g. "disabled" with exit code 1)
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(
+                args=["systemctl", "is-enabled", "disabled-sample.service"],
+                returncode=1,
+                stdout="disabled\n",
+                stderr="",
+            )
+            self.assertFalse(module.unit_masked("disabled-sample.service", root=Path("/")))
+
+        # When root is not "/", fallback to systemctl is skipped to prevent host pollution
+        with patch("subprocess.run") as mock_run:
+            self.assertFalse(module.unit_masked("masked-sample.service", root=Path("/tmp/other-root")))
+            mock_run.assert_not_called()
+
+
+
 if __name__ == "__main__":
     unittest.main()

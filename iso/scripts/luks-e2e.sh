@@ -496,7 +496,7 @@ shot installed-greeter "${MONITOR_INSTALLED}"
 # runs inside the session with a bus and a display of its own.
 echo "Arranging for a terminal to open in the session..."
 ssh_target "
-    grep -q 'utah-e2e fastfetch' ~/.bashrc 2>/dev/null || printf '%s\n' '[[ \$- == *i* ]] && { fastfetch && echo ===UTAH-E2E-FASTFETCH===; } # utah-e2e fastfetch' >> ~/.bashrc
+    grep -q 'utah-e2e fastfetch' ~/.bashrc 2>/dev/null || printf '%s\n' '[[ \$- == *i* ]] && { fastfetch && echo UTAH-E2E-FASTFETCH; } # utah-e2e fastfetch' >> ~/.bashrc
     # Ghostty is a flatpak here, and which config path it reads depends on
     # whether the sandbox exposes xdg-config or keeps its own per-app dir, so
     # write both rather than guess. An unknown key would only be warned about,
@@ -626,27 +626,20 @@ if [[ "${UTAH_E2E_REQUIRE_FASTFETCH:-0}" == 1 ]]; then
         shot installed-fastfetch "${MONITOR_INSTALLED}"
         if [[ -s "${SHOTS}/installed-fastfetch.png" ]]; then
             tesseract "${SHOTS}/installed-fastfetch.png" "${WORK}/fastfetch-ocr" 2>/dev/null
-            # Both patterns avoid the leftmost column of the terminal, which
-            # tesseract does not read reliably. A run whose screenshot showed
-            # the whole fastfetch panel correctly still failed this gate: the
-            # OCR came back with "TAH-E2E-FASTFETCH" -- the marker's first
-            # glyph gone -- and with every fastfetch label ("OS:", "Kernel:",
-            # "Uptime:") missing while their values read perfectly. So the
-            # marker is printed inside an === frame rather than at the line
-            # start, and the second assertion matches the kernel *version*
-            # that fastfetch prints rather than the "Kernel" label in front of
-            # it. Both still prove what they did before: that an interactive
-            # shell ran our marker, and that fastfetch rendered real system
-            # information beside it.
-            if grep -qi 'UTAH.E2E.FASTFETCH' "${WORK}/fastfetch-ocr.txt" \
-                && grep -qiE 'Linux [0-9]+\.[0-9]+' "${WORK}/fastfetch-ocr.txt"; then
+            if bash "${ROOT}/iso/scripts/fastfetch-ocr-match.sh" "${WORK}/fastfetch-ocr.txt"; then
                 fastfetch_seen=1
                 break
             fi
         fi
         sleep 5
     done
-    (( fastfetch_seen )) || fail "fastfetch output was not visible in the desktop screenshot"
+    if (( ! fastfetch_seen )); then
+        # Without this the only way to tell a blank screen from an OCR misread
+        # is to download the diagnostics artifact.
+        echo "  last OCR transcript of installed-fastfetch.png:" >&2
+        sed -n '1,40p' "${WORK}/fastfetch-ocr.txt" 2>/dev/null | sed 's/^/    /' >&2
+        fail "fastfetch output was not visible in the desktop screenshot"
+    fi
 else
     sleep 20
     shot installed-fastfetch "${MONITOR_INSTALLED}"

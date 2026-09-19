@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-16",
+  "generated_at": "2026-09-19",
   "schema_version": "1.0",
   "skills": [
     {
@@ -35,7 +35,7 @@
       ],
       "description": "Layer discipline: COPY folding, late per-image ARGs, script staging, clean+lint in one layer. Use when modifying the Containerfile, adding a script, or investigating build time.",
       "version": "1.0",
-      "last_updated": "2026-09-05",
+      "last_updated": "2026-09-18",
       "doc_type": "policy"
     },
     {
@@ -53,7 +53,7 @@
       ],
       "description": "The runtime desktop contract in contracts/bluefin-desktop.toml and its in-image verifiers. Use when changing branding, os-release, service presets, GNOME extensions, or first-boot Flatpak behavior.",
       "version": "1.0",
-      "last_updated": "2026-09-16",
+      "last_updated": "2026-09-18",
       "doc_type": "policy"
     },
     {
@@ -88,7 +88,7 @@
       ],
       "description": "The kernel cache image, its content-hash tag, and unpack-or-compile behavior. Use when touching install-ogc-kernel.sh, install-nvidia.sh, Containerfile.kernel, or debugging flavored builds.",
       "version": "1.0",
-      "last_updated": "2026-09-05",
+      "last_updated": "2026-09-19",
       "doc_type": "reference"
     },
     {
@@ -107,7 +107,7 @@
       ],
       "description": "Local validation loop: build-ghcr, bootc install to-disk, QEMU/noVNC boot, live ISO. Use when validating changes end-to-end or debugging boot, GDM, or live-session failures.",
       "version": "1.0",
-      "last_updated": "2026-09-05",
+      "last_updated": "2026-09-18",
       "doc_type": "runbook"
     },
     {
@@ -125,7 +125,7 @@
       ],
       "description": "Bluefin parity contract: verbatim bluefin.toml, utah.toml overlay, [unavailable] rules, repository policy. Use when adding, removing, or debugging packages or parity/check-repos failures.",
       "version": "1.0",
-      "last_updated": "2026-09-05",
+      "last_updated": "2026-09-18",
       "doc_type": "policy"
     },
     {
