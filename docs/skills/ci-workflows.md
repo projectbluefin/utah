@@ -165,6 +165,35 @@ successful testing build containing the current harness. Do not pass a PR
 build: PRs do not publish immutable images. This matrix validates emulated
 UEFI desktop installation, not Secure Boot, TPM unlock, or physical GPUs.
 
+## Flavor gate (exact-digest VM suites)
+
+`post-testing-e2e.yml` also runs the `gate` job, which boots each flavor's
+exact `@digest` in the `projectbluefin/testsuite` QEMU VM and runs that
+flavor's own behave suites before `:testing` advances. The digests come from
+`needs.resolve.outputs.digests` (a per-image ref map the `resolve` job builds
+from the same artifacts the LUKS matrix reads), so every flavor is pinned to
+the precise digest this build produced.
+
+Suites per flavor, all starting with `smoke,common` so a broken boot is caught
+first:
+
+| Flavor | Image | Suites |
+|--------|-------|--------|
+| main | `utah` | `smoke,common` |
+| nvidia | `utah-nvidia` | `smoke,common,nvidia` |
+| gaming | `utah-gaming` | `smoke,common,bazzite` |
+| nvidia-gaming | `utah-nvidia-gaming` | `smoke,common,nvidia,bazzite` |
+
+The `nvidia` suite asserts the kernel module is loaded, the driver userspace
+(`nvidia-smi`), and vulkan/CUDA/VA-API; `bazzite` validates the gaming
+userspace. The job calls the pinned `projectbluefin/testsuite` reusable
+e2e workflow (`ee82d53... # v1`) and checks the tests out of that repo's `main`
+so test fixes land immediately. `gate` is a `fail-fast: false` matrix, so one
+stuck flavor fails only itself; `promote-to-testing` needs it, and GitHub skips
+a job when any dependency fails, so a failed suite leaves `:testing` untouched
+and the promotion job never runs. `luks` (installer + provenance) and `gate`
+(suites) are complementary: both must pass before any tag moves.
+
 ## Verification
 
 ```bash

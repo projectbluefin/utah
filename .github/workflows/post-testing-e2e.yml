@@ -22,6 +22,9 @@ jobs:
       actions: read
     outputs:
       matrix: ${{ steps.inputs.outputs.matrix }}
+      # Per-image exact @digest ref keyed by image name, so the gate job can pin
+      # each flavor's VM test to the precise digest this build produced.
+      digests: ${{ steps.inputs.outputs.digests }}
       sha: ${{ steps.inputs.outputs.sha }}
       run: ${{ steps.inputs.outputs.run }}
     steps:
@@ -43,8 +46,10 @@ jobs:
           gh run download "$BUILD_RUN" --repo "$REPOSITORY" \
             --pattern 'image-digest-testing-*' --dir digests
           matrix=$(python3 scripts/resolve-e2e-inputs.py run.json digests "$REPOSITORY")
+          digests=$(jq -c 'reduce .include[] as $i ({}; . + {($i.image): $i.ref})' <<< "$matrix")
           {
             echo "matrix=$matrix"
+            echo "digests=$digests"
             echo "sha=$(jq -r .head_sha run.json)"
             echo "run=$BUILD_RUN"
           } >> "$GITHUB_OUTPUT"
@@ -141,8 +146,42 @@ jobs:
           path: docs/verification/
       # Never upload debug ISOs or test disks: they contain test passwords.
 
+  # Boot and test the exact digest for each flavor with that flavor's own suites
+  # before any :testing tag advances. Main runs smoke,common; the nvidia flavors
+  # add nvidia (kernel module loaded, driver userspace, vulkan/CUDA/VA-API) and
+  # the gaming flavors add bazzite for the gaming userspace. All flavors start
+  # with smoke,common so a broken boot is caught before the flavor-specific
+  # suites run. Fail-closed: a single failed suite fails the matrix and the
+  # promotion job (which needs this one) is skipped, leaving :testing untouched.
+  gate:
+    needs: resolve
+    if: always() && needs.resolve.result == 'success'
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: utah
+            suites: smoke,common
+          - image: utah-nvidia
+            suites: smoke,common,nvidia
+          - image: utah-gaming
+            suites: smoke,common,bazzite
+          - image: utah-nvidia-gaming
+            suites: smoke,common,nvidia,bazzite
+    uses: projectbluefin/testsuite/.github/workflows/e2e.yml@ee82d53a4f86617d807df831a60ad1deaa0d5366 # v1
+    with:
+      image: ${{ fromJSON(needs.resolve.outputs.digests)[matrix.image] }}
+      suites: ${{ matrix.suites }}
+      # projectbluefin/testsuite has no tests/ of its own; test it against the
+      # shared suite repo's main so test fixes land immediately.
+      test_repository: projectbluefin/testsuite
+      test_ref: main
+
   promote-to-testing:
-    needs: [resolve, luks]
+    needs: [resolve, luks, gate]
     runs-on: ubuntu-26.04
     permissions:
       contents: read
