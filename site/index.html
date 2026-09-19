@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Utah — status and project information</title>
+<meta name="description" content="Build status, shipped packages, roadmap and Hummingbird background for Utah, a Bluefin-family GNOME workstation built on Fedora Hummingbird.">
+<meta property="og:title" content="Utah — status and project information">
+<meta property="og:description" content="Build status, shipped packages and roadmap for Utah, a Bluefin-family GNOME workstation built on Fedora Hummingbird.">
+<meta property="og:image" content="https://projectbluefin.github.io/utah/assets/utahraptor-900.png">
+<meta name="theme-color" content="#0c1016">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="styles.css">
+<!-- Entrance animations start from opacity:0, so they are opt-in: without
+     this class the .reveal rule never applies and every section is visible.
+     A page whose content only appears if a script runs is a page that can
+     go blank. Inline and before the stylesheet so there is no flash. -->
+<script>document.documentElement.classList.add("js");</script>
+</head>
+<body>
+<a class="skip" href="#build">Skip to build status</a>
+
+<header class="nav" role="banner">
+  <a class="brand" href="https://projectbluefin.io" rel="noopener">
+    <img src="assets/bluefin-logo.svg" width="28" height="28" alt="" aria-hidden="true">
+    <span>Project&nbsp;Bluefin</span>
+  </a>
+  <nav aria-label="Sections">
+    <a href="#build">Status</a>
+    <a href="#packages">Packages</a>
+    <a href="#roadmap">Roadmap</a>
+    <a href="#hummingbird">Hummingbird</a>
+    <a class="ghost" href="https://github.com/projectbluefin/utah" rel="noopener">GitHub</a>
+  </nav>
+</header>
+
+<main>
+  <!-- ---------- Hero ---------- -->
+  <section class="hero" id="top">
+    <div class="hero-glow" aria-hidden="true"></div>
+    <div class="hero-inner">
+      <div class="hero-copy reveal">
+        <p class="eyebrow"><span class="pulse" aria-hidden="true"></span> Alpha &middot; built in the open</p>
+        <h1>Utah</h1>
+        <p class="lede">
+          A Bluefin-family GNOME&nbsp;51 workstation built on
+          <a href="#hummingbird">Fedora&nbsp;Hummingbird</a> rather than Silverblue.
+          Every desktop package it ships is rebuilt from source against that base
+          by its own factory, and every image is bootc-native and digest-pinned.
+        </p>
+        <p class="sub">
+          Named for <em>Utahraptor ostrommaysorum</em>, the largest known dromaeosaur
+          &mdash; and, like the image, mostly feathers over a very fast skeleton.
+        </p>
+        <div class="cta">
+          <a class="btn primary" href="https://github.com/projectbluefin/utah" rel="noopener">Repository</a>
+          <a class="btn" href="#build">Build status</a>
+          <a class="btn" href="#packages">What it ships</a>
+        </div>
+      </div>
+      <div class="hero-art reveal" aria-hidden="false">
+        <picture>
+          <source type="image/webp"
+                  srcset="assets/utahraptor-560.webp 560w,
+                          assets/utahraptor-900.webp 900w,
+                          assets/utahraptor-1400.webp 1400w"
+                  sizes="(max-width: 860px) 88vw, 46vw">
+          <img class="raptor" src="assets/utahraptor-900.png"
+               width="900" height="589" decoding="async" fetchpriority="high"
+               alt="Illustration of a feathered Utahraptor, the project mascot, striding to the left with its jaws open.">
+        </picture>
+      </div>
+    </div>
+    <dl class="quickstats reveal" id="quickstats">
+      <div><dt>Packages installed</dt><dd data-stat="installed">&mdash;</dd></div>
+      <div><dt>Documented gaps</dt><dd data-stat="unavailable">&mdash;</dd></div>
+      <div><dt>Image flavors</dt><dd>4</dd></div>
+      <div><dt>Desktop</dt><dd>GNOME&nbsp;51</dd></div>
+    </dl>
+  </section>
+
+  <!-- ---------- Build status ---------- -->
+  <section class="band" id="build">
+    <div class="head reveal">
+      <h2>Build status</h2>
+      <p>Live from the GitHub Actions API for the pipelines that gate a release.
+         Each card shows the most recent run on the branch named.</p>
+    </div>
+    <div class="grid status" id="status-grid" aria-live="polite" aria-busy="true"></div>
+    <p class="note" id="status-note">Loading current run conclusions&hellip;</p>
+  </section>
+
+  <!-- ---------- Packages ---------- -->
+  <section class="band alt" id="packages">
+    <div class="head reveal">
+      <h2>What the image ships</h2>
+      <p>Generated from <code>packages/bluefin.toml</code> and <code>packages/utah.toml</code>
+         by <code>scripts/generate-site-data.py</code>, so this list is the one the
+         image build actually resolves. It cannot drift: <code>just check</code> fails
+         when it does.</p>
+    </div>
+    <div class="filters reveal">
+      <label class="search">
+        <span class="visually-hidden">Search packages</span>
+        <input type="search" id="pkg-search" placeholder="Search packages…" autocomplete="off" spellcheck="false">
+      </label>
+      <div class="chips" id="pkg-chips" role="group" aria-label="Filter by group"></div>
+    </div>
+    <div id="pkg-groups" class="pkg-groups"></div>
+    <p class="note" id="pkg-empty" hidden>No package matches that search.</p>
+
+    <div class="gaps reveal" id="gaps">
+      <h3>Known gaps</h3>
+      <p>Packages Bluefin ships that no repository Utah enables can provide. Each one
+         carries a tracking issue, by rule &mdash; this is the documented debt, not a
+         silent omission.</p>
+      <ul class="gap-list" id="gap-list"></ul>
+    </div>
+  </section>
+
+  <!-- ---------- Roadmap ---------- -->
+  <section class="band" id="roadmap">
+    <div class="head reveal">
+      <h2>Roadmap and feature requests</h2>
+      <p>Live from the issue tracker. Anything labelled or titled as a tracker is
+         surfaced first; the rest is what is open right now.</p>
+    </div>
+    <div class="grid roadmap" id="roadmap-grid" aria-live="polite" aria-busy="true"></div>
+    <p class="note" id="roadmap-note">Loading open issues&hellip;</p>
+    <p class="more">
+      <a class="btn" href="https://github.com/projectbluefin/utah/issues" rel="noopener">All issues</a>
+      <a class="btn" href="https://github.com/projectbluefin/utah/issues/new" rel="noopener">Request a feature</a>
+    </p>
+  </section>
+
+  <!-- ---------- Hummingbird ---------- -->
+  <section class="band alt spotlight" id="hummingbird">
+    <div class="spot-inner reveal">
+      <div>
+        <p class="eyebrow">The base</p>
+        <h2>Fedora Hummingbird</h2>
+        <p>
+          Hummingbird is Red Hat's minimal, bootc-native Fedora base: a bootable
+          container image with a server-shaped package set, its own
+          <code>hum</code> disttag, and no desktop at all. Utah is what happens when
+          you put a full GNOME workstation on top of it.
+        </p>
+        <p>
+          That choice is the reason this project has a package factory. Hummingbird
+          ships the bootable base and rebuilt core libraries; it does not ship
+          GNOME&nbsp;51, so
+          <a href="https://github.com/projectbluefin/utah-packages" rel="noopener">utah-packages</a>
+          rebuilds the entire desktop dependency graph from upstream sources against
+          that exact ABI, and publishes it as an OCI repository Utah pins by digest.
+          Anything Hummingbird already provides, Utah takes from Hummingbird.
+        </p>
+        <div class="cta">
+          <a class="btn primary" href="https://hummingbird-project.io/docs/" rel="noopener">Documentation</a>
+          <a class="btn" href="https://gitlab.com/redhat/hummingbird" rel="noopener">Source</a>
+          <a class="btn" href="https://github.com/projectbluefin/utah-packages" rel="noopener">The factory</a>
+        </div>
+      </div>
+      <ul class="facts">
+        <li><span>Base image</span><code>quay.io/hummingbird-community/bootc-os</code></li>
+        <li><span>Disttag</span><code>hum1</code></li>
+        <li><span>Package repo</span><code>public-hummingbird-x86_64-rpms</code></li>
+        <li><span>Utah adds</span>GNOME&nbsp;51, firmware, desktop services</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <p>
+    <a href="https://github.com/projectbluefin/utah" rel="noopener">projectbluefin/utah</a> &middot;
+    <a href="https://github.com/projectbluefin/utah-packages" rel="noopener">utah-packages</a> &middot;
+    <a href="https://projectbluefin.io" rel="noopener">projectbluefin.io</a>
+  </p>
+  <p class="fine">
+    Package data generated <span data-stat="generated">&mdash;</span>. Build status and
+    issues are fetched live from the public GitHub API when you open this page.
+    Utahraptor artwork &copy; Project Bluefin.
+  </p>
+</footer>
+
+<script src="app.js" defer></script>
+</body>
+</html>

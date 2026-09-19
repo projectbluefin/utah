@@ -1,0 +1,207 @@
+{
+  "generated_at": "2026-09-19",
+  "generator": "scripts/generate-site-data.py",
+  "groups": [
+    {
+      "blurb": "Packages Utah installs because Bluefin's own manifest asks for them. This file is a byte-for-byte copy of upstream's.",
+      "id": "bluefin",
+      "packages": [
+        "adw-gtk3-theme",
+        "adwaita-fonts-all",
+        "alsa-firmware",
+        "alsa-tools-firmware",
+        "bootc",
+        "bootupd",
+        "containerd",
+        "ddcutil",
+        "distrobox",
+        "dracut-live",
+        "evtest",
+        "fastfetch",
+        "firewall-config",
+        "flatpak-spawn",
+        "fzf",
+        "gcc",
+        "gcc-c++",
+        "git-credential-libsecret",
+        "gnome-ponytail-daemon",
+        "gnome-tweaks",
+        "google-noto-sans-cjk-vf-fonts",
+        "grub2-efi-x64-cdboot",
+        "gum",
+        "gvfs-nfs",
+        "ibus-mozc",
+        "ibus-unikey",
+        "igt-gpu-tools",
+        "input-remapper",
+        "isomd5sum",
+        "just",
+        "libappindicator-gtk3",
+        "libayatana-appindicator-gtk3",
+        "libblockdev-btrfs",
+        "libblockdev-dm",
+        "libblockdev-lvm",
+        "libblockdev-mpath",
+        "libcamera-gstreamer",
+        "libcamera-tools",
+        "libratbag-ratbagd",
+        "libva-utils",
+        "libxcrypt-compat",
+        "livesys-scripts",
+        "make",
+        "mesa-libGLU",
+        "mozc",
+        "nautilus-gsconnect",
+        "openrgb-udev-rules",
+        "openssh-askpass",
+        "pipewire-libs-extra",
+        "python3-gnome-ponytail-daemon",
+        "squashfs-tools",
+        "switcheroo-control",
+        "waypipe",
+        "wireguard-tools",
+        "wl-clipboard",
+        "xdg-terminal-exec",
+        "xorriso",
+        "zenity"
+      ],
+      "title": "Bluefin contract",
+      "transient": false
+    },
+    {
+      "blurb": "The desktop contract Hummingbird does not ship. Built by the factory.",
+      "id": "gnome",
+      "packages": [
+        "glibc-all-langpacks",
+        "gnome-control-center",
+        "gnome-session",
+        "gnome-settings-daemon",
+        "gnome-shell",
+        "gsettings-desktop-schemas",
+        "gtk4",
+        "libadwaita",
+        "mutter",
+        "xdg-desktop-portal",
+        "xdg-desktop-portal-gnome"
+      ],
+      "title": "GNOME 51 desktop",
+      "transient": false
+    },
+    {
+      "blurb": "What Bluefin inherits from Fedora's base image and Hummingbird has in its repository but not in its bootable base.",
+      "id": "parity",
+      "packages": [
+        "NetworkManager-config-connectivity-fedora",
+        "abattis-cantarell-fonts",
+        "alsa-ucm",
+        "bash-completion",
+        "bind-utils",
+        "crypto-policies-scripts",
+        "dbus-tools",
+        "default-fonts-core-mono",
+        "default-fonts-core-sans",
+        "default-fonts-core-serif",
+        "file",
+        "google-noto-sans-math-fonts",
+        "google-noto-sans-mono-vf-fonts",
+        "google-noto-sans-symbols-2-fonts",
+        "google-noto-serif-vf-fonts",
+        "hostname",
+        "iptables-nft",
+        "keyutils",
+        "langpacks-en",
+        "langpacks-fonts-en",
+        "less",
+        "man-db",
+        "python3-pip",
+        "systemd-container",
+        "unzip",
+        "which",
+        "xxd",
+        "zip"
+      ],
+      "title": "Base-image parity",
+      "transient": false
+    },
+    {
+      "blurb": "Units Bluefin adds on top of the server base; the preset cannot enable what was never installed.",
+      "id": "services",
+      "packages": [
+        "cryptsetup",
+        "flatpak",
+        "fwupd",
+        "systemd-resolved",
+        "tailscale"
+      ],
+      "title": "Desktop services",
+      "transient": false
+    },
+    {
+      "blurb": "Build-only dependencies for the pinned GNOME extensions. These are removed again before the image ships, so they are listed for completeness and are not counted as installed.",
+      "id": "build",
+      "packages": [
+        "dbus-devel",
+        "glib2-devel",
+        "meson",
+        "sassc",
+        "unzip"
+      ],
+      "title": "Extension toolchain",
+      "transient": true
+    }
+  ],
+  "totals": {
+    "installed": 102,
+    "unavailable": 9
+  },
+  "unavailable": [
+    {
+      "issues": [
+        83
+      ],
+      "name": "anaconda-live"
+    },
+    {
+      "issues": [],
+      "name": "evolution-ews-core"
+    },
+    {
+      "issues": [
+        35
+      ],
+      "name": "firefox"
+    },
+    {
+      "issues": [],
+      "name": "fish"
+    },
+    {
+      "issues": [
+        106
+      ],
+      "name": "libgda"
+    },
+    {
+      "issues": [
+        106
+      ],
+      "name": "libgda-sqlite"
+    },
+    {
+      "issues": [
+        107
+      ],
+      "name": "ppp"
+    },
+    {
+      "issues": [
+        83
+      ],
+      "name": "slitherer"
+    },
+    {
+      "issues": [],
+      "name": "zsh"
+    }
+  ]
+}
