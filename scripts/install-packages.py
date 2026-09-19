@@ -115,11 +115,19 @@ def contract(base: Path, overlay: Path, major: str | None) -> list[str]:
     Fedora release it targets, and simply skips that section when it does not
     exist.  The lookup is dynamic: whatever release the base image reports,
     Utah installs the matching section when upstream defines one and skips it
-    otherwise, so a new upstream section is picked up for free.
+    otherwise, so a new upstream section is picked up for free.  Bluefin's
+    [multimedia_overrides] are added too, minus any the factory has not yet
+    published (those are documented in [unavailable] in packages/utah.toml).
     """
     packages = section(base, "fedora")
     if major:
         packages += section(base, f"fedora_v{major}")
+    # Bluefin's [multimedia_overrides] replace Fedora's mesa/libva builds with
+    # negativo17's. Utah does not enable fedora-multimedia, so it takes the same
+    # names from the factory instead. Names the factory has not yet published are
+    # documented in [unavailable] below and excluded here, so a name the factory
+    # is still missing never enters the install set and silently skips nothing.
+    packages += section(base, "multimedia_overrides")
     packages += section(overlay, "gnome")
     # Parity with what Bluefin inherits from Fedora's base image and Hummingbird
     # has in its repository but not in its bootable base.
@@ -253,6 +261,28 @@ def main() -> int:
     rc = run(dnf, "-y", "mark", "user", *packages, *build_deps)
     if rc:
         return rc
+
+    # Factory multimedia overrides: pin the factory builds so a base or
+    # downstream transaction cannot silently swap them for Fedora's or
+    # negativo17's. Bluefin does this with dnf5 versionlock after install; Utah
+    # mirrors it. Only overrides the factory actually shipped are locked, so a
+    # name still pending in the factory (tracked in [unavailable]) is not locked
+    # into non-existence.
+    multimedia = section(args.manifest, "multimedia_overrides")
+    # Only lock the overrides the factory actually shipped. A name still pending
+    # in the factory (tracked in [unavailable]) has no factory build to pin;
+    # locking it here holds whatever non-factory build the base or a downstream
+    # transaction pulled at the base version, which is exactly the silent swap
+    # the pin is meant to prevent -- and the verifier skips [unavailable] names,
+    # so this step would otherwise lock something it never asserts. Subtract the
+    # [unavailable] set before computing what is actually installed.
+    unavailable = set(section(overlay, "unavailable"))
+    locked = installed([m for m in multimedia if m not in unavailable])
+    if locked:
+        print(f"Versionlocking {len(locked)} factory multimedia overrides: {' '.join(locked)}")
+        rc = run(dnf, "-y", "versionlock", "add", *locked)
+        if rc:
+            return rc
 
     # Mirror remove_excluded_packages: only remove what is actually installed,
     # and never let the removal cascade into the contract.

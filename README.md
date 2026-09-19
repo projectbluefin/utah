@@ -60,9 +60,10 @@ being noticed later.
 
 | | count |
 | --- | --- |
-| Bluefin contract installed | **61** |
-| Utah additions (GNOME 51, desktop services) | 12 |
-| Genuinely unavailable | **4** |
+| Bluefin contract installed | **58** |
+| Multimedia overrides from factory | **5** of 12 |
+| Utah additions (GNOME 51, desktop services) | 15 |
+| Documented as unavailable | **16** |
 
 The install writes its resolved list to `/usr/share/utah/contract.txt` and the
 verify step asserts *that file*, so the two cannot disagree.
@@ -97,9 +98,12 @@ This is the honest list, and it is why the label above says pre-alpha.
   install.
 - **Codec support differs.** Twelve `[multimedia_overrides]` names are packages
   Fedora already ships and Bluefin *replaces* with negativo17 builds. Utah
-  installs Fedora's. Nothing is absent from the image; hardware-accelerated
-  codecs are what differ. `utah-packages` already builds several of them, so
-  this closes when Utah consumes that overlay.
+  does not enable `fedora-multimedia`, so it takes the same names from the
+  `utah-packages` factory instead, and versionlocks them so they cannot be
+  swapped out. The factory has published five (intel-gmmlib, intel-mediasdk,
+  intel-vpl-gpu-rt, libheif and libva); the Mesa family and libva-intel-media
+  driver are not yet built for Hummingbird and are documented as unavailable
+  until `utah-packages#24` ships them, at which point they close automatically.
 - **The image is still pre-alpha.** The digest-pinned `utah-packages` OCI
   repository is consumed and the local QEMU image reaches GDM and GNOME Shell.
 - **CUDA is deliberately excluded** — 7.68 GB installed. Use the NVIDIA

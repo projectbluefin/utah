@@ -63,6 +63,7 @@ COPY scripts/install-packages.py \
      scripts/configure-branding.sh \
      scripts/verify-desktop-contract.py \
      scripts/verify-gnome-extensions.py \
+     scripts/verify-multimedia.py \
      /tmp/utah-scripts/
 # Common publishes Bluefin artwork, desktop defaults, Brewfiles, and setup
 # hooks in a separate profile from its shared system files. Both are required:
@@ -83,7 +84,8 @@ RUN for pair in install-packages.py:utah-install-packages \
                 configure-services.sh:utah-configure-services \
                 configure-branding.sh:utah-configure-branding \
                 verify-desktop-contract.py:utah-verify-desktop-contract \
-                verify-gnome-extensions.py:utah-verify-gnome-extensions; do \
+                verify-gnome-extensions.py:utah-verify-gnome-extensions \
+                verify-multimedia.py:utah-verify-multimedia; do \
       install -Dm 0755 "/tmp/utah-scripts/${pair%%:*}" "/usr/local/libexec/${pair##*:}" || exit 1; \
     done && \
     cp -a /tmp/utah-common/. / && \
@@ -122,6 +124,8 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
       /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
     IMAGE_FLAVOR=main /usr/local/libexec/utah-verify-rpm-contract \
       /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
+    /usr/local/libexec/utah-verify-multimedia /usr/share/utah/bluefin.toml \
+      /usr/share/utah/utah.toml && \
     DNF="$(command -v dnf5 || command -v dnf)" && \
     "$DNF" clean all && rm -rf /var/cache/libdnf5 /var/cache/dnf
 

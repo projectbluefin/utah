@@ -4,6 +4,7 @@ import importlib.util
 import hashlib
 import io
 import re
+import sys
 from pathlib import Path
 import subprocess
 import tarfile
@@ -209,6 +210,55 @@ class ParityContractTests(unittest.TestCase):
         source = (ROOT / "scripts/verify-rpm-contract.py").read_text()
         self.assertIn('parity = section(overlay, "parity")', source)
         self.assertIn("*parity,", source)
+
+
+class VersionlockTests(unittest.TestCase):
+    """The versionlock step must skip [unavailable] names from the overlay."""
+
+    def test_versionlock_excludes_overlay_unavailable(self):
+        # Regression: the versionlock step read [unavailable] from the Bluefin
+        # manifest (which has no such section) instead of the overlay, so it
+        # versionlocked non-factory builds pending in the factory -- the exact
+        # silent swap the pin exists to prevent. The pin must subtract the
+        # overlay's [unavailable] set, not the base manifest's.
+        calls = []
+
+        def fake_run(*args):
+            calls.append(args)
+            return 0
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "bluefin.toml"
+            overlay = Path(tmp) / "utah.toml"
+            base.write_text(
+                '[multimedia_overrides]\n'
+                'packages=["mesa-vulkan-drivers", "libva-intel-media-driver"]\n'
+            )
+            overlay.write_text(
+                '[multimedia_overrides]\n'
+                'packages=["mesa-vulkan-drivers", "libva-intel-media-driver"]\n'
+                '\n'
+                '[unavailable]\n'
+                'packages=["libva-intel-media-driver"]\n'
+            )
+            argv = sys.argv
+            try:
+                sys.argv = ["install-packages", str(base), str(overlay)]
+                with patch.object(installer, "run", fake_run), \
+                     patch.object(installer, "dnf_path", return_value="dnf"), \
+                     patch.object(installer, "fedora_major", return_value="43"), \
+                     patch.object(installer, "installed",
+                                  side_effect=lambda pkgs: sorted(set(pkgs))): \
+                    self.assertEqual(installer.main(), 0)
+            finally:
+                sys.argv = argv
+
+        versionlock_calls = [c for c in calls if "versionlock" in c]
+        self.assertEqual(len(versionlock_calls), 1)
+        locked = versionlock_calls[0]
+        self.assertIn("add", locked)
+        self.assertIn("mesa-vulkan-drivers", locked)
+        self.assertNotIn("libva-intel-media-driver", locked)
 
 
 if __name__ == "__main__":

@@ -46,7 +46,8 @@ policy for changing them.
     name there.
   - `[services]` — desktop services Bluefin adds on top of the server base.
   - `[unavailable]` — Bluefin contract packages none of Utah's repositories
-    provide.
+    provide, plus any `[multimedia_overrides]` name the factory has not yet
+    published (see below).
 
 ## [unavailable] rules
 
@@ -55,23 +56,36 @@ policy for changing them.
 a dumping ground for packages that are merely inconvenient (header comment,
 `packages/utah.toml`).
 
-## multimedia_overrides are not missing packages
+## multimedia_overrides are consumed from the factory
 
 Bluefin's `[multimedia_overrides]` (twelve names: mesa-libGL,
 mesa-vulkan-drivers, libva, intel-mediasdk, libheif and friends) are **not**
 extra packages. They are the same names Fedora already ships, which Bluefin
 *replaces* with negativo17 builds by enabling `fedora-multimedia`. Utah does
-not enable that repository, so it installs Fedora's builds instead. Nothing
-is absent from the image; what differs is which build it carries, and the
-practical consequence is hardware-accelerated codec support.
+not enable that repository, so it takes the same names from the utah-packages
+factory instead.
 
-That is why they are absent from the contract rather than listed under
-`[unavailable]`: recording them as missing would be wrong (a source does
-provide the name), and recording them as satisfied would hide a real
-functional difference. The factory already builds several of them in
-projectbluefin/hummingbird-github; when that overlay is published and enabled
-here, these can move into the contract as a version assertion rather than a
-name one (header comment, `packages/utah.toml`).
+`scripts/install-packages.py` adds `[multimedia_overrides]` to the install
+transaction and versionlocks every override it installs, so the factory
+builds are pinned and cannot be silently swapped for Fedora's or negativo17's.
+`scripts/verify-multimedia.py` then asserts each installed override carries the
+factory (Hummingbird `hum`) release rather than a substitute build, and probes
+the VA-API codec path. Source identity is read from the release tag, not a
+pinned NEVRa, because exact versions move with the factory on every rebuild
+(verify-multimedia.py:~19).
+
+The factory has published five of the twelve for Hummingbird
+(intel-gmmlib, intel-mediasdk, intel-vpl-gpu-rt, libheif and libva). The
+remaining seven -- the whole Mesa family plus libva-intel-media-driver -- are
+not yet published, so none of Utah's repositories provide them and they are
+listed under `[unavailable]` (tracked by utah-packages#24). A name is not
+silently skipped: it is documented, and it returns to the asserted contract
+the moment the factory publishes it. When the factory overlay is complete
+these move from `[unavailable]` into the version assertion, so the contract
+asserts factory versions for every override, not just the five.
+
+`scripts/verify-multimedia.py --check packages/bluefin.toml packages/utah.toml`
+validates the manifest off-image (non-empty overrides, no duplicates).
 
 ## Repository policy
 
@@ -134,9 +148,10 @@ about installation.
 - Drift in `packages/bluefin.toml` from upstream is a CI failure
   (`just check-parity`).
 
-Current counts, per the README "Package parity" section: 61 Bluefin contract
-packages installed, 12 Utah additions (GNOME 51, desktop services), 4
-genuinely unavailable.
+Current counts, per `install-packages.py --check`: 78 Bluefin parity packages
+resolved (58 from `[fedora]`, 5 of Bluefin's 12 `[multimedia_overrides]` from
+the factory, plus GNOME 51 and desktop services), 16 documented as unavailable
+(parity debt, each with a tracking issue).
 
 ## Verification
 
@@ -145,4 +160,5 @@ just check-parity
 just check-repos
 python3 scripts/install-packages.py --check packages/bluefin.toml
 python3 scripts/verify-rpm-contract.py --check packages/bluefin.toml
+python3 scripts/verify-multimedia.py --check packages/bluefin.toml packages/utah.toml
 ```

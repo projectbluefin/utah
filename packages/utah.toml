@@ -11,27 +11,33 @@
 #   [build]        toolchain needed to build the pinned GNOME extensions
 #   [unavailable]  Bluefin contract packages none of Utah's repositories provide
 #
-# On [multimedia_overrides], which Utah deliberately does not install:
+# On [multimedia_overrides], which Utah now consumes from the factory:
 #
 #   Those twelve entries -- mesa-libGL, mesa-vulkan-drivers, libva,
 #   intel-mediasdk, libheif and friends -- are not extra packages. They are the
 #   same package names Fedora already ships, which Bluefin *replaces* with
 #   negativo17 builds by enabling fedora-multimedia. Utah does not enable that
-#   repository, so it installs Fedora's builds of those names instead. Nothing
-#   is missing from the image; what differs is which build of them it carries,
-#   and the practical consequence is hardware-accelerated codec support.
+#   repository, so it takes the same names from the utah-packages factory
+#   instead. Nothing is missing from the image by design; what differs from
+#   Bluefin is which build of them it carries, and the practical consequence is
+#   hardware-accelerated codec support.
 #
-#   This is why they are absent from the contract rather than listed under
-#   [unavailable]: [unavailable] means "no source provides this name at all",
-#   which is false of these. Recording them as missing would be wrong, and
-#   recording them as satisfied would hide a real functional difference from
-#   Bluefin.
+#   install-packages.py adds this section to the install transaction and
+#   versionlocks every override it installs, so the factory builds are pinned
+#   and cannot be silently swapped for Fedora's or negativo17's. The runtime
+#   verifier (scripts/verify-multimedia.py) then asserts each installed override
+#   carries the factory (Hummingbird `hum`) release, not a substitute build.
 #
-#   The factory is already building several of them for Hummingbird --
-#   intel-gmmlib, intel-mediasdk, intel-vpl-gpu-rt, libheif and libva all built
-#   in projectbluefin/hummingbird-github. When that overlay is published and enabled
-#   here, it becomes the source that negativo17 is for Bluefin, and these can
-#   move into the contract as a version assertion rather than a name one.
+#   The factory has published five of the twelve for Hummingbird --
+#   intel-gmmlib, intel-mediasdk, intel-vpl-gpu-rt, libheif and libva, all built
+#   in projectbluefin/hummingbird-github, release `*.hum1.bfin`. The remaining
+#   seven -- the whole Mesa family plus libva-intel-media-driver -- are not yet
+#   published by the factory, so none of Utah's repositories provide them and
+#   they are listed under [unavailable] below (tracked by utah-packages#24). A
+#   name is not silently skipped: it is documented, and it returns to the
+#   asserted contract the moment the factory publishes it. When that overlay is
+#   complete these move from [unavailable] into the version assertion, so the
+#   contract asserts factory versions for every override, not just the five.
 
 [gnome]
 # Hummingbird supplies the bootable base but not a desktop.  The pinned
@@ -233,6 +239,15 @@ packages = [
 #
 # grub2-efi-x64-cdboot and pipewire-libs-extra are supplied by the pinned
 # September 10 factory candidate and return to the install contract (#35).
+#
+# libva-intel-media-driver, mesa-dri-drivers, mesa-filesystem, mesa-libEGL,
+# mesa-libGL, mesa-libgbm, mesa-vulkan-drivers
+#   The Mesa family of Bluefin's [multimedia_overrides]. None of Utah's
+#   repositories provide any of these yet: the utah-packages factory has not
+#   rebuilt them against Hummingbird, and public-hummingbird-x86_64-rpms carries
+#   no Mesa at all. Until the factory publishes them (tracked by
+#   utah-packages#24) they have no source in Utah, and they return to the
+#   asserted contract the moment it does -- see the header of this file.
 packages = [
     "anaconda-live",
     "evolution-ews-core",
@@ -240,6 +255,13 @@ packages = [
     "fish",
     "libgda",
     "libgda-sqlite",
+    "libva-intel-media-driver",
+    "mesa-dri-drivers",
+    "mesa-filesystem",
+    "mesa-libEGL",
+    "mesa-libGL",
+    "mesa-libgbm",
+    "mesa-vulkan-drivers",
     "ppp",
     "slitherer",
     "zsh",

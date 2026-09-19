@@ -46,6 +46,7 @@ check:
     test -f scripts/configure-branding.sh
     test -f scripts/verify-desktop-contract.py
     test -f scripts/verify-gnome-extensions.py
+    test -f scripts/verify-multimedia.py
     test -f contracts/bluefin-desktop.toml
     # The reusable image workflow checks out this repository without
     # submodules. Populate them here before validating the source contract;
@@ -54,6 +55,7 @@ check:
     git submodule update --init --recursive
     python3 scripts/verify-desktop-contract.py --check contracts/bluefin-desktop.toml
     python3 scripts/verify-gnome-extensions.py --source
+    python3 scripts/verify-multimedia.py --check packages/bluefin.toml packages/utah.toml
     grep -q '/system_files/bluefin' Containerfile
     grep -q 'flatpak-preinstall.service' scripts/configure-services.sh
     grep -q 'flathub.flatpakrepo' scripts/configure-services.sh
