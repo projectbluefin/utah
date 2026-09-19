@@ -61,24 +61,27 @@ def main() -> int:
     if resolved.exists():
         contract = [line for line in resolved.read_text().split() if line]
         gnome_names = set(section(overlay, "gnome"))
+        hardware_names = set(section(overlay, "hardware"))
         parity_names = set(section(overlay, "parity"))
         service_names = set(section(overlay, "services"))
-        overlay_names = gnome_names | parity_names | service_names
+        overlay_names = gnome_names | hardware_names | parity_names | service_names
         bluefin = [p for p in contract if p not in overlay_names]
         gnome = [p for p in contract if p in gnome_names]
+        hardware = [p for p in contract if p in hardware_names]
         parity = [p for p in contract if p in parity_names]
         services = [p for p in contract if p in service_names]
     else:
         bluefin = [p for p in section(args.manifest, "fedora") if p not in unavailable]
         gnome = section(overlay, "gnome")
+        hardware = section(overlay, "hardware")
         parity = section(overlay, "parity")
         services = section(overlay, "services")
     nvidia = list(NVIDIA_PACKAGES) if "nvidia" in flavor else []
-    expected = [*bluefin, *gnome, *parity, *services, *nvidia]
+    expected = [*bluefin, *gnome, *hardware, *parity, *services, *nvidia]
 
     print(
         f"Verifying {len(bluefin)} Bluefin packages, {len(gnome)} GNOME desktop packages,"
-        f" {len(parity)} parity packages,"
+        f" {len(hardware)} firmware packages, {len(parity)} parity packages,"
         f" {len(services)} desktop service packages, and {len(nvidia)} NVIDIA packages",
         flush=True,
     )

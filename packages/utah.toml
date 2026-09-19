@@ -7,6 +7,7 @@
 #
 # Sections:
 #   [gnome]        GNOME 51 desktop contract Hummingbird does not ship
+#   [hardware]     firmware and microcode the bootable base leaves out
 #   [parity]       what Bluefin gets from Fedora's base image and Hummingbird has
 #   [build]        toolchain needed to build the pinned GNOME extensions
 #   [unavailable]  Bluefin contract packages none of Utah's repositories provide
@@ -129,6 +130,51 @@ packages = [
     "systemd-container",
 ]
 
+[hardware]
+# Firmware for real machines. Neither of these is in the Bluefin contract,
+# for the same reason the [services] entries below are not: Fedora's base
+# image carries them, so Bluefin never has to ask, while Hummingbird's
+# bootable base ships effectively no device firmware at all.
+#
+# On hardware that needs a blob this is not cosmetic. Reported on a ThinkPad
+# X230 (#97) as a dead Centrino Advanced-N 6205:
+#
+#     iwlwifi 0000:03:00.0: Direct firmware load for iwlwifi-6000g2a-6.ucode
+#       failed with error -2
+#     iwlwifi 0000:03:00.0: no suitable firmware found
+#
+# with no iwlwifi blob anywhere under /usr/lib/firmware on the deployed image
+# and no linux-firmware in its rpmdb, against ~192 firmware files on Bluefin
+# on the same machine. A laptop with no wireless has no way to fetch the fix,
+# which is what makes this the sharpest of the parity gaps.
+#
+# linux-firmware alone is NOT enough, which is the trap in this issue.  It is
+# a split package here: it Requires only linux-firmware-whence, and it
+# Recommends thirteen device packages -- amd-gpu, atheros, brcmfmac, cirrus,
+# intel-gpu, mt7xxx, nvidia-gpu, nxpwireless, qcom-wwan, realtek, tiwilink and
+# friends -- which weak dependencies bring in for free.  Intel wireless is in
+# neither list.  Measured against the pinned repository's filelists,
+# iwlwifi-6000g2a-6.ucode -- the exact blob #97 names -- ships in
+# iwlwifi-dvm-firmware, so installing linux-firmware and stopping there would
+# have closed the issue while leaving the X230 just as dead.
+#
+# So the three iwlwifi generations and iwlegacy are named explicitly, which
+# covers Intel wireless from the 3945 era through current parts.  Everything
+# else arrives through the recommends above.
+#
+# microcode_ctl is deliberately absent: it exists in neither enabled
+# repository -- not in the pinned factory image, not in
+# public-hummingbird-x86_64-rpms -- so naming it here would fail the install
+# transaction outright.  CPU errata updates therefore remain a real gap on
+# this base, and closing it needs a factory recipe first.
+packages = [
+    "linux-firmware",
+    "iwlwifi-dvm-firmware",
+    "iwlwifi-mvm-firmware",
+    "iwlwifi-mld-firmware",
+    "iwlegacy-firmware",
+]
+
 [build]
 # Build dependencies for scripts/build-gnome-extensions.sh.
 #
@@ -214,6 +260,25 @@ packages = [
 #   its Qt WebEngine dependency closure. Match the factory's installer policy
 #   until that path is supported; tracked by #83.
 #
+# avahi
+#   Hummingbird ships avahi-libs and avahi-glib but not the daemon, so
+#   geoclue retries forever against nobody (#104). The daemon package does
+#   exist in their repository, but it is not installable here: avahi
+#   0.9~rc4-0.1.1.hum1 needs libdaemon.so.0 and libdaemon >= 0.11, and
+#   libdaemon is in no repository this image enables -- not Hummingbird, not
+#   the pinned factory image, and not the factory inventory either. A
+#   libdaemon recipe has to come first. Tracked by #104.
+#
+# nautilus
+#   The accessories ship orphaned -- nautilus-extensions, nautilus-python and
+#   nautilus-gsconnect installed with no /usr/bin/nautilus (#100). The recipe
+#   is not the gap: nautilus 51~beta-1.hum1.bfin is in the pinned factory
+#   repository already. Its dependency closure is. It needs
+#   libgexiv2-0.16.so.4, libportal.so.1 and libportal-gtk4.so.1, and gexiv2
+#   and libportal are in no repository this image enables and in no factory
+#   recipe -- including utah-packages#70's 340. gexiv2 additionally needs
+#   exiv2, which is equally absent. Three recipes, not one. Tracked by #100.
+#
 # libgda, libgda-sqlite
 #   Upstream added both as runtime dependencies for the maintained Copyous
 #   extension (bluefin#1210). Neither is in the pinned factory image or in
@@ -235,11 +300,13 @@ packages = [
 # September 10 factory candidate and return to the install contract (#35).
 packages = [
     "anaconda-live",
+    "avahi",
     "evolution-ews-core",
     "firefox",
     "fish",
     "libgda",
     "libgda-sqlite",
+    "nautilus",
     "ppp",
     "slitherer",
     "zsh",

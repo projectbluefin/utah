@@ -54,6 +54,9 @@ def contract(base: Path, overlay: Path, major: str | None) -> list[str]:
     if major:
         packages += section(base, f"fedora_v{major}")
     packages += section(overlay, "gnome")
+    # Firmware is part of the contract too: the bootable base ships almost
+    # none, so a driver that needs a blob finds nothing to load.
+    packages += section(overlay, "hardware")
     # Parity with what Bluefin inherits from Fedora's base image and Hummingbird
     # has in its repository but not in its bootable base.
     packages += section(overlay, "parity")

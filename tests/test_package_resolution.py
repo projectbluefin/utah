@@ -77,6 +77,7 @@ class PackageResolutionTests(unittest.TestCase):
             base.write_text('[fedora]\npackages=["base", "unavailable"]\n'
                             '[fedora_v44]\npackages=["release-specific"]\n')
             overlay.write_text('[gnome]\npackages=["shell"]\n'
+                               '[hardware]\npackages=["firmware"]\n'
                                '[parity]\npackages=["manpages"]\n'
                                '[services]\npackages=["resolver"]\n'
                                '[build]\npackages=["compiler"]\n'
@@ -93,7 +94,8 @@ class PackageResolutionTests(unittest.TestCase):
         rc, command = self.resolve("Transaction Summary:\nInstall 12 Packages\nOperation aborted.\n")
         self.assertEqual(rc, 0)
         self.assertEqual(command[command.index("install") + 1:],
-                         ["base", "release-specific", "shell", "manpages", "resolver",
+                         ["base", "release-specific", "shell", "firmware", "manpages",
+                          "resolver",
                           "compiler"])
         self.assertIn("--assumeno", command)
         self.assertIn("--disablerepo=*", command)
@@ -125,6 +127,167 @@ class PackageResolutionTests(unittest.TestCase):
                             f"ARG PACKAGE_IMAGE_SHA=sha256:{'1' * 64}\n")
             with self.assertRaises(ValueError):
                 checker.pinned_inputs(path)
+
+
+class DesktopUnitEnablementTests(unittest.TestCase):
+    """A build-time enablement with no preset line behind it does not survive.
+
+    bootc applies systemd presets on first boot, so `systemctl enable` at
+    build time is undone unless 85-utah-desktop.preset agrees. That trap is
+    documented in configure-services.sh's sshd branch and was confirmed from
+    the other side by projectbluefin/utah#98, where the deployed image had no
+    preset entry enabling bluetooth.service. Hold the two files in agreement
+    so the next unit added to one cannot silently omit the other.
+    """
+
+    PRESET = ROOT / ("system_files/shared/usr/lib/systemd/system-preset/"
+                     "85-utah-desktop.preset")
+    SERVICES = ROOT / "scripts/configure-services.sh"
+
+    def preset_directives(self, verb):
+        return {
+            line.split()[1]
+            for line in self.PRESET.read_text().splitlines()
+            if line.startswith(f"{verb} ")
+        }
+
+    def script_units(self, function):
+        # Leading whitespace matters: sshd is enabled inside a conditional
+        # block, so an anchored pattern misses it and the allowlist below
+        # would look stale when it is not.
+        return set(
+            re.findall(rf"^[ \t]*{function} (\S+)$", self.SERVICES.read_text(), re.M)
+        )
+
+    # sshd is deliberately excluded: configure-services.sh rewrites the preset
+    # in place for the opt-in debug build rather than shipping it enabled,
+    # which is the one case where the two files may legitimately disagree.
+    #
+    # The other three predate this test and are NOT asserted to be correct.
+    # They come from ublue packages that may ship their own vendor presets, in
+    # which case Utah's preset has nothing to add -- but that was not verified
+    # here, because it needs the built image rather than the source tree. They
+    # are listed so the guard below can be exact about what it does not yet
+    # cover, instead of being weakened into passing for everything. If one of
+    # them turns out to have no preset behind it either, it is the same bug as
+    # #98 and belongs in the preset.
+    WITHOUT_PRESET = {
+        "sshd.service",
+        "brew-setup.service",
+        "flatpak-nuke-fedora.service",
+        "flatpak-preinstall.service",
+    }
+
+    def test_no_new_unit_is_enabled_without_a_preset_entry(self):
+        enabled = self.script_units("enable_unit") - self.WITHOUT_PRESET
+        missing = sorted(enabled - self.preset_directives("enable"))
+        self.assertEqual(
+            missing, [],
+            "enabled at build time with no preset entry, so bootc's first-boot "
+            f"preset application will undo it: {missing}",
+        )
+
+    def test_the_exception_list_does_not_cover_absent_units(self):
+        # A stale allowlist silently widens the hole above. Every name in it
+        # must still be a unit configure-services.sh actually enables.
+        enabled = self.script_units("enable_unit")
+        stale = sorted(self.WITHOUT_PRESET - enabled)
+        self.assertEqual(stale, [], f"allowlisted but no longer enabled: {stale}")
+
+    def test_the_reported_desktop_units_are_enabled(self):
+        # projectbluefin/utah#98 and #99: each package was installed and its
+        # unit never started. Name them so a refactor cannot drop one.
+        for unit in ("input-remapper.service",):
+            with self.subTest(unit=unit):
+                self.assertIn(unit, self.script_units("enable_unit"))
+                self.assertIn(unit, self.preset_directives("enable"))
+
+    def test_no_unit_is_enabled_for_an_uninstallable_package(self):
+        # avahi-daemon was enabled here until CI resolved the real
+        # transaction and showed avahi cannot be installed at all (it needs
+        # libdaemon, which no enabled repository carries). Enabling a unit
+        # whose package is in [unavailable] is dead configuration that reads
+        # like a fix.
+        enabled = self.script_units("enable_unit") | self.preset_directives("enable")
+        self.assertNotIn("avahi-daemon.service", enabled)
+
+
+class HardwareContractTests(unittest.TestCase):
+    """Firmware is in the install set and in what the image verifies."""
+
+    OVERLAY = ROOT / "packages/utah.toml"
+    verifier = None
+
+    @classmethod
+    def setUpClass(cls):
+        cls.verifier = load("verify-rpm-contract")
+
+    def test_firmware_packages_are_declared(self):
+        # projectbluefin/utah#97: no linux-firmware in the deployed rpmdb, and
+        # iwlwifi found no blob to load.
+        declared = installer.section(self.OVERLAY, "hardware")
+        self.assertIn("linux-firmware", declared)
+
+    def test_intel_wireless_firmware_is_named_explicitly(self):
+        # The heart of #97. linux-firmware is a split package that requires
+        # only linux-firmware-whence and recommends thirteen device packages,
+        # none of them Intel wireless -- while iwlwifi-6000g2a-6.ucode, the
+        # blob the report names, ships in iwlwifi-dvm-firmware. Depending on
+        # linux-firmware alone closes the issue without fixing the radio, so
+        # pin the explicit set.
+        declared = set(installer.section(self.OVERLAY, "hardware"))
+        for pkg in ("iwlwifi-dvm-firmware", "iwlwifi-mvm-firmware",
+                    "iwlwifi-mld-firmware", "iwlegacy-firmware"):
+            with self.subTest(package=pkg):
+                self.assertIn(pkg, declared)
+
+    def test_no_package_is_requested_from_outside_the_enabled_repositories(self):
+        # microcode_ctl was in the first draft of [hardware] and is in neither
+        # enabled repository, which would have failed the install transaction.
+        # Nothing here can assert repository contents offline, so hold the one
+        # name that was measured and found missing.
+        declared = set(installer.section(self.OVERLAY, "hardware"))
+        self.assertNotIn(
+            "microcode_ctl", declared,
+            "microcode_ctl is in neither the pinned factory image nor "
+            "public-hummingbird-x86_64-rpms; it needs a factory recipe first",
+        )
+
+    def test_hardware_section_reaches_the_install_set(self):
+        contract = installer.contract(ROOT / "packages/bluefin.toml", self.OVERLAY, "44")
+        for pkg in installer.section(self.OVERLAY, "hardware"):
+            with self.subTest(package=pkg):
+                self.assertIn(pkg, contract)
+
+    def test_packages_whose_closure_does_not_resolve_stay_out(self):
+        """Name availability is not installability, which CI proved the hard way.
+
+        Both of these exist by name in a repository the image enables, so a
+        name lookup says yes. Resolving the real transaction says no:
+
+            nothing provides libgexiv2-0.16.so.4 needed by nautilus...
+            nothing provides libportal.so.1      needed by nautilus...
+            nothing provides libdaemon.so.0      needed by avahi...
+
+        gexiv2, libportal, exiv2 and libdaemon are in no enabled repository
+        and in no factory recipe, so neither package can be installed until
+        those exist. #100 and #104 track them.
+        """
+        contract = installer.contract(ROOT / "packages/bluefin.toml", self.OVERLAY, "44")
+        for pkg in ("nautilus", "avahi"):
+            with self.subTest(package=pkg):
+                self.assertNotIn(pkg, contract)
+                self.assertIn(pkg, installer.section(self.OVERLAY, "unavailable"))
+
+    def test_verifier_asserts_the_hardware_section(self):
+        # The off-image --check path builds `expected` from the manifest. If
+        # [hardware] were missing from it, firmware could go absent from a
+        # built image without the contract check noticing.
+        section = self.verifier.section(self.OVERLAY, "hardware")
+        self.assertTrue(section)
+        source = (ROOT / "scripts/verify-rpm-contract.py").read_text()
+        self.assertIn('hardware = section(overlay, "hardware")', source)
+        self.assertIn("*hardware,", source)
 
 
 class ParityContractTests(unittest.TestCase):

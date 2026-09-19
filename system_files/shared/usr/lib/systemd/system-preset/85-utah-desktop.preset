@@ -11,5 +11,13 @@ enable ublue-system-setup.service
 enable systemd-resolved.service
 enable bootc-unified-storage.service
 enable dconf-update.service
+# Desktop hardware units. These must be listed here and not only enabled in
+# configure-services.sh: bootc applies presets on first boot, so a build-time
+# enablement with no preset line behind it gets undone. That is the trap the
+# sshd branch of configure-services.sh already documents, and #98 confirmed
+# the symptom from the other side -- grepping the deployed image found no
+# preset enabling bluetooth.service anywhere. bluetooth.service itself is
+# added by #125, with its desktop-contract entry.
+enable input-remapper.service
 disable sshd.service
 disable rpm-ostree.service

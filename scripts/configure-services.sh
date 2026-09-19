@@ -74,6 +74,26 @@ enable_unit ublue-system-setup.service
 enable_unit systemd-resolved.service
 enable_unit bootc-unified-storage.service
 
+# Hummingbird's server preset enables none of these, and Bluefin gets them
+# from its own 90-default.preset, so on Utah the packages were installed and
+# the units never started. Each was reported from the same ThinkPad X230:
+#
+#   input-remapper        the GUI cannot reach a root daemon and falls back to
+#                         prompting for a password (#99).
+#
+# bluetooth.service (#98) is the same shape and is enabled by #125, which also
+# adds it to contracts/bluefin-desktop.toml so the in-image desktop contract
+# asserts it; it is deliberately not duplicated here.
+#
+# avahi-daemon is deliberately NOT here. #104 is real, but avahi cannot be
+# installed on this base at all -- it needs libdaemon, which no enabled
+# repository carries -- so enabling its unit would be dead configuration
+# claiming a fix that is not there. It goes back in with the package.
+#
+# enable_unit is a no-op when the unit is absent, so a flavor that does not
+# carry one of these is unaffected.
+enable_unit input-remapper.service
+
 # Bluefin's Brewfile and Bazaar preinstall hook need the Flathub remote before
 # first boot. Keep this as a .flatpakrepo descriptor so the remote is available
 # to both flatpak-preinstall and brew-setup without baking mutable /var state.
