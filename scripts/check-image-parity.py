@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
+import http.client
 import json
 import subprocess
 import sys
@@ -277,10 +278,14 @@ def main(argv: list[str] | None = None) -> int:
             bluefin = json.loads(args.bluefin_inventory.read_text())
         else:
             bluefin = bluefin_inventory(args.bluefin_image)
-    except (urllib.error.URLError, ValueError, KeyError, OSError) as exc:
+    except (urllib.error.URLError, http.client.HTTPException,
+            ValueError, KeyError, OSError) as exc:
         # Without Bluefin's inventory there is nothing to compare. That is a
         # failure of the check, not evidence about the image, so it is fatal
-        # only when the check is asked to gate.
+        # only when the check is asked to gate. http.client.HTTPException is in
+        # the list because it is not an OSError: a truncated response raises
+        # IncompleteRead, which would otherwise escape here and traceback out of
+        # a step the Containerfile comment promises cannot fail the build.
         message = f"could not read Bluefin's inventory from {args.bluefin_image}: {exc}"
         print(message, file=sys.stderr)
         if args.report:

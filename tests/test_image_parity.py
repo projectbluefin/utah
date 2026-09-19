@@ -5,12 +5,14 @@ the image inventory is a text file. What is under test is the reading of the
 manifest, the comparison, and the exit code.
 """
 
+import http.client
 import importlib.util
 import json
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -196,6 +198,24 @@ class ExitCodeTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("known gap (baseline):", report)
         self.assertNotIn("NEW --", report)
+
+    def test_a_truncated_response_is_handled_like_any_other_fetch_failure(self):
+        """IncompleteRead is an HTTPException, not an OSError.
+
+        The Containerfile runs this step report-only and its comment promises a
+        fetch failure cannot fail the build. An exception outside the handler's
+        tuple would traceback instead, breaking that promise for the one failure
+        mode a large manifest fetch is most likely to hit.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "x").write_text("nautilus\n")
+            args = ["--bluefin-image", "ghcr.io/ublue-os/bluefin:stable",
+                    "--rpm-list", str(Path(tmp) / "x"),
+                    "--exceptions", str(Path(tmp) / "none")]
+            truncated = http.client.IncompleteRead(b"partial")
+            with patch.object(parity, "bluefin_inventory", side_effect=truncated):
+                self.assertEqual(parity.main(args), 0)
+                self.assertEqual(parity.main([*args, "--strict"]), 1)
 
     def test_an_unreadable_registry_is_not_evidence_about_the_image(self):
         with tempfile.TemporaryDirectory() as tmp:
