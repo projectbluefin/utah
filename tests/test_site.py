@@ -12,6 +12,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -223,6 +224,58 @@ class WorkflowTests(unittest.TestCase):
 
     def test_deployment_is_not_cancelled_mid_upload(self):
         self.assertIn("cancel-in-progress: false", self.workflow)
+
+
+class ScriptBehaviourTests(unittest.TestCase):
+    """Execute the page's own functions instead of reading them.
+
+    The first round of tests here asserted on the source text of app.js, which
+    is how `ago()` shipped rendering every duration one unit too small -- five
+    minutes as "5s ago", two days as "2h ago" -- with twenty-one tests green.
+    A page whose whole claim is that it does not misreport build state cannot
+    have its clock checked by grep.
+    """
+
+    NODE = shutil.which("node")
+
+    def evaluate(self, function_name, script):
+        """Extract one function from app.js and run `script` against it."""
+        source = (SITE / "app.js").read_text()
+        start = source.index(f"function {function_name}(")
+        body = source[start:]
+        body = body[: body.index("\n}\n") + 3]
+        harness = f"{body}\n{script}"
+        result = subprocess.run([self.NODE, "--input-type=module", "-e", harness],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout.strip()
+
+    @unittest.skipUnless(NODE, "node is required to execute the page's functions")
+    def test_relative_times_use_the_unit_they_were_converted_into(self):
+        cases = {30: "30s ago", 300: "5m ago", 10800: "3h ago",
+                 172800: "2d ago", 1814400: "3w ago"}
+        script = """
+        const now = Date.now();
+        const at = (s) => new Date(now - s * 1000).toISOString();
+        console.log(JSON.stringify(%s.map((s) => ago(at(s)))));
+        """ % list(cases)
+        self.assertEqual(json.loads(self.evaluate("ago", script)), list(cases.values()))
+
+    @unittest.skipUnless(NODE, "node is required to execute the page's functions")
+    def test_a_tracker_label_promotes_an_issue_the_title_does_not(self):
+        # index.html promises "labelled or titled as a tracker"; a title-only
+        # check quietly made half that sentence false.
+        script = """
+        const TRACKER = /^(tracking|roadmap|epic)\\b/i;
+        console.log(JSON.stringify([
+          isTracker({title: "Tracking: GNOME 51", labels: []}),
+          isTracker({title: "Wi-Fi is broken", labels: [{name: "tracking"}]}),
+          isTracker({title: "Wi-Fi is broken", labels: [{name: "bug"}]}),
+          isTracker({title: "Wi-Fi is broken"}),
+        ]));
+        """
+        self.assertEqual(json.loads(self.evaluate("isTracker", script)),
+                         [True, True, False, False])
 
 
 if __name__ == "__main__":

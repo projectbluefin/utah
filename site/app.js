@@ -38,7 +38,10 @@ const el = (tag, cls, text) => {
 function ago(iso) {
   if (!iso) return "";
   const seconds = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
-  const steps = [[60, "s"], [60, "m"], [24, "h"], [7, "d"], [4.35, "w"], [12, "mo"]];
+  // The label belongs to the unit the value is converted *into*, not the one it
+  // came from. Getting this one step out made every duration >= 60s read a unit
+  // too small: a build from two days ago rendered "2h ago".
+  const steps = [[60, "m"], [60, "h"], [24, "d"], [7, "w"], [4.35, "mo"], [12, "y"]];
   let value = seconds, unit = "s";
   for (const [size, next] of steps) {
     if (Math.abs(value) < size) break;
@@ -278,10 +281,17 @@ async function loadPackages() {
 
 const TRACKER = /^(tracking|roadmap|epic)\b/i;
 
+/* The section copy promises "labelled or titled as a tracker", so a
+   `tracking`-labelled issue is promoted even when its title says nothing. */
+function isTracker(issue) {
+  return TRACKER.test(issue.title)
+    || (issue.labels || []).some((label) => TRACKER.test(label.name || label));
+}
+
 function issueCard(issue) {
   const card = el("article", "card issue");
   const row = el("div", "row");
-  const tracker = TRACKER.test(issue.title);
+  const tracker = isTracker(issue);
   const pill = el("span", `pill ${tracker ? "running" : "unknown"}`);
   pill.append(el("span", "dot"), document.createTextNode(tracker ? "tracker" : "open"));
   row.append(pill, el("span", "when", ago(issue.created_at)));
@@ -323,7 +333,7 @@ async function loadRoadmap() {
       `${API}/repos/projectbluefin/utah/issues?state=open&sort=created&direction=desc&per_page=60`);
     const real = issues.filter((issue) => !issue.pull_request);
     // Trackers first: they are the roadmap, the rest is the queue behind it.
-    real.sort((a, b) => (TRACKER.test(b.title) ? 1 : 0) - (TRACKER.test(a.title) ? 1 : 0));
+    real.sort((a, b) => (isTracker(b) ? 1 : 0) - (isTracker(a) ? 1 : 0));
     grid.replaceChildren(...real.slice(0, 9).map(issueCard));
     grid.setAttribute("aria-busy", "false");
     note.textContent = `${real.length} open issue${real.length === 1 ? "" : "s"}, newest first, trackers promoted.`;
