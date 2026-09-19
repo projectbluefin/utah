@@ -33,7 +33,8 @@ required_config=(SCHED_CLASS_EXT NTSYNC ANDROID_BINDERFS
                  OVERLAY_FS SQUASHFS SQUASHFS_ZSTD EROFS_FS
                  BLK_DEV_LOOP ISO9660_FS BLK_DEV_DM DM_SNAPSHOT DM_CRYPT
                  CRYPTO_XTS FUSE_FS FS_VERITY
-                 SYSFB_SIMPLEFB DRM_SIMPLEDRM)
+                 SYSFB_SIMPLEFB DRM_SIMPLEDRM
+                 DRM_AMDGPU DRM_XE)
 verify_config() {
   local config="$1" symbol
   for symbol in "${required_config[@]}"; do
@@ -131,12 +132,15 @@ scripts/config --module OVERLAY_FS --module SQUASHFS --enable SQUASHFS_ZSTD \
                --module CRYPTO_XTS --module FUSE_FS --enable FS_VERITY
 # The firmware framebuffer as a KMS device (see required_config above), plus
 # the two paravirtual GPUs QEMU offers, so a VM gets a proper display rather
-# than the boot framebuffer. Native GPU drivers for real gaming hardware
-# (amdgpu, xe) are a separate decision: they need linux-firmware in the image,
-# which the install set does not carry yet (projectbluefin/utah#97).
+# than the boot framebuffer. Native GPU drivers for real gaming hardware:
+# amdgpu (with Display Core) for AMD GPUs and xe for Intel Arc / Battlemage.
+# Note: runtime firmware blobs (amd-gpu-firmware, intel-gpu-firmware) are tracked
+# in projectbluefin/utah#97; enabling driver modules here prepares the kernel build.
+# DRM_NOUVEAU is omitted because the nvidia flavors use the proprietary module.
 scripts/config --enable SYSFB --enable SYSFB_SIMPLEFB \
                --enable DRM --enable DRM_SIMPLEDRM \
-               --module DRM_VIRTIO_GPU --module DRM_BOCHS
+               --module DRM_VIRTIO_GPU --module DRM_BOCHS \
+               --module DRM_AMDGPU --enable DRM_AMD_DC --module DRM_XE
 scripts/config --set-str LOCALVERSION "-ogc1" --disable LOCALVERSION_AUTO
 make olddefconfig
 
@@ -157,6 +161,8 @@ require_config '^CONFIG_SCHED_CLASS_EXT=y$' CONFIG_SCHED_CLASS_EXT
 require_config '^CONFIG_NTSYNC=(y|m)$' CONFIG_NTSYNC
 require_config '^CONFIG_ANDROID_BINDERFS=y$' CONFIG_ANDROID_BINDERFS
 require_config '^CONFIG_DRM_SIMPLEDRM=y$' CONFIG_DRM_SIMPLEDRM
+require_config '^CONFIG_DRM_AMDGPU=(y|m)$' CONFIG_DRM_AMDGPU
+require_config '^CONFIG_DRM_XE=(y|m)$' CONFIG_DRM_XE
 verify_config .config
 
 make modules_prepare
