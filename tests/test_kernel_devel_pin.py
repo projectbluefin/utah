@@ -69,6 +69,49 @@ class KernelDevelPinTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("reached the download", result.stdout)
 
+    def test_both_constants_are_overridable_together(self):
+        """The guard must not make the hash override unreachable.
+
+        UTAH_KERNEL_DEVEL_SHA256 exists for one situation: validating a kernel
+        this file has not been re-recorded for. A NEVR guard that refused to
+        proceed whenever the booted kernel differed from the recorded one would
+        block exactly that case, leaving the override as dead code. So the NEVR
+        has to be overridable too, and the pair has to move together.
+        """
+        for name in ("KERNEL_DEVEL_NEVR", "KERNEL_DEVEL_SHA256"):
+            with self.subTest(constant=name):
+                line = next(l for l in SCRIPT.splitlines()
+                            if l.startswith(f"{name}="))
+                self.assertIn(f"${{UTAH_{name}:-", line,
+                              f"{name} must accept an environment override")
+
+    def test_the_guard_message_names_the_override(self):
+        # A guard that stops the build has to say how to proceed deliberately,
+        # or the only way past it is to edit the script.
+        guard = re.search(
+            r'if \[ "\$\{kernel\}" != "\$\{KERNEL_DEVEL_NEVR\}" \]; then.*?\n      fi',
+            SCRIPT, re.DOTALL).group(0)
+        self.assertIn("UTAH_KERNEL_DEVEL_NEVR", guard)
+        self.assertIn("UTAH_KERNEL_DEVEL_SHA256", guard)
+
+    def test_an_overridden_pair_reaches_the_download(self):
+        """Drive the real guard with both overrides set to a different kernel."""
+        guard = re.search(
+            r'if \[ "\$\{kernel\}" != "\$\{KERNEL_DEVEL_NEVR\}" \]; then.*?\n      fi',
+            SCRIPT, re.DOTALL).group(0)
+        harness = (
+            'KERNEL_DEVEL_NEVR="${UTAH_KERNEL_DEVEL_NEVR:-7.2.5-200.fc44.x86_64}"\n'
+            'kernel="9.9.9-1.fc99.x86_64"\n'
+            + guard.replace("\n      ", "\n")
+            + '\necho "reached the download"\n'
+        )
+        import os
+        env = dict(os.environ, UTAH_KERNEL_DEVEL_NEVR="9.9.9-1.fc99.x86_64")
+        result = subprocess.run(["bash", "-c", harness], capture_output=True,
+                                text=True, env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("reached the download", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

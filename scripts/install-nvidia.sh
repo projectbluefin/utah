@@ -124,7 +124,13 @@ fi
 # the enabled repositories dropped the kernel -- the precise situation this
 # fallback exists for. Pairing the two makes that mismatch loud and immediate
 # instead of latent, and costs nothing when they agree.
-KERNEL_DEVEL_NEVR="7.2.5-200.fc44.x86_64"
+#
+# Both are overridable together, and that pairing is the point. The override on
+# the hash exists for exactly one situation -- validating a kernel this file has
+# not been re-recorded for -- so a guard that refused to proceed whenever the
+# kernel differed from the recorded NEVR would make the override unreachable in
+# the only case it is for. Override both, or neither.
+KERNEL_DEVEL_NEVR="${UTAH_KERNEL_DEVEL_NEVR:-7.2.5-200.fc44.x86_64}"
 KERNEL_DEVEL_SHA256="${UTAH_KERNEL_DEVEL_SHA256:-02467ce35055d553db0babd680aa429c2d0b8d514469768730e03b89326a0703}"
 
 build_tree="/usr/lib/modules/${kernel}/build"
@@ -158,7 +164,9 @@ ensure_toolchain() {
         echo "KERNEL_DEVEL_SHA256 was recorded for kernel ${KERNEL_DEVEL_NEVR}," >&2
         echo "but this image boots ${kernel}. The hash cannot match, so the" >&2
         echo "download below would fail after fetching 60 MB. Re-record both" >&2
-        echo "constants for ${kernel} when bumping BASE_IMAGE." >&2
+        echo "constants for ${kernel} when bumping BASE_IMAGE, or set both" >&2
+        echo "UTAH_KERNEL_DEVEL_NEVR and UTAH_KERNEL_DEVEL_SHA256 to validate" >&2
+        echo "a kernel this file has not been re-recorded for." >&2
         exit 1
       fi
       arch="${kernel##*.}"; nv="${kernel%.*}"; ver="${nv%%-*}"; rel="${nv#*-}"
