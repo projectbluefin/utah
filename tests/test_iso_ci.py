@@ -274,3 +274,73 @@ class FlatpakRetryTests(unittest.TestCase):
             with self.subTest(line=line):
                 self.assertTrue(line.startswith("retry_flatpak install"),
                                 f"unretried network install: {line}")
+
+
+class OgcKernelConfigGateTests(unittest.TestCase):
+    """The OGC kernel must be rejected if it cannot mount Utah's root filesystem.
+
+    Utah installs to btrfs on LUKS, and x86_64_defconfig has no BTRFS_FS -- I
+    checked upstream's own defconfig, where DM_CRYPT is likewise absent and
+    VFAT_FS is present. The gaming flavors therefore formatted a root volume and
+    then failed to mount it, in run 35432516418:
+
+        mkfs.btrfs -f -L root /dev/mapper/fisherman-root       (ok)
+        mount -t btrfs /dev/mapper/fisherman-root /mnt/...
+        mount: unknown filesystem type 'btrfs'
+
+    A full kernel build is the only complete proof, and it takes 45 minutes. The
+    gate itself is a shell function, so its contract can be tested in
+    milliseconds: it must reject a config missing any required symbol, and name
+    the one it rejected.
+    """
+
+    SCRIPT = ROOT / "scripts/install-ogc-kernel.sh"
+
+    def gate(self, config_body: str) -> subprocess.CompletedProcess:
+        """Run the real required_config/verify_config against a fake .config."""
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / ".config"
+            config.write_text(config_body)
+            harness = f"""
+            set -uo pipefail
+            eval "$(sed -n '/^required_config=(/,/)$/p' {self.SCRIPT})"
+            eval "$(sed -n '/^verify_config() {{/,/^}}/p' {self.SCRIPT})"
+            verify_config "{config}"
+            """
+            return subprocess.run(["bash", "-c", harness],
+                                  capture_output=True, text=True)
+
+    def required_symbols(self) -> list[str]:
+        block = self.SCRIPT.read_text().split("required_config=(", 1)[1]
+        block = block.split(")", 1)[0]
+        return block.split()
+
+    def test_btrfs_is_required(self):
+        self.assertIn("BTRFS_FS", self.required_symbols())
+
+    def test_a_config_missing_btrfs_is_rejected_by_name(self):
+        body = "".join(f"CONFIG_{s}=y\n" for s in self.required_symbols()
+                       if s != "BTRFS_FS")
+        result = self.gate(body)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("missing CONFIG_BTRFS_FS", result.stderr)
+
+    def test_a_complete_config_passes(self):
+        body = "".join(f"CONFIG_{s}=y\n" for s in self.required_symbols())
+        self.assertEqual(self.gate(body).returncode, 0, self.gate(body).stderr)
+
+    def test_a_module_satisfies_the_gate_as_well_as_builtin(self):
+        # BTRFS_FS is enabled with --module, so =m has to count.
+        body = "".join(f"CONFIG_{s}=m\n" for s in self.required_symbols())
+        self.assertEqual(self.gate(body).returncode, 0, self.gate(body).stderr)
+
+    def test_every_required_symbol_is_actually_checked(self):
+        # A symbol in the list that verify_config never looks at would be
+        # documentation pretending to be a gate.
+        for symbol in self.required_symbols():
+            with self.subTest(symbol=symbol):
+                body = "".join(f"CONFIG_{s}=y\n" for s in self.required_symbols()
+                               if s != symbol)
+                result = self.gate(body)
+                self.assertEqual(result.returncode, 1, f"{symbol} is not gated")
+                self.assertIn(f"missing CONFIG_{symbol}", result.stderr)
