@@ -1,7 +1,7 @@
 ---
 name: ci-workflows
-version: "1.0"
-last_updated: "2026-09-05"
+version: "1.1"
+last_updated: "2026-09-19"
 id: ci-workflows
 one_line_purpose: Navigate Utah's build, promote, and sync workflow topology.
 entry_point: docs/skills/ci-workflows.md
@@ -21,8 +21,8 @@ metadata:
 
 # CI Workflows
 
-Three workflows, all thin callers into `projectbluefin/actions@v1` reusables,
-each pinned to a SHA tagged `v1`:
+Four workflows, all thin callers into `projectbluefin/actions@v1` reusables
+or pinned third-party actions:
 
 - `.github/workflows/build.yml` -- pull requests, pushes to `testing`, a
   manual dispatch. Top-level `permissions: {}`; each job
@@ -32,6 +32,10 @@ each pinned to a SHA tagged `v1`:
 - `.github/workflows/sync-main-to-testing.yml` -- source pushes to `main`,
   nightly cron, and manual dispatch; explicitly dispatches the testing build
   after syncing. Token-authenticated branch pushes alone do not start CI.
+- `.github/workflows/update-bluefin-parity.yml` -- nightly and manual
+  dispatch. It resolves Bluefin `main` and uses one fixed branch,
+  `automation/bluefin-parity`, so `create-pull-request` updates the existing
+  review rather than opening duplicates. It does not auto-merge.
 - `.github/workflows/post-testing-e2e.yml` -- successful non-PR testing builds
   explicitly dispatch this, or manually supply a successful testing build run ID.
 
@@ -51,7 +55,9 @@ opaque `exit status 71` from the image build (comment,
   (`scripts/check-download-integrity.py`), the syntax gate
   (`scripts/check-script-syntax.py`), host-side unit tests (`just test`),
   and the ban on flavor literals in workflows.
-- `just check-parity` -- `packages/bluefin.toml` against Bluefin's upstream.
+- `just check-parity` -- `packages/bluefin.toml` against Bluefin's upstream
+  pinned at `packages/.bluefin-parity-ref`; the nightly parity workflow opens
+  a dedicated review when Bluefin `main` changes it.
 - `just check-repos` -- the complete installation transaction against the
   digest-pinned base and package repository, including extension build tools.
 
