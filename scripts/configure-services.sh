@@ -108,6 +108,15 @@ else
 fi
 
 # These are global user-service presets, so systemctl needs --global.
+if user_unit_exists pipewire.socket; then
+    systemctl --global enable pipewire.socket
+fi
+if user_unit_exists pipewire-pulse.socket; then
+    systemctl --global enable pipewire-pulse.socket
+fi
+if user_unit_exists wireplumber.service; then
+    systemctl --global enable wireplumber.service
+fi
 if user_unit_exists podman-auto-update.timer; then
     systemctl --global enable podman-auto-update.timer
 fi
