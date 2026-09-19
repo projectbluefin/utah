@@ -73,6 +73,9 @@ check:
     # Every executable release asset fetched during composition must be pinned
     # and verified; no build may resolve a mutable latest release.
     python3 scripts/check-download-integrity.py
+    # The status page's package grid is generated from the manifests; a stale
+    # committed copy would publish a list the image no longer installs.
+    python3 scripts/generate-site-data.py --check
     grep -q '"utah-packages"' scripts/install-packages.py
     python3 scripts/install-packages.py --check packages/bluefin.toml
     python3 scripts/verify-rpm-contract.py --check packages/bluefin.toml
@@ -423,3 +426,14 @@ secureboot base_name default_tag flavor:
     set -euo pipefail
     image_name="$(just image_name '{{ base_name }}' '{{ default_tag }}' '{{ flavor }}')"
     podman run --rm --entrypoint /bin/sh "localhost/$image_name:{{ default_tag }}" -c 'test -e /usr/lib/modules || test -e /boot'
+
+# Regenerate the status page's package data from the manifests. Run this after
+# changing packages/bluefin.toml or packages/utah.toml; `just check` fails if
+# the committed copy is stale.
+site-data:
+    python3 scripts/generate-site-data.py
+
+# Serve the status page locally at http://localhost:8000 for a visual check.
+# The live status and roadmap cards call the public GitHub API from the browser.
+site-serve: site-data
+    python3 -m http.server 8000 --directory site

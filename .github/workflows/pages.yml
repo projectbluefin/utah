@@ -1,0 +1,52 @@
+name: Status page
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - site/**
+      - packages/bluefin.toml
+      - packages/utah.toml
+      - scripts/generate-site-data.py
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+# Pages needs these; nothing here writes to the repository.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time, and never cancel one half way: a cancelled
+# deployment can leave the site serving a partial upload.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      # The committed data is what gets served, so prove it matches the
+      # manifests before publishing rather than regenerating silently here.
+      # A stale file is a bug in the pull request that changed the manifest,
+      # and this is where it must be visible.
+      - name: Package data is current
+        run: python3 scripts/generate-site-data.py --check
+
+      - name: Page structure holds
+        run: python3 -m unittest tests.test_site -v
+
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
+      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
