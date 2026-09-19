@@ -176,10 +176,23 @@ another release as a fallback: that can silently pair mismatched boot files.
 It enables sshd through a boot argument on the disposable installed disk,
 never by rebuilding or changing the published image. `UTAH_E2E_RAM` and
 `UTAH_E2E_CPUS` control VM resources (defaults 8192 MiB and four CPUs).
+Retain the verified package-image digest and available-package contract.
 
-When integrating this harness with newer image-build fixes, retain the
-currently verified package-image digest and available-package contract.
-The older ISO branch's package pin and exclusions must not replace them.
+### Bootc upgrade and rollback lifecycle harness
+
+`just lifecycle-test <disk-or-iso> <candidate-target-image>` runs
+`iso/scripts/lifecycle-e2e.sh` and `scripts/bootc_lifecycle.py` to validate
+atomic lifecycle transitions between two immutable Utah digests in QEMU:
+baseline deployment verification, staging via `bootc switch` or `uupd` policy
+(`UTAH_LIFECYCLE_POLICY=uupd`) with atomic staging invariants preserved,
+reboot into candidate deployment with graphical desktop verification, rollback
+execution, and reboot verification returning to the baseline digest.
+Phase-keyed diagnostics (`evidence/lifecycle-*.json`, `lifecycle-summary.json`)
+and screendumps identify the active deployment and digest at every phase.
+
+```bash
+just lifecycle-test output/bootable.raw ghcr.io/projectbluefin/utah:testing
+```
 
 ```bash
 just check
