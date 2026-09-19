@@ -59,11 +59,12 @@ a dumping ground for packages that are merely inconvenient (header comment,
 
 Bluefin's `[multimedia_overrides]` (twelve names: mesa-libGL,
 mesa-vulkan-drivers, libva, intel-mediasdk, libheif and friends) are **not**
-extra packages. They are the same names Fedora already ships, which Bluefin
+extra packages. They are the same names Hummingbird already ships, which Bluefin
 *replaces* with negativo17 builds by enabling `fedora-multimedia`. Utah does
-not enable that repository, so it installs Fedora's builds instead. Nothing
-is absent from the image; what differs is which build it carries, and the
-practical consequence is hardware-accelerated codec support.
+not enable that repository (or Fedora repositories at runtime), so it installs
+Hummingbird's builds instead. Nothing is absent from the image; what differs is
+which build it carries, and the practical consequence is hardware-accelerated
+codec support.
 
 That is why they are absent from the contract rather than listed under
 `[unavailable]`: recording them as missing would be wrong (a source does
@@ -134,9 +135,11 @@ about installation.
 - Drift in `packages/bluefin.toml` from upstream is a CI failure
   (`just check-parity`).
 
-Current counts, per the README "Package parity" section: 61 Bluefin contract
-packages installed, 12 Utah additions (GNOME 51, desktop services), 4
-genuinely unavailable.
+Current counts, per the README "Package parity" section: 59 Bluefin base contract
+packages installed, 44 Utah additions (11 GNOME 51 desktop components, 28 parity
+packages, 5 desktop services), 103 verified contract packages (including
+release-specific `gnupg2-scdaemon`), and 9 genuinely unavailable packages
+documented as deferred parity debt.
 
 ## Verification
 
