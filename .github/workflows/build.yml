@@ -10,9 +10,20 @@ on:
 
 permissions: {}
 
+# A pull request supersedes itself: a new push means the previous run is
+# answering a question nobody is asking any more.
+#
+# A run on `testing` does not. It is the run that produces the images, and the
+# one that dispatches the ISO end-to-end validation the release gate reads. When
+# two land close together the older one is killed mid-build and its E2E
+# dispatch dies with it -- which is why the promotion gate keeps reporting
+# E2E_LAST_STATUS: skipped and refusing to promote. On 2026-09-19 two testing
+# builds were cancelled within two minutes of each other (runs at 11:09 and
+# 11:11), and the promotion that followed was blocked for want of the evidence
+# they would have produced.
 concurrency:
   group: utah-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # Resolve the complete transaction against the same pinned inputs as the

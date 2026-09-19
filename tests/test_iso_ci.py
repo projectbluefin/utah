@@ -419,3 +419,26 @@ class ForkPullRequestKernelCacheTests(unittest.TestCase):
                     if s.get("id") == "cache")
         hit = step["run"].index("Cache hit")
         self.assertIn("available=true", step["run"][hit:hit + 200])
+
+class ConcurrencyTests(unittest.TestCase):
+    """A testing build must not be cancelled by the next one.
+
+    build.yml on `testing` is what produces the images and dispatches the ISO
+    end-to-end validation the release gate reads. Cancelling it throws away the
+    evidence: on 2026-09-19 two testing builds were cancelled within two minutes
+    (11:09 and 11:11) and the promotion that followed failed with
+    E2E_LAST_STATUS: skipped.
+    """
+
+    def test_only_pull_requests_are_cancelled(self):
+        import yaml
+        build = yaml.safe_load((ROOT / ".github/workflows/build.yml").read_text())
+        self.assertEqual(build["concurrency"]["cancel-in-progress"],
+                         "${{ github.event_name == 'pull_request' }}")
+
+    def test_the_group_still_separates_refs(self):
+        # Sharing one group across refs would make a testing build queue behind
+        # an unrelated PR's.
+        import yaml
+        build = yaml.safe_load((ROOT / ".github/workflows/build.yml").read_text())
+        self.assertIn("github.ref", build["concurrency"]["group"])
