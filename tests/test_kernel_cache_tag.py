@@ -30,6 +30,7 @@ HASHED_INPUTS = (
     "scripts/install-nvidia.sh",
     "packages/hummingbird.repo",
     "packages/fedora-44.repo",
+    "packages/RPM-GPG-KEY-redhat-release-2",
 )
 
 

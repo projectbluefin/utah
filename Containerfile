@@ -41,6 +41,10 @@ FROM ${BASE_IMAGE}
 # turn below them.
 COPY packages/bluefin.toml packages/utah.toml contracts/bluefin-desktop.toml /usr/share/utah/
 COPY packages/hummingbird.repo packages/nvidia-container.repo packages/utah-packages.repo /etc/yum.repos.d/
+# Hummingbird signs its RPMs with Red Hat's release key 2 (fd431d51); the key
+# lets packages/hummingbird.repo run with gpgcheck=1 here and in the live ISO
+# build on top of this image.
+COPY packages/RPM-GPG-KEY-redhat-release-2 /etc/pki/rpm-gpg/
 # The package image is an RPM repository, not a runtime dependency. It is
 # bind mounted into the two RUN steps that install from it and never copied
 # into a layer: a COPY used to put the whole ~4 GB repository at

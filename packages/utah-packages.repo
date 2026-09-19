@@ -5,6 +5,10 @@
 # utah-install: true
 name=Utah package factory
 baseurl=file:///etc/utah-packages
+# The path exists only while the Containerfile bind mounts the pinned package
+# image there. The flavor step, the last one that installs anything, flips this
+# to enabled=0 so later dnf calls on the image (the live ISO build included)
+# do not fail on a baseurl that is not there.
 enabled=1
 gpgcheck=0
 repo_gpgcheck=0

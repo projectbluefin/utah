@@ -75,7 +75,14 @@ check:
     grep -q -- '--mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages,ro' Containerfile
     # The package repository is bind mounted, never committed; a COPY would ship
     # the whole ~4 GB RPM repository in every image and of every ISO (#128).
-    ! grep -q 'COPY --from=packages' Containerfile
+    # `! cmd` is exempt from errexit, so a bare `! grep` neither stops this
+    # script nor changes its exit status unless it happens to be the last line
+    # of the recipe: it reads as a gate and enforces nothing. Use an explicit if.
+    if grep -q 'COPY --from=packages' Containerfile; then
+      echo 'Containerfile must bind-mount the package repository, not COPY it' >&2
+      exit 1
+    fi
+    test -f packages/RPM-GPG-KEY-redhat-release-2
     # Every executable release asset fetched during composition must be pinned
     # and verified; no build may resolve a mutable latest release.
     python3 scripts/check-download-integrity.py
@@ -99,7 +106,10 @@ check:
     # No workflow may carry its own copy of the flavor list. That drift is what
     # config/flavors.json exists to stop: narrowing the build matrix while
     # promote and release still name images nothing produces fails late.
-    ! grep -rn 'utah-nvidia\|utah-gaming' .github/workflows/
+    if grep -rn 'utah-nvidia\|utah-gaming' .github/workflows/; then
+      echo 'no workflow may name a flavored image; read it from config/flavors.json' >&2
+      exit 1
+    fi
 
 # Verify branding, desktop defaults, first-boot Flatpak policy, and service
 # enablement in an already-composed image. The same verifier runs in the

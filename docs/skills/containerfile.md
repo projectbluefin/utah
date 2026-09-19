@@ -39,6 +39,16 @@ In summary:
   layer uses it or not: with `VERSION` at the top, the package transaction
   missed the registry layer cache on every commit, since `VERSION` carries
   the date and the commit. Nothing above the branding step ever sees them.
+- The package repository is bind mounted, never copied:
+  `RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages,ro`
+  on the two steps that install from it. A `COPY --from=packages` used to put
+  the whole 4 GB repository into the image, nothing removed it, and it was two
+  thirds of every published image and of every ISO (#130). `just check`
+  refuses a `COPY --from=packages`. `packages/utah-packages.repo` is committed
+  with `enabled=1`, because the two mounted steps install from it; the flavor
+  step, the last one that installs anything, flips it to `enabled=0` so a later
+  dnf call on the finished image -- the live ISO build among them -- does not
+  fail on a baseurl that is no longer mounted (comment, the repo file itself).
 - `ARG PACKAGE_IMAGE_REF=${PACKAGE_IMAGE}@${PACKAGE_IMAGE_SHA}` defaults to
   the digest-pinned OCI package repository for reproducible CI builds, while
   allowing local composition to inject a local image from containers-storage

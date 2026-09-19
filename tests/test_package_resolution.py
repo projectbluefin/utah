@@ -232,5 +232,44 @@ class ParityContractTests(unittest.TestCase):
         self.assertIn(f"  - {target}\n", stderr.getvalue())
 
 
+class ImageSizeTests(unittest.TestCase):
+    MOUNT = "--mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages,ro"
+
+    def test_package_repository_is_mounted_not_copied(self):
+        # #130: a COPY put the whole 4 GB repository into every image and ISO.
+        source = (ROOT / "Containerfile").read_text()
+        self.assertNotIn("COPY --from=packages", source)
+        steps = [step for step in source.split("\nRUN ") if step.startswith(self.MOUNT)]
+        self.assertEqual(len(steps), 2, "both install steps must mount the repository")
+        self.assertIn("utah-install-packages", steps[0])
+        self.assertIn("utah-install-ogc-kernel", steps[1])
+        self.assertIn("utah-install-nvidia", steps[1])
+        # Nothing installs after the flavor step, so it is the one that turns
+        # the repository file off for the image's lifetime.
+        self.assertIn("sed -i 's/^enabled=1$/enabled=0/' /etc/yum.repos.d/utah-packages.repo", steps[1])
+
+    def test_package_repository_file_is_enabled_only_during_the_build(self):
+        text = (ROOT / "packages/utah-packages.repo").read_text()
+        self.assertIn("enabled=1", text)
+        self.assertIn("baseurl=file:///etc/utah-packages", text)
+        self.assertIn("utah-packages", installer.REPOS)
+
+    def test_hummingbird_packages_are_signature_checked(self):
+        text = (ROOT / "packages/hummingbird.repo").read_text()
+        self.assertIn("gpgcheck=1", text)
+        self.assertIn("gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2", text)
+        key = (ROOT / "packages/RPM-GPG-KEY-redhat-release-2").read_text()
+        self.assertIn("BEGIN PGP PUBLIC KEY BLOCK", key)
+        for containerfile in ("Containerfile", "Containerfile.kernel"):
+            self.assertIn("COPY packages/RPM-GPG-KEY-redhat-release-2 /etc/pki/rpm-gpg/",
+                          (ROOT / containerfile).read_text(), containerfile)
+
+    def test_live_initramfs_build_fails_on_a_dracut_error(self):
+        source = (ROOT / "iso/live/Containerfile").read_text()
+        self.assertIn("mkdir -p /var/roothome", source)
+        self.assertIn("set -euxo pipefail", source)
+        self.assertIn("dracut\\[E\\]: FAILED", source)
+
+
 if __name__ == "__main__":
     unittest.main()

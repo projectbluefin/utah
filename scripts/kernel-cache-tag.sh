@@ -25,4 +25,7 @@ cd "$(dirname "$0")/.."
   cat Containerfile.kernel
   cat scripts/install-ogc-kernel.sh scripts/install-nvidia.sh
   cat packages/hummingbird.repo packages/fedora-44.repo
+  # The builder imports this key to verify Hummingbird's RPMs, so a rotated key
+  # is a different build root (tests/test_kernel_cache_key.py enforces it).
+  cat packages/RPM-GPG-KEY-redhat-release-2
 } | sha256sum | cut -c1-16
