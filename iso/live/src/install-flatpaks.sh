@@ -97,7 +97,12 @@ ostree init --repo="${local_repo}" --mode=archive-z2
 flatpak build-import-bundle "${local_repo}" /tmp/bootc-installer.flatpak
 rm -f /tmp/bootc-installer.flatpak
 flatpak remote-add --system --no-gpg-verify installer-local "file://${local_repo}"
-retry_flatpak install --system --noninteractive installer-local "${INSTALLER_APP_ID}"
+# --or-update for the same reason the Flathub installs below carry it: a retry
+# must be a no-op for a ref that already completed. Without it, an attempt
+# that installed the app but still exited nonzero would make attempts 2 and 3
+# fail with "already installed", turning a flaky success into a hard failure.
+retry_flatpak install --system --noninteractive --or-update installer-local \
+    "${INSTALLER_APP_ID}"
 flatpak remote-delete --system --force installer-local || true
 rm -rf "${local_repo}"
 

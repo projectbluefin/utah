@@ -2,6 +2,7 @@
 import importlib.util
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 import tempfile
@@ -274,6 +275,20 @@ class FlatpakRetryTests(unittest.TestCase):
             with self.subTest(line=line):
                 self.assertTrue(line.startswith("retry_flatpak install"),
                                 f"unretried network install: {line}")
+
+    def test_every_retried_install_is_idempotent(self):
+        # The retry is only safe if re-running it is a no-op for a ref that
+        # already completed. Without --or-update, an attempt that installed the
+        # app but still exited nonzero makes the next attempt fail with
+        # "already installed" -- the retry would turn a flaky success into a
+        # hard failure, which is the opposite of why it was added.
+        script = self.SCRIPT.read_text()
+        calls = re.findall(r"^retry_flatpak install.*?(?=\n\S|\Z)", script,
+                           re.MULTILINE | re.DOTALL)
+        self.assertTrue(calls)
+        for call in calls:
+            with self.subTest(call=call.splitlines()[0]):
+                self.assertIn("--or-update", call)
 
 
 class OgcKernelConfigGateTests(unittest.TestCase):
