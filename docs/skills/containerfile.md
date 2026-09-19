@@ -45,8 +45,10 @@ In summary:
   the whole 4 GB repository into the image, nothing removed it, and it was two
   thirds of every published image and of every ISO (#130). `just check`
   refuses a `COPY --from=packages`. `packages/utah-packages.repo` is committed
-  with `enabled=0` for the same reason: the path exists only during those two
-  steps, and they enable the repo explicitly.
+  with `enabled=1`, because the two mounted steps install from it; the flavor
+  step, the last one that installs anything, flips it to `enabled=0` so a later
+  dnf call on the finished image -- the live ISO build among them -- does not
+  fail on a baseurl that is no longer mounted (comment, the repo file itself).
 - `ARG PACKAGE_IMAGE_REF=${PACKAGE_IMAGE}@${PACKAGE_IMAGE_SHA}` defaults to
   the digest-pinned OCI package repository for reproducible CI builds, while
   allowing local composition to inject a local image from containers-storage
