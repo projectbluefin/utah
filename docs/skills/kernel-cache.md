@@ -81,6 +81,14 @@ compile from source, so there is no second implementation to drift.
 and one for the OGC kernel, so a single cache image serves all three flavors
 (comment, `Containerfile.kernel`).
 
+The vendor installer is verified against `NVIDIA_RUN_SHA256`, a digest
+committed in `install-nvidia.sh` beside `KERNEL_DEVEL_SHA256`, on both the
+download path and the `/utah-cache` path — the cache image is addressed by an
+input-hash tag, not an immutable digest, so a cached installer gets the same
+check as a fresh one. Bumping `UTAH_NVIDIA_DRIVER_VERSION` means updating
+`NVIDIA_RUN_SHA256` with it, from NVIDIA's published
+`NVIDIA-Linux-x86_64-<version>.run.sha256sum` (comment, `install-nvidia.sh`).
+
 ## Verification
 
 The OGC kernel must satisfy the live ISO and installed-root contract, not only
