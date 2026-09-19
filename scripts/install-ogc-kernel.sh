@@ -174,7 +174,6 @@ require_config '^CONFIG_SCHED_CLASS_EXT=y$' CONFIG_SCHED_CLASS_EXT
 require_config '^CONFIG_NTSYNC=(y|m)$' CONFIG_NTSYNC
 require_config '^CONFIG_ANDROID_BINDERFS=y$' CONFIG_ANDROID_BINDERFS
 require_config '^CONFIG_DRM_SIMPLEDRM=y$' CONFIG_DRM_SIMPLEDRM
-require_config '^CONFIG_BTRFS_FS=(y|m)$' CONFIG_BTRFS_FS
 verify_config .config
 
 make modules_prepare
