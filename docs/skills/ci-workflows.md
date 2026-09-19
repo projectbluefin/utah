@@ -166,12 +166,22 @@ restricted networking. CI requires KVM, PNG screenshots, and OCR evidence
 that fastfetch ran in the graphical terminal. Test credentials are confined
 to the disposable ISO/disk; neither is uploaded or released.
 
+Only after the entire LUKS matrix succeeds, `production-iso` composes a fresh
+`DEBUG=0` x86_64 UEFI ISO from each same digest, writes its SHA-256 checksum,
+and retains both as a 30-day Actions artifact. It is deliberately an artifact,
+not a release: destination, flavor policy, naming, signing, and Secure Boot
+are product decisions tracked by #186. Production-ISO composition is a
+promotion prerequisite, so a failed production build cannot advance testing
+tags. Debug ISOs and guest disks are never uploaded because they contain test
+credentials.
+
 Every matrix job preserves build/test logs, serial logs, and screenshots,
 including on failure. Only passing jobs upload `docs/verification` with the
 source commit, original build run, E2E run, image digest and ISO checksum.
-The promotion job depends on the entire matrix; a superseded testing commit
-cannot move tags. Registry tag copies are sequential, not an atomic multi-tag
-transaction: a registry failure can interrupt promotion after a partial copy.
+The promotion job depends on the LUKS and production-ISO matrices; a
+superseded testing commit cannot move tags. Registry tag copies are sequential,
+not an atomic multi-tag transaction: a registry failure can interrupt promotion
+after a partial copy.
 
 A separate least-privilege job proposes the main desktop's screenshots in
 `automation/iso-verification`, a documentation PR. It updates only the README

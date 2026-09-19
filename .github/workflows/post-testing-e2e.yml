@@ -141,8 +141,63 @@ jobs:
           path: docs/verification/
       # Never upload debug ISOs or test disks: they contain test passwords.
 
-  promote-to-testing:
+  # Test credentials are only present in the DEBUG=1 ISO above. Build this
+  # artifact after the whole matrix passes, so a retained ISO is production
+  # media and every configured image has completed its offline-install gate.
+  production-iso:
     needs: [resolve, luks]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          persist-credentials: false
+      - name: Prepare production ISO host
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          sudo apt-get update
+          sudo apt-get install -y podman skopeo uidmap slirp4netns fuse-overlayfs \
+            squashfs-tools xorriso dosfstools mtools
+          mkdir -p output
+          df -h .
+      - name: Pull exact published payload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE_REF: ${{ matrix.ref }}
+        run: |
+          set -euo pipefail
+          echo "$GH_TOKEN" | podman login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          podman pull "$IMAGE_REF"
+          podman logout ghcr.io
+      - name: Compose production ISO and checksum
+        env:
+          IMAGE_REF: ${{ matrix.ref }}
+          UTAH_ISO_WORKDIR: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          bash iso/scripts/build-iso.sh "$IMAGE_REF" "$PWD/output/utah-live.iso" \
+            "Utah Live" 0 "$IMAGE_REF"
+          sha256sum output/utah-live.iso > output/utah-live.iso.sha256
+      - name: Retain production ISO
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: production-iso-${{ matrix.image }}
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            output/utah-live.iso
+            output/utah-live.iso.sha256
+
+  promote-to-testing:
+    needs: [resolve, luks, production-iso]
     runs-on: ubuntu-26.04
     permissions:
       contents: read
@@ -168,7 +223,7 @@ jobs:
           done < <(jq -r '.include[].ref' <<< "$MATRIX")
 
   documentation:
-    needs: [resolve, luks]
+    needs: [resolve, luks, production-iso]
     runs-on: ubuntu-26.04
     permissions:
       contents: write

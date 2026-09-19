@@ -161,12 +161,27 @@ class EvidenceTests(unittest.TestCase):
         self.assertIn("Keep this paragraph.", result)
         self.assertIn("actions/runs/123", result)
 
-    def test_publication_needs_all_luks_jobs_and_debug_images_are_not_uploaded(self):
+    def test_production_iso_artifacts_follow_the_full_luks_matrix(self):
         import yaml
         jobs = yaml.safe_load((ROOT / ".github/workflows/post-testing-e2e.yml").read_text())["jobs"]
+        production = jobs["production-iso"]
+        self.assertIn("luks", production["needs"])
+        self.assertFalse(production["strategy"]["fail-fast"])
+        compose = next(step for step in production["steps"]
+                       if step.get("name") == "Compose production ISO and checksum")
+        self.assertIn('"Utah Live" 0 "$IMAGE_REF"', compose["run"])
+        self.assertIn("sha256sum output/utah-live.iso", compose["run"])
+        artifact = next(step for step in production["steps"]
+                        if step.get("name") == "Retain production ISO")
+        self.assertIn("output/utah-live.iso", artifact["with"]["path"])
+        self.assertIn("output/utah-live.iso.sha256", artifact["with"]["path"])
         for name in ["promote-to-testing", "documentation"]:
-            self.assertIn("luks", jobs[name]["needs"])
+            self.assertIn("production-iso", jobs[name]["needs"])
             self.assertNotIn("if", jobs[name])
+
+    def test_debug_images_and_test_disks_are_not_uploaded(self):
+        import yaml
+        jobs = yaml.safe_load((ROOT / ".github/workflows/post-testing-e2e.yml").read_text())["jobs"]
         steps = jobs["luks"]["steps"]
         self.assertFalse(jobs["luks"]["strategy"]["fail-fast"])
         test = next(step for step in steps if "Run existing LUKS" in step.get("name", ""))
