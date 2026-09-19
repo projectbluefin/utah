@@ -23,17 +23,31 @@ jobs:
       - id: resolve
         run: echo "list=$(python3 scripts/flavors.py releases)" >> "$GITHUB_OUTPUT"
 
+  # Whether this push is the testing-to-main promotion. The commit subject used
+  # to be the only signal, which is silent when it is wrong: a merge commit
+  # subject ("Merge pull request #N from .../auto/promote-testing-to-main") does
+  # not match the prefix, so check-trigger succeeded, execute was skipped, the
+  # workflow reported green and no :stable tag moved -- indistinguishable from an
+  # ordinary merge. scripts/release-trigger.py also recognises a commit that came
+  # from the promotion branch, and annotates every outcome so a skipped release
+  # is legible instead of invisible.
   check-trigger:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       is-promotion: ${{ steps.check.outputs.is-promotion }}
     steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - id: check
         env:
+          GH_TOKEN: ${{ github.token }}
           EVENT: ${{ github.event_name }}
           MESSAGE: ${{ github.event.head_commit.message }}
-        run: |
-          if [[ "$EVENT" == workflow_dispatch || "$MESSAGE" =~ ^chore:\ promote\ testing\ to\ main ]]; then echo 'is-promotion=true' >> "$GITHUB_OUTPUT"; fi
+          SHA: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
+        run: python3 scripts/release-trigger.py
   execute:
     needs: [check-trigger, variants]
     if: needs.check-trigger.outputs.is-promotion == 'true'
