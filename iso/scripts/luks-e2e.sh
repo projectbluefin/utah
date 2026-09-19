@@ -626,15 +626,20 @@ if [[ "${UTAH_E2E_REQUIRE_FASTFETCH:-0}" == 1 ]]; then
         shot installed-fastfetch "${MONITOR_INSTALLED}"
         if [[ -s "${SHOTS}/installed-fastfetch.png" ]]; then
             tesseract "${SHOTS}/installed-fastfetch.png" "${WORK}/fastfetch-ocr" 2>/dev/null
-            if grep -qi 'UTAH.E2E.FASTFETCH' "${WORK}/fastfetch-ocr.txt" \
-                && grep -qi 'Kernel' "${WORK}/fastfetch-ocr.txt"; then
+            if bash "${ROOT}/iso/scripts/fastfetch-ocr-match.sh" "${WORK}/fastfetch-ocr.txt"; then
                 fastfetch_seen=1
                 break
             fi
         fi
         sleep 5
     done
-    (( fastfetch_seen )) || fail "fastfetch output was not visible in the desktop screenshot"
+    if (( ! fastfetch_seen )); then
+        # Without this the only way to tell a blank screen from an OCR misread
+        # is to download the diagnostics artifact.
+        echo "  last OCR transcript of installed-fastfetch.png:" >&2
+        sed -n '1,40p' "${WORK}/fastfetch-ocr.txt" 2>/dev/null | sed 's/^/    /' >&2
+        fail "fastfetch output was not visible in the desktop screenshot"
+    fi
 else
     sleep 20
     shot installed-fastfetch "${MONITOR_INSTALLED}"

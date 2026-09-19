@@ -1,7 +1,7 @@
 ---
 name: kernel-cache
 version: "1.0"
-last_updated: "2026-09-05"
+last_updated: "2026-09-19"
 id: kernel-cache
 one_line_purpose: Understand and rebuild the OGC kernel and NVIDIA module cache image.
 entry_point: docs/skills/kernel-cache.md
@@ -48,26 +48,53 @@ The tag must change whenever anything the cache image contains would change,
 and not otherwise, so it is a hash of exactly those inputs (header comment,
 `scripts/kernel-cache-tag.sh`):
 
-- The `ARG BASE_IMAGE=` line of `Containerfile.kernel` -- the base image the
-  cache is built from.
+- `Containerfile.kernel`, whole file -- the recipe that builds the cache. Its
+  `ARG BASE_IMAGE=` line names the base image, but its body is what decides
+  what the image ends up containing: the repo files copied into the builder,
+  and the single `RUN` that fills `/cache-out`, and the final stage's
+  `COPY --from=builder`. Hashing only the `ARG` line would leave an edit to
+  any of that invisible to the key, and since CI builds the cache image only
+  when its tag is not already published, the three cached flavors would
+  silently take an image built from the previous recipe.
 - `scripts/install-ogc-kernel.sh` and `scripts/install-nvidia.sh`, whole
   files, comments included -- the two scripts that do the building.
 - `packages/hummingbird.repo` and `packages/fedora-44.repo` -- the repositories
   the toolchain comes from (Fedora 44 is builder-only); a different compiler
   produces a different kernel.
 
-Editing either script changes the hash and forces a rebuild, comment-only
+Editing any of them changes the hash and forces a rebuild, comment-only
 edits included. That is deliberate: the key can only ever rebuild something
 that did not need rebuilding, never reuse something stale. A cheaper key
 that hashed just the version pins would miss a change to how the kernel is
 configured or how the module is linked (header comment,
 `scripts/kernel-cache-tag.sh`).
 
+`tests/test_kernel_cache_tag.py` holds the key to that contract: it asserts
+that mutating a non-`ARG` line of `Containerfile.kernel`, or any of the four
+other hashed files, moves the tag.
+
 The `BASE_IMAGE` in `Containerfile.kernel` must match the one in
 `Containerfile`, or the prebuilt NVIDIA module would be linked against a
 kernel the image never boots. Two literals, one invariant, so `just check`
 asserts it with a diff of both `ARG BASE_IMAGE=` lines rather than trusting
 it (recipe comment, `Justfile`, `check`).
+
+That hashed list used to be maintained by hand against a second list --
+what `Containerfile.kernel` actually builds from -- with nothing tying the
+two together. A `COPY` added there without a matching line in the hash
+script yields a key that does not move when that input does, and because CI
+skips the rebuild whenever the tag is already published, the three flavors
+that consume the cache keep unpacking a kernel and a module built from the
+old input for as long as the tag stays put.
+
+`tests/test_kernel_cache_key.py` closes that: it derives the input set from
+`Containerfile.kernel` (the `ARG BASE_IMAGE=` line and every non-`--from`
+`COPY` source) rather than restating it, then mutates a copy of the tree and
+re-runs `scripts/kernel-cache-tag.sh` to assert each derived input moves the
+key, that an unrelated file (`scripts/flavors.py`) does not, and that the key
+is deterministic. Add a `COPY` to `Containerfile.kernel` and the suite fails
+until `scripts/kernel-cache-tag.sh` hashes it too. It runs in `just test`,
+and so in `just check`.
 
 ## Unpack or compile
 
@@ -80,6 +107,14 @@ compile from source, so there is no second implementation to drift.
 `nvidia-gaming` is the superset: it produces a module for the base kernel
 and one for the OGC kernel, so a single cache image serves all three flavors
 (comment, `Containerfile.kernel`).
+
+The vendor installer is verified against `NVIDIA_RUN_SHA256`, a digest
+committed in `install-nvidia.sh` beside `KERNEL_DEVEL_SHA256`, on both the
+download path and the `/utah-cache` path — the cache image is addressed by an
+input-hash tag, not an immutable digest, so a cached installer gets the same
+check as a fresh one. Bumping `UTAH_NVIDIA_DRIVER_VERSION` means updating
+`NVIDIA_RUN_SHA256` with it, from NVIDIA's published
+`NVIDIA-Linux-x86_64-<version>.run.sha256sum` (comment, `install-nvidia.sh`).
 
 ## Verification
 

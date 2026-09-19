@@ -41,10 +41,15 @@ FROM ${BASE_IMAGE}
 # turn below them.
 COPY packages/bluefin.toml packages/utah.toml packages/parity-exceptions.toml packages/parity-baseline.txt contracts/bluefin-desktop.toml /usr/share/utah/
 COPY packages/hummingbird.repo packages/nvidia-container.repo packages/utah-packages.repo /etc/yum.repos.d/
-# The package image is an RPM repository, not a runtime dependency. Its
-# contents are intentionally copied into the image so the package transaction
-# is reproducible and does not depend on a mutable Pages mirror.
-COPY --from=packages /repository /etc/utah-packages
+# The package image is an RPM repository, not a runtime dependency. It is
+# bind mounted into the two RUN steps that install from it and never copied
+# into a layer: a COPY used to put the whole ~4 GB repository at
+# /etc/utah-packages, nothing ever removed it, and it was two thirds of every
+# published image and of every live ISO, whose squashfs holds the image (#128).
+# Reproducibility still comes from the digest-pinned `packages` stage, which is
+# the only source the package transaction can see -- that is what the old
+# comment meant by "does not depend on a mutable Pages mirror." The mount is a
+# BuildKit RUN --mount, so it costs no layer and leaves nothing on disk.
 # One layer for all of Utah's scripts. They are staged under /tmp and installed
 # by name in the RUN below, because a multi-source COPY cannot rename and
 # every downstream path expects the utah- prefix.
@@ -114,7 +119,8 @@ RUN for pair in install-packages.py:utah-install-packages \
 # The package lists live in the manifests, not here.  When they were spelled
 # out in this RUN as well, the two copies drifted and the contract check was
 # asserting a different set than the install had asked for.
-RUN /usr/local/libexec/utah-install-packages \
+RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages,ro \
+    /usr/local/libexec/utah-install-packages \
       /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
     IMAGE_FLAVOR=main /usr/local/libexec/utah-verify-rpm-contract \
       /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
@@ -182,7 +188,8 @@ RUN mkdir -p /tmp/uupd && \
 
 # Dakota-compatible flavors: OGC is built and asserted before NVIDIA so the
 # NVIDIA path can bind its module to the exact kernel tree it will boot.
-RUN case "${IMAGE_FLAVOR}" in \
+RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages,ro \
+    case "${IMAGE_FLAVOR}" in \
       gaming|nvidia-gaming) /usr/local/libexec/utah-install-ogc-kernel ;; \
       main|nvidia) ;; \
       *) echo "Unknown Utah image flavor: ${IMAGE_FLAVOR}" >&2; exit 2 ;; \
@@ -194,7 +201,15 @@ RUN case "${IMAGE_FLAVOR}" in \
     IMAGE_FLAVOR="${IMAGE_FLAVOR}" /usr/local/libexec/utah-verify-rpm-contract \
       /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
     rpm -qa --qf '%{NAME}\t%{VERSION}-%{RELEASE}\n' | sort > /usr/share/utah/packages.txt && \
-    /usr/local/libexec/utah-check-image-parity --report /usr/share/utah/parity-report.txt
+    /usr/local/libexec/utah-check-image-parity --report /usr/share/utah/parity-report.txt && \
+    # The package repository is now only ever bind mounted, so it is absent from
+    # the committed image. Flip it disabled here -- the last step that installs
+    # anything -- so later dnf calls on the image (the live ISO build's included)
+    # do not fail on a file:// baseurl that no longer exists. It goes after the
+    # parity check, which reads rpm and a published manifest and never touches
+    # a repository, so the order between them does not matter to it.
+    sed -i 's/^enabled=1$/enabled=0/' /etc/yum.repos.d/utah-packages.repo \
+      && grep -q '^enabled=0$' /etc/yum.repos.d/utah-packages.repo
 
 # The contract above checks the list Bluefin asks for. The image parity check
 # just after it compares what this image actually installed with what

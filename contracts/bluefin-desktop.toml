@@ -130,6 +130,7 @@ apps = [
 
 [services]
 enabled = [
+  "bluetooth.service",
   "bootc-unified-storage.service",
   "brew-setup.service",
   "dconf-update.service",
@@ -138,4 +139,8 @@ enabled = [
   "gdm.service",
   "ublue-system-setup.service",
   "uupd.timer",
+]
+masked = [
+  "bootc-fetch-apply-updates.service",
+  "bootc-fetch-apply-updates.timer",
 ]

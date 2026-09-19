@@ -1,5 +1,6 @@
 """The preflight must exercise the install contract and fail closed."""
 
+import contextlib
 import importlib.util
 import hashlib
 import io
@@ -126,8 +127,60 @@ class PackageResolutionTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 checker.pinned_inputs(path)
 
+    def test_install_repos_derived_from_packages(self):
+        repos = installer.install_repos(ROOT / "packages")
+        self.assertEqual(repos, ("utah-packages", "public-hummingbird-x86_64-rpms"))
+
+    def test_install_repos_priority_and_filtering(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dirpath = Path(tmp)
+            (dirpath / "a.repo").write_text("[low-prio]\n# utah-install: true\npriority=50\n")
+            (dirpath / "b.repo").write_text("[high-prio]\n# utah-install: true\npriority=5\n")
+            (dirpath / "c.repo").write_text("[unmarked]\npriority=1\n")
+            self.assertEqual(installer.install_repos(dirpath), ("high-prio", "low-prio"))
+
+    def test_install_repos_priority_with_spaces(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dirpath = Path(tmp)
+            (dirpath / "a.repo").write_text("[low-prio]\n# utah-install: true\npriority = 50\n")
+            (dirpath / "b.repo").write_text("[high-prio]\n# utah-install: true\npriority  =  5\n")
+            self.assertEqual(installer.install_repos(dirpath), ("high-prio", "low-prio"))
+
+    def test_install_repos_marker_above_or_below_header(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dirpath = Path(tmp)
+            (dirpath / "a.repo").write_text("# utah-install: true\n[above-header]\npriority=10\n")
+            (dirpath / "b.repo").write_text("[below-header]\n# utah-install: true\npriority=20\n")
+            (dirpath / "multi.repo").write_text("[unmarked]\npriority=1\n# utah-install: true\n[second-marked]\npriority=5\n")
+            self.assertEqual(installer.install_repos(dirpath), ("second-marked", "above-header", "below-header"))
+
+    def test_install_repos_empty_or_no_marked_raises(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dirpath = Path(tmp)
+            (dirpath / "unmarked.repo").write_text("[unmarked]\nname=unmarked\n")
+            with self.assertRaises(ValueError):
+                installer.install_repos(dirpath)
+
+    def test_check_requires_hummingbird_and_utah_packages(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dirpath = Path(tmp)
+            base = dirpath / "bluefin.toml"
+            overlay = dirpath / "utah.toml"
+            base.write_text('[fedora]\npackages=["base"]\n')
+            overlay.write_text('[gnome]\npackages=[]\n')
+            
+            # Missing hummingbird
+            repos_dir = dirpath / "repos"
+            repos_dir.mkdir()
+            (repos_dir / "u.repo").write_text("[utah-packages]\n# utah-install: true\n")
+            with patch("sys.argv", ["install", "--check", "--repos-dir", str(repos_dir), str(base), str(overlay)]):
+                with self.assertRaises(ValueError) as ctx:
+                    installer.main()
+                self.assertIn("public-hummingbird-x86_64-rpms", str(ctx.exception))
+
 
 class ParityContractTests(unittest.TestCase):
+    MANIFEST = ROOT / "packages/bluefin.toml"
     OVERLAY = ROOT / "packages/utah.toml"
 
     def test_parity_section_reaches_the_install_set(self):
@@ -155,9 +208,28 @@ class ParityContractTests(unittest.TestCase):
         self.assertNotIn("unzip", removal[0])
 
     def test_verifier_asserts_the_parity_section(self):
-        source = (ROOT / "scripts/verify-rpm-contract.py").read_text()
-        self.assertIn('parity = section(overlay, "parity")', source)
-        self.assertIn("*parity,", source)
+        """The parity packages must reach the verifier's expected set.
+
+        This used to grep the verifier's source text for
+        `parity = section(overlay, "parity")`, which passed whether or not the
+        code ran. Executed coverage for the verifier lives in
+        tests/test_verify_rpm_contract.py; this asserts the specific claim the
+        grep was standing in for.
+        """
+        verifier = load("verify-rpm-contract")
+        parity = verifier.section(self.OVERLAY, "parity")
+        self.assertTrue(parity, "the shipped overlay declares no parity packages")
+        target = parity[0]
+        argv = ["verify-rpm-contract.py", str(self.MANIFEST), str(self.OVERLAY)]
+        stderr = io.StringIO()
+        with patch.object(verifier, "is_installed", side_effect=lambda p: p != target), \
+                patch.object(verifier.sys, "argv", argv), \
+                patch.dict(verifier.os.environ, {"IMAGE_FLAVOR": "main"}), \
+                patch.object(verifier.sys, "stderr", stderr), \
+                contextlib.redirect_stdout(io.StringIO()):
+            code = verifier.main()
+        self.assertEqual(code, 1)
+        self.assertIn(f"  - {target}\n", stderr.getvalue())
 
 
 if __name__ == "__main__":

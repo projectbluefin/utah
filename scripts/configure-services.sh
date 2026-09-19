@@ -59,7 +59,11 @@ rm -f /usr/lib/systemd/system/*.wants/rechunker-group-fix.service \
 enable_unit brew-setup.service
 enable_unit flatpak-nuke-fedora.service
 enable_unit flatpak-preinstall.service
+# Bluetooth is firmware-less on the X230's BCM20702 (no BCM20702A1 blob is
+# needed), but the service was never enabled, so no adapter appears even with
+# bluez installed. Enable it next to the other desktop units; see #98.
 enable_unit gdm.service
+enable_unit bluetooth.service
 enable_unit firewalld.service
 enable_unit fwupd.service
 enable_unit fwupd-refresh.timer
@@ -81,8 +85,16 @@ curl --fail --retry 3 --silent --show-error \
 disable_unit flatpak-add-fedora-repos.service
 
 # Keep image updates under uupd/bootc rather than the legacy rpm-ostree path.
+# Mask in /usr/lib as well as /etc so the mask survives cross-vendor /etc 3-way merges
+# when switching from systems that have bootc-fetch-apply-updates enabled (such as Bluefin).
+# In a cross-vendor switch, ostree's 3-way /etc merge carries timers.target.wants/
+# symlinks into /etc, which would re-enable the timer if /usr/lib was unmasked.
 disable_unit rpm-ostree.service
 systemctl mask bootc-fetch-apply-updates.timer bootc-fetch-apply-updates.service
+ln -sf /dev/null /usr/lib/systemd/system/bootc-fetch-apply-updates.timer
+ln -sf /dev/null /usr/lib/systemd/system/bootc-fetch-apply-updates.service
+rm -f /usr/lib/systemd/system/*.wants/bootc-fetch-apply-updates.* \
+      /etc/systemd/system/*.wants/bootc-fetch-apply-updates.*
 
 # SSH follows TunaOS's convention: closed in published images, opt-in for a
 # local debug build. The preset must agree or first-boot preset-all will undo

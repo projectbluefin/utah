@@ -83,6 +83,16 @@ comment, `Containerfile` ~L94; repo files copied at `Containerfile` L40).
 `Containerfile.kernel`'s builder stage may use the pinned Fedora 44 repository
 (`packages/fedora-44.repo`) strictly as a builder-only toolchain.
 
+The install-source identity is single-sourced in `packages/*.repo`. Each repository
+participating in the package install transaction carries a `# utah-install: true`
+annotation (either directly preceding or within the `[section]` header in
+`packages/utah-packages.repo` and `packages/hummingbird.repo`).
+`scripts/install-packages.py` derives the `--enablerepo` set from these annotations
+ordered by priority (ascending), so rebuilds in `utah-packages` (`priority=1`)
+precede base Hummingbird packages (`priority=10`). Repositories without this marker
+(such as `nvidia-container-toolkit` or builder-only `fedora-44`) are excluded from
+the desktop package transaction.
+
 The pinned package image is an RPM repository, not a runtime dependency: its
 contents are copied into the image so the package transaction is reproducible
 and does not depend on a mutable mirror (`Containerfile` L41-44).
