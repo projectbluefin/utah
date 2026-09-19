@@ -1,5 +1,6 @@
 """The preflight must exercise the install contract and fail closed."""
 
+import contextlib
 import importlib.util
 import hashlib
 import io
@@ -179,6 +180,7 @@ class PackageResolutionTests(unittest.TestCase):
 
 
 class ParityContractTests(unittest.TestCase):
+    MANIFEST = ROOT / "packages/bluefin.toml"
     OVERLAY = ROOT / "packages/utah.toml"
 
     def test_parity_section_reaches_the_install_set(self):
@@ -206,9 +208,28 @@ class ParityContractTests(unittest.TestCase):
         self.assertNotIn("unzip", removal[0])
 
     def test_verifier_asserts_the_parity_section(self):
-        source = (ROOT / "scripts/verify-rpm-contract.py").read_text()
-        self.assertIn('parity = section(overlay, "parity")', source)
-        self.assertIn("*parity,", source)
+        """The parity packages must reach the verifier's expected set.
+
+        This used to grep the verifier's source text for
+        `parity = section(overlay, "parity")`, which passed whether or not the
+        code ran. Executed coverage for the verifier lives in
+        tests/test_verify_rpm_contract.py; this asserts the specific claim the
+        grep was standing in for.
+        """
+        verifier = load("verify-rpm-contract")
+        parity = verifier.section(self.OVERLAY, "parity")
+        self.assertTrue(parity, "the shipped overlay declares no parity packages")
+        target = parity[0]
+        argv = ["verify-rpm-contract.py", str(self.MANIFEST), str(self.OVERLAY)]
+        stderr = io.StringIO()
+        with patch.object(verifier, "is_installed", side_effect=lambda p: p != target), \
+                patch.object(verifier.sys, "argv", argv), \
+                patch.dict(verifier.os.environ, {"IMAGE_FLAVOR": "main"}), \
+                patch.object(verifier.sys, "stderr", stderr), \
+                contextlib.redirect_stdout(io.StringIO()):
+            code = verifier.main()
+        self.assertEqual(code, 1)
+        self.assertIn(f"  - {target}\n", stderr.getvalue())
 
 
 if __name__ == "__main__":
