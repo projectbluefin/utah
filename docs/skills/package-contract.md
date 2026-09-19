@@ -1,7 +1,7 @@
 ---
 name: package-contract
 version: "1.0"
-last_updated: "2026-09-18"
+last_updated: "2026-09-19"
 id: package-contract
 one_line_purpose: Maintain Bluefin package parity and Utah's overlay manifest.
 entry_point: docs/skills/package-contract.md
@@ -114,6 +114,24 @@ drifted once, so a contract package was installed and never verified
 (install-packages.py:~125, verify-rpm-contract.py:~60). The manifest path in
 the verifier is only the off-image `--check` fallback and asserts nothing
 about installation.
+
+The install transaction follows a strict execution sequence tested in
+`tests/test_package_install.py`:
+1. **Contract record**: The resolved contract packages (excluding `[build]`
+   tooling and `[unavailable]` packages) are written to
+   `/usr/share/utah/contract.txt`. If the path is unwritable, the script warns
+   and continues (fails open).
+2. **Install**: DNF runs with `--disablerepo=*`, enables only marked
+   `# utah-install: true` repositories in ascending priority order, excludes
+   `PackageKit*`, and installs the contract plus `[build]` tooling.
+3. **Mark user**: `dnf mark user` marks all installed contract packages and
+   build dependencies as user-installed before excluded package removal. This
+   prevents DNF autoremove cascades from uninstalling contract packages (such as
+   `xdg-desktop-portal-gnome`).
+4. **Excluded removal**: `rpm -qa` is queried for packages declared in
+   `[excluded]`. Only those actually present are removed with
+   `dnf remove --no-autoremove`. Position after the subcommand is mandatory
+   for DNF5 compatibility.
 
 ## Failure semantics
 
