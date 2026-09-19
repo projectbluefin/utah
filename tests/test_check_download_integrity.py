@@ -3,12 +3,14 @@
 The download integrity script ensures that no build recipe fetches unpinned,
 unverified executables or resolves mutable `releases/latest` URLs.
 These tests verify that the gate reliably rejects mutable and unverified
-downloads, honors verifier tokens per-file, respects comments and allowlists,
+downloads, sees downloads whose URL sits on a backslash continuation line,
+honors verifier tokens per-file, respects comments and allowlists,
 and passes on the shipped repository.
 """
 
 from __future__ import annotations
 
+import importlib.util
 import subprocess
 import sys
 import tempfile
@@ -208,6 +210,103 @@ class DownloadIntegrityTests(unittest.TestCase):
         result = self.run_check()
         self.assertEqual(result.returncode, 1)
         self.assertIn("Containerfile:1: resolves a mutable latest release", result.stderr)
+
+    def test_download_split_across_continuation_lines_is_flagged(self):
+        self.write_file(
+            "scripts/configure-services.sh",
+            "curl -fsSL \\\n"
+            "    --output /tmp/payload.rpm \\\n"
+            "    https://example.com/payload.rpm\n",
+        )
+        result = self.run_check()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            "scripts/configure-services.sh:1: executable download without a digest or signature check",
+            result.stderr,
+        )
+
+    def test_mutable_latest_release_split_across_continuation_lines_is_flagged(self):
+        self.write_file(
+            "Containerfile",
+            "RUN echo building \\\n"
+            " && curl -LO \\\n"
+            "      https://github.com/org/repo/releases/latest/download/tool.tar.gz\n",
+        )
+        result = self.run_check()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Containerfile:1: resolves a mutable latest release", result.stderr)
+
+    def test_continuation_download_reports_the_line_the_command_starts_on(self):
+        self.write_file(
+            "scripts/configure-services.sh",
+            "echo one\n"
+            "echo two\n"
+            "curl -fsSL \\\n"
+            "    https://example.com/driver.run\n",
+        )
+        result = self.run_check()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            "scripts/configure-services.sh:3: executable download without a digest or signature check",
+            result.stderr,
+        )
+
+    def test_allowlisted_descriptor_split_across_continuation_lines_is_exempt(self):
+        self.write_file(
+            "scripts/configure-services.sh",
+            "curl --fail --silent \\\n"
+            "    --output /etc/flatpak/remotes.d/flathub.flatpakrepo \\\n"
+            "    https://dl.flathub.org/repo/flathub.flatpakrepo\n",
+        )
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_commented_continuation_block_stays_exempt(self):
+        self.write_file(
+            "Containerfile",
+            "# curl -LO \\\n"
+            "#     https://example.com/payload.rpm\n",
+        )
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_verifier_on_the_same_continued_command_clears_it(self):
+        self.write_file(
+            "Containerfile",
+            "RUN curl -fsSL -o /tmp/tool.tar.gz https://example.com/tool.tar.gz \\\n"
+            " && echo \"${SHA}  /tmp/tool.tar.gz\" | sha256sum --check --strict\n",
+        )
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+
+class LogicalLineTests(unittest.TestCase):
+    """Directly exercise the continuation joining used by the gate."""
+
+    @staticmethod
+    def load_logical_lines():
+        spec = importlib.util.spec_from_file_location("check_download_integrity", SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.logical_lines
+
+    def test_plain_lines_keep_their_numbers(self):
+        logical_lines = self.load_logical_lines()
+        self.assertEqual(
+            logical_lines("alpha\nbeta\ngamma\n"),
+            [(1, "alpha"), (2, "beta"), (3, "gamma")],
+        )
+
+    def test_continuations_collapse_to_the_starting_line(self):
+        logical_lines = self.load_logical_lines()
+        self.assertEqual(
+            logical_lines("one \\\n  two \\\n  three\nfour\n"),
+            [(1, "one two three"), (4, "four")],
+        )
+
+    def test_trailing_continuation_without_a_successor_is_still_emitted(self):
+        logical_lines = self.load_logical_lines()
+        self.assertEqual(logical_lines("dangling \\\n"), [(1, "dangling")])
 
 
 if __name__ == "__main__":
