@@ -170,7 +170,7 @@ class EvidenceTests(unittest.TestCase):
         compose = next(step for step in production["steps"]
                        if step.get("name") == "Compose production ISO and checksum")
         self.assertIn('"Utah Live" 0 "$IMAGE_REF"', compose["run"])
-        self.assertIn("sha256sum output/utah-live.iso", compose["run"])
+        self.assertIn("cd output && sha256sum utah-live.iso", compose["run"])
         artifact = next(step for step in production["steps"]
                         if step.get("name") == "Retain production ISO")
         self.assertIn("output/utah-live.iso", artifact["with"]["path"])

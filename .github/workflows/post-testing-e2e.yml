@@ -185,7 +185,7 @@ jobs:
           set -euo pipefail
           bash iso/scripts/build-iso.sh "$IMAGE_REF" "$PWD/output/utah-live.iso" \
             "Utah Live" 0 "$IMAGE_REF"
-          sha256sum output/utah-live.iso > output/utah-live.iso.sha256
+          (cd output && sha256sum utah-live.iso > utah-live.iso.sha256)
       - name: Retain production ISO
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
