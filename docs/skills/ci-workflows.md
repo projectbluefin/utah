@@ -22,7 +22,7 @@ metadata:
 
 # CI Workflows
 
-Four workflows, all thin callers into `projectbluefin/actions@v1` reusables
+Six workflows, all thin callers into `projectbluefin/actions@v1` reusables
 or pinned third-party actions:
 
 - `.github/workflows/build.yml` -- pull requests, pushes to `testing`, a
@@ -37,6 +37,9 @@ or pinned third-party actions:
   dispatch. It resolves Bluefin `main` and uses one fixed branch,
   `automation/bluefin-parity`, so `create-pull-request` updates the existing
   review rather than opening duplicates. It does not auto-merge.
+- `.github/workflows/execute-release.yml` -- pushes to `main` carrying a
+  promotion commit, or manual dispatch; promotes `:testing` to `:stable`
+  through the release gate.
 - `.github/workflows/post-testing-e2e.yml` -- successful non-PR testing builds
   explicitly dispatch this, or manually supply a successful testing build run ID.
 
