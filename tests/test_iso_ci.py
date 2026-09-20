@@ -70,8 +70,9 @@ class EvidenceTests(unittest.TestCase):
             '\nif [ -f "${CACHE_DIR}/ogc.tar" ]; then', 1)[0]
         names = gate.split("(", 1)[1].split(")", 1)[0].split()
         for required in ["OVERLAY_FS", "SQUASHFS", "SQUASHFS_ZSTD", "EROFS_FS",
-                         "BLK_DEV_LOOP", "DM_SNAPSHOT", "DM_CRYPT", "CRYPTO_XTS",
-                         "FUSE_FS", "FS_VERITY", "SYSFB_SIMPLEFB", "DRM_SIMPLEDRM"]:
+                         "BTRFS_FS", "BLK_DEV_LOOP", "DM_SNAPSHOT", "DM_CRYPT",
+                         "CRYPTO_XTS", "FUSE_FS", "FS_VERITY", "SYSFB_SIMPLEFB",
+                         "DRM_SIMPLEDRM"]:
             self.assertIn(required, names)
             self.assertRegex(script, rf"--(?:enable|module) {required}(?:\s|$)")
         self.assertEqual(script.count("verify_config /usr/lib/utah/ogc-kernel.config"), 2)
@@ -88,6 +89,14 @@ class EvidenceTests(unittest.TestCase):
                     self.assertEqual(result.returncode, 0 if missing is None else 1)
                     if missing:
                         self.assertIn(f"CONFIG_{missing}", result.stderr)
+
+    def test_luks_harness_preflights_the_btrfs_live_kernel_module(self):
+        script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
+        preflight = "if ! ssh_live 'sudo modprobe btrfs'; then"
+        self.assertIn(preflight, script)
+        self.assertIn("live kernel cannot load the btrfs module", script)
+        self.assertLess(script.index(preflight),
+                        script.index("sudo /usr/local/bin/fisherman"))
 
     def test_offline_payload_preserves_manifest_digest(self):
         script = (ROOT / "iso/scripts/build-iso.sh").read_text()
