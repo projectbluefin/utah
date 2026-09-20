@@ -270,6 +270,37 @@ class DownloadIntegrityTests(unittest.TestCase):
         result = self.run_check()
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_comment_ending_in_backslash_does_not_swallow_the_next_download(self):
+        # A trailing backslash in a shell comment ends at the newline, so the
+        # curl below is a separate, unverified command and must be flagged.
+        self.write_file(
+            "Containerfile",
+            "# fetch the installer bundle \\\n"
+            "curl -fsSL https://example.com/payload.tar.gz -o /tmp/p.tar.gz\n",
+        )
+        result = self.run_check()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(
+            "Containerfile:2: executable download without a digest or signature check",
+            result.stderr,
+        )
+
+    def test_comment_inside_a_continuation_run_does_not_hide_the_download(self):
+        # The Dockerfile parser drops comment lines inside a RUN continuation,
+        # so the URL still belongs to the curl above it.
+        self.write_file(
+            "Containerfile",
+            "RUN curl -fsSL \\\n"
+            "    # the installer payload\n"
+            "    https://example.com/payload.tar.gz -o /tmp/p.tar.gz\n",
+        )
+        result = self.run_check()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(
+            "Containerfile:1: executable download without a digest or signature check",
+            result.stderr,
+        )
+
     def test_verifier_on_the_same_continued_command_clears_it(self):
         self.write_file(
             "Containerfile",
@@ -302,6 +333,27 @@ class LogicalLineTests(unittest.TestCase):
         self.assertEqual(
             logical_lines("one \\\n  two \\\n  three\nfour\n"),
             [(1, "one two three"), (4, "four")],
+        )
+
+    def test_comment_with_trailing_backslash_never_continues(self):
+        logical_lines = self.load_logical_lines()
+        self.assertEqual(
+            logical_lines("# note \\\ncurl -fsSL https://example.com/p.tar.gz\n"),
+            [(1, "# note \\"), (2, "curl -fsSL https://example.com/p.tar.gz")],
+        )
+
+    def test_comment_inside_a_run_is_dropped_and_the_run_continues(self):
+        logical_lines = self.load_logical_lines()
+        self.assertEqual(
+            logical_lines("RUN curl -fsSL \\\n  # payload\n  https://example.com/p.tar.gz\n"),
+            [(1, "RUN curl -fsSL https://example.com/p.tar.gz")],
+        )
+
+    def test_blank_line_before_a_command_does_not_own_its_number(self):
+        logical_lines = self.load_logical_lines()
+        self.assertEqual(
+            logical_lines("\ncurl -fsSL \\\n  https://example.com/p.tar.gz\n"),
+            [(1, ""), (2, "curl -fsSL https://example.com/p.tar.gz")],
         )
 
     def test_trailing_continuation_without_a_successor_is_still_emitted(self):

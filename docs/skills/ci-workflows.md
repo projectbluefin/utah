@@ -69,7 +69,10 @@ the build before expensive compilation or container builds run:
   Scanning is per *logical* line: backslash continuations are joined before
   matching, so a `curl` whose URL sits on a continuation line is still inspected
   and is reported at the line the command starts on. Matching raw lines instead
-  made every multi-line download invisible to the gate.
+  made every multi-line download invisible to the gate. Comment lines never
+  start or end a run: a `#` line with a trailing backslash does not swallow the
+  command below it, and a `#` line inside a `RUN` continuation is dropped the
+  way the Dockerfile parser drops it, so the run keeps going.
   Exercised by black-box tests in `tests/test_check_download_integrity.py`.
 - `scripts/check_workflow_outputs.py`: parses workflows under `.github/workflows/`
   and ensures that every job output referencing `steps.<id>.outputs` points to a

@@ -46,20 +46,31 @@ def logical_lines(text: str) -> list[tuple[int, str]]:
     starts on, which is where a reader looks for the command.
     """
     joined: list[tuple[int, str]] = []
-    start: int | None = None
+    start = 0
     parts: list[str] = []
     for number, line in enumerate(text.splitlines(), start=1):
-        if start is None:
-            start = number
         stripped = line.strip()
+        if stripped.startswith("#"):
+            if parts:
+                # A comment inside a continuation run. The Dockerfile parser
+                # drops such lines and the RUN keeps going, so skip it and let
+                # the run continue; its trailing backslash decides nothing.
+                continue
+            # A comment on its own never starts a run: a trailing backslash in
+            # a shell comment ends at the newline, so the next line is a
+            # separate command and must be inspected on its own rather than
+            # swallowed into an exempt comment.
+            joined.append((number, stripped))
+            continue
+        if not parts:
+            start = number
         if stripped.endswith("\\"):
             parts.append(stripped[:-1].strip())
             continue
         parts.append(stripped)
         joined.append((start, " ".join(part for part in parts if part)))
-        start = None
         parts = []
-    if start is not None:
+    if parts:
         joined.append((start, " ".join(part for part in parts if part)))
     return joined
 
