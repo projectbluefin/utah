@@ -54,6 +54,7 @@ jobs:
           echo "changed=true" >> "$GITHUB_OUTPUT"
 
       - name: Propose Bluefin parity update
+        id: propose
         if: steps.parity.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
         with:
@@ -66,7 +67,7 @@ jobs:
             packages/bluefin.toml
 
       - name: Start CI on the bump branch explicitly
-        if: steps.parity.outputs.changed == 'true'
+        if: contains(fromJSON('["created", "updated"]'), steps.propose.outputs.pull-request-operation)
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}

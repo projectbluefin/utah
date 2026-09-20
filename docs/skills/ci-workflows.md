@@ -46,6 +46,10 @@ or pinned third-party actions:
   is the PR head, and `check-parity`/`check-repos` report on the bump PR
   itself -- the same explicit-dispatch pattern `sync-main-to-testing.yml`
   uses for the testing build. Needs `actions: write`, which the job holds.
+  Gated on `create-pull-request`'s own `pull-request-operation` output being
+  `created` or `updated` (not on the parity diff alone), so a nightly run
+  against an unmerged, unchanged bump branch does not re-dispatch the whole
+  flavor matrix for nothing.
 - `.github/workflows/execute-release.yml` -- pushes to `main` carrying a
   promotion commit, or manual dispatch; promotes `:testing` to `:stable`
   through the release gate.
