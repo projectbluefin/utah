@@ -16,7 +16,9 @@ what an ordinary merge to main looks like. Only checking whether the tag had
 actually moved would reveal it.
 
 These tests pin both halves of the fix: a commit from the promotion branch is a
-promotion whatever its subject, and every outcome annotates itself.
+promotion whatever its subject, and every outcome annotates itself. They also
+pin the trust boundary: head.ref is attacker-chosen on a fork pull request, so
+only branches in this repository count as the promotion branch.
 """
 import importlib.util
 import os
@@ -93,27 +95,52 @@ class DecideTests(unittest.TestCase):
 
 
 class HeadRefLookupTests(unittest.TestCase):
-    def test_the_head_refs_come_from_the_commit_s_pull_requests(self):
+    REPO = "projectbluefin/utah"
+
+    def lookup(self, stdout, returncode=0):
         calls = []
 
         def runner(argv, **kwargs):
             calls.append(argv)
-            return subprocess.CompletedProcess(argv, 0, f"{BRANCH}\nother\n", "")
+            return subprocess.CompletedProcess(argv, returncode, stdout, "")
 
         refs = release_trigger.pull_request_head_refs(
-            "deadbeef", "projectbluefin/utah", runner=runner
+            "deadbeef", self.REPO, runner=runner
         )
+        return refs, calls
+
+    def test_the_head_refs_come_from_the_commit_s_pull_requests(self):
+        refs, calls = self.lookup(f"{self.REPO}\t{BRANCH}\n{self.REPO}\tother\n")
         self.assertEqual(refs, [BRANCH, "other"])
-        self.assertIn("repos/projectbluefin/utah/commits/deadbeef/pulls", calls[0])
+        self.assertIn(f"repos/{self.REPO}/commits/deadbeef/pulls", calls[0])
+
+    def test_a_fork_branch_with_the_promotion_name_is_ignored(self):
+        """head.ref is attacker-chosen on a fork; only this repo's branches count."""
+        refs, _ = self.lookup(f"attacker/utah\t{BRANCH}\n")
+        self.assertEqual(refs, [])
+        ok, notes = release_trigger.decide(
+            "push", f"Merge pull request #9 from attacker/{BRANCH}", refs
+        )
+        self.assertFalse(ok, "a fork must not be able to cut a :stable release")
+        self.assertIn("No :stable tag was moved", "\n".join(notes))
+
+    def test_a_deleted_fork_reporting_no_repo_is_ignored(self):
+        refs, _ = self.lookup(f"\t{BRANCH}\n")
+        self.assertEqual(refs, [])
+
+    def test_the_real_promotion_branch_survives_the_fork_filter(self):
+        refs, _ = self.lookup(
+            f"attacker/utah\t{BRANCH}\n{self.REPO}\t{BRANCH}\n"
+        )
+        self.assertEqual(refs, [BRANCH])
+        ok, _ = release_trigger.decide(
+            "push", f"Merge pull request #181 from {self.REPO}/{BRANCH}", refs
+        )
+        self.assertTrue(ok)
 
     def test_a_failed_lookup_is_not_a_promotion_rather_than_a_crash(self):
         """No token, rate limit, or a commit with no PR must not break the run."""
-        def runner(argv, **kwargs):
-            return subprocess.CompletedProcess(argv, 1, "", "gh: not authenticated")
-
-        refs = release_trigger.pull_request_head_refs(
-            "deadbeef", "projectbluefin/utah", runner=runner
-        )
+        refs, _ = self.lookup("", returncode=1)
         self.assertEqual(refs, [])
         ok, notes = release_trigger.decide("push", "fix: whatever", refs)
         self.assertFalse(ok)

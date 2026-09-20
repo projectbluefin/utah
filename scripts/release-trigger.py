@@ -37,7 +37,13 @@ PROMOTION_PREFIX = "chore: promote testing to main"
 def pull_request_head_refs(
     sha: str, repository: str, *, runner=subprocess.run
 ) -> list[str]:
-    """Head refs of the pull requests that contain this commit.
+    """Head refs of *this repository's* pull requests that contain this commit.
+
+    head.ref is attacker-chosen on a fork pull request, and GitHub associates
+    the merge or squash commit on main with the pull request it came from. A
+    fork branch named auto/promote-testing-to-main would otherwise make an
+    innocuous merge look exactly like the promotion and cut a :stable release,
+    so a head ref only counts when it lives in this repository.
 
     Injectable runner so the decision can be tested without a network or a
     token: the GitHub CLI is the only thing here that needs either.
@@ -46,13 +52,22 @@ def pull_request_head_refs(
         [
             "gh", "api",
             f"repos/{repository}/commits/{sha}/pulls",
-            "--jq", ".[].head.ref",
+            # Both fields, filtered below, so the trust boundary is in Python
+            # where it is covered by tests rather than inside a jq string.
+            "--jq", '.[] | [(.head.repo.full_name // ""), .head.ref] | @tsv',
         ],
         capture_output=True, text=True, check=False,
     )
     if result.returncode != 0:
         return []
-    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    refs = []
+    for line in result.stdout.splitlines():
+        full_name, _, ref = line.partition("\t")
+        ref = ref.strip()
+        # A deleted fork reports a null repo, which is not this repository.
+        if ref and full_name.strip() == repository:
+            refs.append(ref)
+    return refs
 
 
 def decide(
@@ -64,6 +79,9 @@ def decide(
     prefix: str = PROMOTION_PREFIX,
 ) -> tuple[bool, list[str]]:
     """Whether this push is a promotion, and what to say about it.
+
+    head_refs must already be restricted to branches in this repository (see
+    pull_request_head_refs); a fork can name its branch anything.
 
     Returns (is_promotion, annotations) where each annotation is a GitHub
     workflow command. The annotations are the point: every outcome explains
