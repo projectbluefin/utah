@@ -17,6 +17,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      actions: write
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -63,3 +64,10 @@ jobs:
           add-paths: |
             packages/.bluefin-parity-ref
             packages/bluefin.toml
+
+      - name: Start CI on the bump branch explicitly
+        if: steps.parity.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: gh workflow run build.yml --repo "$REPOSITORY" --ref automation/bluefin-parity
