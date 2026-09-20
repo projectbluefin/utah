@@ -37,6 +37,16 @@ or pinned third-party actions:
   dispatch. It resolves Bluefin `main` and uses one fixed branch,
   `automation/bluefin-parity`, so `create-pull-request` updates the existing
   review rather than opening duplicates. It does not auto-merge.
+
+  The bump PR arrives with **no checks**: GitHub does not start
+  `on: pull_request` workflows for pull requests created with the default
+  `GITHUB_TOKEN`. Start them before reviewing, or an upstream package Utah's
+  repositories cannot install looks identical to a clean bump:
+  `gh workflow run build.yml --ref automation/bluefin-parity`. The run attaches
+  to the branch head, which is the PR head, so `check-parity` and `check-repos`
+  report on the bump PR. Pushing to the branch or reopening the PR does the
+  same. Dispatching this from the workflow needs `actions: write` and is the
+  intended follow-up.
 - `.github/workflows/execute-release.yml` -- pushes to `main` carrying a
   promotion commit, or manual dispatch; promotes `:testing` to `:stable`
   through the release gate.
