@@ -11,16 +11,13 @@ DEBUG="${4:-0}"
 # installer recipe use this stable, publishable reference.
 PUBLISHED_IMAGE="${5:-ghcr.io/projectbluefin/utah:testing}"
 # Live-ISO size budget (#128). The ISO embeds the full container store for
-# offline install, so image growth shows up doubled on the ISO. The last fully
-# passing run (2026-09-06) was 7.7G; the 2026-09-18 run was 8.6G once the
-# ~4 GB package repository stopped being removed from the image. The ceiling
-# sits between those two: 8 GB is above the last passing run so a clean build
-# passes, but below the grown size, so the exact #128 regression fails the job
-# instead of landing silently. Raise N only after the real fix -- unmount,
-# never COPY, the package repository (#128) -- lands; #105 adds linux-firmware
-# and ~30 parity packages on top, so expect to revisit N.
+# offline install, so image growth shows up twice in the ISO. The successful
+# post-fix E2E run 35469913325 (2026-09-19) measured 3.9G (utah), 4.6G
+# (gaming), 5.2G (nvidia), and 5.3G (nvidia-gaming). A 6 GB ceiling leaves
+# 0.7 GB headroom for the largest flavor while failing a regression like the
+# previous 8.6G image. Revisit it after a deliberate, measured size change.
 # Override per-run with UTAH_ISO_MAX_GB (GB) without editing this script.
-ISO_MAX_GB="${UTAH_ISO_MAX_GB:-8}"
+ISO_MAX_GB="${UTAH_ISO_MAX_GB:-6}"
 LABEL="UTAH_LIVE"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 mkdir -p "$(dirname "${OUTPUT_ISO}")"

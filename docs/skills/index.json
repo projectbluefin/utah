@@ -17,7 +17,7 @@
       ],
       "description": "build.yml contract gate, kernel-cache job, main/kernel matrix split, promote-testing-to-main and sync-main-to-testing, actions@v1 delegation. Use when changing .github/workflows/ or debugging a red run.",
       "version": "1.0",
-      "last_updated": "2026-09-05",
+      "last_updated": "2026-09-19",
       "doc_type": "reference"
     },
     {

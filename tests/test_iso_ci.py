@@ -108,6 +108,7 @@ class EvidenceTests(unittest.TestCase):
         # to an unexported, unpassed variable (which dies under set -u inside
         # the assembly) is caught here before it breaks every ISO build.
         self.assertRegex(script, r"podman unshare bash -s -- .*\$\{ISO_MAX_GB\}")
+        self.assertIn('ISO_MAX_GB="${UTAH_ISO_MAX_GB:-6}"', script)
         self.assertIn('ISO_MAX_GB="$8"', script)
         start = script.index("iso_max_bytes=$(( ISO_MAX_GB")
         end = script.index("\nfi\n", start) + len("\nfi\n")
@@ -119,14 +120,14 @@ class EvidenceTests(unittest.TestCase):
             + guard
         )
         under = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"),
-                 "ISO_MAX_GB": "8", "DU_BYTES": str(7 * 1024 ** 3), "DU_HUMAN": "7.0G"}
+                 "ISO_MAX_GB": "6", "DU_BYTES": str(5 * 1024 ** 3), "DU_HUMAN": "5.0G"}
         result = subprocess.run(["bash", "-eu", "-c", run], capture_output=True, text=True, env=under)
         self.assertEqual(result.returncode, 0, result.stderr)
         over = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"),
-                "ISO_MAX_GB": "8", "DU_BYTES": str(8 * 1024 ** 3 + 512 * 1024 ** 2), "DU_HUMAN": "8.5G"}
+                "ISO_MAX_GB": "6", "DU_BYTES": str(6 * 1024 ** 3 + 512 * 1024 ** 2), "DU_HUMAN": "6.5G"}
         result = subprocess.run(["bash", "-eu", "-c", run], capture_output=True, text=True, env=over)
         self.assertNotEqual(result.returncode, 0, result.stdout)
-        self.assertIn("exceeds 8 GB budget", result.stderr)
+        self.assertIn("exceeds 6 GB budget", result.stderr)
 
     def test_build_explicitly_dispatches_iso_after_both_image_jobs(self):
         import yaml
