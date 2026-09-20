@@ -173,6 +173,69 @@ class EvidenceTests(unittest.TestCase):
         self.assertIn("fastfetch output was not visible", script)
         self.assertIn("missing required screenshot", script)
 
+    def test_installed_system_asserts_the_booted_image_is_the_offline_payload(self):
+        script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
+        self.assertIn("bootc status --json", script)
+        self.assertIn('["status"]["booted"]["image"]["image"]["image"]', script)
+        self.assertIn('"${booted_image}" == "${PAYLOAD_IMAGE}"', script)
+        self.assertIn("not the offline payload", script)
+        # Must run before the login phase, on a guest that still has no route
+        # to a network that could otherwise mask a substituted image.
+        payload_at = script.index("bootc status --json")
+        graphical_at = script.index('echo "=== Phase 6/7')
+        login_at = script.index('echo "=== Phase 7/7')
+        self.assertLess(graphical_at, payload_at)
+        self.assertLess(payload_at, login_at)
+
+    def test_default_flatpak_check_executes_against_stubbed_ssh(self):
+        # Extract the real block and drive it with stubbed ssh_target/sleep/
+        # fail, the same way test_iso_budget_guard_fails_closed_above_ceiling
+        # drives the ISO size gate -- this is genuinely new set-difference
+        # logic, not a string in a shell script.
+        script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
+        start = script.index('if [[ -n "${UTAH_E2E_FLATPAKS-x}" ]]; then')
+        end = script.index("\nfi\n", script.index("present offline", start)) + len("\nfi\n")
+        block = script[start:end]
+
+        def run(installed, flatpaks_env):
+            harness = (
+                "sleep() { :; }\n"
+                "ssh_target() { [[ \"$1\" == *'flatpak list'* ]] && printf '%s\\n' \"$INSTALLED\"; }\n"
+                "fail() { echo \"FAIL: $*\" >&2; exit 1; }\n"
+                + block
+            )
+            env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+                   "INSTALLED": installed, "UTAH_E2E_FLATPAKS": flatpaks_env}
+            return subprocess.run(["bash", "-eu", "-c", harness],
+                                   capture_output=True, text=True, env=env)
+
+        complete = run("org.a\norg.b\norg.c", "org.a\norg.b")
+        self.assertEqual(complete.returncode, 0, complete.stderr)
+        self.assertIn("org.a, org.b", complete.stdout)
+
+        missing = run("org.a", "org.a\norg.b")
+        self.assertNotEqual(missing.returncode, 0)
+        self.assertIn("org.b", missing.stderr)
+        self.assertNotIn("org.a\n", missing.stderr.split("missing")[-1])
+
+        skipped = run("org.a", "")
+        self.assertEqual(skipped.returncode, 0, skipped.stderr)
+        self.assertNotIn("present offline", skipped.stdout)
+
+    def test_failure_diagnostics_run_from_the_exit_trap_not_only_fail(self):
+        script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
+        self.assertIn("preserve_failed_disk_diagnostics", script)
+        self.assertIn("qemu-img info", script)
+        self.assertIn("never the disk itself", script)
+        # A bare command failing under `set -e` (the installer step, for one)
+        # aborts straight to the EXIT trap without ever calling fail(), so
+        # the capture must live in cleanup(), not only in fail()'s body.
+        cleanup_at = script.index("cleanup() {")
+        trap_at = script.index("trap cleanup EXIT")
+        self.assertIn("preserve_failed_disk_diagnostics", script[cleanup_at:trap_at])
+        fail_at = script.index('fail() { echo "FAIL: $*"')
+        self.assertNotIn("preserve_failed_disk_diagnostics", script[fail_at:fail_at + 80])
+
 
 class FastfetchOcrGateTests(unittest.TestCase):
     """The gate runs against tesseract output, which drops and mangles glyphs."""

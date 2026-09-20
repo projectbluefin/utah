@@ -144,7 +144,12 @@ persists.
 `just luks-test` runs `iso/scripts/luks-e2e.sh` against a debug live ISO
 (`just iso testing 1`). It checks the live GNOME session, installs to a
 disposable LUKS2 disk from the embedded payload, boots without the ISO,
-unlocks the disk, and checks graphical login and extension states.
+unlocks the disk, confirms `bootc status` reports the offline embedded
+payload (not a network pull) on a guest with no route out, and checks
+graphical login and extension states. A trailing check, after login,
+confirms every default Flatpak in the Brewfile contract is also present
+offline -- deferred past login because it deploys asynchronously on first
+boot.
 Read the recipe and script prerequisites before running it: it creates test
 accounts and requires local QEMU/KVM access, not a production installation.
 

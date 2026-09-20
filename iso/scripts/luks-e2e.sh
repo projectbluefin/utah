@@ -1,15 +1,22 @@
 #!/usr/bin/env bash
 # Install Utah from its live ISO onto an encrypted disk, then log in to it.
 #
-# Six phases, each of which can fail the test on its own:
+# Seven phases, each of which can fail the test on its own:
 #   1. boot the live ISO in QEMU with one blank disk attached
 #   2. prove the live session reached a graphical desktop, not just a shell
 #   3. run the installer with a LUKS passphrase and a user account
 #   4. boot the installed disk with no ISO, so it must come up on its own
 #   5. answer Plymouth's passphrase prompt
-#   6. log in at the GDM greeter and prove a GNOME session is running
+#   6. reach the graphical target and confirm the booted image is the
+#      offline embedded payload, with no network route out
+#   7. log in at the GDM greeter and prove a GNOME session is running
 #
-# Phases 2 and 6 are the point. An image can install perfectly, unlock
+# A trailing check, after phase 7's desktop and fastfetch evidence, confirms
+# the Brewfile's default Flatpak set is also present offline -- deferred
+# because it deploys asynchronously on first boot and checking right after
+# login undercounts it.
+#
+# Phases 2 and 7 are the point. An image can install perfectly, unlock
 # perfectly, and still be useless if the desktop never starts -- and a boot
 # that stops at a text console looks identical to a working one if all you
 # check is that the machine came up.
@@ -167,7 +174,31 @@ send_keys() {
 }
 
 qemu_pids=()
+# Never the disk itself: post-testing-e2e.yml explicitly never uploads
+# install.qcow2 because it carries the test LUKS passphrase, the test
+# account password, and host keys. qemu-img's own metadata is not guest
+# data -- virtual/actual size and format are enough to tell a disk that
+# never got written (an install that silently no-op'd) from one whose boot
+# phases simply could not unlock or start it, without shipping the guest
+# filesystem anywhere. Written under WORK, which the CI workflow already
+# globs for "*.log" on failure.
+preserve_failed_disk_diagnostics() {
+    [[ -f "${INSTALL_DISK}" ]] || return 0
+    local out="${WORK}/failed-disk-info-$(date +%Y%m%d-%H%M%S).log"
+    { echo "=== qemu-img info: ${INSTALL_DISK} ==="; qemu-img info "${INSTALL_DISK}"; } \
+        > "${out}" 2>&1 || true
+    echo "  disk diagnostics kept (metadata only, never the disk itself): ${out}" >&2
+}
+
 cleanup() {
+    # $? must be read before anything else runs in this function, or it
+    # stops reflecting the exit that triggered the trap. `fail()` funnels
+    # every deliberate failure through `exit 1`, but a bare command failing
+    # under `set -e` (the installer step in phase 3, for one) aborts here
+    # directly without ever calling `fail()` -- so diagnostics belong in the
+    # trap that always runs, not only in the helper that sometimes does.
+    local status=$?
+    (( status != 0 )) && preserve_failed_disk_diagnostics
     for pid in "${qemu_pids[@]:-}"; do
         [[ -n "${pid}" ]] && kill "${pid}" 2>/dev/null || true
     done
@@ -207,7 +238,7 @@ if [[ -f "${WORK}/try.pid" ]] && kill -0 "$(cat "${WORK}/try.pid" 2>/dev/null)" 
     fail "a VM from 'just try-installed' is running on this work directory (pid $(cat "${WORK}/try.pid")); stop it first: kill \$(cat ${WORK}/try.pid)"
 fi
 
-echo "=== Phase 1/6: boot the live ISO ==="
+echo "=== Phase 1/7: boot the live ISO ==="
 rm -f "${INSTALL_DISK}" "${MONITOR_LIVE}" "${MONITOR_INSTALLED}" \
       "${SERIAL_LIVE}" "${SERIAL_INSTALLED}"
 qemu-img create -f qcow2 "${INSTALL_DISK}" 64G >/dev/null
@@ -252,7 +283,7 @@ for i in $(seq 1 90); do
     sleep 5
 done
 
-echo "=== Phase 2/6: prove the live session reached a desktop ==="
+echo "=== Phase 2/7: prove the live session reached a desktop ==="
 # The live ISO autologins liveuser into GNOME. If that silently degraded to a
 # text console the installer would still be reachable over SSH and every other
 # check here would pass, so assert the session explicitly.
@@ -278,7 +309,7 @@ live_session_type="$(ssh_live "loginctl show-session \$(loginctl show-user liveu
 echo "  live session type: ${live_session_type:-unknown}"
 shot live-desktop "${MONITOR_LIVE}"
 
-echo "=== Phase 3/6: install onto an encrypted disk ==="
+echo "=== Phase 3/7: install onto an encrypted disk ==="
 # An empty "image" with a "targetImgref" is the offline shape: fisherman then
 # installs from containers-storage rather than pulling, which is the only way
 # the ISO's embedded payload gets used. Naming the image directly makes it
@@ -418,7 +449,7 @@ kill -0 "${live_pid}" 2>/dev/null && fail "the live VM would not exit; refusing 
 echo "  live VM exited cleanly"
 sync
 
-echo "=== Phase 4/6: boot the installed disk ==="
+echo "=== Phase 4/7: boot the installed disk ==="
 # Carry the live VM's firmware variables over rather than starting from a
 # pristine copy. The installer writes an NVRAM boot entry pointing at
 # \EFI\fedora\shimx64.efi, and this ESP has no \EFI\BOOT\BOOTX64.EFI
@@ -445,7 +476,7 @@ qemu_pids+=("$(cat "${WORK}/installed.pid")")
 echo "  watch the installed VM: vnc://127.0.0.1:$((5900 + VNC_INSTALLED))"
 sleep 5
 
-echo "=== Phase 5/6: answer the passphrase prompt ==="
+echo "=== Phase 5/7: answer the passphrase prompt ==="
 status=0
 python3 "${ROOT}/iso/scripts/luks-unlock.py" qemu \
     "${MONITOR_INSTALLED}" "${PASSPHRASE}" "${SERIAL_INSTALLED}" || status=$?
@@ -455,7 +486,7 @@ if [[ ${status} -ne 0 ]]; then
     fail "LUKS unlock or post-unlock boot failed (exit ${status})"
 fi
 
-echo "=== Phase 6/6: log in and prove the desktop starts ==="
+echo "=== Phase 6/7: reach the graphical target and verify the offline payload ==="
 echo "Waiting for the installed system to reach the graphical target..."
 emergency_seen=""
 for i in $(seq 1 90); do
@@ -494,6 +525,24 @@ for i in $(seq 1 60); do
 done
 echo "  ssh: logged in as ${TEST_USER}"
 
+echo "Verifying the installed system booted the offline embedded payload..."
+# bootc's own view of what is booted is the ground truth for "the offline
+# payload survived the install": fisherman's recipe named targetImgref
+# exactly ${PAYLOAD_IMAGE}, formatted from the ISO's embedded
+# containers-storage with no network (phase 3), so the booted image
+# reference matching it proves that payload -- not a substitute, and not one
+# reached over a network this guest does not have -- is what is running.
+# (/usr/share/utah/contract.txt, tried here in an earlier revision, is the
+# resolved *RPM* contract written at image-build time by
+# scripts/install-packages.py; its presence says nothing about which OCI
+# image or digest actually got deployed.)
+booted_image="$(ssh_target 'bootc status --json' 2>/dev/null \
+    | python3 -c 'import json, sys; print(json.load(sys.stdin)["status"]["booted"]["image"]["image"]["image"])' 2>/dev/null || true)"
+[[ "${booted_image}" == "${PAYLOAD_IMAGE}" ]] \
+    || fail "installed system booted '${booted_image:-<unreadable>}', not the offline payload '${PAYLOAD_IMAGE}'"
+echo "  booted image: ${booted_image}"
+
+echo "=== Phase 7/7: log in and prove the desktop starts ==="
 ssh_target 'systemctl is-active gdm.service' 2>/dev/null | grep -qx active \
     || fail "gdm is not running on the installed system"
 echo "  gdm.service: active"
@@ -664,6 +713,49 @@ if [[ "${UTAH_E2E_REQUIRE_SCREENSHOTS:-0}" == 1 ]]; then
     done
 fi
 
+# The default Flatpak set is asserted last, not right after login: the
+# fastfetch shot above showed 45 flatpaks present on the installed disk only
+# after ~2 minutes of uptime (docs/verification, 2026-09-19 run), so checking
+# immediately after SSH -- long before first-boot deployment finishes --
+# would misreport a set that has simply not arrived yet as missing. By here
+# the system has already spent minutes reaching the graphical target, logging
+# in, and (when required) proving fastfetch on screen, so deployment has had
+# real time to complete; the loop below still tolerates a little more.
+#
+# Same Brewfile-to-list conversion iso/live/Containerfile uses to seed the
+# ISO's own Flatpak repo, run here against the installed contract's copy so
+# this checks the actual default set rather than one app (Ghostty) picked
+# only because the terminal-automation phase above happens to need it --
+# install-flatpaks.sh keeps Ghostty out of the Brewfile-derived list on
+# purpose, as Utah's own addition rather than the Bluefin parity contract.
+# UTAH_E2E_FLATPAKS overrides the expected set directly; empty to skip.
+if [[ -n "${UTAH_E2E_FLATPAKS-x}" ]]; then
+    if [[ -n "${UTAH_E2E_FLATPAKS-}" ]]; then
+        expected_flatpaks="${UTAH_E2E_FLATPAKS}"
+    else
+        expected_flatpaks="$(ssh_target "awk -F '\"' '/^flatpak / {print \$2}' /usr/share/ublue-os/homebrew/system-flatpaks.Brewfile" 2>/dev/null || true)"
+        [[ -n "${expected_flatpaks}" ]] || fail "could not read the default Flatpak Brewfile on the installed system"
+    fi
+    missing_flatpaks=()
+    for _ in $(seq 1 12); do
+        installed_flatpaks="$(ssh_target 'flatpak list --system --app --columns=application' 2>/dev/null || true)"
+        [[ -n "${installed_flatpaks}" ]] || { sleep 10; continue; }
+        missing_flatpaks=()
+        while IFS= read -r app; do
+            [[ -n "${app}" ]] || continue
+            grep -qxF "${app}" <<< "${installed_flatpaks}" || missing_flatpaks+=("${app}")
+        done <<< "${expected_flatpaks}"
+        (( ${#missing_flatpaks[@]} == 0 )) && break
+        sleep 10
+    done
+    [[ -n "${installed_flatpaks}" ]] \
+        || fail "'flatpak list --system' returned nothing on the installed system"
+    if (( ${#missing_flatpaks[@]} > 0 )); then
+        fail "default Flatpak(s) missing on the installed, network-isolated system: ${missing_flatpaks[*]}"
+    fi
+    echo "  default Flatpaks present offline: ${expected_flatpaks//$'\n'/, }"
+fi
+
 echo
 echo "PASS: Utah installed to an encrypted disk, unlocked, and ${TEST_USER} logged"
 echo "      in to a GNOME session on it."
@@ -713,7 +805,12 @@ the check beside it passed.
 3. The installed disk boots on its own, with no ISO attached.
 4. Plymouth's passphrase prompt is answered and the root volume opens.
 5. The system reaches the graphical target rather than an emergency shell.
-6. The user logs in at the GDM greeter and gets a GNOME session.
+6. \`bootc status\` on the installed system reports the booted image as the
+   offline embedded payload, not a substitute reached over a network this
+   guest does not have.
+7. The user logs in at the GDM greeter and gets a GNOME session.
+8. Every default Flatpak in the Brewfile contract is present and listed by
+   \`flatpak\` on the installed, network-isolated system.
 
 ## Screenshots
 
