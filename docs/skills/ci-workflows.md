@@ -35,9 +35,13 @@ each pinned to a SHA tagged `v1`:
 - `.github/workflows/post-testing-e2e.yml` -- successful non-PR testing builds
   explicitly dispatch this, or manually supply a successful testing build run ID.
 
-CI delegates builds, vulnerability reporting, SBOMs, keyless signatures,
-provenance, caching, and rechunking to `projectbluefin/actions@v1` (originated
-as a `docs/building.md` design bullet; now lives in this skill).
+CI delegates builds, vulnerability reporting, keyless signatures, provenance,
+and caching to `projectbluefin/actions@v1` (originated as a `docs/building.md`
+design bullet; now lives in this skill). The reusable workflow supports
+rechunking and build SBOMs, but its `testing`-stream guard skips the package
+update-interval xattrs, rechunk, and SBOM steps. Utah publishes only the
+`testing` stream, so its images are not rechunked and do not produce those SBOM
+artifacts; enabling them requires a reusable-workflow change (#131).
 
 ## contract: the cheap gate
 
@@ -101,7 +105,7 @@ and why lives in [kernel-cache.md](kernel-cache.md).
 `build_main` needs only `contract`, so `main` starts the moment the gate
 passes; `build_kernel` needs `contract` and `kernel_cache`, so a cache miss
 holds up only the flavors that consume it. Both call
-`reusable-build.yml@eb4c546389f19ad9e42f1af052623de73c620ebb # v1`, and
+`reusable-build.yml@8895d09342174927b950abc75dccd6da2c8ba36f # v1`, and
 `just check` asserts that pin with
 `grep -qE 'reusable-build\.yml@(v1|[0-9a-f]{40} # v1)$' .github/workflows/build.yml`
 (recipe, `Justfile`, `check`). Both pass `publish_stream_tag: "false"` --
