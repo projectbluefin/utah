@@ -34,18 +34,18 @@ retry_flatpak() {
 
 FLATPAK_CACHE=/var/cache/flatpak-dl
 INSTALLER_APP_ID=org.bootcinstaller.Installer
-INSTALLER_REPO=projectbluefin/bootc-installer
+INSTALLER_REPO=tuna-os/bootc-installer
 BUNDLE=org.bootcinstaller.Installer.flatpak
 # Pin the installer release so ISO composition is reproducible rather than
 # resolving a mutable `latest` during the build. Override with
 # UTAH_INSTALLER_VERSION when validating a newer installer.
-INSTALLER_VERSION="${UTAH_INSTALLER_VERSION:-v3.0.16}"
+INSTALLER_VERSION="${UTAH_INSTALLER_VERSION:-v2026.09.19-cee9ba29}"
 # The bundle is installed system-wide with --no-gpg-verify below, so the
 # version pin alone is the whole trust story. Pin its SHA-256 the same way
 # the Containerfile pins UUPD_SHA256, and verify before import. Version and
 # digest move together; override with UTAH_INSTALLER_SHA256 when validating
 # a newer installer.
-INSTALLER_SHA256="${UTAH_INSTALLER_SHA256:-6d68445965bf03fd628fcc9e856b162939b5f87bf4532f62725cf0e114c7eea7}"
+INSTALLER_SHA256="${UTAH_INSTALLER_SHA256:-ebd661e554523957a05e6dba038512369d232adb0512b63233512db4cc012941}"
 
 mkdir -p "${FLATPAK_CACHE}/tmp" /run/dbus
 export TMPDIR="${FLATPAK_CACHE}/tmp"
@@ -85,9 +85,12 @@ flatpak remote-add --system --if-not-exists flathub https://dl.flathub.org/repo/
 
 # A bundle import needs a temporary local remote in an OCI build: direct
 # --bundle installs omit the deploy/active ref without flatpak-system-helper.
-# The download comes only from INSTALLER_REPO: an earlier fallback fetched the
-# same version tag from tuna-os/tuna-installer, which would have let a release
-# in a different org substitute the installer every Utah ISO ships.
+# The download comes only from INSTALLER_REPO, tuna-os/bootc-installer -- the
+# sole upstream for bootc-installer and its fisherman backend now that
+# projectbluefin/bootc-installer and projectbluefin/fisherman are archived.
+# An earlier version of this script also fell back to tuna-os/tuna-installer
+# on failure, which would have let a release in a different org substitute
+# the installer every Utah ISO ships; that fallback was removed instead.
 curl --retry 3 --fail --location \
     "https://github.com/${INSTALLER_REPO}/releases/download/${INSTALLER_VERSION}/${BUNDLE}" \
     -o /tmp/bootc-installer.flatpak

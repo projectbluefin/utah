@@ -189,6 +189,18 @@ Production live boot entries configure:
   is planned for future release pipelines, but currently module signing is not
   implemented in-tree and Secure Boot must remain disabled.
 
+`iso/live/src/install-flatpaks.sh` pins the bootc-installer Flatpak bundle to
+a specific `tuna-os/bootc-installer` release rather than resolving
+`/releases/latest/download/` the way dakota-iso does: the bundle installs
+system-wide with `--no-gpg-verify`, so the version pin is the whole trust
+story, and a fixed tag keeps ISO composition reproducible. Its releases are
+tagged by build date + commit sha (e.g. `v2026.09.19-cee9ba29`), not semver,
+so there is no tag-name continuity to lean on when bumping it.
+`UTAH_INSTALLER_VERSION` and `UTAH_INSTALLER_SHA256` must move together —
+take the digest from that release's `org.bootcinstaller.Installer.flatpak`
+asset (`digest` field of `gh api repos/tuna-os/bootc-installer/releases/tags/<tag>`,
+or download and `sha256sum` it) rather than guessing or reusing an old value.
+
 ## Verification
 
 ### Encrypted install and screenshot harness
