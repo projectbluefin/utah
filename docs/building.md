@@ -43,8 +43,8 @@ just check-repos                # every contract package resolves in the enabled
 embedded container store with no network, unlocks the LUKS2 volume at the
 Plymouth prompt, confirms the disk boots on its own, and overwrites
 [`docs/verification/README.md`](verification/README.md) and its screenshots
-with the fresh passing record (`scripts/update-e2e-readme.py`) — that file
-documents exactly what a run proved and when. See
+with the fresh passing record — that file documents exactly what a run
+proved and when. See
 [`skills/local-testing.md`](skills/local-testing.md) for the encrypted and
 plain offline install paths and the `bootc rollback` / `uupd` update policy.
 

@@ -381,9 +381,9 @@ generate-bootable-image stream="testing":
     sync
     echo "Bootable disk ready: $disk"
 
-# Build a single-architecture UEFI live ISO. This first slice proves the
-# Utah live boot path; installer payload integration is intentionally the next
-# ISO milestone.
+# Build a single-architecture UEFI live ISO. `just luks-test` drives the
+# bootc-installer payload this produces through an offline, LUKS2-encrypted
+# install (see docs/verification); this recipe only builds the media.
 iso stream="testing" debug="0":
     #!/usr/bin/env bash
     set -euo pipefail
