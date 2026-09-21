@@ -130,20 +130,11 @@ class EvidenceTests(unittest.TestCase):
         self.assertIn("env LIBGL_ALWAYS_SOFTWARE=1 MESA_LOADER_DRIVER_OVERRIDE=llvmpipe ",
                        exec_line)
         self.assertTrue(exec_line.endswith("flatpak --system run ${TERMINAL_APP}"))
-
-    def test_no_gdk_disable_override_survives_in_the_iso_build(self):
-        # The autostart assertion above covers the line the test harness
-        # writes. The disproven approach -- `flatpak override --env=GDK_DISABLE`
-        # -- lived in install-flatpaks.sh instead, and Ghostty setenv(3)s
-        # GDK_DISABLE with overwrite=1 right before gtk_init, so an override
-        # there is silently clobbered rather than failing loudly. Nothing
-        # asserted its removal, so it could return as a plausible-looking fix
-        # for the next GPU-less rendering failure and cost the same debugging
-        # round again.
-        self.assertNotIn(
-            "GDK_DISABLE",
-            (ROOT / "iso/live/src/install-flatpaks.sh").read_text(),
-        )
+        # The disproven `flatpak override --env=GDK_DISABLE=...` route (see
+        # comment above) was added and reverted during review; assert it
+        # never comes back in the installer script either.
+        installer = (ROOT / "iso/live/src/install-flatpaks.sh").read_text()
+        self.assertNotIn("GDK_DISABLE", installer)
 
     def test_iso_budget_guard_fails_closed_above_ceiling(self):
         # The budget guard (#128) is the whole point of the size drift this PR
