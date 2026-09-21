@@ -145,6 +145,15 @@ mcopy -i "${ESP}" "${INITRD}" ::/images/pxeboot/initrd.img
 # Documented exception (Issue #22): rootless podman unshare cannot write security.selinux
 # xattrs into the squashfs root, leaving it unlabeled. enforcing=0 is required for live boot
 # to avoid systemd/GDM denials until xattr-preserving rootfs assembly is implemented.
+#
+# This applies for every DEBUG value, which was unremarkable while every ISO
+# was disposable. Since post-testing-e2e.yml began retaining the DEBUG=0 build
+# for 30 days as "production-iso-*", it is no longer only a test concern: a
+# permissive live boot is a product decision, tracked with signing and Secure
+# Boot in #186, and must be settled there before any of these ISOs reach
+# users. DEBUG=0 does still exclude the test credentials and sshd path
+# (iso/live/src/configure-live.sh), so the retained artifact carries no
+# secrets; it is simply not release media.
 cat > "${WORK}/utah-live.conf" <<EOF
  title   ${TITLE}
  linux   /images/pxeboot/vmlinuz

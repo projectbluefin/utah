@@ -175,6 +175,25 @@ promotion prerequisite, so a failed production build cannot advance testing
 tags. Debug ISOs and guest disks are never uploaded because they contain test
 credentials.
 
+**"Production" names the `DEBUG=0` build, not shippable media.** `DEBUG=0`
+does exclude the test credentials and sshd path (`iso/live/src/configure-live.sh`),
+so the retained artifact carries no secrets — but `iso/scripts/build-iso.sh`
+hard-codes `enforcing=0 console=ttyS0,115200n8` on the boot entry for every
+`DEBUG` value (the documented Issue #22 exception: rootless `podman unshare`
+cannot write `security.selinux` xattrs into the squashfs root), so this ISO
+boots SELinux-permissive with a serial console.
+That was unremarkable while ISOs were disposable; retaining them for
+30 days under the name "production" makes it worth stating plainly. Running
+the live environment permissive is a product decision, and it belongs to #186
+along with signing and Secure Boot — it must be settled there before any of
+these ISOs reach users. Do not treat a green `production-iso` job as evidence
+that the media is release-ready.
+
+Each retained ISO is multi-GB (the size budget in `iso/scripts/build-iso.sh`
+is the ceiling, not the measured size), per flavor, per dispatch, at 30-day
+retention. That is real Actions storage; if the matrix widens, revisit the
+retention window before the flavor count.
+
 Every matrix job preserves build/test logs, serial logs, and screenshots,
 including on failure. Only passing jobs upload `docs/verification` with the
 source commit, original build run, E2E run, image digest and ISO checksum.

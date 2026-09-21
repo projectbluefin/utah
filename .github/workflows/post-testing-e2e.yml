@@ -186,6 +186,15 @@ jobs:
           bash iso/scripts/build-iso.sh "$IMAGE_REF" "$PWD/output/utah-live.iso" \
             "Utah Live" 0 "$IMAGE_REF"
           (cd output && sha256sum utah-live.iso > utah-live.iso.sha256)
+      # "production" is the DEBUG=0 build, not shippable media. DEBUG=0 keeps
+      # the test credentials and sshd path out (iso/live/src/configure-live.sh),
+      # so nothing secret is retained -- but build-iso.sh applies
+      # `enforcing=0 console=ttyS0,115200n8` for every DEBUG value, so this
+      # boots SELinux-permissive. Whether the live environment ships that way
+      # is a product decision tracked in #186 alongside signing and Secure
+      # Boot; a green job here is not evidence the media is release-ready.
+      # Multi-GB per flavor per dispatch at 30 days: revisit the window before
+      # widening the matrix.
       - name: Retain production ISO
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
