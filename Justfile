@@ -129,9 +129,33 @@ check-desktop-contract image_ref="localhost/utah:testing":
 
 # Fail fast when a contract package is in none of the repositories the image
 # actually enables, instead of discovering it twenty minutes into a build.
+#
+# The pinned base image is pulled from a remote registry here, so a CDN that
+# drops a blob mid-read fails this gate before a single package is evaluated.
+# Exit 125 is the container engine refusing to run the container at all, which
+# is that failure and not a verdict about the package set. The flavor builds
+# already retry their registry work, and this gate gates them, so a transient
+# here is strictly more expensive than one there. Retry 125 and nothing else:
+# a real resolution failure must stay immediate and loud rather than paying for
+# three slow dnf resolves to reach the same answer.
+#
 # Resolves dependencies on the pinned base and package image. Needs podman and network.
 check-repos:
-    python3 scripts/check-repo-availability.py packages/bluefin.toml packages/utah.toml
+    #!/usr/bin/env bash
+    set -uo pipefail
+    for attempt in 1 2 3; do
+      python3 scripts/check-repo-availability.py packages/bluefin.toml packages/utah.toml
+      status=$?
+      if [ "$status" -ne 125 ]; then
+        exit "$status"
+      fi
+      echo "check-repos: container engine could not run (exit 125), attempt ${attempt}/3" >&2
+      if [ "$attempt" -ne 3 ]; then
+        sleep $(( attempt * 15 ))
+      fi
+    done
+    echo "check-repos: giving up after 3 engine failures; the registry is not serving the pinned image" >&2
+    exit 125
 
 # packages/bluefin.toml is a verbatim copy of Bluefin's base.toml.  Drift here
 # is a parity bug, so make it loud rather than letting it accumulate quietly.
