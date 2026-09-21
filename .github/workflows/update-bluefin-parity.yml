@@ -47,9 +47,19 @@ jobs:
             printf "Updates the Bluefin package contract from \`%s\` to \`%s\`.\n\n" \
               "$current_ref" "$upstream_ref"
             printf 'This PR intentionally does not auto-merge; review any required Utah overlay changes before adopting the upstream package set.\n\n'
-            printf '## Upstream diff\n\n```diff\n'
-            git diff --no-ext-diff --unified=3 -- packages/bluefin.toml
-            printf '\n```\n'
+            printf '## Upstream diff\n\n'
+            diff_body="$(git diff --no-ext-diff --unified=3 -- packages/bluefin.toml)"
+            # Fence must be longer than the longest backtick run the upstream
+            # diff contains, or an upstream base.toml line of exactly ``` would
+            # close the fence early and let unrelated upstream text render as
+            # raw markdown in the bump PR body.
+            longest_run=$(printf '%s\n' "$diff_body" | { grep -oE '`+' || true; } | awk '{ print length }' | sort -rn | head -1)
+            fence_len=$(( ${longest_run:-0} + 1 ))
+            [[ "$fence_len" -lt 3 ]] && fence_len=3
+            fence=$(printf '`%.0s' $(seq 1 "$fence_len"))
+            printf '%sdiff\n' "$fence"
+            printf '%s\n' "$diff_body"
+            printf '%s\n' "$fence"
           } > "$RUNNER_TEMP/bluefin-parity-pr.md"
           echo "changed=true" >> "$GITHUB_OUTPUT"
 
