@@ -184,11 +184,15 @@ not an atomic multi-tag transaction: a registry failure can interrupt promotion
 after a partial copy.
 
 A separate least-privilege job proposes the main desktop's screenshots in
-`automation/iso-verification`, a documentation PR. It updates only the README
-evidence block and `docs/verification/`, preserving the current README's other
-content. The repository must allow Actions to create pull requests; a denied
-write fails this job visibly, without deleting test artifacts. It does not
-auto-merge the evidence PR or imply a fresh pass for a different commit.
+`automation/iso-verification`, a documentation PR. It also depends on
+`production-iso`, so a failed production-ISO composition blocks this
+screenshot-refresh PR too, not just testing-tag promotion — a LUKS-only
+concern in `docs/verification` still has to wait on the whole matrix
+composing cleanly. It updates only the README evidence block and
+`docs/verification/`, preserving the current README's other content. The
+repository must allow Actions to create pull requests; a denied write fails
+this job visibly, without deleting test artifacts. It does not auto-merge
+the evidence PR or imply a fresh pass for a different commit.
 
 For a deliberate rerun, dispatch Post-Testing E2E with `build_run_id` from a
 successful testing build containing the current harness. Do not pass a PR
