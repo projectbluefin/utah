@@ -1,7 +1,7 @@
 ---
 name: local-testing
 version: "1.0"
-last_updated: "2026-09-18"
+last_updated: "2026-09-21"
 id: local-testing
 one_line_purpose: Build, install, and boot Utah locally in a VM or live ISO.
 entry_point: docs/skills/local-testing.md
@@ -208,6 +208,18 @@ local fastfetch capture waits after terminal autostart by default. CI sets
 kernel output, and `UTAH_E2E_REQUIRE_SCREENSHOTS=1` to reject missing PNGs.
 CI retains the tested commit/image digest and proposes evidence updates in a
 documentation PR only after all flavors pass. See [ci-workflows.md](ci-workflows.md).
+
+Ghostty is the only terminal the harness's fastfetch capture can show, and
+this VM never has a GPU (plain stdvga, no `/dev/dri`), so its terminal
+autostart entry (`iso/scripts/luks-e2e.sh`) launches it with
+`LIBGL_ALWAYS_SOFTWARE=1 MESA_LOADER_DRIVER_OVERRIDE=llvmpipe`. A
+`flatpak override --env=GDK_DISABLE=...` looks like the obvious fix but does
+not work: Ghostty computes `GDK_DISABLE` from a hardcoded struct and
+`setenv(3)`s it with `overwrite=1` right before `gtk_init`, clobbering any
+inherited value, and an upstream build on 2026-09-20 dropped `gles-api` from
+that struct and broke every flavor's harness run this way (#183). The two
+Mesa variables above are never among the ones Ghostty itself sets, so they
+are the ones that actually reach the process.
 
 The harness blocks outbound guest networking while retaining loopback-only
 SSH forwards, so installation cannot silently fall back to an online pull.

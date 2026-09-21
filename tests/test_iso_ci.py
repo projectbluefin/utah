@@ -107,6 +107,44 @@ class EvidenceTests(unittest.TestCase):
         self.assertIn("rd.live.image", script)
         self.assertIn("rd.live.overlay.overlayfs=1", script)
 
+    def test_terminal_autostart_forces_software_gl_rendering(self):
+        # #183: Ghostty computes GDK_DISABLE from a hardcoded struct and
+        # setenv(3)s it with overwrite=1 right before gtk_init (upstream
+        # src/apprt/gtk/class/application.zig, gtk_ghostty_application
+        # scope), so neither this script nor a `flatpak override --env` can
+        # steer it: an upstream build on 2026-09-20 dropped `gles-api` from
+        # that struct, and every flavor's terminal exited without ever
+        # mapping a window under QEMU's GPU-less VGA device ("MESA: error:
+        # ZINK: failed to choose pdev", then "gtk_ghostty_surface: failed to
+        # initialize surface"). LIBGL_ALWAYS_SOFTWARE and
+        # MESA_LOADER_DRIVER_OVERRIDE are never among the variables Ghostty
+        # itself setenv(3)s (only LANG, GDK_DEBUG and GDK_DISABLE are), so
+        # they survive into the sandboxed process and force llvmpipe
+        # directly -- assert the fix that actually reaches the process, not
+        # a GDK_DISABLE override Ghostty is proven to clobber.
+        script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
+        marker = "cat > ~/.config/autostart/"
+        autostart = script[script.index(marker):script.index("\nEOF", script.index(marker))]
+        exec_line = next(l for l in autostart.splitlines() if l.startswith("Exec="))
+        self.assertNotIn("GDK_DISABLE", exec_line)
+        self.assertIn("env LIBGL_ALWAYS_SOFTWARE=1 MESA_LOADER_DRIVER_OVERRIDE=llvmpipe ",
+                       exec_line)
+        self.assertTrue(exec_line.endswith("flatpak --system run ${TERMINAL_APP}"))
+
+    def test_no_gdk_disable_override_survives_in_the_iso_build(self):
+        # The autostart assertion above covers the line the test harness
+        # writes. The disproven approach -- `flatpak override --env=GDK_DISABLE`
+        # -- lived in install-flatpaks.sh instead, and Ghostty setenv(3)s
+        # GDK_DISABLE with overwrite=1 right before gtk_init, so an override
+        # there is silently clobbered rather than failing loudly. Nothing
+        # asserted its removal, so it could return as a plausible-looking fix
+        # for the next GPU-less rendering failure and cost the same debugging
+        # round again.
+        self.assertNotIn(
+            "GDK_DISABLE",
+            (ROOT / "iso/live/src/install-flatpaks.sh").read_text(),
+        )
+
     def test_iso_budget_guard_fails_closed_above_ceiling(self):
         # The budget guard (#128) is the whole point of the size drift this PR
         # closes. Extract the real block and run it with du stubbed so we can

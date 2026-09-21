@@ -525,11 +525,28 @@ window-height = ${TERMINAL_ROWS}
 CFG
     done
     mkdir -p ~/.config/autostart
+    # This VM never has a GPU (VGA_ARGS above is plain stdvga, no virtio-gpu,
+    # no /dev/dri), so Ghostty's GTK surface has to fall back to software
+    # rendering. It used to get there via GDK_DISABLE=gles-api,vulkan, which
+    # steered GDK away from the EGL/GLES path onto a GLX path that Mesa could
+    # still soften. Ghostty computes GDK_DISABLE itself from a hardcoded
+    # struct and setenv(3)s it with overwrite=1 right before gtk_init --
+    # https://github.com/ghostty-org/ghostty src/apprt/gtk/class/application.zig,
+    # gtk_ghostty_application scope -- so any value this script or a flatpak
+    # override sets is clobbered unconditionally; only the fields Ghostty
+    # itself compiles in ever apply, and an upstream build on 2026-09-20
+    # dropped gles-api from that struct, taking the GLX fallback with it
+    # (\"MESA: error: ZINK: failed to choose pdev\", then \"gtk_ghostty_surface:
+    # failed to initialize surface\") (#183). LIBGL_ALWAYS_SOFTWARE and
+    # MESA_LOADER_DRIVER_OVERRIDE are never touched by Ghostty's own setenv
+    # calls (only LANG, GDK_DEBUG and GDK_DISABLE are), so they survive into
+    # the sandboxed process and force llvmpipe directly, without depending on
+    # whichever GDK path Ghostty's own default happens to select.
     cat > ~/.config/autostart/${TERMINAL_APP}.desktop <<EOF
 [Desktop Entry]
 Type=Application
 Name=Terminal
-Exec=flatpak --system run ${TERMINAL_APP}
+Exec=env LIBGL_ALWAYS_SOFTWARE=1 MESA_LOADER_DRIVER_OVERRIDE=llvmpipe flatpak --system run ${TERMINAL_APP}
 X-GNOME-Autostart-enabled=true
 EOF
 " || fail "could not write the terminal autostart entry"
