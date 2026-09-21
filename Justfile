@@ -93,6 +93,9 @@ check:
     # The status page's package grid is generated from the manifests; a stale
     # committed copy would publish a list the image no longer installs.
     python3 scripts/generate-site-data.py --check
+    # README.md and docs/skills/package-contract.md quote the same package
+    # counts by hand; catch it before the manifests move and the prose does not.
+    python3 scripts/check-doc-counts.py
     python3 scripts/install-packages.py --check --repos-dir packages packages/bluefin.toml
     python3 scripts/verify-rpm-contract.py --check packages/bluefin.toml
     # run the host-side unit suite (tests/test_*.py) via its dedicated recipe

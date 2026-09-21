@@ -25,6 +25,29 @@ noVNC and SSH ports; SSH is available only when the image was built with
 unified-storage's registry repull; published images omit that argument and keep
 the service enabled.
 
+## Validate the release-readiness gates
+
+Once `boot-vm` confirms the desktop boots, the rest of the adopted gates run
+locally too:
+
+```bash
+just iso testing 1              # build a debug live ISO (needed for luks-test)
+just boot-iso                   # boot the live session and confirm the installer is there
+just luks-test                  # install to an encrypted disk over SSH, boot it, log in
+just try-installed              # re-boot the disk luks-test installed, with a browser console
+just check-desktop-contract     # branding, services, and Flatpak policy against a built image
+just check-repos                # every contract package resolves in the enabled repositories
+```
+
+`just luks-test` drives `iso/scripts/luks-e2e.sh`: it installs from the ISO's
+embedded container store with no network, unlocks the LUKS2 volume at the
+Plymouth prompt, confirms the disk boots on its own, and overwrites
+[`docs/verification/README.md`](verification/README.md) and its screenshots
+with the fresh passing record (`scripts/update-e2e-readme.py`) — that file
+documents exactly what a run proved and when. See
+[`skills/local-testing.md`](skills/local-testing.md) for the encrypted and
+plain offline install paths and the `bootc rollback` / `uupd` update policy.
+
 ## Deep documentation
 
 | Topic | Skill |
