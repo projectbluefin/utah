@@ -22,7 +22,7 @@ metadata:
 
 # CI Workflows
 
-Six workflows, all thin callers into `projectbluefin/actions@v1` reusables
+Seven workflows, all thin callers into `projectbluefin/actions@v1` reusables
 or pinned third-party actions:
 
 - `.github/workflows/build.yml` -- pull requests, pushes to `testing`, a
@@ -55,6 +55,11 @@ or pinned third-party actions:
   through the release gate.
 - `.github/workflows/post-testing-e2e.yml` -- successful non-PR testing builds
   explicitly dispatch this, or manually supply a successful testing build run ID.
+- `.github/workflows/pages.yml` -- pushes to `main` touching `site/**`, the
+  package manifests, or the site generator, plus manual dispatch. It verifies
+  the committed site data matches the manifests (`generate-site-data.py
+  --check`) before deploying to GitHub Pages; deployments are serialized and
+  never cancelled in flight.
 
 CI delegates builds, vulnerability reporting, keyless signatures, provenance,
 and caching to `projectbluefin/actions@v1` (originated as a `docs/building.md`
