@@ -185,7 +185,11 @@ qemu_pids=()
 preserve_failed_disk_diagnostics() {
     [[ -f "${INSTALL_DISK}" ]] || return 0
     local out="${WORK}/failed-disk-info-$(date +%Y%m%d-%H%M%S).log"
-    { echo "=== qemu-img info: ${INSTALL_DISK} ==="; qemu-img info "${INSTALL_DISK}"; } \
+    # -U: this runs from the EXIT trap, before the kill loop below has stopped
+    # QEMU, so the image is still write-locked by the running guest. Without
+    # it the retained log holds a "Failed to get shared 'write' lock" error
+    # instead of the size and format the diagnostic exists to record.
+    { echo "=== qemu-img info: ${INSTALL_DISK} ==="; qemu-img info -U "${INSTALL_DISK}"; } \
         > "${out}" 2>&1 || true
     echo "  disk diagnostics kept (metadata only, never the disk itself): ${out}" >&2
 }
@@ -536,11 +540,25 @@ echo "Verifying the installed system booted the offline embedded payload..."
 # resolved *RPM* contract written at image-build time by
 # scripts/install-packages.py; its presence says nothing about which OCI
 # image or digest actually got deployed.)
-booted_image="$(ssh_target 'bootc status --json' 2>/dev/null \
-    | python3 -c 'import json, sys; print(json.load(sys.stdin)["status"]["booted"]["image"]["image"]["image"])' 2>/dev/null || true)"
-[[ "${booted_image}" == "${PAYLOAD_IMAGE}" ]] \
-    || fail "installed system booted '${booted_image:-<unreadable>}', not the offline payload '${PAYLOAD_IMAGE}'"
-echo "  booted image: ${booted_image}"
+#
+# Read unprivileged first, and retry under sudo (${TEST_USER} is in wheel, set
+# up that way by the recipe in phase 3) if that returns nothing: whether bootc
+# lets a normal user read its status varies by version, and an unreadable
+# status is not evidence of a substituted image. Set UTAH_E2E_PAYLOAD_CHECK=""
+# to skip this gate entirely, the same escape hatch UTAH_E2E_FLATPAKS gives the
+# Flatpak assertion below.
+if [[ -n "${UTAH_E2E_PAYLOAD_CHECK-x}" ]]; then
+    read_booted_image() {
+        ssh_target "$1" 2>/dev/null \
+            | python3 -c 'import json, sys; print(json.load(sys.stdin)["status"]["booted"]["image"]["image"]["image"])' 2>/dev/null || true
+    }
+    booted_image="$(read_booted_image 'bootc status --json')"
+    [[ -n "${booted_image}" ]] || booted_image="$(read_booted_image \
+        "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' bootc status --json")"
+    [[ "${booted_image}" == "${PAYLOAD_IMAGE}" ]] \
+        || fail "installed system booted '${booted_image:-<unreadable>}', not the offline payload '${PAYLOAD_IMAGE}'"
+    echo "  booted image: ${booted_image}"
+fi
 
 echo "=== Phase 7/7: log in and prove the desktop starts ==="
 ssh_target 'systemctl is-active gdm.service' 2>/dev/null | grep -qx active \
