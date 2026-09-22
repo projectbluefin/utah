@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-19",
+  "generated_at": "2026-09-22",
   "generator": "scripts/generate-site-data.py",
   "groups": [
     {
@@ -124,6 +124,19 @@
       "transient": false
     },
     {
+      "blurb": "Device firmware the bootable base leaves out, so a driver that needs a blob can find one.",
+      "id": "hardware",
+      "packages": [
+        "iwlegacy-firmware",
+        "iwlwifi-dvm-firmware",
+        "iwlwifi-mld-firmware",
+        "iwlwifi-mvm-firmware",
+        "linux-firmware"
+      ],
+      "title": "Firmware",
+      "transient": false
+    },
+    {
       "blurb": "Units Bluefin adds on top of the server base; the preset cannot enable what was never installed.",
       "id": "services",
       "packages": [
@@ -151,7 +164,7 @@
     }
   ],
   "totals": {
-    "installed": 102,
+    "installed": 107,
     "unavailable": 9
   },
   "unavailable": [

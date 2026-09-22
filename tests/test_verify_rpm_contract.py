@@ -57,6 +57,7 @@ def write_overlay(
     *,
     gnome: list[str] | None = None,
     parity: list[str] | None = None,
+    hardware: list[str] | None = None,
     services: list[str] | None = None,
     unavailable: list[str] | None = None,
 ) -> Path:
@@ -64,6 +65,7 @@ def write_overlay(
     path.write_text(
         toml_section("gnome", gnome or [])
         + toml_section("parity", parity or [])
+        + toml_section("hardware", hardware or [])
         + toml_section("services", services or [])
         + toml_section("unavailable", unavailable or [])
     )
@@ -166,6 +168,7 @@ class CheckModeTests(unittest.TestCase):
                 directory,
                 gnome=["gnome-shell", "mutter"],
                 parity=["fastfetch", "gh", "just"],
+                hardware=["linux-firmware", "iwlwifi-dvm-firmware"],
                 services=["tailscale"],
             )
             result = self.run_check(manifest, overlay)
@@ -173,6 +176,7 @@ class CheckModeTests(unittest.TestCase):
         self.assertIn("Verifying 1 Bluefin packages", result.stdout)
         self.assertIn("2 GNOME desktop packages", result.stdout)
         self.assertIn("3 parity packages", result.stdout)
+        self.assertIn("2 firmware packages", result.stdout)
         self.assertIn("1 desktop service packages", result.stdout)
 
     def test_nvidia_packages_are_added_only_on_an_nvidia_flavor(self) -> None:
@@ -329,19 +333,22 @@ class ResolvedContractTests(unittest.TestCase):
                 directory,
                 gnome=["gnome-shell"],
                 parity=["fastfetch", "gh"],
+                hardware=["linux-firmware"],
                 services=["tailscale"],
             )
-            installed = {"bash", "coreutils", "gnome-shell", "fastfetch", "gh", "tailscale"}
+            installed = {"bash", "coreutils", "gnome-shell", "fastfetch", "gh",
+                         "linux-firmware", "tailscale"}
             code, out = self.run_main_with_contract(
-                "bash coreutils gnome-shell fastfetch gh tailscale",
+                "bash coreutils gnome-shell fastfetch gh linux-firmware tailscale",
                 manifest, overlay, installed,
             )
         self.assertEqual(code, 0, out)
         self.assertIn("Verifying 2 Bluefin packages", out)
         self.assertIn("1 GNOME desktop packages", out)
         self.assertIn("2 parity packages", out)
+        self.assertIn("1 firmware packages", out)
         self.assertIn("1 desktop service packages", out)
-        self.assertIn("All 6 contract packages are present.", out)
+        self.assertIn("All 7 contract packages are present.", out)
 
     def test_whitespace_separated_contract_is_tolerated(self) -> None:
         """install-packages.py writes the set as a whitespace-joined blob."""

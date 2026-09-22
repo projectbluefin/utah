@@ -79,6 +79,7 @@ class PackageResolutionTests(unittest.TestCase):
                             '[fedora_v44]\npackages=["release-specific"]\n')
             overlay.write_text('[gnome]\npackages=["shell"]\n'
                                '[parity]\npackages=["manpages"]\n'
+                               '[hardware]\npackages=["firmware"]\n'
                                '[services]\npackages=["resolver"]\n'
                                '[build]\npackages=["compiler"]\n'
                                '[unavailable]\npackages=["unavailable"]\n')
@@ -94,8 +95,8 @@ class PackageResolutionTests(unittest.TestCase):
         rc, command = self.resolve("Transaction Summary:\nInstall 12 Packages\nOperation aborted.\n")
         self.assertEqual(rc, 0)
         self.assertEqual(command[command.index("install") + 1:],
-                         ["base", "release-specific", "shell", "manpages", "resolver",
-                          "compiler"])
+                         ["base", "release-specific", "shell", "manpages", "firmware",
+                          "resolver", "compiler"])
         self.assertIn("--assumeno", command)
         self.assertIn("--disablerepo=*", command)
         for repo in installer.REPOS:

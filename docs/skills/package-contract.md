@@ -1,7 +1,7 @@
 ---
 name: package-contract
 version: "1.0"
-last_updated: "2026-09-18"
+last_updated: "2026-09-22"
 id: package-contract
 one_line_purpose: Maintain Bluefin package parity and Utah's overlay manifest.
 entry_point: docs/skills/package-contract.md
@@ -12,9 +12,9 @@ status: active
 dependencies: []
 tags: [packages, parity, bluefin, contracts]
 description: >-
-  Bluefin parity contract: verbatim bluefin.toml, utah.toml overlay,
-  [unavailable] rules, repository policy. Use when adding, removing, or
-  debugging packages or parity/check-repos failures.
+  Bluefin parity contract: verbatim bluefin.toml, utah.toml overlay, device
+  firmware, [unavailable] rules, repository policy. Use when adding, removing,
+  or debugging packages or parity/check-repos failures.
 metadata:
   type: policy
 ---
@@ -45,6 +45,13 @@ policy for changing them.
     has in its repository but not in its bootable base; CI's package
     availability step resolves the real transaction and is the gate on every
     name there.
+  - `[hardware]` — device firmware the bootable base leaves out entirely. Its
+    own section rather than `[parity]`, because it is parity with nothing:
+    Hummingbird's repository has no `linux-firmware` to inherit, the factory
+    builds it, and nothing in the image `Requires` it. `linux-firmware` is a
+    split package whose thirteen Recommends omit Intel wireless, so the iwlwifi
+    and iwlegacy packages are named explicitly — the X230's
+    `iwlwifi-6000g2a-6.ucode` ships in `iwlwifi-dvm-firmware` (#97).
   - `[services]` — desktop services Bluefin adds on top of the server base.
   - `[unavailable]` — Bluefin contract packages none of Utah's repositories
     provide.
@@ -158,10 +165,26 @@ default branch, preventing unrelated upstream changes from breaking Utah's CI.
 Update it whenever synchronizing `packages/bluefin.toml` with upstream.
 
 Current counts, per the README "Package parity" section: 58 Bluefin contract
-packages installed, 44 Utah additions (GNOME 51, base-image parity, desktop
-services), 9 genuinely unavailable. `scripts/check-doc-counts.py` (part of
+packages installed, 49 Utah additions (GNOME 51, base-image parity, device
+firmware, desktop services), 9 genuinely unavailable. `scripts/check-doc-counts.py` (part of
 `just check`) recomputes these from the manifests and fails if either
 document drifts from `site/data/packages.json`.
+
+## A section nobody reads installs nothing
+
+`contract()` in `scripts/install-packages.py` composes the install set from an
+explicit list of overlay sections. A section added to `packages/utah.toml` but
+not named there is read by nobody: the build succeeds, `just check` passes, and
+the packages silently never install — the same failure this contract exists to
+catch, one level up. Adding a section means four edits, not one: the section
+and its header entry in `packages/utah.toml`; `contract()`; both buckets in
+`scripts/verify-rpm-contract.py` (the `/usr/share/utah/contract.txt` path and
+the off-image fallback) and its printed count; and `GROUPS` in
+`scripts/generate-site-data.py`, which is what puts the card on the status
+page. `tests/test_package_resolution.py` and `tests/test_verify_rpm_contract.py`
+assert a package in every section reaches the install set and is counted under
+its own heading, so a section wired into one place and not another fails the
+suite rather than shipping quietly.
 
 ## Verification
 

@@ -122,9 +122,9 @@
         "bluefin",
         "contracts"
       ],
-      "description": "Bluefin parity contract: verbatim bluefin.toml, utah.toml overlay, [unavailable] rules, repository policy. Use when adding, removing, or debugging packages or parity/check-repos failures.",
+      "description": "Bluefin parity contract: verbatim bluefin.toml, utah.toml overlay, device firmware, [unavailable] rules, repository policy. Use when adding, removing, or debugging packages or parity/check-repos failures.",
       "version": "1.0",
-      "last_updated": "2026-09-18",
+      "last_updated": "2026-09-22",
       "doc_type": "policy"
     },
     {

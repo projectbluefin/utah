@@ -124,6 +124,12 @@ def contract(base: Path, overlay: Path, major: str | None) -> list[str]:
     # Parity with what Bluefin inherits from Fedora's base image and Hummingbird
     # has in its repository but not in its bootable base.
     packages += section(overlay, "parity")
+    # Device firmware the bootable base leaves out altogether. Its own section
+    # rather than [parity], because it is not parity with anything: Hummingbird
+    # has no linux-firmware to inherit, the factory builds it, and nothing in
+    # the image Requires it. A section named here is a section that installs;
+    # one that is not is read by nobody and ships nothing.
+    packages += section(overlay, "hardware")
     # Service packages are part of the desktop contract as well: 40-services.sh
     # cannot enable what the server base never installed.
     packages += section(overlay, "services")

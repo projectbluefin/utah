@@ -8,6 +8,7 @@
 # Sections:
 #   [gnome]        GNOME 51 desktop contract Hummingbird does not ship
 #   [parity]       what Bluefin gets from Fedora's base image and Hummingbird has
+#   [hardware]     device firmware the bootable base leaves out entirely
 #   [build]        toolchain needed to build the pinned GNOME extensions
 #   [unavailable]  Bluefin contract packages none of Utah's repositories provide
 #
@@ -87,9 +88,12 @@ packages = [
 #   fprintd, fprintd-pam       in no repository (utah-packages#145)
 #   alsa-utils                 in no repository (utah-packages#146)
 #
-# NetworkManager-wifi is deliberately not here yet: its supplicant and the
-# regulatory database are being built by utah-packages#133, and it joins this
-# list when the factory image that carries them is pinned (#126).
+# NetworkManager-wifi is deliberately not here yet: Hummingbird's own build
+# Requires wireless-regdb and (wpa_supplicant or iwd), and none of the three
+# exists in any enabled repository. The factory builds them under
+# utah-packages#136; NetworkManager-wifi joins this list when the factory
+# image that carries them is pinned (#126). Firmware is the other half and
+# lives in [hardware] below -- the radio needs both.
 #
 # unzip is also in [build]; it is listed here because configure-services.sh
 # removes the build tooling after the extension build, and Bluefin ships
@@ -127,6 +131,47 @@ packages = [
     "crypto-policies-scripts",
     "python3-pip",
     "systemd-container",
+]
+
+[hardware]
+# Device firmware. Hummingbird's bootable base carries none: Bluefin inherits
+# linux-firmware from its Fedora Silverblue base, so the name never appears in
+# the parity contract this repository copies byte-for-byte, and nothing in the
+# image Requires it -- the transaction resolves without it and every gate
+# passed on an image that had no firmware at all (#97). A driver that wants a
+# blob then gets
+#   iwlwifi 0000:03:00.0: Direct firmware load for iwlwifi-6000g2a-6.ucode
+#   failed with error -2
+# and the radio never attaches. Read from the pinned factory image's own
+# repodata rather than assumed: the blob the report names is in it, so this is
+# a manifest gap and not a factory gap.
+#
+# The four Intel names are not redundant with linux-firmware, and this is the
+# part that is easy to get wrong. linux-firmware is a split package whose only
+# Requires is linux-firmware-whence; its thirteen Recommends cover amd-gpu,
+# atheros, brcmfmac, cirrus-audio, intel-audio, intel-gpu, mt7xxx,
+# nvidia-gpu, nxpwireless, qcom-wwan, realtek and tiwilink. Intel wireless is
+# in neither list. iwlwifi-6000g2a-6.ucode -- the exact blob the X230 report
+# names -- ships in iwlwifi-dvm-firmware, so adding linux-firmware alone would
+# have closed #97 with the radio just as dead. The other device families do
+# arrive through the Recommends, which the install keeps: the image
+# transaction does not set install_weak_deps=False.
+#
+# microcode_ctl is deliberately absent. It is in neither enabled repository,
+# so naming it would fail the transaction outright rather than record a gap;
+# CPU errata updates need a factory recipe first and are worth their own
+# issue.
+#
+# Necessary, not sufficient: with the firmware present the driver loads, but
+# NetworkManager still does not manage the interface until NetworkManager-wifi
+# can be installed. That half is blocked on the factory, and [parity] above
+# records why.
+packages = [
+    "linux-firmware",
+    "iwlwifi-dvm-firmware",
+    "iwlwifi-mvm-firmware",
+    "iwlwifi-mld-firmware",
+    "iwlegacy-firmware",
 ]
 
 [build]
