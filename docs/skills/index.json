@@ -52,7 +52,7 @@
       ],
       "description": "The runtime desktop contract in contracts/bluefin-desktop.toml and its in-image verifiers. Use when changing branding, os-release, service presets, GNOME extensions, or first-boot Flatpak behavior.",
       "version": "1.0",
-      "last_updated": "2026-09-18",
+      "last_updated": "2026-09-20",
       "doc_type": "policy"
     },
     {
@@ -106,7 +106,7 @@
       ],
       "description": "Local validation loop: build-ghcr, bootc install to-disk, QEMU/noVNC boot, live ISO boot paths, and Secure Boot strategy. Use when validating changes end-to-end or debugging boot, GDM, or live-session failures.",
       "version": "1.0",
-      "last_updated": "2026-09-18",
+      "last_updated": "2026-09-20",
       "doc_type": "runbook"
     },
     {

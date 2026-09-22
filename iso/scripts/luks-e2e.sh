@@ -112,6 +112,10 @@ ssh_target() {
     sshpass -p "${TEST_PASSWORD}" ssh "${SSH_OPTS[@]}" \
         -p "${SSH_PORT_INSTALLED}" "${TEST_USER}@127.0.0.1" "$@"
 }
+sudo_target() {
+    printf '%s\n' "${TEST_PASSWORD}" \
+        | ssh_target "sudo -S -p '' env PKEXEC_UID=\"\$(id -u)\" $*"
+}
 
 monitor() {
     python3 - "$1" "$2" <<'PY'
@@ -664,10 +668,152 @@ if [[ "${UTAH_E2E_REQUIRE_SCREENSHOTS:-0}" == 1 ]]; then
     done
 fi
 
+echo "=== Validating Bluefin first-boot services and hooks at runtime ==="
+
+# 1. Assert no failed setup units or services on first boot
+echo "Checking first-boot units for failure..."
+failed_setup_units="$(ssh_target "systemctl list-units --state=failed --no-legend 2>/dev/null | grep -E 'ublue|setup|dconf-update' || true")"
+if [[ -n "${failed_setup_units}" ]]; then
+    echo "Failed setup units found on first boot:" >&2
+    echo "${failed_setup_units}" >&2
+    fail "first boot completed with failed setup units: ${failed_setup_units}"
+fi
+echo "  first-boot setup units: clean (no failures)"
+
+# 2. Flathub and default Flatpaks
+echo "Checking Flathub remote and default Flatpaks..."
+ssh_target 'flatpak remotes | grep -qw flathub' \
+    || fail "Flathub remote is not configured in flatpak remotes"
+echo "  flatpak remote: flathub is configured"
+
+flatpak_status="$(ssh_target '
+    installed="$(flatpak list --app --columns=application 2>/dev/null | grep -v "^$" || true)"
+    if [[ -n "${installed}" ]]; then
+        echo "installed: $(echo "${installed}" | wc -l) flatpaks present"
+    else
+        unit_state="$(systemctl is-active flatpak-preinstall.service 2>/dev/null || systemctl is-failed flatpak-preinstall.service 2>/dev/null || echo "unknown")"
+        if [[ "${unit_state}" == "failed" ]]; then
+            echo "failed: flatpak-preinstall.service failed"
+            exit 1
+        fi
+        echo "retryable-state: flatpak-preinstall.service state=${unit_state}"
+    fi
+')" || fail "Flatpak installation check failed: ${flatpak_status}"
+echo "  flatpak status: ${flatpak_status}"
+
+# 3. Input-remapper and Bluefin statistics enablement policy
+echo "Checking enablement policy for input-remapper and statistics..."
+ssh_target 'systemctl is-enabled input-remapper.service 2>/dev/null' | grep -qxE 'enabled(-runtime)?' \
+    || fail "input-remapper.service is not enabled"
+echo "  input-remapper.service: enabled"
+
+ssh_target 'systemctl is-enabled bluefin-stats-refresh.timer 2>/dev/null' | grep -qxE 'enabled(-runtime)?' \
+    || fail "bluefin-stats-refresh.timer is not enabled"
+echo "  bluefin-stats-refresh.timer: enabled"
+
+# Exercise statistics script (non-fatal, external API call)
+if sudo_target '/usr/libexec/bluefin-refresh-stats'; then
+    echo "  bluefin-refresh-stats: executed cleanly"
+else
+    echo "  bluefin-refresh-stats: warning: execution failed (non-fatal API call)"
+fi
+
+# 4. Update service enablement
+ssh_target 'systemctl is-enabled uupd.timer 2>/dev/null' | grep -qxE 'enabled(-runtime)?' \
+    || fail "uupd.timer is not enabled"
+echo "  uupd.timer: enabled"
+
+# 5. Tailscale hook: never invokes missing binary; deferred state is explicit
+echo "Checking Tailscale setup hook..."
+if ssh_target 'command -v tailscale >/dev/null 2>&1'; then
+    sudo_target '/usr/share/ublue-os/privileged-setup.hooks.d/10-tailscale.sh' \
+        || fail "10-tailscale.sh failed execution when tailscale binary is present"
+    echo "  tailscale binary present: hook executed cleanly"
+else
+    tailscale_hook_out="$(sudo_target '/usr/share/ublue-os/privileged-setup.hooks.d/10-tailscale.sh' 2>&1 || true)"
+    echo "${tailscale_hook_out}" | grep -qi "deferred" \
+        || fail "10-tailscale.sh did not explicitly indicate deferred state when tailscale is missing: ${tailscale_hook_out}"
+    echo "  tailscale binary missing: deferred state confirmed"
+fi
+
+# 6. Privileged and user setup execution
+echo "Exercising ublue-privileged-setup and ublue-user-setup..."
+sudo_target '/usr/bin/ublue-privileged-setup' \
+    || fail "ublue-privileged-setup execution failed"
+echo "  ublue-privileged-setup: OK"
+
+ssh_target '/usr/bin/ublue-user-setup' \
+    || fail "ublue-user-setup execution failed"
+echo "  ublue-user-setup: OK"
+
+# 7. Repeat boot idempotency. This is the only check that proves first-boot
+# operations are idempotent (issue #19), so it runs by default in CI. Locally
+# it is opt-in with UTAH_E2E_REPEAT_BOOT=1, because it adds a second LUKS
+# unlock and graphical boot to the run; UTAH_E2E_REPEAT_BOOT=0 skips it in CI.
+repeat_boot_verified=0
+repeat_boot_default=0
+[[ "${CI:-}" == "true" ]] && repeat_boot_default=1
+if [[ "${UTAH_E2E_REPEAT_BOOT:-${repeat_boot_default}}" == "1" ]]; then
+    echo "Rebooting installed system to verify repeat-boot idempotency..."
+    cp "${SERIAL_INSTALLED}" "${WORK}/installed-serial-boot1.log" 2>/dev/null || true
+    : > "${SERIAL_INSTALLED}"
+
+    sudo_target 'systemctl reboot' 2>/dev/null || true
+    sleep 5
+
+    status=0
+    python3 "${ROOT}/iso/scripts/luks-unlock.py" qemu \
+        "${MONITOR_INSTALLED}" "${PASSPHRASE}" "${SERIAL_INSTALLED}" || status=$?
+    if [[ ${status} -ne 0 ]]; then
+        shot luks-failed-repeat "${MONITOR_INSTALLED}" || true
+        fail "repeat boot LUKS unlock failed (exit ${status})"
+    fi
+
+    echo "Waiting for the installed system to reach graphical target on repeat boot..."
+    for i in $(seq 1 90); do
+        if grep -qa "Reached target.*Graphical" "${SERIAL_INSTALLED}" 2>/dev/null; then
+            echo "  serial: reached graphical target on repeat boot"; break
+        fi
+        [[ "$i" -eq 90 ]] && { diagnose_boot "${SERIAL_INSTALLED}"; fail "repeat boot: no graphical target after 7m30s"; }
+        sleep 5
+    done
+
+    for i in $(seq 1 60); do
+        if ssh_target true 2>/dev/null; then break; fi
+        [[ "$i" -eq 60 ]] && fail "cannot log in over SSH after repeat boot"
+        sleep 5
+    done
+    echo "  ssh: logged in after repeat boot"
+
+    failed_repeat="$(ssh_target "systemctl list-units --state=failed --no-legend 2>/dev/null | grep -E 'ublue|setup|dconf-update' || true")"
+    if [[ -n "${failed_repeat}" ]]; then
+        echo "Failed setup units found on repeat boot:" >&2
+        echo "${failed_repeat}" >&2
+        fail "repeat boot completed with failed setup units: ${failed_repeat}"
+    fi
+
+    sudo_target '/usr/bin/ublue-privileged-setup' || fail "repeat boot: ublue-privileged-setup failed"
+    ssh_target '/usr/bin/ublue-user-setup' || fail "repeat boot: ublue-user-setup failed"
+    repeat_boot_verified=1
+    echo "  repeat boot: idempotent and clean"
+fi
+
 echo
 echo "PASS: Utah installed to an encrypted disk, unlocked, and ${TEST_USER} logged"
 echo "      in to a GNOME session on it."
 echo "Screenshots: ${SHOTS}"
+
+if (( repeat_boot_verified )); then
+    repeat_boot_record="7. The installed disk boots a second time, reaching the graphical target
+   with no failed setup units, and \`ublue-privileged-setup\` and
+   \`ublue-user-setup\` re-run cleanly — first-boot operations are idempotent.
+"
+else
+    repeat_boot_record="
+*Repeat-boot idempotency was not checked in this run; set
+\`UTAH_E2E_REPEAT_BOOT=1\` to include it.*
+"
+fi
 
 # Publish the screenshots as the record of what passed. A run that only prints
 # "PASS" is a claim; the same run with the greeter and the desktop it produced
@@ -714,7 +860,7 @@ the check beside it passed.
 4. Plymouth's passphrase prompt is answered and the root volume opens.
 5. The system reaches the graphical target rather than an emergency shell.
 6. The user logs in at the GDM greeter and gets a GNOME session.
-
+${repeat_boot_record}
 ## Screenshots
 
 ### The installed system, running

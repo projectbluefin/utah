@@ -1,7 +1,7 @@
 ---
 name: local-testing
 version: "1.0"
-last_updated: "2026-09-18"
+last_updated: "2026-09-20"
 id: local-testing
 one_line_purpose: Build, install, and boot Utah locally in a VM or live ISO.
 entry_point: docs/skills/local-testing.md
@@ -206,6 +206,20 @@ test records, not proof that the current commit passed CI. In particular,
 local fastfetch capture waits after terminal autostart by default. CI sets
 `UTAH_E2E_REQUIRE_FASTFETCH=1` to require OCR of its completion marker and
 kernel output, and `UTAH_E2E_REQUIRE_SCREENSHOTS=1` to reject missing PNGs.
+The repeat-boot check reboots the installed disk after the first-boot checks
+and re-runs `ublue-privileged-setup`, `ublue-user-setup` and the failed-unit
+scan. It is the only check proving first-boot operations are idempotent, so it
+is on by default whenever `CI=true`; locally it is opt-in because it adds a
+second LUKS unlock and graphical boot (roughly ten minutes) to the run.
+`UTAH_E2E_REPEAT_BOOT` overrides the default in either direction:
+
+```bash
+UTAH_E2E_REPEAT_BOOT=1 just luks-test   # include it locally
+UTAH_E2E_REPEAT_BOOT=0 ...              # skip it in CI
+```
+
+The generated `docs/verification/README.md` states whether the run included
+the repeat boot, so a record cannot imply an idempotency proof it lacks.
 CI retains the tested commit/image digest and proposes evidence updates in a
 documentation PR only after all flavors pass. See [ci-workflows.md](ci-workflows.md).
 

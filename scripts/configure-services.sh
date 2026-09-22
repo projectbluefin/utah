@@ -74,6 +74,8 @@ enable_unit uupd.timer
 enable_unit ublue-system-setup.service
 enable_unit systemd-resolved.service
 enable_unit bootc-unified-storage.service
+enable_unit input-remapper.service
+enable_unit bluefin-stats-refresh.timer
 
 # Bluefin's Brewfile and Bazaar preinstall hook need the Flathub remote before
 # first boot. Keep this as a .flatpakrepo descriptor so the remote is available

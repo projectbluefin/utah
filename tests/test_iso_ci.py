@@ -185,6 +185,47 @@ class EvidenceTests(unittest.TestCase):
         self.assertIn("missing required screenshot", script)
 
 
+class RepeatBootIdempotencyTests(unittest.TestCase):
+    """Issue #19 asks for proof that first boot is idempotent.
+
+    Only a second boot of the installed disk can give it, and a check that no
+    automated run ever enables proves nothing. The harness therefore turns the
+    repeat boot on whenever CI=true, and an operator can force it either way.
+    """
+
+    SCRIPT = ROOT / "iso/scripts/luks-e2e.sh"
+
+    def decide(self, env):
+        """Evaluate the harness's own default-selection lines under env."""
+        lines = self.SCRIPT.read_text().splitlines()
+        start = next(i for i, l in enumerate(lines) if l.startswith("repeat_boot_default="))
+        snippet = "\n".join(lines[start:start + 2])
+        snippet += '\necho "${UTAH_E2E_REPEAT_BOOT:-${repeat_boot_default}}"'
+        run_env = {"PATH": os.environ["PATH"], **env}
+        out = subprocess.run(["bash", "-c", snippet], capture_output=True, text=True,
+                             env=run_env)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        return out.stdout.strip()
+
+    def test_repeat_boot_runs_in_ci_and_is_opt_in_locally(self):
+        self.assertEqual(self.decide({"CI": "true"}), "1")
+        self.assertEqual(self.decide({}), "0")
+        self.assertEqual(self.decide({"CI": "true", "UTAH_E2E_REPEAT_BOOT": "0"}), "0")
+        self.assertEqual(self.decide({"UTAH_E2E_REPEAT_BOOT": "1"}), "1")
+
+    def test_repeat_boot_rechecks_setup_and_is_named_in_the_record(self):
+        script = self.SCRIPT.read_text()
+        self.assertIn("repeat boot: ublue-privileged-setup failed", script)
+        self.assertIn("repeat boot completed with failed setup units", script)
+        # The generated record must not imply an idempotency proof it lacks.
+        self.assertIn("${repeat_boot_record}", script)
+        self.assertIn("Repeat-boot idempotency was not checked in this run", script)
+
+    def test_repeat_boot_flag_is_documented(self):
+        docs = (ROOT / "docs/skills/local-testing.md").read_text()
+        self.assertIn("UTAH_E2E_REPEAT_BOOT", docs)
+
+
 class FastfetchOcrGateTests(unittest.TestCase):
     """The gate runs against tesseract output, which drops and mangles glyphs."""
 
