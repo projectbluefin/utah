@@ -43,6 +43,13 @@ check:
     grep -q 'disable bootc-fetch-apply-updates.timer' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
     grep -q 'disable bootc-fetch-apply-updates.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
     grep -q 'bootc-fetch-apply-updates.timer' scripts/configure-services.sh
+    # The serial getty is a Hummingbird server leftover that spams the journal
+    # on machines without a serial port; the mask and the preset must both
+    # survive, and the contract has to declare the mask. See #103.
+    grep -q 'serial-getty@ttyS0.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
+    grep -q 'systemctl mask serial-getty@ttyS0.service' scripts/configure-services.sh
+    grep -q 'ln -sf /dev/null /usr/lib/systemd/system/serial-getty@ttyS0.service' scripts/configure-services.sh
+    grep -q 'serial-getty@ttyS0.service' contracts/bluefin-desktop.toml
     test -f scripts/configure-services.sh
     test -f scripts/configure-branding.sh
     test -f scripts/verify-desktop-contract.py

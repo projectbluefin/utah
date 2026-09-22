@@ -1,7 +1,7 @@
 ---
 name: desktop-contract
 version: "1.0"
-last_updated: "2026-09-18"
+last_updated: "2026-09-22"
 id: desktop-contract
 one_line_purpose: Maintain Utah identity, Bluefin desktop defaults, and first-boot Flatpak policy.
 entry_point: docs/skills/desktop-contract.md
@@ -109,6 +109,38 @@ Hummingbird's base does not include `systemd-resolved` by default; it is listed
 under `[services]` in `packages/utah.toml` and configured in
 `scripts/configure-services.sh`, which also disables `PrivateTmp` on
 `systemd-resolved.service` for bootc early-boot DNS resolution.
+
+### The serial getty is masked (#103)
+
+Two Hummingbird defaults compose into a desktop bug. The base declares the
+serial console as a kernel argument in `/usr/lib/bootc/kargs.d/00-base.toml`
+(`console=ttyS0,115200n8`), and systemd-getty-generator instantiates
+`serial-getty@ttyS0.service` for every serial `console=` on the cmdline. On
+hardware with no serial port the agetty dies on EIO and respawns roughly every
+ten seconds for the whole session — 197 journal entries in one boot on the
+ThinkPad X230 that filed it, and a pointless wakeup each time on battery.
+Bluefin carries neither half, which is why it is silent.
+
+The karg cannot be withdrawn from this repository. bootc's `kargs.d` is
+additive only, and removing an argument the base image declared there is
+documented undefined behavior — so Utah pins the outcome instead of the cause
+and masks the unit from both directions the repo already uses:
+
+- `scripts/configure-services.sh` runs `systemctl mask serial-getty@ttyS0.service`
+  and writes the `/usr/lib/systemd/system/serial-getty@ttyS0.service` → `/dev/null`
+  symlink, the same `/etc` + `/usr/lib` pair the update timer uses so a
+  cross-vendor 3-way merge cannot resurrect it.
+- `85-utah-desktop.preset` carries `disable serial-getty@ttyS0.service`.
+  Presets are read in lexicographic order and the first match wins, so 85-*
+  outranks the base's `90-systemd.preset`.
+- `[services].masked` in `contracts/bluefin-desktop.toml` lists the unit, so
+  the in-image verifier fails the build if the mask is dropped.
+
+The mask names the instance, not `serial-getty@.service`: `ttyS0` is the port
+the base names, and a genuinely attached serial device on another port still
+gets its login. A mask is also the only lever that works here — the generator's
+`getty.target.wants` symlink is created in `/run` at boot, so it cannot be
+deleted at build time, and a preset entry alone would not stop it.
 
 ## The verifiers run twice
 

@@ -144,4 +144,8 @@ enabled = [
 masked = [
   "bootc-fetch-apply-updates.service",
   "bootc-fetch-apply-updates.timer",
+  # Hummingbird's server kargs.d declares console=ttyS0, so the getty generator
+  # spawns an agetty on a port desktop hardware does not have. It dies on EIO
+  # and respawns every ~10s for the whole session; see #103.
+  "serial-getty@ttyS0.service",
 ]
