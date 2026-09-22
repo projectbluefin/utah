@@ -8,10 +8,19 @@ set -euo pipefail
 CACHE_DIR=/var/cache/bluefin
 mkdir -p "${CACHE_DIR}"
 
+# These values end up rendered verbatim in user terminals by fastfetch, so
+# never write a string the remote endpoint fully controls: a compromised or
+# spoofed response could otherwise inject ANSI escape sequences into every
+# terminal that runs fastfetch. Accept only short plain counts like
+# "4.2k users" or "12K".
+valid_stat() {
+    [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9.,+\ ]{0,31}$ ]]
+}
+
 # User count from ublue-os/countme
 if count=$(curl -sf --retry 3 --max-time 10 \
     https://raw.githubusercontent.com/ublue-os/countme/main/badge-endpoints/bluefin.json \
-    | jq -r '.message'); then
+    | jq -r '.message') && valid_stat "${count}"; then
     echo "${count}" > "${CACHE_DIR}/fastfetch-user-count"
 fi
 
@@ -19,6 +28,6 @@ fi
 if installs=$(curl -sf --retry 3 --max-time 10 \
     'https://flathub.org/api/v2/stats/io.github.kolunmi.Bazaar?all=false&days=1' \
     | jq -r '.installs_last_7_days' \
-    | numfmt --to=si --round=nearest); then
+    | numfmt --to=si --round=nearest) && valid_stat "${installs}"; then
     echo "${installs}" > "${CACHE_DIR}/bazaar-install-count"
 fi
