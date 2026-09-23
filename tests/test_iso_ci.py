@@ -158,6 +158,10 @@ class EvidenceTests(unittest.TestCase):
         self.assertLess(trigger, fastfetch_shot, "terminal trigger must precede fastfetch shot")
         self.assertIn("installed-desktop.png and installed-fastfetch.png are byte-identical", script)
 
+    def test_local_fastfetch_capture_retries_on_duplicate(self):
+        script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
+        self.assertIn("retrying capture after 10s", script)
+
     def test_iso_budget_guard_fails_closed_above_ceiling(self):
         # The budget guard (#128) is the whole point of the size drift this PR
         # closes. Extract the real block and run it with du stubbed so we can

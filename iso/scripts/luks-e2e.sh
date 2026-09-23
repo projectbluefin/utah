@@ -774,6 +774,13 @@ if [[ "${UTAH_E2E_REQUIRE_FASTFETCH:-0}" == 1 ]]; then
 else
     sleep 20
     shot installed-fastfetch "${MONITOR_INSTALLED}"
+    if [[ -s "${SHOTS}/installed-desktop.png" && -s "${SHOTS}/installed-fastfetch.png" ]]; then
+        if cmp -s "${SHOTS}/installed-desktop.png" "${SHOTS}/installed-fastfetch.png"; then
+            echo "installed-fastfetch matches installed-desktop after 20s; retrying capture after 10s..." >&2
+            sleep 10
+            shot installed-fastfetch "${MONITOR_INSTALLED}"
+        fi
+    fi
 fi
 if [[ "${UTAH_E2E_REQUIRE_SCREENSHOTS:-0}" == 1 ]]; then
     for label in live-desktop installed-greeter installed-desktop installed-fastfetch; do
