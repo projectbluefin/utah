@@ -615,6 +615,7 @@ window-height = ${TERMINAL_ROWS}
 CFG
     done
     mkdir -p ~/.config/autostart
+    rm -f /tmp/utah-e2e-open-terminal
     # This VM never has a GPU (VGA_ARGS above is plain stdvga, no virtio-gpu,
     # no /dev/dri), so Ghostty's GTK surface has to fall back to software
     # rendering. It used to get there via GDK_DISABLE=gles-api,vulkan, which
@@ -632,11 +633,16 @@ CFG
     # calls (only LANG, GDK_DEBUG and GDK_DISABLE are), so they survive into
     # the sandboxed process and force llvmpipe directly, without depending on
     # whichever GDK path Ghostty's own default happens to select.
+    #
+    # Autostart runs at session login, but the harness needs a screenshot of the
+    # clean desktop (installed-desktop.png) before opening the terminal for
+    # installed-fastfetch.png (#240). Hold launch on /tmp/utah-e2e-open-terminal
+    # until the harness triggers it.
     cat > ~/.config/autostart/${TERMINAL_APP}.desktop <<EOF
 [Desktop Entry]
 Type=Application
 Name=Terminal
-Exec=env LIBGL_ALWAYS_SOFTWARE=1 MESA_LOADER_DRIVER_OVERRIDE=llvmpipe flatpak --system run ${TERMINAL_APP}
+Exec=bash -c \"while [ ! -f /tmp/utah-e2e-open-terminal ]; do sleep 1; done; rm -f /tmp/utah-e2e-open-terminal; exec \\\$@\" bash env LIBGL_ALWAYS_SOFTWARE=1 MESA_LOADER_DRIVER_OVERRIDE=llvmpipe flatpak --system run ${TERMINAL_APP}
 X-GNOME-Autostart-enabled=true
 EOF
 " || fail "could not write the terminal autostart entry"
@@ -740,6 +746,10 @@ shot installed-desktop "${MONITOR_INSTALLED}"
 # shot a human actually reads: it names the OS, the kernel and the desktop
 # from inside the installed system, so one image carries what half a dozen
 # assertions above prove separately.
+#
+# Release the gated autostart entry now that the clean desktop screenshot is saved.
+ssh_target "touch /tmp/utah-e2e-open-terminal"
+
 if [[ "${UTAH_E2E_REQUIRE_FASTFETCH:-0}" == 1 ]]; then
     command -v tesseract >/dev/null || fail "tesseract is required for CI screenshot verification"
     fastfetch_seen=0
@@ -769,6 +779,11 @@ if [[ "${UTAH_E2E_REQUIRE_SCREENSHOTS:-0}" == 1 ]]; then
     for label in live-desktop installed-greeter installed-desktop installed-fastfetch; do
         [[ -s "${SHOTS}/${label}.png" ]] || fail "missing required screenshot: ${label}"
     done
+fi
+if [[ -s "${SHOTS}/installed-desktop.png" && -s "${SHOTS}/installed-fastfetch.png" ]]; then
+    if cmp -s "${SHOTS}/installed-desktop.png" "${SHOTS}/installed-fastfetch.png"; then
+        fail "installed-desktop.png and installed-fastfetch.png are byte-identical; they must capture distinct states"
+    fi
 fi
 
 # The default Flatpak set is asserted last, not right after login: the
