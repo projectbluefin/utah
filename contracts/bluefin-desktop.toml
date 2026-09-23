@@ -140,6 +140,7 @@ enabled = [
   "input-remapper.service",
   "ublue-system-setup.service",
   "uupd.timer",
+  "utah-countme.timer",
 ]
 masked = [
   "bootc-fetch-apply-updates.service",

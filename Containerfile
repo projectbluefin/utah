@@ -68,6 +68,7 @@ COPY scripts/install-packages.py \
      scripts/verify-desktop-contract.py \
      scripts/verify-gnome-extensions.py \
      scripts/mirror-shim.sh \
+     scripts/countme.sh \
      /tmp/utah-scripts/
 # Common publishes Bluefin artwork, desktop defaults, Brewfiles, and setup
 # hooks in a separate profile from its shared system files. Both are required:
@@ -89,7 +90,8 @@ RUN for pair in install-packages.py:utah-install-packages \
                 configure-branding.sh:utah-configure-branding \
                 verify-desktop-contract.py:utah-verify-desktop-contract \
                 verify-gnome-extensions.py:utah-verify-gnome-extensions \
-                mirror-shim.sh:utah-mirror-shim; do \
+                mirror-shim.sh:utah-mirror-shim \
+                countme.sh:utah-countme; do \
       install -Dm 0755 "/tmp/utah-scripts/${pair%%:*}" "/usr/local/libexec/${pair##*:}" || exit 1; \
     done && \
     cp -a /tmp/utah-common/. / && \

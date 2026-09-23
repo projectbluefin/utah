@@ -1,0 +1,14 @@
+[Unit]
+Description=Weekly countme analytics ping for Utah
+Documentation=https://projectbluefin.io/analytics
+
+[Timer]
+# Delay the first ping past early-boot networking so it does not join the
+# boot-time thundering herd, then once a week thereafter.
+OnBootSec=20min
+OnCalendar=weekly
+RandomizedDelaySec=6h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

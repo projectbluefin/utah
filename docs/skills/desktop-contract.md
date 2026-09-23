@@ -1,7 +1,7 @@
 ---
 name: desktop-contract
 version: "1.0"
-last_updated: "2026-09-22"
+last_updated: "2026-09-23"
 id: desktop-contract
 one_line_purpose: Maintain Utah identity, Bluefin desktop defaults, and first-boot Flatpak policy.
 entry_point: docs/skills/desktop-contract.md
@@ -57,7 +57,12 @@ The TOML's sections are the contract's table of contents:
 - **`[services]`** — systemd units the preset must enable: `gdm.service`,
   `bluetooth.service`, `ublue-system-setup.service`, `flatpak-preinstall.service`,
   `flatpak-nuke-fedora.service`, `brew-setup.service`, `dconf-update.service`,
-  `bootc-unified-storage.service`, `uupd.timer`. Update policy delegates
+  `bootc-unified-storage.service`, `uupd.timer`, `utah-countme.timer`. The
+  `utah-countme.timer`/`utah-countme.service` pair sends one anonymous weekly
+  "I still exist" ping to `countme.projectbluefin.io` (opt out by creating
+  `/etc/projectbluefin/countme/disabled`); the service is a `oneshot` running
+  `/usr/local/libexec/utah-countme`, which buckets installation age so the
+  analytics dashboard shows an age distribution rather than a raw count. Update policy delegates
   background updates to `uupd.timer`; `bootc-fetch-apply-updates.timer` and
   `bootc-fetch-apply-updates.service` are masked in `/etc` and `/usr/lib` (and
   disabled in `85-utah-desktop.preset`) so cross-vendor `/etc` 3-way merges
