@@ -6,10 +6,18 @@
 # addition to* (or *instead of*) that contract lives here.
 #
 # Sections:
-#   [gnome]        GNOME 51 desktop contract Hummingbird does not ship
-#   [parity]       what Bluefin gets from Fedora's base image and Hummingbird has
-#   [build]        toolchain needed to build the pinned GNOME extensions
-#   [unavailable]  Bluefin contract packages none of Utah's repositories provide
+#   [gnome]           GNOME 51 desktop contract Hummingbird does not ship
+#   [gnome.versions]  required major version of each [gnome] package, asserted
+#                     against the installed NEVRA so a name match cannot stand
+#                     in for a version match
+#   [repositories]    the only RPM repositories allowed to be enabled at runtime
+#   [factory]         contract packages that must resolve from the utah-packages
+#                     factory rebuild, carrying its .bfin release identity
+#   [parity]          what Bluefin gets from Fedora's base image and Hummingbird has
+#   [build]           toolchain needed to build the pinned GNOME extensions
+#   [services]        packages whose units 40-services.sh enables, which the
+#                     bootable base does not already carry
+#   [unavailable]     Bluefin contract packages none of Utah's repositories provide
 #
 # On [multimedia_overrides], which Utah deliberately does not install:
 #
@@ -58,6 +66,112 @@ packages = [
     # ships glibc-all-langpacks; matching it is what makes Region & Language
     # a working control rather than a way to break the terminal.
     "glibc-all-langpacks",
+]
+
+[gnome.versions]
+# Required major versions for GNOME contract packages
+gnome-control-center = "51"
+gnome-session = "51"
+gnome-settings-daemon = "51"
+gnome-shell = "51"
+gsettings-desktop-schemas = "51"
+gtk4 = "4"
+libadwaita = "1"
+mutter = "51"
+xdg-desktop-portal = "1"
+xdg-desktop-portal-gnome = "51"
+glibc-all-langpacks = "2"
+
+[repositories]
+# Explicitly allowed runtime RPM repositories
+allowed = [
+    "public-hummingbird-x86_64-rpms",
+    "utah-packages",
+    "nvidia-container-toolkit",
+]
+
+[factory]
+# Packages expected to resolve from the utah-packages factory rebuild with .bfin
+# release identity. This is a hard build gate, so a name belongs here only if
+# projectbluefin/utah-packages carries a recipe that builds it: .bfin is applied
+# per build job from the buildroot's Hummingbird release tag, so it marks what
+# the factory built, not everything its repository serves. A name the factory
+# does not build resolves from public-hummingbird-x86_64-rpms with .hum and
+# fails the verifier -- which is the point, but only for packages the factory is
+# actually meant to own. Sources the factory declares Hummingbird-owned in its
+# config/hummingbird-provided-sources.json (bootc, dracut, firewalld, gcc,
+# libxcrypt, make, openssh, rust-bootupd) must never be listed here: it has no
+# recipe for them and prunes them from its published repository.
+packages = [
+    # Core GNOME desktop components
+    "gnome-control-center",
+    "gnome-session",
+    "gnome-settings-daemon",
+    "gnome-shell",
+    "gsettings-desktop-schemas",
+    "gtk4",
+    "libadwaita",
+    "mutter",
+    "xdg-desktop-portal",
+    "xdg-desktop-portal-gnome",
+    # Service packages from factory
+    "flatpak",
+    "fwupd",
+    "tailscale",
+    # Bluefin parity packages from factory
+    "adw-gtk3-theme",
+    "adwaita-fonts-all",
+    "alsa-firmware",
+    "alsa-tools-firmware",
+    "containerd",
+    "ddcutil",
+    "distrobox",
+    "evtest",
+    "fastfetch",
+    "flatpak-spawn",
+    "fzf",
+    "gnome-ponytail-daemon",
+    "gnome-tweaks",
+    "google-noto-sans-cjk-vf-fonts",
+    "grub2-efi-x64-cdboot",
+    "gum",
+    "gvfs-nfs",
+    "ibus-mozc",
+    "ibus-unikey",
+    "igt-gpu-tools",
+    "input-remapper",
+    "isomd5sum",
+    "just",
+    "libappindicator-gtk3",
+    "libayatana-appindicator-gtk3",
+    "libblockdev-btrfs",
+    "libblockdev-dm",
+    "libblockdev-lvm",
+    "libblockdev-mpath",
+    "libcamera-gstreamer",
+    "libcamera-tools",
+    "libratbag-ratbagd",
+    "libva-utils",
+    "livesys-scripts",
+    # make is deliberately not here. The factory declares it Hummingbird-owned
+    # in config/hummingbird-provided-sources.json, has no packages/make recipe,
+    # and prunes any previously published make RPM from its repository, so it
+    # resolves from public-hummingbird-x86_64-rpms with a .hum release and no
+    # .bfin. Listing it would fail every image build.
+    "mesa-libGLU",
+    "mozc",
+    "nautilus-gsconnect",
+    "openrgb-udev-rules",
+    "pipewire-libs-extra",
+    "python3-gnome-ponytail-daemon",
+    "squashfs-tools",
+    "switcheroo-control",
+    "waypipe",
+    "wireguard-tools",
+    "wl-clipboard",
+    "xdg-terminal-exec",
+    "xorriso",
+    "zenity",
 ]
 
 [parity]

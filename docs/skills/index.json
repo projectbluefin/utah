@@ -112,7 +112,7 @@
     {
       "id": "package-contract",
       "name": "package-contract",
-      "one_line_purpose": "Maintain Bluefin package parity and Utah's overlay manifest.",
+      "one_line_purpose": "Maintain Bluefin package parity, supply-chain attestation, and repository policy.",
       "entry_point": "docs/skills/package-contract.md",
       "category": "contracts",
       "status": "active",
@@ -120,11 +120,13 @@
         "packages",
         "parity",
         "bluefin",
-        "contracts"
+        "contracts",
+        "supply-chain",
+        "provenance"
       ],
-      "description": "Bluefin parity contract: verbatim bluefin.toml, utah.toml overlay, [unavailable] rules, repository policy. Use when adding, removing, or debugging packages or parity/check-repos failures.",
-      "version": "1.0",
-      "last_updated": "2026-09-18",
+      "description": "Bluefin parity contract: verbatim bluefin.toml, utah.toml overlay, supply-chain NEVRA attestation, repository allowlist, and build provenance. Use when modifying packages, repository policy, or resolving parity failures.",
+      "version": "1.1",
+      "last_updated": "2026-09-20",
       "doc_type": "policy"
     },
     {

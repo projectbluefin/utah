@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import json
 import os
 import subprocess
 import sys
@@ -59,13 +60,30 @@ def write_overlay(
     parity: list[str] | None = None,
     services: list[str] | None = None,
     unavailable: list[str] | None = None,
+    gnome_versions: dict[str, str] | None = None,
+    allowed_repos: list[str] | None = None,
+    factory: list[str] | None = None,
 ) -> Path:
     path = directory / "utah.toml"
+    gnome_pkgs = gnome or []
+    versions = gnome_versions if gnome_versions is not None else {p: "51" for p in gnome_pkgs}
+    repos = allowed_repos if allowed_repos is not None else [
+        "public-hummingbird-x86_64-rpms",
+        "utah-packages",
+        "nvidia-container-toolkit",
+    ]
+    factory_pkgs = factory if factory is not None else list(parity or [])
+    versions_toml = "\n".join(f'"{k}" = "{v}"' for k, v in versions.items())
+    repos_toml = ", ".join(f'"{r}"' for r in repos)
+    factory_toml = ", ".join(f'"{f}"' for f in factory_pkgs)
     path.write_text(
-        toml_section("gnome", gnome or [])
+        toml_section("gnome", gnome_pkgs)
+        + (f"[gnome.versions]\n{versions_toml}\n" if versions_toml else "[gnome.versions]\n")
         + toml_section("parity", parity or [])
         + toml_section("services", services or [])
         + toml_section("unavailable", unavailable or [])
+        + f"[repositories]\nallowed = [{repos_toml}]\n"
+        + f"[factory]\npackages = [{factory_toml}]\n"
     )
     return path
 
@@ -213,6 +231,25 @@ class CheckModeTests(unittest.TestCase):
         is_installed.assert_not_called()
 
 
+def mock_query_pkgs(pkgs: list[str], installed: set[str]):
+    found = {}
+    missing = []
+    for p in pkgs:
+        if p in installed:
+            found[p] = {
+                "name": p,
+                "epoch": "0",
+                "version": "51.0" if p == "gnome-shell" else "1.0",
+                "release": "1.hum1.bfin" if p in ("gnome-shell", "fastfetch", "gh", "tailscale") else "1.hum1",
+                "arch": "x86_64",
+                "nevra": f"{p}-1.0.x86_64",
+                "origin": "factory" if p in ("gnome-shell", "fastfetch", "gh", "tailscale") else "hummingbird",
+            }
+        else:
+            missing.append(p)
+    return found, missing
+
+
 class VerifyModeTests(unittest.TestCase):
     """Without --check the verifier asserts the packages are really installed."""
 
@@ -220,14 +257,25 @@ class VerifyModeTests(unittest.TestCase):
         self.module = load_module()
 
     def run_main(self, manifest: Path, overlay: Path, installed: set[str],
-                 flavor: str = "main") -> tuple[int, str]:
+                 flavor: str = "main", report_dir: Path | None = None,
+                 policy_root: Path | None = None) -> tuple[int, str]:
         argv = ["verify-rpm-contract.py", str(manifest), str(overlay)]
         stdout = io.StringIO()
-        with patch.object(self.module, "is_installed", side_effect=lambda p: p in installed), \
-                patch.object(sys, "argv", argv), \
-                patch.dict(os.environ, {"IMAGE_FLAVOR": flavor}), \
-                redirect_stdout(stdout):
-            code = self.module.main()
+        with tempfile.TemporaryDirectory() as scratch:
+            # The verifier retains its provenance report on disk. Without this
+            # redirect these tests write into the host's /usr/share/utah.
+            # UTAH_POLICY_ROOT does the same for the repository allowlist: left
+            # at /, the result would depend on whatever DNF configuration the
+            # machine running the tests happens to carry.
+            env = {"IMAGE_FLAVOR": flavor,
+                   "UTAH_REPORT_DIR": str(report_dir or Path(scratch) / "report"),
+                   "UTAH_POLICY_ROOT": str(policy_root or Path(scratch) / "root")}
+            with patch.object(self.module, "is_installed", side_effect=lambda p: p in installed), \
+                    patch.object(self.module, "query_packages", side_effect=lambda pkgs: mock_query_pkgs(pkgs, installed)), \
+                    patch.object(sys, "argv", argv), \
+                    patch.dict(os.environ, env), \
+                    redirect_stdout(stdout):
+                code = self.module.main()
         return code, stdout.getvalue()
 
     def test_a_fully_installed_contract_passes(self) -> None:
@@ -274,6 +322,128 @@ class VerifyModeTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("  - nvidia-container-toolkit\n", stderr.getvalue())
 
+    def test_the_repository_allowlist_is_applied_to_the_attested_root(self) -> None:
+        """main() really runs the repository policy, and the tests choose its root.
+
+        Left at /, the verdict would come from whatever DNF configuration the
+        machine running the tests happens to carry: green on a runner with no
+        /etc/yum.repos.d, red on any Fedora host. UTAH_POLICY_ROOT makes the
+        filesystem being attested part of the test.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(directory)
+            policy_root = directory / "root"
+            (policy_root / "etc/yum.repos.d").mkdir(parents=True)
+            (policy_root / "etc/yum.repos.d/fedora.repo").write_text(
+                "[fedora]\nname=Fedora\nenabled=1\n"
+            )
+            stderr = io.StringIO()
+            with patch.object(sys, "stderr", stderr):
+                code, _ = self.run_main(
+                    manifest, overlay, {"bash"}, policy_root=policy_root
+                )
+            self.assertEqual(code, 1)
+            self.assertIn("Fedora repository 'fedora' is enabled", stderr.getvalue())
+
+            # The same run against a root carrying only approved repositories passes.
+            (policy_root / "etc/yum.repos.d/fedora.repo").unlink()
+            (policy_root / "etc/yum.repos.d/utah-packages.repo").write_text(
+                "[utah-packages]\nname=utah\nenabled=1\n"
+            )
+            code, out = self.run_main(
+                manifest, overlay, {"bash"}, policy_root=policy_root
+            )
+        self.assertEqual(code, 0, out)
+
+
+class ProvenanceReportTests(unittest.TestCase):
+    """The retained report is a contract criterion, so it is asserted, not assumed.
+
+    It is also the reason these tests route the writer through UTAH_REPORT_DIR:
+    the verifier's own default is /usr/share/utah, which a test run must never
+    touch -- unprivileged that is a permission error, as root it is host
+    pollution.
+    """
+
+    def setUp(self) -> None:
+        self.module = load_module()
+
+    def run_main(self, manifest: Path, overlay: Path, installed: set[str],
+                 report_dir: Path) -> tuple[int, str]:
+        argv = ["verify-rpm-contract.py", str(manifest), str(overlay)]
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as scratch, \
+                patch.object(self.module, "is_installed", side_effect=lambda p: p in installed), \
+                patch.object(self.module, "query_packages",
+                             side_effect=lambda pkgs: mock_query_pkgs(pkgs, installed)), \
+                patch.object(sys, "argv", argv), \
+                patch.dict(os.environ, {"IMAGE_FLAVOR": "main",
+                                        "UTAH_REPORT_DIR": str(report_dir),
+                                        "UTAH_POLICY_ROOT": str(Path(scratch) / "root")}), \
+                redirect_stdout(stdout):
+            code = self.module.main()
+        return code, stdout.getvalue()
+
+    def test_the_report_is_written_where_the_run_is_told_to_put_it(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(directory, gnome=["gnome-shell"])
+            report_dir = directory / "report"
+            code, out = self.run_main(manifest, overlay, {"bash", "gnome-shell"}, report_dir)
+
+            self.assertEqual(code, 0, out)
+            self.assertTrue((report_dir / "package-origins.txt").is_file())
+            report = json.loads((report_dir / "package-origins.json").read_text())
+
+        self.assertEqual(report["build_provenance"]["contract_packages"], 2)
+        self.assertEqual(report["packages"]["gnome-shell"]["section"], "gnome")
+        self.assertEqual(report["packages"]["bash"]["section"], "bluefin")
+        self.assertIn(str(report_dir / "package-origins.json"), out)
+
+    def test_a_report_that_cannot_be_written_fails_the_build(self) -> None:
+        """Fail closed: a warning here would pass a build that proved nothing."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(directory)
+            # A file, not a directory: mkdir on it raises OSError.
+            blocked = directory / "blocked"
+            blocked.write_text("")
+            stderr = io.StringIO()
+            with patch.object(sys, "stderr", stderr):
+                code, out = self.run_main(manifest, overlay, {"bash"}, blocked)
+
+        self.assertEqual(code, 1, out)
+        self.assertIn("could not retain provenance report", stderr.getvalue())
+
+
+class MissingOverlayTests(unittest.TestCase):
+    """A missing overlay is reported, not raised as a bare FileNotFoundError.
+
+    The guard used to sit below the first read of the file, so it never ran.
+    """
+
+    def setUp(self) -> None:
+        self.module = load_module()
+
+    def test_a_missing_overlay_is_a_named_error(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = directory / "utah.toml"
+            argv = ["verify-rpm-contract.py", str(manifest), str(overlay)]
+            stderr = io.StringIO()
+            with patch.object(sys, "argv", argv), \
+                    patch.dict(os.environ, {"IMAGE_FLAVOR": "main"}), \
+                    patch.object(sys, "stderr", stderr), \
+                    redirect_stdout(io.StringIO()):
+                code = self.module.main()
+        self.assertEqual(code, 1)
+        self.assertIn(f"Overlay manifest '{overlay}' does not exist", stderr.getvalue())
+
 
 class ResolvedContractTests(unittest.TestCase):
     """The set install-packages.py resolved wins over recomputing the manifest.
@@ -300,11 +470,15 @@ class ResolvedContractTests(unittest.TestCase):
 
             argv = ["verify-rpm-contract.py", str(manifest), str(overlay)]
             stdout = io.StringIO()
+            env = {"IMAGE_FLAVOR": "main", "UTAH_REPORT_DIR": str(Path(tmp) / "report"),
+                   "UTAH_POLICY_ROOT": str(Path(tmp) / "root")}
             with patch.object(self.module, "Path", redirected), \
                     patch.object(self.module, "is_installed",
                                  side_effect=lambda p: p in installed), \
+                    patch.object(self.module, "query_packages",
+                                 side_effect=lambda pkgs: mock_query_pkgs(pkgs, installed)), \
                     patch.object(sys, "argv", argv), \
-                    patch.dict(os.environ, {"IMAGE_FLAVOR": "main"}), \
+                    patch.dict(os.environ, env), \
                     redirect_stdout(stdout):
                 code = self.module.main()
         return code, stdout.getvalue()
@@ -433,6 +607,9 @@ class NvidiaImageAssertionTests(unittest.TestCase):
         def fake_run(cmd, *args, **kwargs):
             if list(cmd[:3]) == ["rpm", "-q", "kernel"]:
                 return subprocess.CompletedProcess(cmd, 0, stdout=rpm_kernel_stdout)
+            if list(cmd[:3]) == ["rpm", "-q", "--qf"]:
+                lines = [f"{pkg}|0|1.17.4|1.hum1.bfin|x86_64\n" for pkg in cmd[3:]]
+                return subprocess.CompletedProcess(cmd, 0, stdout="".join(lines))
             raise AssertionError(f"unexpected subprocess call: {cmd}")
 
         argv = ["verify-rpm-contract.py", str(self.manifest), str(self.overlay)]
@@ -441,7 +618,9 @@ class NvidiaImageAssertionTests(unittest.TestCase):
                 patch.object(self.module, "is_installed", return_value=True), \
                 patch.object(self.module.subprocess, "run", fake_run), \
                 patch.object(sys, "argv", argv), \
-                patch.dict(os.environ, {"IMAGE_FLAVOR": flavor}), \
+                patch.dict(os.environ, {"IMAGE_FLAVOR": flavor,
+                                        "UTAH_REPORT_DIR": str(root / "usr/share/utah"),
+                                        "UTAH_POLICY_ROOT": str(root)}), \
                 patch.object(sys, "stderr", stderr), \
                 redirect_stdout(stdout):
             code = self.module.main()

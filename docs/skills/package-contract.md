@@ -1,20 +1,20 @@
 ---
 name: package-contract
-version: "1.0"
-last_updated: "2026-09-18"
+version: "1.1"
+last_updated: "2026-09-20"
 id: package-contract
-one_line_purpose: Maintain Bluefin package parity and Utah's overlay manifest.
+one_line_purpose: Maintain Bluefin package parity, supply-chain attestation, and repository policy.
 entry_point: docs/skills/package-contract.md
 category: contracts
 mcp_compliance_level: partial
 optimization_status: draft
 status: active
 dependencies: []
-tags: [packages, parity, bluefin, contracts]
+tags: [packages, parity, bluefin, contracts, supply-chain, provenance]
 description: >-
   Bluefin parity contract: verbatim bluefin.toml, utah.toml overlay,
-  [unavailable] rules, repository policy. Use when adding, removing, or
-  debugging packages or parity/check-repos failures.
+  supply-chain NEVRA attestation, repository allowlist, and build provenance.
+  Use when modifying packages, repository policy, or resolving parity failures.
 metadata:
   type: policy
 ---
@@ -23,7 +23,7 @@ metadata:
 
 Utah keeps Bluefin's user-facing package contract on a Hummingbird base. Two
 manifests under `packages/` define what the image installs; this skill is the
-policy for changing them.
+policy for changing them and asserting supply-chain integrity.
 
 ## The two manifests
 
@@ -39,6 +39,7 @@ policy for changing them.
   the header comment of that file (cite it; do not move or copy it):
 
   - `[gnome]` — GNOME 51 desktop contract Hummingbird does not ship.
+  - `[gnome.versions]` — required major versions for GNOME contract packages.
   - `[build]` — toolchain needed to build the pinned GNOME extensions
     (`scripts/build-gnome-extensions.sh`).
   - `[parity]` — what Bluefin inherits from Fedora's base image and Hummingbird
@@ -46,6 +47,8 @@ policy for changing them.
     availability step resolves the real transaction and is the gate on every
     name there.
   - `[services]` — desktop services Bluefin adds on top of the server base.
+  - `[factory]` — packages expected from the factory rebuild with `.bfin` release identity.
+  - `[repositories]` — explicitly allowed runtime RPM repositories.
   - `[unavailable]` — Bluefin contract packages none of Utah's repositories
     provide.
 
@@ -74,13 +77,14 @@ projectbluefin/hummingbird-github; when that overlay is published and enabled
 here, these can move into the contract as a version assertion rather than a
 name one (header comment, `packages/utah.toml`).
 
-## Repository policy
+## Repository policy and allowlist
 
 Runtime repositories are the pinned `utah-packages` repository (listed first)
-plus Hummingbird's own repository only. **Fedora repositories are never
-enabled at runtime** — they are bootstrap material for the package factory's
-buildroot, not a source of installed packages (Containerfile package-RUN
-comment, `Containerfile` ~L94; repo files copied at `Containerfile` L40).
+plus Hummingbird's own repository only, along with `nvidia-container-toolkit`
+for container GPU acceleration. **Fedora repositories are never enabled at
+runtime** — they are bootstrap material for the package factory's buildroot,
+not a source of installed packages (Containerfile package-RUN comment,
+`Containerfile` ~L94; repo files copied at `Containerfile` L40).
 `Containerfile.kernel`'s builder stage may use the pinned Fedora 44 repository
 (`packages/fedora-44.repo`) strictly as a builder-only toolchain.
 
@@ -94,9 +98,56 @@ precede base Hummingbird packages (`priority=10`). Repositories without this mar
 (such as `nvidia-container-toolkit` or builder-only `fedora-44`) are excluded from
 the desktop package transaction.
 
+`scripts/verify-rpm-contract.py` enforces a final repository allowlist over the
+whole runtime DNF configuration: every `*.repo` file in each directory DNF
+actually reads, plus any repository section declared directly in
+`/etc/dnf/dnf.conf` or `/etc/dnf/libdnf5.conf`. With no explicit `reposdir` that
+means DNF's own default list — `/etc/yum.repos.d`, `/etc/yum/repos.d` and
+`/etc/distro.repos.d` — not `/etc/yum.repos.d` alone, so an enabled repository
+file cannot be hidden from the attestation by placing it in one of the other
+directories DNF reads. An explicit `reposdir=` in either configuration file
+replaces that default list, matching DNF's semantics, and every directory it
+names is scanned instead. Any enabled Fedora repository (`fedora`,
+`fedora-updates`, etc.) or unapproved third-party repository causes the contract
+verification to fail immediately. `UTAH_POLICY_ROOT` re-roots the scan, which is
+how the unit tests attest a known filesystem rather than the DNF configuration
+of whatever machine runs them.
+
 The pinned package image is an RPM repository, not a runtime dependency: its
 contents are copied into the image so the package transaction is reproducible
 and does not depend on a mutable mirror (`Containerfile` L41-44).
+
+## Supply-chain attestation and build provenance
+
+Beyond package-name presence, `scripts/verify-rpm-contract.py` validates NEVRA
+attributes and source provenance for every contract package:
+
+1. **GNOME major version attestation**: Desktop packages (`gnome-shell`,
+   `mutter`, `gnome-control-center`, `gnome-session`, `gnome-settings-daemon`,
+   `gsettings-desktop-schemas`, `xdg-desktop-portal-gnome`) must declare major
+   version `51`, matching the GNOME 51 contract.
+2. **Factory release identity**: Packages expected from the package factory
+   rebuild must carry the factory release identity (`.bfin`, e.g. `.hum1.bfin`).
+   Bluefin parity packages expected from the factory cannot silently resolve
+   from Hummingbird or Fedora repositories. Which packages those are is stated
+   once, in `[factory]` in `packages/utah.toml`, and the verifier derives the
+   GNOME split from it rather than naming exceptions in code. Because `.bfin` is
+   applied per build job in `projectbluefin/utah-packages`, it marks what the
+   factory built: a name belongs in `[factory]` only if the factory keeps a
+   recipe for it. The sources it declares Hummingbird-owned (`bootc`, `dracut`,
+   `firewalld`, `gcc`, `libxcrypt`, `make`, `openssh`, `rust-bootupd`) have no
+   recipe and are pruned from its published repository, so they are excluded
+   from `[factory]` and asserted absent by the tests.
+3. **Hummingbird release identity**: Packages provided by Hummingbird must carry
+   `.hum` release identity and cannot resolve from raw Fedora packages (`.fc`).
+4. **Build provenance retention**: The resolved package-origin and NEVRA report
+   is written to `/usr/share/utah/package-origins.json` and
+   `/usr/share/utah/package-origins.txt`, recording the exact NEVRA, epoch,
+   architecture, and repository origin with build metadata in the final image.
+   Retention is enforced: if the report cannot be written the verifier fails,
+   because a build that kept no report has proven nothing about its origins.
+   `UTAH_REPORT_DIR` redirects the report elsewhere, which is how the unit
+   tests exercise the writer without touching the host.
 
 ## Supply-chain download verification
 
@@ -144,6 +195,11 @@ releases or emit missing-module errors with empty kernel names.
   factory must copy the same repodata into the leading layer and payload layer.
   DNF's `--assumeno` may return 1 for a valid declined transaction; the checker
   requires a transaction summary and rejects dependency and repository errors.
+- A package failing the required GNOME major version (e.g. not GNOME 51) or
+  carrying an unapproved release identity is a **build failure**.
+- A factory package resolving from Hummingbird or Fedora without `.bfin` is a
+  **build failure**.
+- An unapproved or Fedora repository enabled at runtime is a **build failure**.
 - `[unavailable]` entries still present in the install set are a validation
   error (`install-packages.py --check`).
 - Drift in `packages/bluefin.toml` from upstream at `packages/.bluefin-parity-ref`
