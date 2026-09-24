@@ -318,6 +318,18 @@ class EvidenceTests(unittest.TestCase):
         fail_at = script.index('fail() { echo "FAIL: $*"')
         self.assertNotIn("preserve_failed_disk_diagnostics", script[fail_at:fail_at + 80])
 
+    def test_live_initramfs_gates_on_dracut_errors_and_prepares_roothome(self):
+        # #132: the sole home for the live initramfs gate assertions. dracut
+        # exits 0 even when it logs a failed install, so the build has to read
+        # the log itself; keep every piece of that gate asserted here rather
+        # than restated in another module, where the two copies drift.
+        containerfile = (ROOT / "iso/live/Containerfile").read_text()
+        self.assertIn("mkdir -m 0700 -p /var/roothome", containerfile)
+        self.assertIn("set -euxo pipefail", containerfile)
+        self.assertIn("sysloglvl=0", containerfile)
+        self.assertIn("--stdlog 4", containerfile)
+        self.assertIn("grep -q 'dracut\\[E\\]'", containerfile)
+
 
 class FastfetchOcrGateTests(unittest.TestCase):
     """The gate runs against tesseract output, which drops and mangles glyphs."""

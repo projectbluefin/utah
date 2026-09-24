@@ -5,6 +5,7 @@
 
 [branding]
 files = [
+  "/usr/lib/fedora-release",
   "/usr/share/ublue-os/bluefin-logos/bluefin.png",
   "/usr/share/ublue-os/bluefin-logos/chicken.png",
   "/usr/share/ublue-os/bluefin-logos/symbols/bluefin",

@@ -1,7 +1,7 @@
 ---
 name: desktop-contract
 version: "1.0"
-last_updated: "2026-09-22"
+last_updated: "2026-09-24"
 id: desktop-contract
 one_line_purpose: Maintain Utah identity, Bluefin desktop defaults, and first-boot Flatpak policy.
 entry_point: docs/skills/desktop-contract.md
@@ -35,7 +35,8 @@ The TOML's sections are the contract's table of contents:
 
 - **`[branding]`** — files that must exist (Bluefin logos, backgrounds, the
   `zz0-bluefin-modifications` gschema override, fastfetch and Bazaar count
-  files) plus the os-release identity. The identity fields are exact values:
+  files, `/usr/lib/fedora-release` for vulnerability scanners) plus the
+  os-release identity. The identity fields are exact values:
   `NAME=Utah`, `ID=utah`, `ID_LIKE=fedora`, `VERSION_CODENAME=Utahraptor`,
   `DEFAULT_HOSTNAME=utah`, `IMAGE_ID=utah`, and the projectbluefin.io URLs.
   `[branding.os_release_patterns]` shapes the fields the build generates:
