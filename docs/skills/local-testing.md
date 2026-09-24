@@ -273,6 +273,37 @@ When integrating this harness with newer image-build fixes, retain the
 currently verified package-image digest and available-package contract.
 The older ISO branch's package pin and exclusions must not replace them.
 
+### Bootc upgrade and rollback lifecycle harness
+
+`just lifecycle-test <disk-or-iso> <candidate-target-image>` runs
+`iso/scripts/lifecycle-e2e.sh` and `scripts/bootc_lifecycle.py` to validate
+atomic lifecycle transitions between two immutable Utah digests in QEMU:
+baseline deployment verification, staging with atomic staging invariants
+preserved, reboot into the candidate deployment with graphical desktop
+verification, rollback execution, and reboot verification returning to the
+baseline digest.
+Phase-keyed diagnostics (`evidence/lifecycle-*.json`, `lifecycle-summary.json`)
+and screendumps identify the active deployment and digest at every phase.
+
+The default `bootc` policy stages the candidate with `bootc switch`, so the
+candidate may come from any repository. `UTAH_LIFECYCLE_POLICY=uupd` instead
+runs the shipped `uupd.service` in the guest, which is the unit the production
+timer triggers. uupd follows the image reference the booted deployment already
+tracks, so that policy requires a candidate in the same repository as the
+booted deployment and fails closed rather than falling back to `bootc switch`.
+Passing a live ISO instead of an installed disk runs the LUKS install harness
+first; `UTAH_E2E_WORK` overrides where that install phase writes its disk.
+The harness drives the guest over SSH as the `utahtest` password account the
+installer provisions, so it defaults to the debug ISO (`just iso testing 1`).
+The disk from `just generate-bootable-image` has no such account and cannot be
+used directly. An installed disk may be passed instead when it carries that
+account; its image format is detected before the overlay is created, so raw
+and qcow2 disks both work.
+
+```bash
+just lifecycle-test output/utah-live.iso ghcr.io/projectbluefin/utah:testing
+```
+
 ```bash
 just check
 ```

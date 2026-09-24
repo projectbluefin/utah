@@ -54,6 +54,7 @@ check:
     test -f scripts/configure-branding.sh
     test -f scripts/verify-desktop-contract.py
     test -f scripts/verify-gnome-extensions.py
+    test -f scripts/bootc_lifecycle.py
     test -f scripts/mirror-shim.sh
     test -f contracts/bluefin-desktop.toml
     # The reusable image workflow checks out this repository without
@@ -72,6 +73,7 @@ check:
     test -f iso/live/src/etc/bootc-installer/images.json
     test -f iso/live/src/etc/bootc-installer/recipe.json
     test -f iso/scripts/build-iso.sh
+    test -f iso/scripts/lifecycle-e2e.sh
     python3 -m json.tool iso/live/src/etc/bootc-installer/images.json >/dev/null
     python3 -m json.tool iso/live/src/etc/bootc-installer/recipe.json >/dev/null
     grep -q 'org.bootcinstaller.Installer' iso/live/src/install-flatpaks.sh
@@ -322,6 +324,15 @@ luks-test iso_path="output/utah-live.iso" image="ghcr.io/projectbluefin/utah:tes
 # verified result can be driven by hand instead of only asserted about.
 try-installed:
     bash iso/scripts/boot-installed.sh
+
+# Validate bootc upgrade and rollback lifecycle between two immutable digests in QEMU.
+# Boots a known Utah deployment, stages/upgrades to candidate digest via bootc/uupd,
+# verifies graphical desktop, rolls back, and verifies the previous deployment.
+# Defaults to the debug live ISO -- `just iso testing 1` -- because the harness
+# logs in over SSH as the `utahtest` account the installer provisions. The disk
+# from `just generate-bootable-image` has no such account and cannot be used.
+lifecycle-test disk_or_iso="output/utah-live.iso" candidate_image="ghcr.io/projectbluefin/utah:testing":
+    bash iso/scripts/lifecycle-e2e.sh "{{ disk_or_iso }}" "{{ candidate_image }}"
 
 generate-build-tags base_name stream flavor kernel_pin build_number version event_name event_number:
     @echo "{{ stream }} {{ version }}"
