@@ -280,9 +280,19 @@ packages = [
 #   nautilus (#100): a plugin shipped without the daemon behind it.
 #   Tracked by #107.
 #
-# grub2-efi-x64-cdboot and pipewire-libs-extra are supplied by the pinned
-# September 10 factory candidate and return to the install contract (#35).
+# grub2-efi-x64-cdboot
+#   The factory supplies it, but it must be the same build as grub2-efi-x64,
+#   and the factory's grub2 is built for EFI/hummingbird. Installing it
+#   replaced the base's Fedora GRUB, the one paired with the base's Fedora
+#   shim, and installed systems could not boot. utah-packages.repo now
+#   excludes grub2*, which makes cdboot unavailable too. Nothing in Utah uses
+#   it (it is Bluefin parity). Returns when utah-packages#238 publishes a grub2
+#   built with efi_vendor=fedora. Tracked by #253.
+#
+# pipewire-libs-extra is supplied by the pinned September 10 factory candidate
+# and returns to the install contract (#35).
 packages = [
+    "grub2-efi-x64-cdboot",
     "anaconda-live",
     "evolution-ews-core",
     "firefox",

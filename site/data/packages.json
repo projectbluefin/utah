@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-22",
+  "generated_at": "2026-09-24",
   "generator": "scripts/generate-site-data.py",
   "groups": [
     {
@@ -27,7 +27,6 @@
         "gnome-ponytail-daemon",
         "gnome-tweaks",
         "google-noto-sans-cjk-vf-fonts",
-        "grub2-efi-x64-cdboot",
         "gum",
         "gvfs-nfs",
         "ibus-mozc",
@@ -164,8 +163,8 @@
     }
   ],
   "totals": {
-    "installed": 107,
-    "unavailable": 9
+    "installed": 106,
+    "unavailable": 10
   },
   "unavailable": [
     {
@@ -187,6 +186,12 @@
     {
       "issues": [],
       "name": "fish"
+    },
+    {
+      "issues": [
+        253
+      ],
+      "name": "grub2-efi-x64-cdboot"
     },
     {
       "issues": [
