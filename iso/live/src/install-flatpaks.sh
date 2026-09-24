@@ -147,6 +147,23 @@ flatpak remote-add --system --if-not-exists tuna-os \
     https://tunaos.org/flatpak/tuna-os.flatpakrepo
 retry_flatpak install --system --noninteractive --no-related --or-update \
     tuna-os com.mitchellh.ghostty
+# `uninstall --unused` removes every runtime that no installed app depends on,
+# and the Brewfile lists two of exactly that kind: the adw-gtk3 GTK3 themes.
+# Nothing requires them, so they were stripped from the ISO and the offline
+# install check failed on every flavor (post-testing-e2e run 36047291319):
+#   FAIL: default Flatpak(s) missing on the installed, network-isolated
+#   system: org.gtk.Gtk3theme.adw-gtk3 org.gtk.Gtk3theme.adw-gtk3-dark
+# Pin each listed runtime first; --unused never removes a pinned ref. The pin
+# is part of /var/lib/flatpak, so it also reaches the installed system and
+# keeps later `--unused` cleanups there from removing the themes too.
+declare -A wanted=()
+for app in "${apps[@]}"; do wanted["${app}"]=1; done
+while read -r ref; do
+    id="${ref#runtime/}"; id="${id%%/*}"
+    if [[ -n "${wanted[${id}]:-}" ]]; then
+        flatpak pin --system "${ref}"
+    fi
+done < <(flatpak list --system --runtime --columns=ref | sed 's|^|runtime/|')
 flatpak uninstall --system --noninteractive --unused || true
 
 mkdir -p "${FLATPAK_CACHE}"
