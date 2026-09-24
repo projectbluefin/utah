@@ -95,6 +95,21 @@ def __getattr__(name: str):
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
+# Packages excluded from the install transaction:
+# - PackageKit*: Bluefin excludes PackageKit from its bulk install; an image-based
+#   system must not carry a second package manager that can write to /usr.
+# - libxml2: Hummingbird upstream undergoes a SONAME split (libxml2 -> libxml2-16).
+#   The bootc base image pre-installs libxml2-16 providing libxml2.so.16()(64bit).
+#   The unsplit libxml2 RPM also packages /usr/lib64/libxml2.so.16.1.4 without an
+#   Obsoletes or Conflicts header, causing an on-disk RPM transaction file conflict
+#   when pulled transitively (Issue #248). Excluding libxml2 lets DNF satisfy the
+#   SONAME dependency using the pre-installed libxml2-16.
+EXCLUDED_PACKAGES: tuple[str, ...] = (
+    "PackageKit*",
+    "libxml2",
+)
+
+
 def section(path: Path, name: str) -> list[str]:
     data = tomllib.loads(path.read_text())
     return list(data.get(name, {}).get("packages", []))
@@ -205,12 +220,13 @@ def main() -> int:
     packages = contract(args.manifest, overlay, major)
     build_deps = section(overlay, "build")
     excluded = section(args.manifest, "excluded")
+    exclude_args = [arg for pkg in EXCLUDED_PACKAGES for arg in ("-x", pkg)]
 
     if args.resolve:
         result = subprocess.run(
             [dnf, "--assumeno", "--disablerepo=*",
              *(f"--enablerepo={r}" for r in repos),
-             "-x", "PackageKit*", "install", *packages, *build_deps],
+             *exclude_args, "install", *packages, *build_deps],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
             env={**os.environ, "LC_ALL": "C"}, check=False,
         )
@@ -244,10 +260,12 @@ def main() -> int:
 
     # Bluefin excludes PackageKit from its bulk install; an image-based system
     # must not carry a second package manager that can write to /usr.
+    # Exclude libxml2 to preserve the libxml2-16 SONAME split and avoid RPM file
+    # conflicts with the bootc base on /usr/lib64/libxml2.so.16.1.4 (Issue #248).
     rc = run(
         dnf, "-y", "--disablerepo=*",
         *(f"--enablerepo={r}" for r in repos),
-        "-x", "PackageKit*", "install", *packages, *build_deps,
+        *exclude_args, "install", *packages, *build_deps,
     )
     if rc:
         return rc

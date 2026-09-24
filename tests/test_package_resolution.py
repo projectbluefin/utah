@@ -116,6 +116,40 @@ class PackageResolutionTests(unittest.TestCase):
     def test_already_installed_contract_passes(self):
         self.assertEqual(self.resolve("Nothing to do.\n", code=0)[0], 0)
 
+    def test_install_transaction_excludes_packagekit_and_conflicting_libxml2(self):
+        rc, command = self.resolve("Transaction Summary:\nInstall 12 Packages\nOperation aborted.\n")
+        self.assertEqual(rc, 0)
+        self.assertIn("PackageKit*", installer.EXCLUDED_PACKAGES)
+        self.assertIn("libxml2", installer.EXCLUDED_PACKAGES)
+        for pkg in installer.EXCLUDED_PACKAGES:
+            indices = [i for i, x in enumerate(command) if x == pkg]
+            self.assertTrue(indices, f"{pkg} not found in dnf command")
+            for idx in indices:
+                self.assertEqual(command[idx - 1], "-x")
+
+    def test_install_invokes_dnf_with_exclusions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "bluefin.toml"
+            overlay = Path(tmp) / "utah.toml"
+            base.write_text('[fedora]\npackages=["base"]\n')
+            overlay.write_text('[gnome]\npackages=[]\n')
+            with patch("sys.argv", ["install", str(base), str(overlay)]), \
+                 patch.object(installer, "fedora_major", return_value="44"), \
+                 patch.object(installer, "dnf_path", return_value="dnf5"), \
+                 patch.object(installer, "installed", return_value=[]), \
+                 patch.object(installer.Path, "mkdir"), \
+                 patch.object(installer.Path, "write_text"), \
+                 patch.object(installer, "run", return_value=0) as mock_run, \
+                 contextlib.redirect_stdout(io.StringIO()):
+                rc = installer.main()
+                self.assertEqual(rc, 0)
+                first_call_args = mock_run.call_args_list[0].args
+                self.assertEqual(first_call_args[0], "dnf5")
+                self.assertIn("install", first_call_args)
+                for pkg in installer.EXCLUDED_PACKAGES:
+                    idx = first_call_args.index(pkg)
+                    self.assertEqual(first_call_args[idx - 1], "-x")
+
     def test_pins_come_from_containerfile(self):
         base, packages = checker.pinned_inputs(ROOT / "Containerfile")
         self.assertIn("@sha256:", base)

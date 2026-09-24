@@ -1,7 +1,7 @@
 ---
 name: package-contract
 version: "1.0"
-last_updated: "2026-09-22"
+last_updated: "2026-09-24"
 id: package-contract
 one_line_purpose: Maintain Bluefin package parity and Utah's overlay manifest.
 entry_point: docs/skills/package-contract.md
@@ -105,6 +105,14 @@ The pinned package image is an RPM repository, not a runtime dependency: its
 contents are copied into the image so the package transaction is reproducible
 and does not depend on a mutable mirror (`Containerfile` L41-44).
 
+The install transaction in `scripts/install-packages.py` also explicitly excludes
+specific packages via `-x` (`EXCLUDED_PACKAGES`): `PackageKit*` (image systems forbid
+a second package manager modifying `/usr`) and `libxml2`. Hummingbird is transitioning
+the SONAME split `libxml2` -> `libxml2-16`. The base image pre-installs `libxml2-16`
+providing `libxml2.so.16()(64bit)`. The unsplit `libxml2` RPM also packages
+`/usr/lib64/libxml2.so.16.1.4` without `Obsoletes`/`Conflicts`, causing file conflicts
+when pulled transitively (#248). Excluding `libxml2` directs DNF to use `libxml2-16`.
+
 ## Supply-chain download verification
 
 Every executable release asset fetched during image or ISO composition is
@@ -127,15 +135,9 @@ On NVIDIA flavors (`IMAGE_FLAVOR=nvidia` or `nvidia-gaming`),
 `scripts/verify-rpm-contract.py` also asserts that the kernel module
 (`extra/nvidia/nvidia.ko`) is present for every bootable kernel in the image and
 that userspace tools (`nvidia-smi`, `nvidia-driver-version`) exist. Determining
-the base kernel release cannot rely solely on `rpm -q kernel`, because `kernel`
-is a metapackage that may not be installed on a minimal bootc base, and rpm queries
-may return nothing or unhelpful text such as `package kernel is not installed`. If
-no release resolves from rpm (empty or whitespace output), or if the resolved
-release does not correspond to a directory under `/usr/lib/modules/<release>`, the
-verifier falls back to the module trees present on disk under `/usr/lib/modules/`
-(excluding the OGC gaming release for the base check). Furthermore, the verifier
-guards against empty release strings, refusing to construct module paths from empty
-releases or emit missing-module errors with empty kernel names.
+the base kernel release cannot rely solely on `rpm -q kernel`; if empty or
+absent under `/usr/lib/modules/<release>`, the verifier falls back to module
+trees on disk and guards against empty releases.
 
 ## Failure semantics
 
