@@ -218,7 +218,7 @@ retention window before the flavor count.
 Every matrix job preserves build/test logs, serial logs, and screenshots,
 including on failure. Only passing jobs upload `docs/verification` with the
 source commit, original build run, E2E run, image digest and ISO checksum.
-The promotion job depends on the LUKS and production-ISO matrices; a
+The promotion job depends on the LUKS, production-ISO, and gate matrices; a
 superseded testing commit cannot move tags. Registry tag copies are sequential,
 not an atomic multi-tag transaction: a registry failure can interrupt promotion
 after a partial copy.
@@ -246,6 +246,39 @@ the ISO is written. Successful post-fix E2E run `35469913325` measured 3.9G
 headroom for the largest flavor. The guard lives in the build script, so it
 holds for every caller (local `just iso`, the CI LUKS job, and any deliberate
 rerun), not just one workflow.
+
+## Flavor gate (exact-digest VM suites)
+
+`post-testing-e2e.yml` also runs the `gate` job, which boots each flavor's
+exact `@digest` in the `projectbluefin/testsuite` QEMU VM and runs that
+flavor's own behave suites before `:testing` advances. The digests come from
+`needs.resolve.outputs.digests` (a per-image ref map the `resolve` job builds
+from the same artifacts the LUKS matrix reads), so every flavor is pinned to
+the precise digest this build produced.
+
+Suites per flavor, all starting with `smoke,common` so a broken boot is caught
+first:
+
+| Flavor | Image | Suites |
+|--------|-------|--------|
+| main | `utah` | `smoke,common` |
+| nvidia | `utah-nvidia` | `smoke,common,nvidia` |
+| gaming | `utah-gaming` | `smoke,common,bazzite` |
+| nvidia-gaming | `utah-nvidia-gaming` | `smoke,common,nvidia,bazzite` |
+
+The `bazzite` suite validates the gaming userspace. The `nvidia` suite is
+currently hardware-blocked at the pinned test ref: every nvidia scenario is
+stubbed-only (tagged `@hardware_blocked`) and excluded from the run, so the
+nvidia flavors gain only `smoke,common` coverage until real nvidia scenarios
+land. The job calls the pinned `projectbluefin/testsuite` reusable
+e2e workflow (`ee82d53... # v1`) and checks the tests out of that repo pinned
+to a specific SHA (not `main`), so an unreleased test change cannot start or
+stop `:testing` promotion with no local commit to revert. `gate` is a `fail-fast: false` matrix, so one
+stuck flavor fails only itself; `promote-to-testing` needs it, and GitHub skips
+a job when any dependency fails, so a failed suite leaves `:testing` untouched
+and the promotion job never runs. `luks` (installer + provenance), `production-iso`
+(production media composition), and `gate` (suites) are complementary: all must
+pass before any tag moves.
 
 ## Verification
 

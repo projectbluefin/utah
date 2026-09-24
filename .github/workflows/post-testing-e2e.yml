@@ -22,6 +22,8 @@ jobs:
       actions: read
     outputs:
       matrix: ${{ steps.inputs.outputs.matrix }}
+      digests: ${{ steps.inputs.outputs.digests }}
+      suites: ${{ steps.inputs.outputs.suites }}
       sha: ${{ steps.inputs.outputs.sha }}
       run: ${{ steps.inputs.outputs.run }}
     steps:
@@ -43,8 +45,23 @@ jobs:
           gh run download "$BUILD_RUN" --repo "$REPOSITORY" \
             --pattern 'image-digest-testing-*' --dir digests
           matrix=$(python3 scripts/resolve-e2e-inputs.py run.json digests "$REPOSITORY")
+          digests=$(jq -c 'reduce .include[] as $i ({}; . + {($i.image): $i.ref})' <<< "$matrix")
+          suites_json=$(python3 scripts/flavors.py suites)
+          # Fail before the gate boots anything if a flavor has no published
+          # exact digest: an empty image input would fail later and confusingly,
+          # hiding the real cause (a missing build artifact) behind four.
+          missing=$(jq -r --argjson d "$digests" \
+            '[.[] | .image | select(($d[.]) == null or ($d[.] | length) == 0)] \
+            | (if length == 0 then "" else ":\(join(", "))" end)' \
+            <<< "$suites_json")
+          if [ -n "$missing" ]; then
+            echo "::error::gate: no published exact-digest for flavor(s)$missing — promotion would boot an empty image"
+            exit 1
+          fi
           {
             echo "matrix=$matrix"
+            echo "digests=$digests"
+            echo "suites=$suites_json"
             echo "sha=$(jq -r .head_sha run.json)"
             echo "run=$BUILD_RUN"
           } >> "$GITHUB_OUTPUT"
@@ -205,8 +222,34 @@ jobs:
             output/utah-live.iso
             output/utah-live.iso.sha256
 
+
+  # Boot and test the exact digest for each flavor with that flavor's own suites
+  # before any :testing tag advances. Main runs smoke,common; the nvidia flavors
+  # add nvidia (currently hardware-blocked at the pinned test ref — every scenario
+  # is stubbed-only and excluded from the run, so this is smoke,common in practice)
+  # and the gaming flavors add bazzite for the gaming userspace. All flavors start
+  # with smoke,common so a broken boot is caught before the flavor-specific
+  # suites run. Fail-closed: a single failed suite fails the matrix and the
+  # promotion job (which needs this one) is skipped, leaving :testing untouched.
+  gate:
+    needs: resolve
+    if: needs.resolve.result == 'success'
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.resolve.outputs.suites) }}
+    uses: projectbluefin/testsuite/.github/workflows/e2e.yml@ee82d53a4f86617d807df831a60ad1deaa0d5366 # v1
+    with:
+      image: ${{ fromJSON(needs.resolve.outputs.digests)[matrix.image] }}
+      suites: ${{ matrix.suites }}
+      test_repository: projectbluefin/testsuite
+      test_ref: 4c053fd2ea7837d1d92788adb2812122fa666e65
   promote-to-testing:
-    needs: [resolve, luks, production-iso]
+    needs: [resolve, luks, production-iso, gate]
     runs-on: ubuntu-26.04
     permissions:
       contents: read

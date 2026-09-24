@@ -55,6 +55,14 @@ elif what == "list-main":
     print(json.dumps([f for f in flavors if f == "main"]))
 elif what == "list-kernel":
     print(json.dumps([f for f in flavors if f != "main"]))
+elif what == "suites":
+    SUITES = {
+        "main": "smoke,common",
+        "nvidia": "smoke,common,nvidia",
+        "gaming": "smoke,common,bazzite",
+        "nvidia-gaming": "smoke,common,nvidia,bazzite",
+    }
+    print(json.dumps([{"image": IMAGE[f], "suites": SUITES[f]} for f in flavors]))
 elif what == "image":
     if len(sys.argv) < 3:
         raise SystemExit("usage: flavors.py image FLAVOR")
