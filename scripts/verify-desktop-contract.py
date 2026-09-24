@@ -67,6 +67,17 @@ def unit_enabled(unit: str) -> bool:
         return False
 
 
+def user_unit_enabled(unit: str) -> bool:
+    """Enabled for every user (systemctl --global), where desktop audio lives."""
+    try:
+        result = subprocess.run(
+            ["systemctl", "--global", "is-enabled", unit], capture_output=True, text=True, check=False
+        )
+        return result.returncode == 0 and result.stdout.strip() in {"enabled", "enabled-runtime"}
+    except FileNotFoundError:
+        return False
+
+
 def unit_masked(unit: str, root: Path = Path("/")) -> bool:
     usr_lib_path = root / "usr/lib/systemd/system" / unit
     if usr_lib_path.is_symlink() and usr_lib_path.resolve() == Path("/dev/null"):
@@ -185,6 +196,10 @@ def main() -> int:
         if not unit_enabled(unit):
             errors.append(f"required service is not enabled: {unit}")
 
+    for unit in services.get("user_enabled", []):
+        if not user_unit_enabled(unit):
+            errors.append(f"required user service is not enabled globally: {unit}")
+
     for unit in services.get("masked", []):
         if not unit_masked(unit):
             errors.append(f"required service is not masked: {unit}")
@@ -197,7 +212,8 @@ def main() -> int:
     masked_msg = f", {masked_count} masked services" if masked_count else ""
     print(
         f"Utah desktop contract passed: {len(flatpak['apps'])} Flatpaks, "
-        f"{len(services.get('enabled', []))} enabled services{masked_msg}"
+        f"{len(services.get('enabled', []))} enabled services, "
+        f"{len(services.get('user_enabled', []))} user services{masked_msg}"
     )
     return 0
 

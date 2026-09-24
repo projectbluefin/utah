@@ -141,6 +141,15 @@ enabled = [
   "ublue-system-setup.service",
   "uupd.timer",
 ]
+# Per-user services, checked with `systemctl --global is-enabled`. Hummingbird's
+# user preset disables everything but dbus; without these an installed Utah had
+# no audio server. See user-preset/85-utah-desktop.preset.
+user_enabled = [
+  "pipewire.socket",
+  "pipewire-pulse.socket",
+  "wireplumber.service",
+  "xdg-user-dirs.service",
+]
 masked = [
   "bootc-fetch-apply-updates.service",
   "bootc-fetch-apply-updates.timer",

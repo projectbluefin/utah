@@ -118,6 +118,7 @@ class VerifyModeTests(unittest.TestCase):
         self.write(BREWFILE, "".join(f'flatpak "{app}"\n' for app in APPS))
         self.write(REMOTE, f"[Flatpak Remote]\nUrl={REMOTE_URL}\n")
         self.enabled = {"gdm.service"}
+        self.user_enabled = {"pipewire.socket", "wireplumber.service"}
         self.masked = {"bootc-fetch-apply-updates.timer"}
 
     @staticmethod
@@ -140,6 +141,8 @@ class VerifyModeTests(unittest.TestCase):
         path.write_text(to_toml(contract))
         with patch.object(desktop, "Path", image_path_factory(self.root)), patch.object(
             desktop, "unit_enabled", lambda unit: unit in self.enabled
+        ), patch.object(
+            desktop, "user_unit_enabled", lambda unit: unit in self.user_enabled
         ), patch.object(desktop, "unit_masked", lambda unit: unit in self.masked), patch.object(
             desktop.sys, "argv", ["verify", str(path)]
         ):
@@ -155,6 +158,29 @@ class VerifyModeTests(unittest.TestCase):
         self.assertEqual(code, 1, f"verifier accepted the image; stderr was {errors!r}")
         self.assertIn(naming, errors)
         return errors
+
+
+class UserServiceTests(VerifyModeTests):
+    """Hummingbird's user preset disables every per-user service but dbus, so
+    an installed Utah had no audio server. The contract's user_enabled list
+    is checked with systemctl --global."""
+
+    def contract_with_user_units(self, *units):
+        contract = base_contract()
+        contract["services"] = dict(contract["services"], user_enabled=list(units))
+        return contract
+
+    def test_globally_enabled_user_services_pass_and_are_counted(self):
+        code, out, errors = self.verify(self.contract_with_user_units("pipewire.socket", "wireplumber.service"))
+        self.assertEqual(code, 0, errors)
+        self.assertIn("2 user services", out)
+
+    def test_a_disabled_audio_service_is_rejected_by_name(self):
+        self.user_enabled.discard("wireplumber.service")
+        self.assert_rejected(
+            self.contract_with_user_units("pipewire.socket", "wireplumber.service"),
+            naming="required user service is not enabled globally: wireplumber.service",
+        )
 
 
 class CompliantImageTests(VerifyModeTests):

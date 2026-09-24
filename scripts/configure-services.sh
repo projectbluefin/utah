@@ -136,6 +136,21 @@ else
 fi
 
 # These are global user-service presets, so systemctl needs --global.
+#
+# The desktop's per-user services. Hummingbird's user preset enables only
+# dbus and then disables everything else. Fedora's (and so Bluefin's) enables
+# these, and without them an installed Utah had no audio server at all. See
+# /usr/lib/systemd/user-preset/85-utah-desktop.preset; the desktop contract
+# asserts the result (services.user_enabled).
+for unit in pipewire.socket pipewire-pulse.socket wireplumber.service \
+            xdg-user-dirs.service grub-boot-success.timer \
+            obex.service mpris-proxy.service; do
+    if user_unit_exists "${unit}"; then
+        systemctl --global enable "${unit}"
+    else
+        echo "user unit ${unit} is not installed; skipping" >&2
+    fi
+done
 if user_unit_exists podman-auto-update.timer; then
     systemctl --global enable podman-auto-update.timer
 fi
