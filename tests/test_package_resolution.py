@@ -120,7 +120,7 @@ class PackageResolutionTests(unittest.TestCase):
         rc, command = self.resolve("Transaction Summary:\nInstall 12 Packages\nOperation aborted.\n")
         self.assertEqual(rc, 0)
         self.assertIn("PackageKit*", installer.EXCLUDED_PACKAGES)
-        self.assertIn("libxml2", installer.EXCLUDED_PACKAGES)
+        self.assertIn("libxml2-2.15.4-1.hum1", installer.EXCLUDED_PACKAGES)
         for pkg in installer.EXCLUDED_PACKAGES:
             indices = [i for i, x in enumerate(command) if x == pkg]
             self.assertTrue(indices, f"{pkg} not found in dnf command")

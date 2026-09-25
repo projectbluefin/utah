@@ -98,15 +98,16 @@ def __getattr__(name: str):
 # Packages excluded from the install transaction:
 # - PackageKit*: Bluefin excludes PackageKit from its bulk install; an image-based
 #   system must not carry a second package manager that can write to /usr.
-# - libxml2: Hummingbird upstream undergoes a SONAME split (libxml2 -> libxml2-16).
+# - libxml2-2.15.4-1.hum1: Hummingbird upstream undergoes a SONAME split (libxml2 -> libxml2-16).
 #   The bootc base image pre-installs libxml2-16 providing libxml2.so.16()(64bit).
-#   The unsplit libxml2 RPM also packages /usr/lib64/libxml2.so.16.1.4 without an
+#   The unsplit libxml2-2.15.4-1.hum1 RPM packages /usr/lib64/libxml2.so.16.1.4 without an
 #   Obsoletes or Conflicts header, causing an on-disk RPM transaction file conflict
-#   when pulled transitively (Issue #248). Excluding libxml2 lets DNF satisfy the
-#   SONAME dependency using the pre-installed libxml2-16.
+#   when pulled transitively (Issue #248). Excluding specifically this build lets DNF satisfy the
+#   SONAME dependency using the pre-installed libxml2-16 while allowing utilities-only
+#   libxml2 builds (providing /usr/bin/xmlcatalog) to satisfy xml-common.
 EXCLUDED_PACKAGES: tuple[str, ...] = (
     "PackageKit*",
-    "libxml2",
+    "libxml2-2.15.4-1.hum1",
 )
 
 
