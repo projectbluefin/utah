@@ -73,6 +73,7 @@ enable_unit tailscaled.service
 enable_unit uupd.timer
 enable_unit ublue-system-setup.service
 enable_unit systemd-resolved.service
+enable_unit avahi-daemon.service
 enable_unit bootc-unified-storage.service
 # input-remapper is installed by Bluefin's package set, but without its root
 # daemon running, udev autoload fails on input devices and the GUI prompts for

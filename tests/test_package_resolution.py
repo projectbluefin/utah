@@ -365,6 +365,14 @@ class DesktopUnitEnablementTests(unittest.TestCase):
                 self.assertIn(unit, self.script_units("enable_unit"))
                 self.assertIn(unit, self.preset_directives("enable"))
 
+    def test_services_section_includes_avahi_and_preset_enables_it(self):
+        services = installer.section(self.OVERLAY, "services")
+        self.assertIn("avahi", services)
+        preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset").read_text()
+        self.assertIn("enable avahi-daemon.service", preset)
+        configure_services = (ROOT / "scripts/configure-services.sh").read_text()
+        self.assertIn("enable_unit avahi-daemon.service", configure_services)
+
 
 if __name__ == "__main__":
     unittest.main()
