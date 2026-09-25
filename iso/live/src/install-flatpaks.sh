@@ -39,13 +39,13 @@ BUNDLE=org.bootcinstaller.Installer.flatpak
 # Pin the installer release so ISO composition is reproducible rather than
 # resolving a mutable `latest` during the build. Override with
 # UTAH_INSTALLER_VERSION when validating a newer installer.
-INSTALLER_VERSION="${UTAH_INSTALLER_VERSION:-v2026.09.19-cee9ba29}"
+INSTALLER_VERSION="${UTAH_INSTALLER_VERSION:-v2026.09.25-51f8cfe6}"
 # The bundle is installed system-wide with --no-gpg-verify below, so the
 # version pin alone is the whole trust story. Pin its SHA-256 the same way
 # the Containerfile pins UUPD_SHA256, and verify before import. Version and
 # digest move together; override with UTAH_INSTALLER_SHA256 when validating
 # a newer installer.
-INSTALLER_SHA256="${UTAH_INSTALLER_SHA256:-ebd661e554523957a05e6dba038512369d232adb0512b63233512db4cc012941}"
+INSTALLER_SHA256="${UTAH_INSTALLER_SHA256:-a303514765c3ba8c33e71e5361f36cf4bad906d46d473818286527891c40c5b5}"
 
 mkdir -p "${FLATPAK_CACHE}/tmp" /run/dbus
 export TMPDIR="${FLATPAK_CACHE}/tmp"
