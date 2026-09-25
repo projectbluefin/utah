@@ -11,7 +11,6 @@
       "filesystem": "btrfs",
       "composefs": false,
       "needs_user_creation": true,
-      "flatpak_var_path": "var/lib/flatpak",
       "filesystems": ["btrfs", "xfs"]
     }
   ]

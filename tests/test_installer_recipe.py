@@ -44,5 +44,24 @@ class InstallerAccountTests(unittest.TestCase):
             self.assertTrue(image.get("needs_user_creation", True))
 
 
+class InstallerFlatpakPathTests(unittest.TestCase):
+    """The installer's flatpaks must land where the installed system reads them.
+
+    fisherman treats flatpak_var_path as the target's *var* directory and
+    appends lib/flatpak. Utah set it to "var/lib/flatpak", so a GUI install
+    copied every Flatpak to /sysroot/var/lib/flatpak/lib/flatpak: the
+    installed system had none, and the dock (Firefox, Bazaar, Files) was
+    empty. The e2e sends no such key and so never saw it. Without the key,
+    fisherman finds ostree/deploy/default/var itself.
+    """
+
+    def test_flatpak_var_path_is_a_var_root_if_set(self):
+        for image in json.loads(IMAGES.read_text())["images"]:
+            path = image.get("flatpak_var_path")
+            if path:
+                self.assertFalse(path.rstrip("/").endswith("lib/flatpak"),
+                                 f"{path!r} is the flatpak dir; fisherman appends lib/flatpak itself")
+
+
 if __name__ == "__main__":
     unittest.main()
