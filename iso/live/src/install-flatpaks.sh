@@ -81,7 +81,12 @@ if [[ -d "${FLATPAK_CACHE}/repo/refs" ]]; then
     cp -a -n "${FLATPAK_CACHE}/repo/." /var/lib/flatpak/repo/ || true
 fi
 
-flatpak remote-add --system --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+# remote-add fetches the .flatpakrepo over the network, so it flakes like the
+# pulls do: production-iso for utah in run 36077426925 died on
+#   Can't load uri https://dl.flathub.org/repo/flathub.flatpakrepo: [28] Timeout
+# after every E2E flavor had passed. --if-not-exists keeps a retry a no-op once
+# one attempt succeeds.
+retry_flatpak remote-add --system --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 
 # A bundle import needs a temporary local remote in an OCI build: direct
 # --bundle installs omit the deploy/active ref without flatpak-system-helper.
@@ -143,7 +148,7 @@ retry_flatpak install --system --noninteractive --no-related --or-update flathub
 # Kept out of the Brewfile-derived list on purpose: that list is the parity
 # contract with Bluefin and verify-desktop-contract compares it byte for byte.
 # This is Utah's own addition and does not belong in it.
-flatpak remote-add --system --if-not-exists tuna-os \
+retry_flatpak remote-add --system --if-not-exists tuna-os \
     https://tunaos.org/flatpak/tuna-os.flatpakrepo
 retry_flatpak install --system --noninteractive --no-related --or-update \
     tuna-os com.mitchellh.ghostty
