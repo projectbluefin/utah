@@ -1,0 +1,20 @@
+# Utah is a workstation; Hummingbird's user preset is a server's.
+#
+# Hummingbird ships 90-default-user.preset enabling only dbus, then
+# 99-default-disable.preset with "disable *". Fedora's user preset, which Bluefin
+# inherits, also enables the desktop's per-user services. Without these, an
+# installed Utah had no audio server (so no volume control and no sound), no
+# XDG user directories for new accounts, and no GRUB boot-success mark for
+# 14_menu_show_once. Presets are read in lexicographic order and the first
+# match wins, so this file outranks 90-* and 99-*.
+#
+# Global user presets are not applied by bootc's first-boot preset-all, so
+# configure-services.sh also enables these at build time. The desktop
+# contract's services.user_enabled asserts the result.
+enable pipewire.socket
+enable pipewire-pulse.socket
+enable wireplumber.service
+enable xdg-user-dirs.service
+enable grub-boot-success.timer
+enable obex.service
+enable mpris-proxy.service

@@ -101,6 +101,29 @@ ln -sf /dev/null /usr/lib/systemd/system/bootc-fetch-apply-updates.service
 rm -f /usr/lib/systemd/system/*.wants/bootc-fetch-apply-updates.* \
       /etc/systemd/system/*.wants/bootc-fetch-apply-updates.*
 
+# Hummingbird is a server base and declares the serial console on the kernel
+# cmdline in /usr/lib/bootc/kargs.d/00-base.toml ("console=ttyS0,115200n8").
+# systemd-getty-generator reads that argument and instantiates
+# serial-getty@ttyS0.service for it, so a desktop machine with no serial port
+# gets an agetty that dies on EIO roughly every ten seconds for the whole
+# session: 197 journal entries in one boot on the X230, and a pointless wakeup
+# each time on battery. Bluefin carries neither half and stays silent; see #103.
+#
+# The karg itself cannot be withdrawn from here. bootc's kargs.d is additive
+# only, and dropping an argument a base image declared there is documented
+# undefined behavior, so masking the unit is the lever the image actually has.
+# Mask the instance, not serial-getty@.service: ttyS0 is the port the base
+# names, and a genuinely attached serial device on another port still gets its
+# login. A mask also outranks the generator's getty.target.wants symlink, which
+# is created in /run at boot and so cannot be removed at build time.
+#
+# Both /etc and /usr/lib, for the same cross-vendor 3-way merge reason as the
+# update timer above.
+systemctl mask serial-getty@ttyS0.service
+ln -sf /dev/null /usr/lib/systemd/system/serial-getty@ttyS0.service
+rm -f /usr/lib/systemd/system/*.wants/serial-getty@ttyS0.service \
+      /etc/systemd/system/*.wants/serial-getty@ttyS0.service
+
 # SSH follows TunaOS's convention: closed in published images, opt-in for a
 # local debug build. The preset must agree or first-boot preset-all will undo
 # the build-time enablement.
@@ -113,6 +136,21 @@ else
 fi
 
 # These are global user-service presets, so systemctl needs --global.
+#
+# The desktop's per-user services. Hummingbird's user preset enables only
+# dbus and then disables everything else. Fedora's (and so Bluefin's) enables
+# these, and without them an installed Utah had no audio server at all. See
+# /usr/lib/systemd/user-preset/85-utah-desktop.preset; the desktop contract
+# asserts the result (services.user_enabled).
+for unit in pipewire.socket pipewire-pulse.socket wireplumber.service \
+            xdg-user-dirs.service grub-boot-success.timer \
+            obex.service mpris-proxy.service; do
+    if user_unit_exists "${unit}"; then
+        systemctl --global enable "${unit}"
+    else
+        echo "user unit ${unit} is not installed; skipping" >&2
+    fi
+done
 if user_unit_exists podman-auto-update.timer; then
     systemctl --global enable podman-auto-update.timer
 fi

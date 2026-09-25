@@ -13,3 +13,9 @@ enabled=1
 gpgcheck=0
 repo_gpgcheck=0
 priority=1
+# The factory's grub2 is built with Hummingbird's efi_vendor (EFI/hummingbird)
+# and would replace the base's Fedora GRUB, which is the one paired with the
+# base's Fedora shim in EFI/fedora. Installed systems then cannot boot (#253).
+# Keep the base GRUB until utah-packages#238 (efi_vendor=fedora) publishes;
+# scripts/verify-efi-chain.sh fails the build if the pairing breaks again.
+excludepkgs=grub2*

@@ -13,6 +13,12 @@ enable bootc-unified-storage.service
 enable dconf-update.service
 enable input-remapper.service
 disable sshd.service
+# The Hummingbird base's 90-systemd.preset enables getty@.service, and its
+# kargs.d declares console=ttyS0, which is what makes systemd-getty-generator
+# instantiate the serial login on a desktop box. Presets are read in
+# lexicographic order and the first match wins, so this file outranks 90-*;
+# configure-services.sh masks the unit as well. See #103.
+disable serial-getty@ttyS0.service
 disable rpm-ostree.service
 disable bootc-fetch-apply-updates.timer
 disable bootc-fetch-apply-updates.service

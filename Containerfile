@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=quay.io/hummingbird-community/bootc-os:latest@sha256:9d69f6f33f5af87c76b0d7f49387bc4b969271a8eb788970396d6eab2b5af8a2
+ARG BASE_IMAGE=quay.io/hummingbird-community/bootc-os:latest@sha256:7ea735968c2543f51a975474b13b17bb8e110852045fd99bd13066179bf775f2
 # The package factory publishes a complete, digest-addressable RPM repository.
 # Keep this pin in Utah so an image build is reproducible and can be reviewed
 # against the exact package set it consumes.
@@ -69,6 +69,7 @@ COPY scripts/install-packages.py \
      scripts/verify-gnome-extensions.py \
      scripts/mirror-shim.sh \
      scripts/check-image-parity.py \
+     scripts/verify-efi-chain.sh \
      /tmp/utah-scripts/
 # Common publishes Bluefin artwork, desktop defaults, Brewfiles, and setup
 # hooks in a separate profile from its shared system files. Both are required:
@@ -91,7 +92,8 @@ RUN for pair in install-packages.py:utah-install-packages \
                 verify-desktop-contract.py:utah-verify-desktop-contract \
                 verify-gnome-extensions.py:utah-verify-gnome-extensions \
                 mirror-shim.sh:utah-mirror-shim \
-                check-image-parity.py:utah-check-image-parity; do \
+                check-image-parity.py:utah-check-image-parity \
+                verify-efi-chain.sh:utah-verify-efi-chain; do \
       install -Dm 0755 "/tmp/utah-scripts/${pair%%:*}" "/usr/local/libexec/${pair##*:}" || exit 1; \
     done && \
     cp -a /tmp/utah-common/. / && \
@@ -164,6 +166,11 @@ ARG UUPD_TIMER_SHA256=bbb5f098ec33d047bdef571e0bc112364df157e0f92d73e0febab703c4
 # it applies the desktop service policy, login defaults, update policy, and
 # removes the extension build toolchain before the final cleanup.
 #
+# The shim mirroring and the EFI chain guard at the end belong to the same
+# step. The guard fails the build when shim has no packaged GRUB with a
+# matching prefix beside it: that shipped once, and only the post-testing
+# install e2e noticed, three days later (scripts/verify-efi-chain.sh).
+#
 # The shim mirroring at the end belongs to the same step: it was a layer of its
 # own and cost forty seconds to commit a few megabytes. It lives in
 # scripts/mirror-shim.sh rather than inline, because as a bare && chain a
@@ -185,7 +192,8 @@ RUN mkdir -p /tmp/uupd && \
     ENABLE_SSHD="${ENABLE_SSHD}" /usr/local/libexec/utah-configure-services && \
     /usr/local/libexec/utah-configure-branding && \
     /usr/local/libexec/utah-verify-desktop-contract /usr/share/utah/bluefin-desktop.toml && \
-    /usr/local/libexec/utah-mirror-shim
+    /usr/local/libexec/utah-mirror-shim && \
+    /usr/local/libexec/utah-verify-efi-chain
 
 # Dakota-compatible flavors: OGC is built and asserted before NVIDIA so the
 # NVIDIA path can bind its module to the exact kernel tree it will boot.

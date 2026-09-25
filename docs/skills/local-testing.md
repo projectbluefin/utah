@@ -1,7 +1,7 @@
 ---
 name: local-testing
 version: "1.0"
-last_updated: "2026-09-21"
+last_updated: "2026-09-23"
 id: local-testing
 one_line_purpose: Build, install, and boot Utah locally in a VM or live ISO.
 entry_point: docs/skills/local-testing.md
@@ -228,8 +228,10 @@ accounts and requires local QEMU/KVM access, not a production installation.
 
 Passing runs refresh `docs/verification/README.md`, its screenshots, and the
 delimited verification block in the root README. These are historical local
-test records, not proof that the current commit passed CI. In particular,
-local fastfetch capture waits after terminal autostart by default. CI sets
+test records, not proof that the current commit passed CI. The harness gates
+the terminal autostart release via a trigger file so `installed-desktop.png`
+captures a clean desktop state before `installed-fastfetch.png` captures the
+terminal overlay, preventing duplicate verification evidence (#240). CI sets
 `UTAH_E2E_REQUIRE_FASTFETCH=1` to require OCR of its completion marker and
 kernel output, and `UTAH_E2E_REQUIRE_SCREENSHOTS=1` to reject missing PNGs.
 CI retains the tested commit/image digest and proposes evidence updates in a

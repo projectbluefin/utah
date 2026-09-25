@@ -145,6 +145,23 @@ class EvidenceTests(unittest.TestCase):
         installer = (ROOT / "iso/live/src/install-flatpaks.sh").read_text()
         self.assertNotIn("GDK_DISABLE", installer)
 
+    def test_desktop_screenshot_precedes_terminal_trigger(self):
+        # #240: installed-desktop.png and installed-fastfetch.png must capture
+        # distinct states. The clean desktop shot must be taken before touching
+        # the trigger that releases Ghostty, and the harness must assert the
+        # two resulting screenshots are not byte-identical.
+        script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
+        desktop_shot = script.index('shot installed-desktop "${MONITOR_INSTALLED}"')
+        trigger = script.index('ssh_target "touch /tmp/utah-e2e-open-terminal"')
+        fastfetch_shot = script.index('shot installed-fastfetch "${MONITOR_INSTALLED}"')
+        self.assertLess(desktop_shot, trigger, "desktop shot must precede terminal launch")
+        self.assertLess(trigger, fastfetch_shot, "terminal trigger must precede fastfetch shot")
+        self.assertIn("installed-desktop.png and installed-fastfetch.png are byte-identical", script)
+
+    def test_local_fastfetch_capture_retries_on_duplicate(self):
+        script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
+        self.assertIn("retrying capture after 10s", script)
+
     def test_iso_budget_guard_fails_closed_above_ceiling(self):
         # The budget guard (#128) is the whole point of the size drift this PR
         # closes. Extract the real block and run it with du stubbed so we can

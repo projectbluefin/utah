@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-22",
+  "generated_at": "2026-09-24",
   "generator": "scripts/generate-site-data.py",
   "groups": [
     {
@@ -27,7 +27,6 @@
         "gnome-ponytail-daemon",
         "gnome-tweaks",
         "google-noto-sans-cjk-vf-fonts",
-        "grub2-efi-x64-cdboot",
         "gum",
         "gvfs-nfs",
         "ibus-mozc",
@@ -93,15 +92,20 @@
       "packages": [
         "NetworkManager-config-connectivity-fedora",
         "abattis-cantarell-fonts",
+        "acl",
         "alsa-ucm",
+        "attr",
         "bash-completion",
         "bind-utils",
+        "buildah",
+        "bzip2",
         "crypto-policies-scripts",
         "dbus-tools",
         "default-fonts-core-mono",
         "default-fonts-core-sans",
         "default-fonts-core-serif",
         "file",
+        "glycin-thumbnailer",
         "google-noto-sans-math-fonts",
         "google-noto-sans-mono-vf-fonts",
         "google-noto-sans-symbols-2-fonts",
@@ -109,11 +113,17 @@
         "hostname",
         "iptables-nft",
         "keyutils",
+        "krb5-workstation",
         "langpacks-en",
         "langpacks-fonts-en",
         "less",
         "man-db",
+        "pciutils",
+        "pipewire-utils",
+        "pulseaudio-utils",
         "python3-pip",
+        "samba-client",
+        "samba-common-tools",
         "systemd-container",
         "unzip",
         "which",
@@ -164,8 +174,8 @@
     }
   ],
   "totals": {
-    "installed": 107,
-    "unavailable": 9
+    "installed": 117,
+    "unavailable": 10
   },
   "unavailable": [
     {
@@ -187,6 +197,12 @@
     {
       "issues": [],
       "name": "fish"
+    },
+    {
+      "issues": [
+        253
+      ],
+      "name": "grub2-efi-x64-cdboot"
     },
     {
       "issues": [

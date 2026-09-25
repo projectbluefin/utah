@@ -43,6 +43,13 @@ check:
     grep -q 'disable bootc-fetch-apply-updates.timer' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
     grep -q 'disable bootc-fetch-apply-updates.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
     grep -q 'bootc-fetch-apply-updates.timer' scripts/configure-services.sh
+    # The serial getty is a Hummingbird server leftover that spams the journal
+    # on machines without a serial port; the mask and the preset must both
+    # survive, and the contract has to declare the mask. See #103.
+    grep -q 'serial-getty@ttyS0.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
+    grep -q 'systemctl mask serial-getty@ttyS0.service' scripts/configure-services.sh
+    grep -q 'ln -sf /dev/null /usr/lib/systemd/system/serial-getty@ttyS0.service' scripts/configure-services.sh
+    grep -q 'serial-getty@ttyS0.service' contracts/bluefin-desktop.toml
     test -f scripts/configure-services.sh
     test -f scripts/configure-branding.sh
     test -f scripts/verify-desktop-contract.py
@@ -56,6 +63,8 @@ check:
     git submodule update --init --recursive
     python3 scripts/verify-desktop-contract.py --check contracts/bluefin-desktop.toml
     python3 scripts/verify-gnome-extensions.py --source
+    # Every Bluefin package Utah lacks must be triaged (baselines/triage.toml).
+    python3 scripts/image-baseline.py check
     grep -q '/system_files/bluefin' Containerfile
     grep -q 'flatpak-preinstall.service' scripts/configure-services.sh
     grep -q 'flathub.flatpakrepo' scripts/configure-services.sh
@@ -198,6 +207,25 @@ check-parity:
 check-image-parity image bluefin="ghcr.io/ublue-os/bluefin:stable":
     podman run --rm --entrypoint /usr/local/libexec/utah-check-image-parity \
       "{{image}}" --strict --bluefin-image "{{bluefin}}"
+
+# Re-measure Utah against the published Bluefin and Dakota images: package
+# lists and user-visible files from inside each image, and Dakota's SBOM.
+# Needs podman and gh. Then review baselines/GAP.md and triage new gaps.
+baselines bluefin="ghcr.io/ublue-os/bluefin:stable" utah="ghcr.io/projectbluefin/utah:testing":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for pair in "{{ bluefin }} bluefin" "{{ utah }} utah"; do
+      read -r image dir <<<"$pair"
+      podman pull -q "$image" >/dev/null
+      python3 scripts/image-baseline.py extract "$image" "baselines/$dir"
+    done
+    run=$(gh run list -R projectbluefin/dakota -w publish.yml -b main -s success -L 20 \
+      --json databaseId --jq '.[].databaseId' | while read -r id; do
+        gh api "repos/projectbluefin/dakota/actions/runs/$id/artifacts" \
+          --jq '.artifacts[].name' | grep -qx sbom-dakota && { echo "$id"; break; }
+      done)
+    python3 scripts/image-baseline.py dakota "$run" baselines/dakota
+    python3 scripts/image-baseline.py gap
 
 image_name base_name stream flavor:
     @python3 scripts/flavors.py image "{{ flavor }}"

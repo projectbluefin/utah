@@ -131,6 +131,23 @@ packages = [
     "crypto-policies-scripts",
     "python3-pip",
     "systemd-container",
+    # Base-image parity measured from the published Bluefin image rather than
+    # its manifest (baselines/GAP.md, #263). Bluefin inherits all of these from
+    # Silverblue; each resolves today against Hummingbird and the pinned
+    # factory image. Printing (cups), ModemManager, iPhone tools, sensors,
+    # poppler-utils and vim need dependencies the factory has not published
+    # yet (#263); they follow the next factory publish.
+    "pciutils",
+    "pipewire-utils",
+    "pulseaudio-utils",
+    "glycin-thumbnailer",
+    "samba-client",
+    "samba-common-tools",
+    "krb5-workstation",
+    "bzip2",
+    "acl",
+    "attr",
+    "buildah",
 ]
 
 [hardware]
@@ -280,9 +297,19 @@ packages = [
 #   nautilus (#100): a plugin shipped without the daemon behind it.
 #   Tracked by #107.
 #
-# grub2-efi-x64-cdboot and pipewire-libs-extra are supplied by the pinned
-# September 10 factory candidate and return to the install contract (#35).
+# grub2-efi-x64-cdboot
+#   The factory supplies it, but it must be the same build as grub2-efi-x64,
+#   and the factory's grub2 is built for EFI/hummingbird. Installing it
+#   replaced the base's Fedora GRUB, the one paired with the base's Fedora
+#   shim, and installed systems could not boot. utah-packages.repo now
+#   excludes grub2*, which makes cdboot unavailable too. Nothing in Utah uses
+#   it (it is Bluefin parity). Returns when utah-packages#238 publishes a grub2
+#   built with efi_vendor=fedora. Tracked by #253.
+#
+# pipewire-libs-extra is supplied by the pinned September 10 factory candidate
+# and returns to the install contract (#35).
 packages = [
+    "grub2-efi-x64-cdboot",
     "anaconda-live",
     "evolution-ews-core",
     "firefox",

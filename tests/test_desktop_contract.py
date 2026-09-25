@@ -276,6 +276,29 @@ class ServiceMaskParityTests(unittest.TestCase):
         self.assertIn("ln -sf /dev/null /usr/lib/systemd/system/bootc-fetch-apply-updates.service", config_services)
         self.assertIn("bootc-fetch-apply-updates", config_services)
 
+    def test_serial_getty_ttyS0_masked_and_disabled(self):
+        preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset").read_text()
+        self.assertIn("disable serial-getty@ttyS0.service", preset)
+
+        config_services = (ROOT / "scripts/configure-services.sh").read_text()
+        self.assertIn("systemctl mask serial-getty@ttyS0.service", config_services)
+        self.assertIn(
+            "ln -sf /dev/null /usr/lib/systemd/system/serial-getty@ttyS0.service", config_services
+        )
+
+        import tomllib
+
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        masked = contract.get("services", {}).get("masked", [])
+        self.assertIn("serial-getty@ttyS0.service", masked)
+
+    def test_serial_getty_mask_explains_the_hummingbird_karg(self):
+        # The mask only makes sense next to the reason: the karg lives in the
+        # base image's kargs.d and cannot be withdrawn from here.
+        config_services = (ROOT / "scripts/configure-services.sh").read_text()
+        self.assertIn("/usr/lib/bootc/kargs.d/00-base.toml", config_services)
+        self.assertIn("#103", config_services)
+
     def test_cross_vendor_merge_and_switch_mask_documented(self):
         readme = (ROOT / "README.md").read_text()
         desktop_skill = (ROOT / "docs/skills/desktop-contract.md").read_text()

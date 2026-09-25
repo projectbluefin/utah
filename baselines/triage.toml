@@ -1,0 +1,1239 @@
+# Triage of every Bluefin package Utah lacks (scripts/image-baseline.py).
+#
+# One table per package. status is one of:
+#   planned      Utah should ship it; issue tracks the work
+#   waived       Utah deliberately differs from Bluefin; reason says why
+#   unavailable  listed in packages/utah.toml [unavailable]
+#   untriaged    not decided yet (mostly libraries and tools that arrive as
+#                dependencies of something else)
+# `just check` fails on any gap missing from this file, so a new gap needs a
+# decision before it can land. Drop an entry once it stops being a gap.
+
+[package.wpa_supplicant]
+status = "planned"
+area = "wifi"
+issue = "#262"
+
+[package.iwd]
+status = "planned"
+area = "wifi"
+issue = "#262"
+
+[package.wireless-regdb]
+status = "planned"
+area = "wifi"
+issue = "#262"
+
+[package.iw]
+status = "planned"
+area = "wifi"
+issue = "#262"
+
+[package.nm-connection-editor]
+status = "planned"
+area = "wifi"
+issue = "#262"
+
+[package.openvpn]
+status = "planned"
+area = "wifi"
+issue = "#262"
+
+[package.openconnect]
+status = "planned"
+area = "wifi"
+issue = "#262"
+
+[package.vpnc]
+status = "planned"
+area = "wifi"
+issue = "#262"
+
+[package.ModemManager]
+status = "planned"
+area = "wifi"
+issue = "#262"
+
+[package.usb_modeswitch]
+status = "planned"
+area = "wifi"
+issue = "#262"
+
+[package.libmbim-utils]
+status = "planned"
+area = "wifi"
+issue = "#262"
+
+[package.libqmi-utils]
+status = "planned"
+area = "wifi"
+issue = "#262"
+
+[package.gnome-initial-setup]
+status = "planned"
+area = "first-boot"
+issue = "#261"
+
+[package.gnome-tour]
+status = "planned"
+area = "first-boot"
+issue = "#261"
+
+[package.nautilus]
+status = "planned"
+area = "files-devices"
+issue = "#263"
+
+[package.localsearch]
+status = "planned"
+area = "files-devices"
+issue = "#263"
+
+[package.gvfs-mtp]
+status = "planned"
+area = "files-devices"
+issue = "#263"
+
+[package.gvfs-afc]
+status = "planned"
+area = "files-devices"
+issue = "#263"
+
+[package.gvfs-gphoto2]
+status = "planned"
+area = "files-devices"
+issue = "#263"
+
+[package.usbmuxd]
+status = "planned"
+area = "files-devices"
+issue = "#263"
+
+[package.ifuse]
+status = "planned"
+area = "files-devices"
+issue = "#263"
+
+[package.libimobiledevice-utils]
+status = "planned"
+area = "files-devices"
+issue = "#263"
+
+[package.exfatprogs]
+status = "planned"
+area = "files-devices"
+issue = "#263"
+
+[package.udftools]
+status = "planned"
+area = "files-devices"
+issue = "#263"
+
+[package.xfsprogs]
+status = "planned"
+area = "files-devices"
+issue = "#263"
+
+[package.f2fs-tools]
+status = "planned"
+area = "files-devices"
+issue = "#263"
+
+[package.mtools]
+status = "planned"
+area = "files-devices"
+issue = "#263"
+
+[package.cups]
+status = "planned"
+area = "printing"
+issue = "#263"
+
+[package.cups-client]
+status = "planned"
+area = "printing"
+issue = "#263"
+
+[package.cups-filters]
+status = "planned"
+area = "printing"
+issue = "#263"
+
+[package.cups-filters-driverless]
+status = "planned"
+area = "printing"
+issue = "#263"
+
+[package.cups-browsed]
+status = "planned"
+area = "printing"
+issue = "#263"
+
+[package.cups-ipptool]
+status = "planned"
+area = "printing"
+issue = "#263"
+
+[package.ipp-usb]
+status = "planned"
+area = "printing"
+issue = "#263"
+
+[package.hplip]
+status = "planned"
+area = "printing"
+issue = "#263"
+
+[package.gutenprint]
+status = "planned"
+area = "printing"
+issue = "#263"
+
+[package.gutenprint-cups]
+status = "planned"
+area = "printing"
+issue = "#263"
+
+[package.foo2zjs]
+status = "planned"
+area = "printing"
+issue = "#263"
+
+[package.ghostscript]
+status = "planned"
+area = "printing"
+issue = "#263"
+
+[package.ghostscript-tools-fontutils]
+status = "planned"
+area = "printing"
+issue = "#263"
+
+[package.ghostscript-tools-printing]
+status = "planned"
+area = "printing"
+issue = "#263"
+
+[package.system-config-printer-libs]
+status = "planned"
+area = "printing"
+issue = "#263"
+
+[package.system-config-printer-udev]
+status = "planned"
+area = "printing"
+issue = "#263"
+
+[package.sane-backends]
+status = "planned"
+area = "printing"
+issue = "#263"
+
+[package.sane-airscan]
+status = "planned"
+area = "printing"
+issue = "#263"
+
+[package.paps]
+status = "planned"
+area = "printing"
+issue = "#263"
+
+[package.mpage]
+status = "planned"
+area = "printing"
+issue = "#263"
+
+[package.poppler-utils]
+status = "planned"
+area = "printing"
+issue = "#263"
+
+[package.libieee1284]
+status = "planned"
+area = "printing"
+issue = "#263"
+
+[package.plymouth]
+status = "planned"
+area = "hardware-power"
+issue = "#263"
+
+[package.plymouth-scripts]
+status = "planned"
+area = "hardware-power"
+issue = "#263"
+
+[package.fprintd]
+status = "planned"
+area = "hardware-power"
+issue = "#263"
+
+[package.bolt]
+status = "planned"
+area = "hardware-power"
+issue = "#263"
+
+[package.tuned]
+status = "planned"
+area = "hardware-power"
+issue = "#263"
+
+[package.tuned-ppd]
+status = "planned"
+area = "hardware-power"
+issue = "#263"
+
+[package.thermald]
+status = "planned"
+area = "hardware-power"
+issue = "#263"
+
+[package.intel-lpmd]
+status = "planned"
+area = "hardware-power"
+issue = "#263"
+
+[package.powertop]
+status = "planned"
+area = "hardware-power"
+issue = "#263"
+
+[package.zram-generator]
+status = "planned"
+area = "hardware-power"
+issue = "#263"
+
+[package.lm_sensors]
+status = "planned"
+area = "hardware-power"
+issue = "#263"
+
+[package.smartmontools]
+status = "planned"
+area = "hardware-power"
+issue = "#263"
+
+[package.nvme-cli]
+status = "planned"
+area = "hardware-power"
+issue = "#263"
+
+[package.usbutils]
+status = "planned"
+area = "hardware-power"
+issue = "#263"
+
+[package.pciutils]
+status = "planned"
+area = "hardware-power"
+issue = "#263"
+
+[package.alsa-utils]
+status = "planned"
+area = "hardware-power"
+issue = "#263"
+
+[package.pipewire-utils]
+status = "planned"
+area = "hardware-power"
+issue = "#263"
+
+[package.pulseaudio-utils]
+status = "planned"
+area = "hardware-power"
+issue = "#263"
+
+[package.kernel-tools]
+status = "planned"
+area = "hardware-power"
+issue = "#263"
+
+[package.hdparm]
+status = "planned"
+area = "hardware-power"
+issue = "#263"
+
+[package.dmidecode]
+status = "planned"
+area = "hardware-power"
+issue = "#263"
+
+[package.lshw]
+status = "planned"
+area = "hardware-power"
+issue = "#263"
+
+[package.orca]
+status = "planned"
+area = "accessibility-input"
+issue = "#263"
+
+[package.speech-dispatcher]
+status = "planned"
+area = "accessibility-input"
+issue = "#263"
+
+[package.speech-dispatcher-utils]
+status = "planned"
+area = "accessibility-input"
+issue = "#263"
+
+[package.espeak-ng]
+status = "planned"
+area = "accessibility-input"
+issue = "#263"
+
+[package.brltty]
+status = "planned"
+area = "accessibility-input"
+issue = "#263"
+
+[package.brlapi]
+status = "planned"
+area = "accessibility-input"
+issue = "#263"
+
+[package.ibus-anthy]
+status = "planned"
+area = "accessibility-input"
+issue = "#263"
+
+[package.ibus-chewing]
+status = "planned"
+area = "accessibility-input"
+issue = "#263"
+
+[package.ibus-hangul]
+status = "planned"
+area = "accessibility-input"
+issue = "#263"
+
+[package.ibus-libpinyin]
+status = "planned"
+area = "accessibility-input"
+issue = "#263"
+
+[package.ibus-m17n]
+status = "planned"
+area = "accessibility-input"
+issue = "#263"
+
+[package.ibus-typing-booster]
+status = "planned"
+area = "accessibility-input"
+issue = "#263"
+
+[package.libhangul]
+status = "planned"
+area = "accessibility-input"
+issue = "#263"
+
+[package.libchewing]
+status = "planned"
+area = "accessibility-input"
+issue = "#263"
+
+[package.anthy-unicode]
+status = "planned"
+area = "accessibility-input"
+issue = "#263"
+
+[package.kasumi-unicode]
+status = "planned"
+area = "accessibility-input"
+issue = "#263"
+
+[package.m17n-lib]
+status = "planned"
+area = "accessibility-input"
+issue = "#263"
+
+[package.gnome-disk-utility]
+status = "planned"
+area = "desktop-apps"
+issue = "#263"
+
+[package.gnome-system-monitor]
+status = "planned"
+area = "desktop-apps"
+issue = "#263"
+
+[package.gnome-color-manager]
+status = "planned"
+area = "desktop-apps"
+issue = "#263"
+
+[package.gnome-remote-desktop]
+status = "planned"
+area = "desktop-apps"
+issue = "#263"
+
+[package.gnome-user-share]
+status = "planned"
+area = "desktop-apps"
+issue = "#263"
+
+[package.gnome-browser-connector]
+status = "planned"
+area = "desktop-apps"
+issue = "#263"
+
+[package.papers-previewer]
+status = "planned"
+area = "desktop-apps"
+issue = "#263"
+
+[package.papers-thumbnailer]
+status = "planned"
+area = "desktop-apps"
+issue = "#263"
+
+[package.glycin-thumbnailer]
+status = "planned"
+area = "desktop-apps"
+issue = "#263"
+
+[package.gst-thumbnailers]
+status = "planned"
+area = "desktop-apps"
+issue = "#263"
+
+[package.ffmpegthumbnailer]
+status = "planned"
+area = "desktop-apps"
+issue = "#263"
+
+[package.gnome-epub-thumbnailer]
+status = "planned"
+area = "desktop-apps"
+issue = "#263"
+
+[package.rygel]
+status = "planned"
+area = "desktop-apps"
+issue = "#263"
+
+[package.gupnp-dlna]
+status = "planned"
+area = "desktop-apps"
+issue = "#263"
+
+[package.spice-vdagent]
+status = "planned"
+area = "vm-guests"
+issue = "#263"
+
+[package.spice-webdavd]
+status = "planned"
+area = "vm-guests"
+issue = "#263"
+
+[package.qemu-guest-agent]
+status = "planned"
+area = "vm-guests"
+issue = "#263"
+
+[package.open-vm-tools]
+status = "planned"
+area = "vm-guests"
+issue = "#263"
+
+[package.open-vm-tools-desktop]
+status = "planned"
+area = "vm-guests"
+issue = "#263"
+
+[package.virtualbox-guest-additions]
+status = "planned"
+area = "vm-guests"
+issue = "#263"
+
+[package.hypervfcopyd]
+status = "planned"
+area = "vm-guests"
+issue = "#263"
+
+[package.hypervkvpd]
+status = "planned"
+area = "vm-guests"
+issue = "#263"
+
+[package.hypervvssd]
+status = "planned"
+area = "vm-guests"
+issue = "#263"
+
+[package.pinentry]
+status = "planned"
+area = "auth-security"
+issue = "#263"
+
+[package.pinentry-gnome3]
+status = "planned"
+area = "auth-security"
+issue = "#263"
+
+[package.yubikey-manager]
+status = "planned"
+area = "auth-security"
+issue = "#263"
+
+[package.ykpers]
+status = "planned"
+area = "auth-security"
+issue = "#263"
+
+[package.ykclient]
+status = "planned"
+area = "auth-security"
+issue = "#263"
+
+[package.libyubikey]
+status = "planned"
+area = "auth-security"
+issue = "#263"
+
+[package.pam_yubico]
+status = "planned"
+area = "auth-security"
+issue = "#263"
+
+[package.pamu2fcfg]
+status = "planned"
+area = "auth-security"
+issue = "#263"
+
+[package.opensc]
+status = "planned"
+area = "auth-security"
+issue = "#263"
+
+[package.openpace]
+status = "planned"
+area = "auth-security"
+issue = "#263"
+
+[package.pcsc-lite]
+status = "planned"
+area = "auth-security"
+issue = "#263"
+
+[package.tpm2-tools]
+status = "planned"
+area = "auth-security"
+issue = "#263"
+
+[package.gssproxy]
+status = "planned"
+area = "auth-security"
+issue = "#263"
+
+[package.krb5-workstation]
+status = "planned"
+area = "auth-security"
+issue = "#263"
+
+[package.sssd-common]
+status = "planned"
+area = "auth-security"
+issue = "#263"
+
+[package.sssd-kcm]
+status = "planned"
+area = "auth-security"
+issue = "#263"
+
+[package.realmd]
+status = "planned"
+area = "auth-security"
+issue = "#263"
+
+[package.adcli]
+status = "planned"
+area = "auth-security"
+issue = "#263"
+
+[package.oddjob]
+status = "planned"
+area = "auth-security"
+issue = "#263"
+
+[package.samba]
+status = "planned"
+area = "network-fs"
+issue = "#263"
+
+[package.samba-client]
+status = "planned"
+area = "network-fs"
+issue = "#263"
+
+[package.samba-common-tools]
+status = "planned"
+area = "network-fs"
+issue = "#263"
+
+[package.samba-winbind]
+status = "planned"
+area = "network-fs"
+issue = "#263"
+
+[package.samba-winbind-clients]
+status = "planned"
+area = "network-fs"
+issue = "#263"
+
+[package.cifs-utils]
+status = "planned"
+area = "network-fs"
+issue = "#263"
+
+[package.cifs-utils-info]
+status = "planned"
+area = "network-fs"
+issue = "#263"
+
+[package.nfs-utils]
+status = "planned"
+area = "network-fs"
+issue = "#263"
+
+[package.nfs-common-utils]
+status = "planned"
+area = "network-fs"
+issue = "#263"
+
+[package.nfsv3-client-utils]
+status = "planned"
+area = "network-fs"
+issue = "#263"
+
+[package.nfsv4-client-utils]
+status = "planned"
+area = "network-fs"
+issue = "#263"
+
+[package.rpcbind]
+status = "planned"
+area = "network-fs"
+issue = "#263"
+
+[package.autofs]
+status = "planned"
+area = "network-fs"
+issue = "#263"
+
+[package.davfs2]
+status = "planned"
+area = "network-fs"
+issue = "#263"
+
+[package.rsync]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.tmux]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.nano]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.vim-enhanced]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.htop]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.nvtop]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.lsof]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.tree]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.pv]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.time]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.whois]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.traceroute]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.mtr]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.tcpdump]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.ethtool]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.bc]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.wget2]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.wget2-wget]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.7zip]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.bzip2]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.acl]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.attr]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.glow]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.rclone]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.restic]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.borgbackup]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.cryfs]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.fuse-encfs]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.sshpass]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.symlinks]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.pinfo]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.fpaste]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.lsb_release]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.xdg-utils]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.toolbox]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.buildah]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.criu]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.slirp4netns]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.compsize]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.net-tools]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.dbus-daemon]
+status = "waived"
+reason = "Utah uses dbus-broker, as Bluefin does for the system bus"
+
+[package.dbus-x11]
+status = "waived"
+reason = "X11 session helper; Utah ships the Wayland session only"
+
+[package.epiphany-runtime]
+status = "waived"
+reason = "Web view runtime Bluefin gets from its Fedora base; no Utah feature needs it"
+
+[package.fish]
+status = "unavailable"
+reason = "packages/utah.toml [unavailable]"
+
+[package.gnome-classic-session]
+status = "waived"
+reason = "Bluefin ships it; Utah deliberately offers the standard GNOME session only"
+
+[package.grub2-tools-extra]
+status = "waived"
+reason = "GRUB is excluded from the factory repo until utah-packages#238 (see utah.toml)"
+
+[package.httpd]
+status = "waived"
+reason = "Pulled in by gnome-user-share's WebDAV in Bluefin; tracked with gnome-user-share"
+
+[package.httpd-core]
+status = "waived"
+reason = "Pulled in by gnome-user-share's WebDAV in Bluefin; tracked with gnome-user-share"
+
+[package.httpd-tools]
+status = "waived"
+reason = "Pulled in by gnome-user-share's WebDAV in Bluefin; tracked with gnome-user-share"
+
+[package.initscripts-service]
+status = "waived"
+reason = "Legacy SysV service shim"
+
+[package.ppp]
+status = "unavailable"
+reason = "packages/utah.toml [unavailable]"
+
+[package.ptyxis]
+status = "waived"
+reason = "Utah's terminal is the Ghostty Flatpak (Hummingbird packages no ptyxis/vte291)"
+
+[package.qemu-user-static-aarch64]
+status = "waived"
+reason = "Cross-architecture emulation for container builds; not a desktop default"
+
+[package.rpm-ostree]
+status = "waived"
+reason = "Utah is a bootc image and updates with bootc; rpm-ostree is not part of it"
+
+[package.systemd-networkd]
+status = "waived"
+reason = "Utah manages networking with NetworkManager"
+
+[package.v4l2loopback]
+status = "waived"
+reason = "Out-of-tree kernel module; not built for Hummingbird's kernel"
+
+[package.zfs]
+status = "waived"
+reason = "Out-of-tree kernel module; not built for Hummingbird's kernel"
+
+[package.zsh]
+status = "unavailable"
+reason = "packages/utah.toml [unavailable]"
+
+[package.ImageMagick]
+status = "untriaged"
+
+[package.antiword]
+status = "untriaged"
+
+[package.argyllcms]
+status = "untriaged"
+
+[package.avahi]
+status = "untriaged"
+
+[package.avahi-tools]
+status = "untriaged"
+
+[package.b43-fwcutter]
+status = "untriaged"
+
+[package.bcache-tools]
+status = "untriaged"
+
+[package.bison]
+status = "untriaged"
+
+[package.capstone]
+status = "untriaged"
+
+[package.cracklib-dicts]
+status = "untriaged"
+
+[package.desktop-file-utils]
+status = "untriaged"
+
+[package.dnf5daemon-server]
+status = "untriaged"
+
+[package.dnsmasq]
+status = "untriaged"
+
+[package.exempi]
+status = "untriaged"
+
+[package.exiv2]
+status = "untriaged"
+
+[package.ffmpeg]
+status = "untriaged"
+
+[package.flex]
+status = "untriaged"
+
+[package.gamemode]
+status = "untriaged"
+
+[package.gdbm]
+status = "untriaged"
+
+[package.gst-editing-services]
+status = "untriaged"
+
+[package.gstreamer1-plugins-bad-free]
+status = "untriaged"
+
+[package.hfsplus-tools]
+status = "untriaged"
+
+[package.ipset]
+status = "untriaged"
+
+[package.iptstate]
+status = "untriaged"
+
+[package.kpartx]
+status = "untriaged"
+
+[package.lcms]
+status = "untriaged"
+
+[package.libavc1394]
+status = "untriaged"
+
+[package.libbs2b]
+status = "untriaged"
+
+[package.libgsf]
+status = "untriaged"
+
+[package.liblouisutdml-utils]
+status = "untriaged"
+
+[package.libosinfo]
+status = "untriaged"
+
+[package.libraw1394]
+status = "untriaged"
+
+[package.libuser]
+status = "untriaged"
+
+[package.libwnck3]
+status = "untriaged"
+
+[package.lockdev]
+status = "untriaged"
+
+[package.lrzsz]
+status = "untriaged"
+
+[package.m4]
+status = "untriaged"
+
+[package.mcelog]
+status = "untriaged"
+
+[package.memstrack]
+status = "untriaged"
+
+[package.mkpasswd]
+status = "untriaged"
+
+[package.nilfs-utils]
+status = "untriaged"
+
+[package.openal-soft]
+status = "untriaged"
+
+[package.osinfo-db-tools]
+status = "untriaged"
+
+[package.passwdqc-utils]
+status = "untriaged"
+
+[package.powerstat]
+status = "untriaged"
+
+[package.python-unversioned-command]
+status = "untriaged"
+
+[package.python3-charset-normalizer]
+status = "untriaged"
+
+[package.python3-email-validator]
+status = "untriaged"
+
+[package.python3-html2text]
+status = "untriaged"
+
+[package.python3-idna]
+status = "untriaged"
+
+[package.python3-inotify]
+status = "untriaged"
+
+[package.python3-jmespath]
+status = "untriaged"
+
+[package.python3-keyring]
+status = "untriaged"
+
+[package.python3-linux-procfs]
+status = "untriaged"
+
+[package.python3-pskc]
+status = "untriaged"
+
+[package.python3-shtab]
+status = "untriaged"
+
+[package.qt6-qtbase]
+status = "untriaged"
+
+[package.quota]
+status = "untriaged"
+
+[package.serd]
+status = "untriaged"
+
+[package.setools-console]
+status = "untriaged"
+
+[package.sord]
+status = "untriaged"
+
+[package.sos]
+status = "untriaged"
+
+[package.soundtouch]
+status = "untriaged"
+
+[package.sysstat]
+status = "untriaged"
+
+[package.tcl]
+status = "untriaged"
+
+[package.tslib]
+status = "untriaged"
+
+[package.uchardet]
+status = "untriaged"
+
+[package.unbound-anchor]
+status = "untriaged"
+
+[package.uresourced]
+status = "untriaged"
+
+[package.uriparser]
+status = "untriaged"
+
+[package.usbip]
+status = "untriaged"
+
+[package.usermode]
+status = "untriaged"
+
+[package.uupd]
+status = "untriaged"
+
+[package.virt-what]
+status = "untriaged"
+
+[package.xdriinfo]
+status = "untriaged"
+
+[package.xmlsec1]
+status = "untriaged"
+
+[package.xrandr]
+status = "untriaged"
+
+[package.xset]
+status = "untriaged"
+
+[package.zeromq]
+status = "untriaged"
