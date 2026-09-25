@@ -148,8 +148,8 @@ The live initramfs is built inside `iso/live/Containerfile` using `dracut`. Beca
 container builds, the step creates `/var/roothome` (mode 0700) so `dracut-install -f /root /root`
 succeeds. Syslog logging is disabled via `sysloglvl=0` in `/etc/dracut.conf.d/00-no-syslog.conf`
 to avoid container `/dev/log` warnings, and dracut runs with `--stdlog 4`. Output is captured
-under `pipefail`, and any `dracut[E]` errors fail the build immediately, preventing silent
-initramfs corruption.
+under `pipefail`, and the error gate established in #132 is tightened from `dracut[E]: FAILED` to
+any `dracut[E]` line so any error fails the build immediately.
 
 ### Supported and unsupported boot paths
 

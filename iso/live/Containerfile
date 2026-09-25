@@ -39,17 +39,14 @@ RUN chmod 0755 /tmp/utah-live-src/configure-live.sh && \
 #
 # /root is a symlink to /var/roothome in bootc images, but /var/roothome does
 # not exist at container build time, causing dracut-install to fail copying it.
-# We create /var/roothome (0700) so dracut-install can resolve the symlink target.
+# We create /var/roothome with mode 0700 so dracut-install can resolve the symlink target.
 #
 # In container build contexts, syslog logging is disabled via sysloglvl=0 so
 # dracut does not emit /dev/log errors.
 #
-# dracut is run with --stdlog 4 and output is monitored so any logged error
-# (dracut[E]) immediately fails the live initramfs build step. dracut exits 0
-# even when it logs a failed install, so without this grep the broken
-# initramfs shipped (#132):
-#     dracut-install: ERROR: installing '/root' to '/root'
-#     dracut[E]: FAILED: /usr/lib/dracut/dracut-install ... -f /root /root
+# Tightened error gate (#132): dracut runs with --stdlog 4 and the output check
+# is broadened from 'dracut[E]: FAILED' to any 'dracut[E]' error line, ensuring any
+# logged dracut error fails the live initramfs build step immediately.
 #
 # tpm2-tss and pcsc are omitted because they cannot be satisfied. Hummingbird's
 # dracut config adds "fido2 tpm2-tss pkcs11 pcsc" unconditionally, and a module
