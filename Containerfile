@@ -69,6 +69,7 @@ COPY scripts/install-packages.py \
      scripts/verify-gnome-extensions.py \
      scripts/mirror-shim.sh \
      scripts/verify-efi-chain.sh \
+     scripts/fix-home-labels.sh \
      /tmp/utah-scripts/
 # Common publishes Bluefin artwork, desktop defaults, Brewfiles, and setup
 # hooks in a separate profile from its shared system files. Both are required:
@@ -91,7 +92,8 @@ RUN for pair in install-packages.py:utah-install-packages \
                 verify-desktop-contract.py:utah-verify-desktop-contract \
                 verify-gnome-extensions.py:utah-verify-gnome-extensions \
                 mirror-shim.sh:utah-mirror-shim \
-                verify-efi-chain.sh:utah-verify-efi-chain; do \
+                verify-efi-chain.sh:utah-verify-efi-chain \
+                fix-home-labels.sh:utah-fix-home-labels; do \
       install -Dm 0755 "/tmp/utah-scripts/${pair%%:*}" "/usr/local/libexec/${pair##*:}" || exit 1; \
     done && \
     cp -a /tmp/utah-common/. / && \
@@ -130,6 +132,7 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
       /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
     IMAGE_FLAVOR=main /usr/local/libexec/utah-verify-rpm-contract \
       /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
+    /usr/local/libexec/utah-fix-home-labels && \
     DNF="$(command -v dnf5 || command -v dnf)" && \
     "$DNF" clean all && rm -rf /var/cache/libdnf5 /var/cache/dnf
 
