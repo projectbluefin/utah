@@ -1,6 +1,6 @@
 ---
 name: package-contract
-version: "1.0"
+version: "1.1"
 last_updated: "2026-09-22"
 id: package-contract
 one_line_purpose: Maintain Bluefin package parity and Utah's overlay manifest.
@@ -30,10 +30,11 @@ policy for changing them.
 - **`packages/bluefin.toml`** — the parity contract. It is a byte-for-byte
   copy of projectbluefin/bluefin's `build_files/packages/base.toml` pinned to
   the revision in `packages/.bluefin-parity-ref` and must stay that way.
-  **Never hand-edit it.** Sync it verbatim from upstream; any drift is a parity
-  bug. `just check-parity` diffs it against upstream on every CI run so drift
-  fails the build rather than accumulating quietly (recipe comment: `Justfile`,
-  `check-parity`).
+  **Never hand-edit it.** Sync it verbatim from upstream; any drift is a
+  parity bug. `just check-parity` diffs it against upstream at that pinned SHA
+  on every CI run so drift fails the build rather than accumulating quietly,
+  while preventing unpinned upstream promotions from breaking unrelated PRs
+  (recipe comment: `Justfile`, `check-parity`).
 - **`packages/utah.toml`** — Utah's overlay. Everything Utah needs *in
   addition to* or *instead of* the contract lives here. The full rules are in
   the header comment of that file (cite it; do not move or copy it):
@@ -158,11 +159,18 @@ releases or emit missing-module errors with empty kernel names.
 
 ## Pinned upstream parity reference
 
-`packages/.bluefin-parity-ref` holds the 40-character commit SHA that
-`packages/bluefin.toml` is synchronized with. The reference exists so Utah's
-parity gate tests against a known revision rather than moving with Bluefin's
-default branch, preventing unrelated upstream changes from breaking Utah's CI.
-Update it whenever synchronizing `packages/bluefin.toml` with upstream.
+The upstream revision of `projectbluefin/bluefin` is recorded in
+`packages/.bluefin-parity-ref` as a full 40-character commit SHA. `just check-parity`
+fetches `base.toml` at that exact revision. The nightly
+`update-bluefin-parity.yml` workflow resolves Bluefin `main`, then opens or updates
+the single `automation/bluefin-parity` PR with both the ref and manifest when its
+package contract changes. Its PR body includes the upstream diff; it never
+auto-merges, so maintainers can decide whether Utah's overlay needs adjustment.
+A PR opened with the default `GITHUB_TOKEN` gets no `on: pull_request` checks
+by default, so the workflow's last step explicitly dispatches
+`build.yml --ref automation/bluefin-parity` after opening or updating the PR,
+which is what makes `just check-repos` catch a missing overlay source on the
+bump PR itself (see `docs/skills/ci-workflows.md`).
 
 Current counts, per the README "Package parity" section: 57 Bluefin contract
 packages installed, 83 Utah additions (GNOME 51, base-image parity, device

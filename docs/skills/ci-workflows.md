@@ -1,6 +1,6 @@
 ---
 name: ci-workflows
-version: "1.0"
+version: "1.1"
 last_updated: "2026-09-19"
 id: ci-workflows
 one_line_purpose: Navigate Utah's build, promote, and sync workflow topology.
@@ -21,8 +21,8 @@ metadata:
 
 # CI Workflows
 
-Three workflows, all thin callers into `projectbluefin/actions@v1` reusables,
-each pinned to a SHA tagged `v1`:
+Eight workflows, all thin callers into `projectbluefin/actions@v1` reusables
+or pinned third-party actions:
 
 - `.github/workflows/build.yml` -- pull requests, pushes to `testing`, a
   manual dispatch. Top-level `permissions: {}`; each job
@@ -32,8 +32,42 @@ each pinned to a SHA tagged `v1`:
 - `.github/workflows/sync-main-to-testing.yml` -- source pushes to `main`,
   nightly cron, and manual dispatch; explicitly dispatches the testing build
   after syncing. Token-authenticated branch pushes alone do not start CI.
+- `.github/workflows/update-bluefin-parity.yml` -- nightly and manual
+  dispatch. It resolves Bluefin `main` and uses one fixed branch,
+  `automation/bluefin-parity`, so `create-pull-request` updates the existing
+  review rather than opening duplicates. It does not auto-merge. Before
+  proposing, it reruns `scripts/generate-site-data.py` and
+  `scripts/check-doc-counts.py --write`, so the bump carries the new
+  `site/data/packages.json` and the README / `package-contract.md` counts
+  that `just check` compares against the manifests.
+
+  The bump PR would otherwise arrive with **no checks**: GitHub does not
+  start `on: pull_request` workflows for pull requests created with the
+  default `GITHUB_TOKEN`. The workflow's last step dispatches
+  `gh workflow run build.yml --ref automation/bluefin-parity` right after
+  `create-pull-request` runs, so the run attaches to the branch head, which
+  is the PR head, and `check-parity`/`check-repos` report on the bump PR
+  itself -- the same explicit-dispatch pattern `sync-main-to-testing.yml`
+  uses for the testing build. Needs `actions: write`, which the job holds.
+  Gated on `create-pull-request`'s own `pull-request-operation` output being
+  `created` or `updated` (not on the parity diff alone), so a nightly run
+  against an unmerged, unchanged bump branch does not re-dispatch the whole
+  flavor matrix for nothing.
+- `.github/workflows/execute-release.yml` -- pushes to `main` carrying a
+  promotion commit, or manual dispatch; promotes `:testing` to `:stable`
+  through the release gate.
 - `.github/workflows/post-testing-e2e.yml` -- successful non-PR testing builds
   explicitly dispatch this, or manually supply a successful testing build run ID.
+- `.github/workflows/pages.yml` -- pushes to `main` touching `site/**`, the
+  package manifests, or the site generator, plus manual dispatch. It verifies
+  the committed site data matches the manifests (`generate-site-data.py
+  --check`) before deploying to GitHub Pages; deployments are serialized and
+  never cancelled in flight.
+- `.github/workflows/image-baselines.yml` -- weekly (Monday 05:17 UTC) and
+  manual dispatch. Runs `just baselines` to re-measure Utah against the
+  published Bluefin and Dakota images and proposes the refreshed snapshots as
+  a pull request; `just check` then fails that PR if a Bluefin package Utah
+  lacks is not triaged in `baselines/triage.toml`.
 
 CI delegates builds, vulnerability reporting, keyless signatures, provenance,
 and caching to `projectbluefin/actions@v1` (originated as a `docs/building.md`
@@ -56,7 +90,8 @@ opaque `exit status 71` from the image build (comment,
   (`scripts/check-script-syntax.py`), host-side unit tests (`just test`),
   and the ban on flavor literals in workflows.
 - `just check-parity` -- `packages/bluefin.toml` against Bluefin's upstream
-  pinned at `packages/.bluefin-parity-ref`.
+  pinned at `packages/.bluefin-parity-ref`; the nightly parity workflow opens
+  a dedicated review when Bluefin `main` changes it.
 - `just check-repos` -- the complete installation transaction against the
   digest-pinned base and package repository, including extension build tools.
 
