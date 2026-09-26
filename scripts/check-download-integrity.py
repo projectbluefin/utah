@@ -18,6 +18,7 @@ FILES = [
     Path("Containerfile.kernel"),
     Path("scripts/install-nvidia.sh"),
     Path("scripts/install-ogc-kernel.sh"),
+    Path("scripts/install-v4l2loopback.sh"),
     Path("scripts/configure-services.sh"),
     Path("iso/live/src/install-flatpaks.sh"),
     Path("iso/scripts/build-iso.sh"),

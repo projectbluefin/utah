@@ -73,7 +73,7 @@ class EvidenceTests(unittest.TestCase):
         for required in ["OVERLAY_FS", "SQUASHFS", "SQUASHFS_ZSTD", "EROFS_FS",
                          "BTRFS_FS", "BLK_DEV_LOOP", "DM_SNAPSHOT", "DM_CRYPT",
                          "CRYPTO_XTS", "FUSE_FS", "FS_VERITY", "SYSFB_SIMPLEFB",
-                         "DRM_SIMPLEDRM"]:
+                         "DRM_SIMPLEDRM", "VIDEO_DEV"]:
             self.assertIn(required, names)
             self.assertRegex(script, rf"--(?:enable|module) {required}(?:\s|$)")
         self.assertEqual(script.count("verify_config /usr/lib/utah/ogc-kernel.config"), 2)

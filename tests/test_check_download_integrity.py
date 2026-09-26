@@ -25,6 +25,7 @@ INSPECTED_FILES = [
     "Containerfile.kernel",
     "scripts/install-nvidia.sh",
     "scripts/install-ogc-kernel.sh",
+    "scripts/install-v4l2loopback.sh",
     "scripts/configure-services.sh",
     "iso/live/src/install-flatpaks.sh",
     "iso/scripts/build-iso.sh",
@@ -75,9 +76,9 @@ class DownloadIntegrityTests(unittest.TestCase):
     def test_shipped_tree_passes(self):
         result = self.run_check(cwd=ROOT)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("checked 7 build recipes: downloads are pinned and verified", result.stdout)
+        self.assertIn("checked 8 build recipes: downloads are pinned and verified", result.stdout)
 
-    def test_all_seven_inspected_paths_reject_mutable_latest_release(self):
+    def test_all_eight_inspected_paths_reject_mutable_latest_release(self):
         for path_str in INSPECTED_FILES:
             with self.subTest(path=path_str):
                 with tempfile.TemporaryDirectory() as sub_tmp:

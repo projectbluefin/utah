@@ -990,8 +990,9 @@ status = "waived"
 reason = "Utah manages networking with NetworkManager"
 
 [package.v4l2loopback]
-status = "waived"
-reason = "Out-of-tree kernel module; not built for Hummingbird's kernel"
+status = "planned"
+area = "files-devices"
+issue = "#291"
 
 [package.zfs]
 status = "waived"

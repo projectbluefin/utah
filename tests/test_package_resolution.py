@@ -55,7 +55,8 @@ class PackageResolutionTests(unittest.TestCase):
 
     def test_containerfile_installs_scripts_into_absent_destination(self):
         text = (ROOT / "Containerfile").read_text()
-        loop = re.search(r"RUN (for pair in .*?\bdone) &&", text, re.S).group(1)
+        loop = re.search(r"^RUN (?:--mount=\S+ \\\n\s+)?(for pair in .*?\bdone) &&",
+                         text, re.S | re.M).group(1)
         pairs = re.findall(r"([\w.-]+):(utah-[\w.-]+)", loop)
         self.assertTrue(pairs)
         with tempfile.TemporaryDirectory() as tmp:
