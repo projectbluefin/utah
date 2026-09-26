@@ -1,7 +1,7 @@
 ---
 name: package-contract
 version: "1.0"
-last_updated: "2026-09-22"
+last_updated: "2026-09-24"
 id: package-contract
 one_line_purpose: Maintain Bluefin package parity and Utah's overlay manifest.
 entry_point: docs/skills/package-contract.md
@@ -104,6 +104,12 @@ the desktop package transaction.
 The pinned package image is an RPM repository, not a runtime dependency: its
 contents are copied into the image so the package transaction is reproducible
 and does not depend on a mutable mirror (`Containerfile` L41-44).
+Hummingbird's repository (`packages/hummingbird.repo`) enforces OpenPGP package
+signature verification (`gpgcheck=1`). Hummingbird's RPMs are signed with the
+Red Hat release key 2 (key ID `199e2f91fd431d51`), which is committed as
+`packages/RPM-GPG-KEY-redhat-release-2`, installed by the `Containerfile` into
+`/etc/pki/rpm-gpg/`, and referenced as
+`gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2`.
 
 ## Supply-chain download verification
 

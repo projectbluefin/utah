@@ -35,9 +35,18 @@ COPY src/ /tmp/utah-live-src/
 RUN chmod 0755 /tmp/utah-live-src/configure-live.sh && \
     /tmp/utah-live-src/configure-live.sh
 
-# Rebuild against Utah's own kernel and userspace. Hummingbird's dracut emits
-# a harmless /root install warning in the container build context but still
-# returns a successful image with dmsquash-live included.
+# Rebuild against Utah's own kernel and userspace.
+#
+# /root is a symlink to /var/roothome in bootc images, but /var/roothome does
+# not exist at container build time, causing dracut-install to fail copying it.
+# We create /var/roothome with mode 0700 so dracut-install can resolve the symlink target.
+#
+# In container build contexts, syslog logging is disabled via sysloglvl=0 so
+# dracut does not emit /dev/log errors.
+#
+# Tightened error gate (#132): dracut runs with --stdlog 4 and the output check
+# is broadened from 'dracut[E]: FAILED' to any 'dracut[E]' error line, ensuring any
+# logged dracut error fails the live initramfs build step immediately.
 #
 # tpm2-tss and pcsc are omitted because they cannot be satisfied. Hummingbird's
 # dracut config adds "fido2 tpm2-tss pkcs11 pcsc" unconditionally, and a module
@@ -50,23 +59,19 @@ RUN chmod 0755 /tmp/utah-live-src/configure-live.sh && \
 # to open; the installed system boots the payload image's own initramfs, which
 # this build never touches. Revisit if Utah ever wants TPM-bound LUKS, which
 # needs tpm2-tools in the installed image, not in the live overlay.
-# /root is a symlink to /var/roothome in a bootc image and the target does not
-# exist at build time, so dracut's install of /root failed on every build:
-#     dracut-install: ERROR: installing '/root' to '/root'
-#     dracut[E]: FAILED: /usr/lib/dracut/dracut-install ... -f /root /root
-# and dracut still exited 0, so the failure never stopped the build (#132).
-# Give the symlink a target for the duration of the build, and treat any
-# dracut[E] FAILED line as the error it is.
 RUN set -euxo pipefail; \
-    mkdir -p /var/roothome; \
+    mkdir -m 0700 -p /var/roothome; \
+    mkdir -p /etc/dracut.conf.d; \
+    printf 'sysloglvl=0\n' > /etc/dracut.conf.d/00-no-syslog.conf; \
     kernel="$(ls /usr/lib/modules | sort -V | tail -1)"; \
-    dracut --force --reproducible --no-hostonly \
+    dracut --force --reproducible --no-hostonly --stdlog 4 \
       --add dmsquash-live \
       --omit 'tpm2-tss pcsc' \
       --add-drivers 'squashfs overlay loop iso9660 sr_mod cdrom' \
       "/usr/lib/modules/${kernel}/initramfs.img" "${kernel}" 2>&1 | tee /tmp/dracut.log; \
-    if grep -q 'dracut\[E\]: FAILED' /tmp/dracut.log; then \
-      echo 'dracut reported a failed install; refusing to ship the initramfs' >&2; exit 1; \
+    if grep -q 'dracut\[E\]' /tmp/dracut.log; then \
+      echo "dracut reported errors during live initramfs generation; refusing to ship the initramfs" >&2; \
+      exit 1; \
     fi; \
-    rm -f /tmp/dracut.log; \
+    rm -f /tmp/dracut.log /etc/dracut.conf.d/00-no-syslog.conf; \
     rmdir /var/roothome || true

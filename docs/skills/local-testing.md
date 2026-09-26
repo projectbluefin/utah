@@ -1,7 +1,7 @@
 ---
 name: local-testing
 version: "1.0"
-last_updated: "2026-09-23"
+last_updated: "2026-09-24"
 id: local-testing
 one_line_purpose: Build, install, and boot Utah locally in a VM or live ISO.
 entry_point: docs/skills/local-testing.md
@@ -140,6 +140,16 @@ the `UTAH_LIVE_READY` marker on the serial console in addition to
 QEMU-for-Docker and exposes the noVNC console at the printed URL (comment
 above `boot-iso` in `Justfile`), with TPM, UEFI, and `-snapshot` so nothing
 persists.
+
+### Live initramfs generation and error gating
+
+The live initramfs is built inside `iso/live/Containerfile` using `dracut`. Because
+`/root` is a symlink to `/var/roothome` in bootc images and does not exist during
+container builds, the step creates `/var/roothome` (mode 0700) so `dracut-install -f /root /root`
+succeeds. Syslog logging is disabled via `sysloglvl=0` in `/etc/dracut.conf.d/00-no-syslog.conf`
+to avoid container `/dev/log` warnings, and dracut runs with `--stdlog 4`. Output is captured
+under `pipefail`, and the error gate established in #132 is tightened from `dracut[E]: FAILED` to
+any `dracut[E]` line so any error fails the build immediately.
 
 ### Supported and unsupported boot paths
 

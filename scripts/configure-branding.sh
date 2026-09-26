@@ -69,6 +69,11 @@ set_os_release IMAGE_ID "${IMAGE_ID}"
 set_os_release IMAGE_VERSION "${VERSION}"
 set_os_release BUILD_ID "${SHA_HEAD_SHORT}"
 
+# Provide /usr/lib/fedora-release and /etc/fedora-release so vulnerability scanners
+# (such as Trivy) recognize the OS family as Fedora and scan the RPM database.
+echo "Fedora release ${FEDORA_MAJOR_VERSION}" > /usr/lib/fedora-release
+ln -sfn ../usr/lib/fedora-release /etc/fedora-release
+
 # Fedora's bootloader helper still keys its vendor directory off EFIDIR after
 # the distribution ID changes.
 if [ -f /usr/sbin/grub2-switch-to-blscfg ]; then
