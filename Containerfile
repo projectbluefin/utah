@@ -222,8 +222,9 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
 # with no tmpfiles.d entry. This must run after the last package install, which
 # is the NVIDIA and OGC step, not after the main transaction. The lint that
 # checks the result runs in the same layer: nothing can change between the two.
-RUN /usr/local/libexec/utah-clean-stage && \
-    /usr/local/libexec/utah-fix-home-labels --check && \
+# The home-label check runs first: clean-stage removes the utah-* helpers.
+RUN /usr/local/libexec/utah-fix-home-labels --check && \
+    /usr/local/libexec/utah-clean-stage && \
     bootc container lint --fatal-warnings --skip nonempty-boot
 
 LABEL org.opencontainers.image.title="Utah"
