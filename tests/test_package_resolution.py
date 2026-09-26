@@ -102,6 +102,22 @@ class PackageResolutionTests(unittest.TestCase):
         for repo in installer.REPOS:
             self.assertIn(f"--enablerepo={repo}", command)
 
+    def test_libxml2_split_is_excluded_by_name(self):
+        # libxml2-16 is the soname-16 build Hummingbird's libxml2-devel pins
+        # (Requires: libxml2-16(x86-64)); the plain libxml2 conflicts on disk
+        # with it. Keep libxml2-16, exclude the plain name so the soname is
+        # still satisfied and the transaction no longer aborts
+        # (projectbluefin/utah#248).
+        self.assertEqual(installer.EXCLUDES, ("PackageKit*", "libxml2"))
+        rc, command = self.resolve(
+            "Transaction Summary:\nInstall 12 Packages\nOperation aborted.\n")
+        self.assertEqual(rc, 0)
+        self.assertIn("-x", command)
+        # Each exclusion is its own -x, so dnf never reads a pattern as an
+        # install target.
+        start = command.index("-x")
+        self.assertEqual(command[start:start + 4], ["-x", "PackageKit*", "-x", "libxml2"])
+
     def test_resolution_failures_do_not_pass(self):
         for output in ("nothing provides libmissing.so.1\n",
                        "No match for argument: compiler\nTransaction Summary\n",

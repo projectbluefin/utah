@@ -1,7 +1,7 @@
 ---
 name: package-contract
 version: "1.0"
-last_updated: "2026-09-22"
+last_updated: "2026-09-26"
 id: package-contract
 one_line_purpose: Maintain Bluefin package parity and Utah's overlay manifest.
 entry_point: docs/skills/package-contract.md
@@ -104,6 +104,32 @@ the desktop package transaction.
 The pinned package image is an RPM repository, not a runtime dependency: its
 contents are copied into the image so the package transaction is reproducible
 and does not depend on a mutable mirror (`Containerfile` L41-44).
+
+## Install-time name exclusions (-x)
+
+`scripts/install-packages.py` installs the resolved contract with `dnf -x
+<name> install ...`. The exclusions live in the module-level `EXCLUDES` tuple
+and are spread into **both** the `--resolve` preflight and the real install
+step, so a fix in one place fixes both. Each exclusion is passed as its own
+`-x`; a bare name after `-x` would be read by dnf as an install target rather
+than an exclusion.
+
+Two exclusions are carried:
+
+- **`PackageKit*`** — Bluefin's own rule: an image-based system must not carry
+  a second package manager that can write to `/usr`.
+- **`libxml2`** — the plain package conflicts on disk with `libxml2-16`, the
+  soname-16 build. Hummingbird's own `libxml2-devel` pins
+  `Requires: libxml2-16(x86-64)`, so `libxml2-16` is the half to keep and the
+  plain `libxml2` is the stale side of a soname split in transition
+  (`projectbluefin/utah#248`). `libxml2-16` still provides the
+  `libxml2.so.16` soname every dependent requires, so excluding the plain name
+  breaks nothing; excluding the other side would leave `libxml2-devel`'s name
+  requirement unsatisfiable.
+
+Adding a new exclusion is a one-line change to `EXCLUDES`. A name that no
+repository provides at all does *not* belong here — that is `[unavailable]`
+above, not an `-x`.
 
 ## Supply-chain download verification
 

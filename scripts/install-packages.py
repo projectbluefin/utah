@@ -95,6 +95,22 @@ def __getattr__(name: str):
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
+# Packages excluded by name from the bulk install (dnf -x):
+#   - PackageKit* : an image-based system must not carry a second package
+#     manager that can write to /usr; this is Bluefin's own exclusion.
+#   - libxml2     : the plain package conflicts on disk with libxml2-16, the
+#     soname-16 build. Hummingbird's own libxml2-devel pins
+#     `Requires: libxml2-16(x86-64)`, so libxml2-16 is the half to keep and
+#     the plain libxml2 is the stale side of a soname split in transition
+#     (projectbluefin/utah#248). libxml2-16 still provides the libxml2.so.16
+#     soname every dependent requires, so excluding the plain name breaks
+#     nothing; excluding the other side would leave libxml2-devel's name
+#     requirement unsatisfiable.
+# Each exclusion is passed as its own -x so dnf never reads a pattern as an
+# install target.
+EXCLUDES = ("PackageKit*", "libxml2")
+
+
 def section(path: Path, name: str) -> list[str]:
     data = tomllib.loads(path.read_text())
     return list(data.get(name, {}).get("packages", []))
@@ -210,7 +226,7 @@ def main() -> int:
         result = subprocess.run(
             [dnf, "--assumeno", "--disablerepo=*",
              *(f"--enablerepo={r}" for r in repos),
-             "-x", "PackageKit*", "install", *packages, *build_deps],
+             *([part for exc in EXCLUDES for part in ("-x", exc)]), "install", *packages, *build_deps],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
             env={**os.environ, "LC_ALL": "C"}, check=False,
         )
@@ -247,7 +263,7 @@ def main() -> int:
     rc = run(
         dnf, "-y", "--disablerepo=*",
         *(f"--enablerepo={r}" for r in repos),
-        "-x", "PackageKit*", "install", *packages, *build_deps,
+        *([part for exc in EXCLUDES for part in ("-x", exc)]), "install", *packages, *build_deps,
     )
     if rc:
         return rc
