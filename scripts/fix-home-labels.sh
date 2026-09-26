@@ -17,16 +17,16 @@
 #
 # Fedora, and so Bluefin, keeps HOME=/home and relies on the /var/home -> /home
 # substitution: /home -d is home_root_t and /home/[^/]+ is user_home_dir_t.
-# Do the same, rebuild the generated home rules, and fail the build if the
-# labels are not what Initial Setup needs.
+# Generate the rules that way, then put Hummingbird's HOME=/var/home back.
+# useradd needs it at build time: in a container /var/home does not exist yet
+# (tmpfiles creates it at boot), so with HOME=/home, `useradd -m` fails on the
+# dangling /home symlink ("cannot create directory /home"). That broke every
+# live ISO build, which creates liveuser, when this first set HOME=/home
+# outright (#281). The generated rules live in the policy store under /usr,
+# which is read-only on a booted system, so nothing regenerates them there.
+# The image's last step re-runs the check (--check) in case a later package
+# install rebuilt the policy.
 set -euo pipefail
-
-sed -i 's|^HOME=/var/home$|HOME=/home|' /etc/default/useradd
-grep -qx 'HOME=/home' /etc/default/useradd
-
-# Regenerate file_contexts.homedirs from the new HOME root. -n: no policy
-# reload; an image build has no selinuxfs to load it into.
-semodule -n -B
 
 want() {
     local path=$1 type=$2 got
@@ -37,5 +37,18 @@ want() {
     fi
     echo "${path}: ${got}"
 }
+
+if [[ "${1:-}" != "--check" ]]; then
+    backup=$(mktemp)
+    cp -a /etc/default/useradd "$backup"
+    sed -i 's|^HOME=/var/home$|HOME=/home|' /etc/default/useradd
+    grep -qx 'HOME=/home' /etc/default/useradd
+    # Regenerate file_contexts.homedirs from the /home root. -n: no policy
+    # reload; an image build has no selinuxfs to load it into.
+    semodule -n -B
+    cp -a "$backup" /etc/default/useradd
+    rm -f "$backup"
+fi
+
 want /var/home home_root_t
 want /var/home/someone user_home_dir_t

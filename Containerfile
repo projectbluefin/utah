@@ -223,6 +223,7 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
 # is the NVIDIA and OGC step, not after the main transaction. The lint that
 # checks the result runs in the same layer: nothing can change between the two.
 RUN /usr/local/libexec/utah-clean-stage && \
+    /usr/local/libexec/utah-fix-home-labels --check && \
     bootc container lint --fatal-warnings --skip nonempty-boot
 
 LABEL org.opencontainers.image.title="Utah"
