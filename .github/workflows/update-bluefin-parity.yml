@@ -43,6 +43,11 @@ jobs:
           fi
           cp "$RUNNER_TEMP/base.toml" packages/bluefin.toml
           printf '%s\n' "$upstream_ref" > packages/.bluefin-parity-ref
+          # A new contract changes the package totals. Regenerate the status
+          # page data and the hand-written counts so `just check` passes on
+          # the bump PR instead of failing check-doc-counts.
+          python3 scripts/generate-site-data.py
+          python3 scripts/check-doc-counts.py --write
           {
             printf "Updates the Bluefin package contract from \`%s\` to \`%s\`.\n\n" \
               "$current_ref" "$upstream_ref"
@@ -75,6 +80,9 @@ jobs:
           add-paths: |
             packages/.bluefin-parity-ref
             packages/bluefin.toml
+            site/data/packages.json
+            README.md
+            docs/skills/package-contract.md
 
       - name: Start CI on the bump branch explicitly
         if: contains(fromJSON('["created", "updated"]'), steps.propose.outputs.pull-request-operation)

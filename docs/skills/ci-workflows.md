@@ -21,7 +21,7 @@ metadata:
 
 # CI Workflows
 
-Seven workflows, all thin callers into `projectbluefin/actions@v1` reusables
+Eight workflows, all thin callers into `projectbluefin/actions@v1` reusables
 or pinned third-party actions:
 
 - `.github/workflows/build.yml` -- pull requests, pushes to `testing`, a
@@ -35,7 +35,11 @@ or pinned third-party actions:
 - `.github/workflows/update-bluefin-parity.yml` -- nightly and manual
   dispatch. It resolves Bluefin `main` and uses one fixed branch,
   `automation/bluefin-parity`, so `create-pull-request` updates the existing
-  review rather than opening duplicates. It does not auto-merge.
+  review rather than opening duplicates. It does not auto-merge. Before
+  proposing, it reruns `scripts/generate-site-data.py` and
+  `scripts/check-doc-counts.py --write`, so the bump carries the new
+  `site/data/packages.json` and the README / `package-contract.md` counts
+  that `just check` compares against the manifests.
 
   The bump PR would otherwise arrive with **no checks**: GitHub does not
   start `on: pull_request` workflows for pull requests created with the
@@ -59,6 +63,11 @@ or pinned third-party actions:
   the committed site data matches the manifests (`generate-site-data.py
   --check`) before deploying to GitHub Pages; deployments are serialized and
   never cancelled in flight.
+- `.github/workflows/image-baselines.yml` -- weekly (Monday 05:17 UTC) and
+  manual dispatch. Runs `just baselines` to re-measure Utah against the
+  published Bluefin and Dakota images and proposes the refreshed snapshots as
+  a pull request; `just check` then fails that PR if a Bluefin package Utah
+  lacks is not triaged in `baselines/triage.toml`.
 
 CI delegates builds, vulnerability reporting, keyless signatures, provenance,
 and caching to `projectbluefin/actions@v1` (originated as a `docs/building.md`
