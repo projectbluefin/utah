@@ -104,6 +104,7 @@
         "abattis-cantarell-fonts",
         "acl",
         "alsa-ucm",
+        "alsa-utils",
         "attr",
         "bash-completion",
         "bind-utils",
@@ -197,7 +198,7 @@
     }
   ],
   "totals": {
-    "installed": 140,
+    "installed": 141,
     "unavailable": 10
   },
   "unavailable": [

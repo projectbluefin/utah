@@ -93,7 +93,6 @@ packages = [
 # Left out, with the dependency the pinned repositories do not carry:
 #   default-fonts-core-emoji   needs google-noto-emoji-color-fonts
 #   default-fonts-core-math    needs stix-fonts (both utah-packages#147)
-#   alsa-utils                 in no repository (utah-packages#146)
 #
 # Wi-Fi, printing, fingerprint login and PDF tools arrived with the factory
 # image published 2026-09-25 (sha256:9e17ca2c), the first publish since
@@ -120,8 +119,13 @@ packages = [
     "NetworkManager-bluetooth",
     "bind-utils",
     "iptables-nft",
-    # Audio
+    # Audio. alsa-ucm only carries the ALSA use-case profiles; alsa-utils
+    # provides alsactl plus the alsa-restore/alsa-state units that persist the
+    # kernel mixer state across reboots. Without them hardware whose power-on
+    # mixer defaults are muted or mis-routed boots with broken sound -- the
+    # Dakota parity gap this resolves (utah-packages#146, now published).
     "alsa-ucm",
+    "alsa-utils",
     # Locale and fonts
     "langpacks-en",
     "langpacks-fonts-en",
