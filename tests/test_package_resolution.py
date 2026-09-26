@@ -204,7 +204,7 @@ class ParityContractTests(unittest.TestCase):
         self.assertEqual(sorted(set(parity) & others), [])
         self.assertEqual(sorted(set(parity) & set(installer.section(self.OVERLAY, "build"))), ["unzip"])
         removal = [line for line in (ROOT / "scripts/configure-services.sh").read_text().splitlines()
-                   if "remove --no-autoremove" in line]
+                   if "-y remove" in line]
         self.assertEqual(len(removal), 1)
         self.assertNotIn("unzip", removal[0])
 

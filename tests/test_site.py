@@ -63,7 +63,7 @@ class GeneratedDataTests(unittest.TestCase):
         build = next(g for g in self.data["groups"] if g["id"] == "build")
         self.assertTrue(build["transient"])
         removal = [line for line in (ROOT / "scripts/configure-services.sh").read_text().splitlines()
-                   if "remove --no-autoremove" in line]
+                   if "-y remove" in line]
         self.assertEqual(len(removal), 1)
         # Everything in the group is either removed again or kept for a
         # documented reason (unzip is also in [parity], which the image ships).
