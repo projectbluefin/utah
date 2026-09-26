@@ -582,3 +582,38 @@ class ConcurrencyTests(unittest.TestCase):
         import yaml
         build = yaml.safe_load((ROOT / ".github/workflows/build.yml").read_text())
         self.assertIn("github.ref", build["concurrency"]["group"])
+
+
+class BuildToolingRemovalTests(unittest.TestCase):
+    """The [build] toolchain must not ship (D1, docs/bluefin-package-gaps.md).
+
+    configure-services.sh removes the extension build tooling after the build.
+    Passing --no-autoremove kept the dependency closure (ninja-build,
+    meson-srpm-macros, libsass, *-devel chains) in the image; the default
+    remove cleans up dependencies orphaned by the transaction.
+    """
+
+    def setUp(self):
+        import tomllib
+        manifest = tomllib.loads((ROOT / "packages" / "utah.toml").read_text())
+        self.build = manifest["build"]["packages"]
+        self.script = (ROOT / "scripts" / "configure-services.sh").read_text()
+
+    def remove_line(self):
+        lines = [line for line in self.script.splitlines()
+                 if "remove" in line and "dbus-devel" in line]
+        self.assertEqual(len(lines), 1,
+                         "expected exactly one build-tooling removal command")
+        return lines[0]
+
+    def test_every_build_package_but_unzip_is_removed(self):
+        # unzip is in [parity] as well as [build]: Bluefin ships it to users.
+        line = self.remove_line()
+        for pkg in self.build:
+            if pkg == "unzip":
+                continue
+            self.assertIn(pkg, line, f"{pkg} from [build] is not removed")
+
+    def test_removal_cleans_the_dependency_closure(self):
+        self.assertNotIn("--no-autoremove", self.remove_line(),
+                         "removal must let dnf clean the orphaned build closure")
