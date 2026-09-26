@@ -78,10 +78,6 @@ enable_unit bootc-unified-storage.service
 # daemon running, udev autoload fails on input devices and the GUI prompts for
 # root credentials on launch. Enable it next to the desktop units; see #99.
 enable_unit input-remapper.service
-# Printing on demand, as Fedora's preset enables it for Bluefin; Hummingbird's
-# 99-default-disable would leave it off.
-enable_unit cups.socket
-enable_unit cups.path
 enable_unit ModemManager.service
 
 # Bluefin's Brewfile and Bazaar preinstall hook need the Flathub remote before
