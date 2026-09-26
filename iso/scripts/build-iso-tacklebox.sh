@@ -187,12 +187,16 @@ chmod +x "${CUSTOMIZE_DIR}/customize-live.sh"
 
 # enforcing=0: the live squashfs root is unlabeled, exactly as in
 # iso/scripts/build-iso.sh. console=ttyS0 keeps the serial E2E readable.
+# compression=release (zstd-15, 1 MiB blocks) for the live rootfs and the
+# offline store: at tacklebox's fast default the ISO overshoots the 6 GiB
+# budget (#128) that post-testing-e2e enforces.
 cat >"$RECIPE_FILE" <<EOF
 {
   "media_name": "${MEDIA_ID}",
   "size": "10G",
   "shared_store": {
-    "format": "ext4"
+    "format": "ext4",
+    "compression": "release"
   },
   "kargs": ["enforcing=0", "console=ttyS0,115200n8"],
   "bootable_environments": [
