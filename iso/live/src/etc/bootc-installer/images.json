@@ -10,7 +10,7 @@
       "bootloader": "grub2",
       "filesystem": "btrfs",
       "composefs": false,
-      "needs_user_creation": true,
+      "needs_user_creation": false,
       "filesystems": ["btrfs", "xfs"]
     }
   ]

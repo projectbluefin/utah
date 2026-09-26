@@ -29,7 +29,6 @@
     "welcome": {"template": "welcome", "protected": true},
     "image": {"template": "image", "protected": true},
     "disk": {"template": "disk"},
-    "encryption": {"template": "encryption"},
-    "user": {"template": "user"}
+    "encryption": {"template": "encryption"}
   }
 }

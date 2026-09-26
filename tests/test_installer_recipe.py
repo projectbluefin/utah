@@ -17,8 +17,14 @@ IMAGES = ROOT / "iso/live/src/etc/bootc-installer/images.json"
 CONTRACT = ROOT / "contracts/bluefin-desktop.toml"
 
 
+PACKAGES = ROOT / "packages/utah.toml"
+
+
 def ships_initial_setup():
-    return "gnome-initial-setup" in CONTRACT.read_text()
+    """Whether the image installs gnome-initial-setup (any utah.toml section)."""
+    data = tomllib.loads(PACKAGES.read_text())
+    return any("gnome-initial-setup" in section.get("packages", [])
+               for section in data.values() if isinstance(section, dict))
 
 
 class InstallerAccountTests(unittest.TestCase):
@@ -39,9 +45,19 @@ class InstallerAccountTests(unittest.TestCase):
         steps = json.loads(RECIPE.read_text())["steps"]
         has_user_step = any(s["template"] == "user" for s in steps.values())
         image = json.loads(IMAGES.read_text())["images"][0]
-        if has_user_step:
-            # bootc-installer hides the user step unless the image asks for it.
-            self.assertTrue(image.get("needs_user_creation", True))
+        # bootc-installer hides the user step unless the image asks for it, and
+        # an image that asks for one with no step to collect it would stall.
+        self.assertEqual(image.get("needs_user_creation", True), has_user_step)
+
+    def test_initial_setup_owns_the_first_account(self):
+        """Like Bluefin and Dakota: Initial Setup, not the installer, creates it.
+
+        With a user step, the installer creates an account, GDM finds one, and
+        gnome-initial-setup never runs on first boot.
+        """
+        steps = json.loads(RECIPE.read_text())["steps"]
+        if ships_initial_setup():
+            self.assertNotIn("user", {s["template"] for s in steps.values()})
 
 
 class InstallerFlatpakPathTests(unittest.TestCase):
