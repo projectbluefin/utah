@@ -133,6 +133,7 @@ enabled = [
   "bluetooth.service",
   "bootc-unified-storage.service",
   "brew-setup.service",
+  "cups.socket",
   "dconf-update.service",
   "flatpak-nuke-fedora.service",
   "flatpak-preinstall.service",

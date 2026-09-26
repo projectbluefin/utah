@@ -66,11 +66,12 @@ packages = [
     # published in the factory image of 2026-09-25.
     "nautilus",
     "localsearch",
-    # Phones (MTP, iOS) in Files; libmtp and usbmuxd first published in the
-    # factory image of 2026-09-26. Cameras (gvfs-gphoto2) wait on libexif
-    # and lockdev, which libgphoto2 needs and nothing provides yet.
+    # Phones (MTP, iOS) and cameras in Files. libgphoto2 is built without
+    # lockdev (no upstream source exists); only RS-232 serial cameras lose
+    # port locking.
     "gvfs-mtp",
     "gvfs-afc",
+    "gvfs-gphoto2",
     # First-boot account setup, as on Bluefin and Dakota (#261). The
     # installer's user step stays until an install is verified to boot into
     # it; tests/test_installer_recipe.py allows dropping it after that.
@@ -147,8 +148,11 @@ packages = [
     "crypto-policies-scripts",
     "python3-pip",
     "systemd-container",
-    # Fingerprint login, PDF tools. Printing waits on ghostscript, which
-    # libppd (cups-filters) needs and nothing provides yet.
+    # Printing (driverless IPP Everywhere; ghostscript and cups-filters first
+    # published in the factory image of 2026-09-26), fingerprint login, PDF tools.
+    "cups",
+    "cups-client",
+    "cups-ipptool",
     "fprintd",
     "fprintd-pam",
     "poppler-utils",

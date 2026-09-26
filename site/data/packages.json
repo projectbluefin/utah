@@ -80,6 +80,7 @@
         "gsettings-desktop-schemas",
         "gtk4",
         "gvfs-afc",
+        "gvfs-gphoto2",
         "gvfs-mtp",
         "libadwaita",
         "localsearch",
@@ -109,6 +110,9 @@
         "buildah",
         "bzip2",
         "crypto-policies-scripts",
+        "cups",
+        "cups-client",
+        "cups-ipptool",
         "dbus-tools",
         "default-fonts-core-mono",
         "default-fonts-core-sans",
@@ -193,7 +197,7 @@
     }
   ],
   "totals": {
-    "installed": 136,
+    "installed": 140,
     "unavailable": 10
   },
   "unavailable": [

@@ -13,6 +13,9 @@ enable bootc-unified-storage.service
 enable dconf-update.service
 enable input-remapper.service
 enable ModemManager.service
+# Printing on demand, as Fedora's preset enables it for Bluefin.
+enable cups.socket
+enable cups.path
 disable sshd.service
 # The Hummingbird base's 90-systemd.preset enables getty@.service, and its
 # kargs.d declares console=ttyS0, which is what makes systemd-getty-generator
