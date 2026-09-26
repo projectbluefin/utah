@@ -226,7 +226,8 @@ The script (`iso/scripts/build-iso-tacklebox.sh`) resolves flavored image
 names through `scripts/flavors.py image` -- no literals, enforced by
 `just check` -- requires root (loop devices, mkfs), and writes
 `output/utah-<flavor>-tacklebox.iso`. Tacklebox itself comes from
-`ghcr.io/tuna-os/tacklebox:latest` unless `TACKLEBOX_FROM_SOURCE=1`; a host
+a digest-pinned `ghcr.io/tuna-os/tacklebox` image (see `TACKLEBOX_IMAGE` in
+the script) unless `TACKLEBOX_FROM_SOURCE=1`; a host
 binary wins when present (`TACKLEBOX_BIN`, or `tacklebox` on `PATH`), which
 matters on hosts where nested podman breaks container DNS (observed: the
 customize container's resolver unreachable from inside the tacklebox
