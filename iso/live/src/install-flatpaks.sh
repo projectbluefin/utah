@@ -17,18 +17,24 @@ set -euo pipefail
 # for the same reason. flatpak resumes a partial pull from the local repository,
 # so a retry re-fetches only what is still missing, and every install below
 # passes --or-update, which makes a retry a no-op for refs already complete.
+# 3 attempts stopped being enough: post-testing-e2e run 36230660725 lost
+# utah to dl.flathub.org [28] timeouts on all 3 attempts spread over
+# ~20 minutes (thunderbird, then org.gnome.Platform), with nothing wrong
+# in the image. 5 attempts at ~6 minutes each plus backoff covers a
+# ~35-minute outage window; flatpak resumes partial pulls, and --or-update
+# below keeps every retry a no-op for refs already complete.
 retry_flatpak() {
-    local attempt
-    for attempt in 1 2 3; do
+    local attempt max_attempts=5
+    for (( attempt = 1; attempt <= max_attempts; attempt++ )); do
         if flatpak "$@"; then
             return 0
         fi
-        echo "flatpak $1 attempt ${attempt} of 3 failed" >&2
-        if (( attempt < 3 )); then
-            sleep $(( attempt * 15 ))
+        echo "flatpak $1 attempt ${attempt} of ${max_attempts} failed" >&2
+        if (( attempt < max_attempts )); then
+            sleep $(( attempt * 30 ))
         fi
     done
-    echo "ERROR: flatpak $1 failed after 3 attempts: $*" >&2
+    echo "ERROR: flatpak $1 failed after ${max_attempts} attempts: $*" >&2
     return 1
 }
 

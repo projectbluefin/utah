@@ -403,11 +403,17 @@ class FlatpakRetryTests(unittest.TestCase):
         result = self.drive('flatpak() { attempts=$((attempts+1)); [ "$attempts" -ge 3 ]; }')
         self.assertEqual(result.stdout.strip(), "rc=0 attempts=3", result.stderr)
 
-    def test_a_persistent_failure_still_fails_after_three_attempts(self):
+    def test_a_longer_outage_is_retried_and_succeeds_on_the_fifth_attempt(self):
+        # Run 36230660725 lost utah to dl.flathub.org timeouts on attempts
+        # 1-3 spread over ~20 minutes: the retry budget is five attempts.
+        result = self.drive('flatpak() { attempts=$((attempts+1)); [ "$attempts" -ge 5 ]; }')
+        self.assertEqual(result.stdout.strip(), "rc=0 attempts=5", result.stderr)
+
+    def test_a_persistent_failure_still_fails_after_five_attempts(self):
         # The point is resilience, not swallowing errors: a repository that is
         # genuinely gone must still fail the build.
         result = self.drive("flatpak() { attempts=$((attempts+1)); return 1; }")
-        self.assertEqual(result.stdout.strip(), "rc=1 attempts=3", result.stderr)
+        self.assertEqual(result.stdout.strip(), "rc=1 attempts=5", result.stderr)
 
     def test_every_network_install_goes_through_the_retry(self):
         script = self.SCRIPT.read_text()
