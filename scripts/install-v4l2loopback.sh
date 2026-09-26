@@ -146,6 +146,13 @@ build() {
 
 if [ -f "${dest}/${module}" ]; then
   echo "v4l2loopback for ${release} is already staged; not rebuilding"
+elif [ "$target" = base ] && [ -z "$stage" ]; then
+  # The image run only registers what the builder stage staged. Compiling here
+  # would install kernel-devel into a shipped layer, which is what the builder
+  # stage exists to prevent.
+  echo "No staged v4l2loopback module for ${release} at ${dest}/${module};" >&2
+  echo "the Containerfile's v4l2loopback stage should have provided it." >&2
+  exit 1
 else
   build
 fi

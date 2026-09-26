@@ -76,6 +76,13 @@ class InstallV4l2loopbackTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("usr/bin/v4l2loopback-ctl is missing", result.stderr)
 
+    def test_image_run_without_a_staged_module_fails_instead_of_compiling(self):
+        # Compiling here would pull kernel-devel into a shipped layer.
+        result = self.run_script("base")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(f"No staged v4l2loopback module for {BASE}", result.stderr)
+        self.assertEqual(self.called(), [])
+
     def test_ogc_without_its_build_tree_fails_before_fetching_anything(self):
         result = self.run_script("ogc")
         self.assertEqual(result.returncode, 1)
