@@ -55,6 +55,8 @@ check:
     test -f scripts/verify-desktop-contract.py
     test -f scripts/verify-gnome-extensions.py
     test -f scripts/mirror-shim.sh
+    test -f scripts/install-v4l2loopback.sh
+    test -f packages/RPM-GPG-KEY-fedora-44-primary
     test -f contracts/bluefin-desktop.toml
     # The reusable image workflow checks out this repository without
     # submodules. Populate them here before validating the source contract;

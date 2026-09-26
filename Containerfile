@@ -15,6 +15,19 @@ ARG BREW_IMAGE_SHA=sha256:e9a72571b7644b6277f0638b6a3c5e497e265e1098ab91224567ac
 FROM ${COMMON_IMAGE}@${COMMON_IMAGE_SHA} AS common
 FROM ${BREW_IMAGE}@${BREW_IMAGE_SHA} AS brew
 FROM ${PACKAGE_IMAGE_REF} AS packages
+
+# v4l2loopback for the distribution kernel (#291). It is compiled here rather
+# than in the image so that kernel-devel, which it needs and nothing else in
+# the image does, never enters a layer that ships. Fedora 44 is enabled for
+# the same reason and on the same terms as in Containerfile.kernel: to resolve
+# kernel-devel's build dependencies, in a stage that is thrown away. Only the
+# module and v4l2loopback-ctl are copied out, under /out.
+FROM ${BASE_IMAGE} AS v4l2loopback
+COPY packages/hummingbird.repo packages/fedora-44.repo /etc/yum.repos.d/
+COPY packages/RPM-GPG-KEY-redhat-release-2 packages/RPM-GPG-KEY-fedora-44-primary /etc/pki/rpm-gpg/
+COPY scripts/install-v4l2loopback.sh /usr/local/libexec/utah-install-v4l2loopback
+RUN /usr/local/libexec/utah-install-v4l2loopback base /out
+
 FROM ${BASE_IMAGE}
 
 # Layer discipline, because it is where the build time goes.
@@ -70,6 +83,7 @@ COPY scripts/install-packages.py \
      scripts/mirror-shim.sh \
      scripts/verify-efi-chain.sh \
      scripts/fix-home-labels.sh \
+     scripts/install-v4l2loopback.sh \
      /tmp/utah-scripts/
 # Common publishes Bluefin artwork, desktop defaults, Brewfiles, and setup
 # hooks in a separate profile from its shared system files. Both are required:
@@ -81,7 +95,10 @@ COPY --from=brew /system_files /tmp/utah-brew
 COPY system_files/shared /tmp/utah-local
 
 
-RUN for pair in install-packages.py:utah-install-packages \
+# The v4l2loopback stage's output is bind mounted rather than copied: it is two
+# files, and a COPY would be a layer of its own.
+RUN --mount=type=bind,from=v4l2loopback,source=/out,target=/tmp/utah-v4l2loopback,ro \
+    for pair in install-packages.py:utah-install-packages \
                 verify-rpm-contract.py:utah-verify-rpm-contract \
                 build-gnome-extensions.sh:utah-build-gnome-extensions \
                 install-ogc-kernel.sh:utah-install-ogc-kernel \
@@ -93,13 +110,15 @@ RUN for pair in install-packages.py:utah-install-packages \
                 verify-gnome-extensions.py:utah-verify-gnome-extensions \
                 mirror-shim.sh:utah-mirror-shim \
                 verify-efi-chain.sh:utah-verify-efi-chain \
-                fix-home-labels.sh:utah-fix-home-labels; do \
+                fix-home-labels.sh:utah-fix-home-labels \
+                install-v4l2loopback.sh:utah-install-v4l2loopback; do \
       install -Dm 0755 "/tmp/utah-scripts/${pair%%:*}" "/usr/local/libexec/${pair##*:}" || exit 1; \
     done && \
     cp -a /tmp/utah-common/. / && \
     cp -a /tmp/utah-bluefin/. / && \
     cp -a /tmp/utah-brew/. / && \
     cp -a /tmp/utah-local/. / && \
+    cp -a /tmp/utah-v4l2loopback/. / && \
     rm -rf /tmp/utah-scripts /tmp/utah-common /tmp/utah-bluefin /tmp/utah-brew /tmp/utah-local && \
     rm -f /etc/dconf/db/distro.d/05-bluefin-searchlight-extension
 # The last line drops Common's settings for the Search Light extension. Utah no
@@ -198,6 +217,9 @@ RUN mkdir -p /tmp/uupd && \
 
 # Dakota-compatible flavors: OGC is built and asserted before NVIDIA so the
 # NVIDIA path can bind its module to the exact kernel tree it will boot.
+# v4l2loopback comes last, after the NVIDIA installer, which may remove modules
+# it takes for an earlier driver's: the base module staged by the builder stage
+# is registered and asserted, and the gaming flavors compile one for OGC.
 RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages,ro \
     case "${IMAGE_FLAVOR}" in \
       gaming|nvidia-gaming) /usr/local/libexec/utah-install-ogc-kernel ;; \
@@ -207,6 +229,11 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
     case "${IMAGE_FLAVOR}" in \
       nvidia|nvidia-gaming) /usr/local/libexec/utah-install-nvidia "${IMAGE_FLAVOR}" ;; \
       main|gaming) ;; \
+    esac && \
+    /usr/local/libexec/utah-install-v4l2loopback base && \
+    case "${IMAGE_FLAVOR}" in \
+      gaming|nvidia-gaming) /usr/local/libexec/utah-install-v4l2loopback ogc ;; \
+      main|nvidia) ;; \
     esac && \
     IMAGE_FLAVOR="${IMAGE_FLAVOR}" /usr/local/libexec/utah-verify-rpm-contract \
       /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \

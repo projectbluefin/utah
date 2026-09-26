@@ -186,12 +186,13 @@ Production live boot entries configure:
   require either disabling Secure Boot or manually enrolling a Machine Owner Key
   (MOK) into UEFI NVRAM using `mokutil` (planned tooling; no automated helper
   currently exists in-tree).
-- **Custom flavor modules (`nvidia`, `nvidia-gaming`)**: Out-of-tree NVIDIA
-  kernel modules compiled against the base or OGC kernel run under kernel
-  lockdown when Secure Boot is active. Unsigned modules fail to load; signing
-  modules with an enrolled MOK key (e.g. via the kernel's `sign-file` utility)
-  is planned for future release pipelines, but currently module signing is not
-  implemented in-tree and Secure Boot must remain disabled.
+- **Custom flavor modules (`nvidia`, `nvidia-gaming`) and v4l2loopback (every
+  flavor)**: Out-of-tree NVIDIA and v4l2loopback kernel modules compiled
+  against the base or OGC kernel run under kernel lockdown when Secure Boot is
+  active. Unsigned modules fail to load; signing modules with an enrolled MOK
+  key (e.g. via the kernel's `sign-file` utility) is planned for future release
+  pipelines, but currently module signing is not implemented in-tree and Secure
+  Boot must remain disabled.
 
 `iso/live/src/install-flatpaks.sh` pins the bootc-installer Flatpak bundle to
 a specific `tuna-os/bootc-installer` release rather than resolving

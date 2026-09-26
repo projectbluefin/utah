@@ -34,7 +34,7 @@
       ],
       "description": "Layer discipline: COPY folding, late per-image ARGs, script staging, clean+lint in one layer. Use when modifying the Containerfile, adding a script, or investigating build time.",
       "version": "1.0",
-      "last_updated": "2026-09-18",
+      "last_updated": "2026-09-26",
       "doc_type": "policy"
     },
     {

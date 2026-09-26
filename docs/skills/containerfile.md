@@ -1,7 +1,7 @@
 ---
 name: containerfile
 version: "1.0"
-last_updated: "2026-09-18"
+last_updated: "2026-09-26"
 id: containerfile
 one_line_purpose: Edit the Containerfile without regressing layer count or cache hits.
 entry_point: docs/skills/containerfile.md
@@ -141,6 +141,22 @@ The destination directory may be absent in the Hummingbird base. Use
 `${pair##*:}` for the destination. `${pair##:*}` does not strip the source
 name: it installs a filename containing the entire colon-separated pair.
 
+## Build-only dependencies go in a builder stage
+
+When a step needs a package the image must not ship, compile it in a stage of
+its own and hand over only the result. The `v4l2loopback` stage is the example
+(#291): it installs kernel-devel (from Koji, signature-checked against the
+committed `packages/RPM-GPG-KEY-fedora-44-primary`) plus Fedora 44 to resolve
+its build dependencies, compiles the module and `v4l2loopback-ctl` into
+`/out`, and the final stage bind mounts `/out` into the script-staging RUN
+(`RUN --mount=type=bind,from=v4l2loopback,...`) instead of COPYing it, so no
+layer is added. The builder never runs `depmod` against `/out`: a partial
+`modules.dep` would be laid over the image's. `utah-install-v4l2loopback base`
+runs again in the flavor step, finds the staged module, and only registers and
+asserts it; `utah-install-v4l2loopback ogc` compiles against the OGC tree that
+`install-ogc-kernel.sh` preserves, which needs `CONFIG_VIDEO_DEV` in that
+kernel (enforced by its `required_config`).
+
 ## Clean and lint share a layer
 
 Everything above writes build-time residue that bootc lint rejects: dnf logs
@@ -158,6 +174,9 @@ just check
 grep -c '^COPY\|^RUN' Containerfile
 ```
 
-The count stays at its current value (12 as of 2026-09-18) unless the change
-justifies a new layer against the timings table above. Removing the package
-repository COPY dropped it from 13 to 12; a later change must earn its layer.
+The count stays at its current value (17 as of 2026-09-26: 13 for the shipped
+image, plus the four `v4l2loopback` builder-stage instructions, which never
+reach it)
+unless the change justifies a new layer against the timings table above.
+Removing the package repository COPY dropped it from 13 to 12; a later change
+must earn its layer.
