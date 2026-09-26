@@ -184,7 +184,18 @@ rm -rf /tmp/uupd
 
 # Build-only extension tooling is not part of the desktop image. unzip stays:
 # it is in [parity] as well as [build], because Bluefin ships it to users.
+#
+# No --no-autoremove: that flag kept the build dependency closure (ninja-build,
+# meson-srpm-macros, libsass, *-devel chains) in the shipping image. The
+# default remove cleans up dependencies orphaned by this transaction, which is
+# exactly the closure. Decisions D1 (docs/bluefin-package-gaps.md).
 DNF="$(command -v dnf5 || command -v dnf)"
-"$DNF" -y remove --no-autoremove dbus-devel glib2-devel meson sassc
+"$DNF" -y remove dbus-devel glib2-devel meson sassc
+for pkg in dbus-devel glib2-devel meson sassc; do
+    if rpm -q "$pkg" >/dev/null 2>&1; then
+        echo "ERROR: build tooling $pkg still installed after removal" >&2
+        exit 1
+    fi
+done
 
 echo "Utah desktop service configuration complete"
