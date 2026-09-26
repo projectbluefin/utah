@@ -63,6 +63,8 @@ check:
     git submodule update --init --recursive
     python3 scripts/verify-desktop-contract.py --check contracts/bluefin-desktop.toml
     python3 scripts/verify-gnome-extensions.py --source
+    # Every Bluefin package Utah lacks must be triaged (baselines/triage.toml).
+    python3 scripts/image-baseline.py check
     grep -q '/system_files/bluefin' Containerfile
     grep -q 'flatpak-preinstall.service' scripts/configure-services.sh
     grep -q 'flathub.flatpakrepo' scripts/configure-services.sh
@@ -72,6 +74,12 @@ check:
     test -f iso/live/src/etc/bootc-installer/images.json
     test -f iso/live/src/etc/bootc-installer/recipe.json
     test -f iso/scripts/build-iso.sh
+    test -f iso/scripts/build-iso-tacklebox.sh
+    test -f iso/scripts/tacklebox-boot-gate.sh
+    test -f iso/live/Containerfile.tacklebox
+    grep -q 'live_customize' iso/scripts/build-iso-tacklebox.sh
+    grep -q 'offline_payloads' iso/scripts/build-iso-tacklebox.sh
+    grep -q 'Secure Boot DISABLED' iso/scripts/build-iso-tacklebox.sh
     python3 -m json.tool iso/live/src/etc/bootc-installer/images.json >/dev/null
     python3 -m json.tool iso/live/src/etc/bootc-installer/recipe.json >/dev/null
     grep -q 'org.bootcinstaller.Installer' iso/live/src/install-flatpaks.sh
@@ -131,6 +139,10 @@ check:
     fi
     if grep -nE '(utah|\{\{ image \}\})-(nvidia|gaming)' Justfile; then
       echo 'no recipe may name a flavored image; use flavors.py image' >&2
+      exit 1
+    fi
+    if grep -rnE 'utah-(nvidia|gaming)' iso/scripts/; then
+      echo 'no ISO script may name a flavored image; use flavors.py image' >&2
       exit 1
     fi
 
@@ -198,6 +210,25 @@ check-parity:
       echo "packages/bluefin.toml has drifted from projectbluefin/bluefin@${ref}" >&2
       exit 1
     fi
+
+# Re-measure Utah against the published Bluefin and Dakota images: package
+# lists and user-visible files from inside each image, and Dakota's SBOM.
+# Needs podman and gh. Then review baselines/GAP.md and triage new gaps.
+baselines bluefin="ghcr.io/ublue-os/bluefin:stable" utah="ghcr.io/projectbluefin/utah:testing":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for pair in "{{ bluefin }} bluefin" "{{ utah }} utah"; do
+      read -r image dir <<<"$pair"
+      podman pull -q "$image" >/dev/null
+      python3 scripts/image-baseline.py extract "$image" "baselines/$dir"
+    done
+    run=$(gh run list -R projectbluefin/dakota -w publish.yml -b main -s success -L 20 \
+      --json databaseId --jq '.[].databaseId' | while read -r id; do
+        gh api "repos/projectbluefin/dakota/actions/runs/$id/artifacts" \
+          --jq '.artifacts[].name' | grep -qx sbom-dakota && { echo "$id"; break; }
+      done)
+    python3 scripts/image-baseline.py dakota "$run" baselines/dakota
+    python3 scripts/image-baseline.py gap
 
 image_name base_name stream flavor:
     @python3 scripts/flavors.py image "{{ flavor }}"
@@ -420,6 +451,20 @@ iso stream="testing" debug="0":
     podman image exists "$ref" || { echo "Image $ref not found; run just build-ghcr {{ image }} {{ stream }} main" >&2; exit 1; }
     mkdir -p "{{ base_dir }}"
     bash iso/scripts/build-iso.sh "$ref" "$(realpath "{{ base_dir }}")/utah-live.iso" "Utah Live" "{{ debug }}" "ghcr.io/{{ repo_organization }}/{{ image }}:{{ stream }}"
+
+# Fast live ISO via tacklebox for any flavors.json flavor, including variants
+# this project publishes no ISO for. Two stages: a rootless Flatpak bake
+# (bwrap needs the userns tacklebox's rootful customize containers lack),
+# then root assembly. Unsigned systemd-boot chain: boots with Secure Boot
+# DISABLED only. For the Secure Boot ISO use `just iso`.
+#   just iso-tacklebox main              # from localhost/utah:testing
+#   just iso-tacklebox main testing ghcr testing-20260922-256d837
+iso-tacklebox flavor="main" stream="testing" repo="local" tag="" debug="0":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    tag="{{ tag }}"
+    if [[ -z "$tag" ]]; then tag="{{ stream }}"; fi
+    sudo bash iso/scripts/build-iso-tacklebox.sh "{{ flavor }}" "{{ stream }}" "{{ repo }}" "$tag" "{{ debug }}"
 
 # Boot the live ISO with QEMU-for-Docker and expose its noVNC console.
 boot-iso:

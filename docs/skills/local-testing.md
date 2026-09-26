@@ -205,6 +205,50 @@ take the digest from that release's `org.bootcinstaller.Installer.flatpak`
 asset (`digest` field of `gh api repos/tuna-os/bootc-installer/releases/tags/<tag>`,
 or download and `sha256sum` it) rather than guessing or reusing an old value.
 
+## Tacklebox ISOs (unpublished variants)
+
+`just iso-tacklebox` builds a live ISO via
+[tacklebox](https://github.com/tuna-os/tacklebox) (systemd-boot + tbox-live,
+no anaconda) for any `config/flavors.json` flavor -- including variants this
+project publishes no ISO for. Two stages: `iso/live/Containerfile.tacklebox`
+pre-bakes the live Flatpaks rootless (flatpak's bwrap sandbox needs the user
+namespace that tacklebox's rootful customize containers lack), then tacklebox
+assembles the ISO with `configure-live.sh` as the `live_customize` script and
+the published image ref embedded as an offline payload, so the live desktop
+matches the standard ISO:
+
+```bash
+just iso-tacklebox main                              # from localhost/utah:testing
+just iso-tacklebox main testing ghcr testing-20260922-256d837
+```
+
+The script (`iso/scripts/build-iso-tacklebox.sh`) resolves flavored image
+names through `scripts/flavors.py image` -- no literals, enforced by
+`just check` -- requires root (loop devices, mkfs), and writes
+`output/utah-<flavor>-tacklebox.iso`. Tacklebox itself comes from
+`ghcr.io/tuna-os/tacklebox:latest` unless `TACKLEBOX_FROM_SOURCE=1`; a host
+binary wins when present (`TACKLEBOX_BIN`, or `tacklebox` on `PATH`), which
+matters on hosts where nested podman breaks container DNS (observed: the
+customize container's resolver unreachable from inside the tacklebox
+container while identical host-level runs resolve fine).
+
+Two hard differences from `just iso`:
+
+- **Secure Boot: unsupported.** Tacklebox emits an unsigned systemd-boot
+  chain. These ISOs boot with Secure Boot disabled only.
+- **Kargs are `enforcing=0 console=ttyS0,115200n8`**, same rationale as the
+  standard live ISO (unlabeled squashfs root, serial E2E).
+
+The same images build in the browser at
+[iso.tunaos.org](https://iso.tunaos.org) via `?image=` presets -- no Utah-side
+registration exists because none is needed: `projectbluefin` is on the relay
+org allowlist (`ORGS` in `worker/cors-shim.js`, tuna-os/iso-builder), and any
+bootable container (kernel under `/usr/lib/modules`, systemd) is accepted.
+Shareable form: `https://iso.tunaos.org/?image=projectbluefin/<name>:<tag>`
+using a dated published tag (`testing-*`), since Utah publishes no floating
+`testing` tag. Verify a preset by confirming the relay mints a pull token for
+the scope (`/token?scope=repository:projectbluefin/<name>:pull`).
+
 ## Verification
 
 ### Encrypted install and screenshot harness

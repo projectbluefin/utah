@@ -39,13 +39,13 @@ BUNDLE=org.bootcinstaller.Installer.flatpak
 # Pin the installer release so ISO composition is reproducible rather than
 # resolving a mutable `latest` during the build. Override with
 # UTAH_INSTALLER_VERSION when validating a newer installer.
-INSTALLER_VERSION="${UTAH_INSTALLER_VERSION:-v2026.09.19-cee9ba29}"
+INSTALLER_VERSION="${UTAH_INSTALLER_VERSION:-v2026.09.25-51f8cfe6}"
 # The bundle is installed system-wide with --no-gpg-verify below, so the
 # version pin alone is the whole trust story. Pin its SHA-256 the same way
 # the Containerfile pins UUPD_SHA256, and verify before import. Version and
 # digest move together; override with UTAH_INSTALLER_SHA256 when validating
 # a newer installer.
-INSTALLER_SHA256="${UTAH_INSTALLER_SHA256:-ebd661e554523957a05e6dba038512369d232adb0512b63233512db4cc012941}"
+INSTALLER_SHA256="${UTAH_INSTALLER_SHA256:-a303514765c3ba8c33e71e5361f36cf4bad906d46d473818286527891c40c5b5}"
 
 mkdir -p "${FLATPAK_CACHE}/tmp" /run/dbus
 export TMPDIR="${FLATPAK_CACHE}/tmp"
@@ -81,7 +81,12 @@ if [[ -d "${FLATPAK_CACHE}/repo/refs" ]]; then
     cp -a -n "${FLATPAK_CACHE}/repo/." /var/lib/flatpak/repo/ || true
 fi
 
-flatpak remote-add --system --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+# remote-add fetches the .flatpakrepo over the network, so it flakes like the
+# pulls do: production-iso for utah in run 36077426925 died on
+#   Can't load uri https://dl.flathub.org/repo/flathub.flatpakrepo: [28] Timeout
+# after every E2E flavor had passed. --if-not-exists keeps a retry a no-op once
+# one attempt succeeds.
+retry_flatpak remote-add --system --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 
 # A bundle import needs a temporary local remote in an OCI build: direct
 # --bundle installs omit the deploy/active ref without flatpak-system-helper.
@@ -143,10 +148,27 @@ retry_flatpak install --system --noninteractive --no-related --or-update flathub
 # Kept out of the Brewfile-derived list on purpose: that list is the parity
 # contract with Bluefin and verify-desktop-contract compares it byte for byte.
 # This is Utah's own addition and does not belong in it.
-flatpak remote-add --system --if-not-exists tuna-os \
+retry_flatpak remote-add --system --if-not-exists tuna-os \
     https://tunaos.org/flatpak/tuna-os.flatpakrepo
 retry_flatpak install --system --noninteractive --no-related --or-update \
     tuna-os com.mitchellh.ghostty
+# `uninstall --unused` removes every runtime that no installed app depends on,
+# and the Brewfile lists two of exactly that kind: the adw-gtk3 GTK3 themes.
+# Nothing requires them, so they were stripped from the ISO and the offline
+# install check failed on every flavor (post-testing-e2e run 36047291319):
+#   FAIL: default Flatpak(s) missing on the installed, network-isolated
+#   system: org.gtk.Gtk3theme.adw-gtk3 org.gtk.Gtk3theme.adw-gtk3-dark
+# Pin each listed runtime first; --unused never removes a pinned ref. The pin
+# is part of /var/lib/flatpak, so it also reaches the installed system and
+# keeps later `--unused` cleanups there from removing the themes too.
+declare -A wanted=()
+for app in "${apps[@]}"; do wanted["${app}"]=1; done
+while read -r ref; do
+    id="${ref#runtime/}"; id="${id%%/*}"
+    if [[ -n "${wanted[${id}]:-}" ]]; then
+        flatpak pin --system "${ref}"
+    fi
+done < <(flatpak list --system --runtime --columns=ref | sed 's|^|runtime/|')
 flatpak uninstall --system --noninteractive --unused || true
 
 mkdir -p "${FLATPAK_CACHE}"

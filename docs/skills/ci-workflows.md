@@ -94,8 +94,12 @@ the build before expensive compilation or container builds run:
 - `scripts/check-download-integrity.py`: enforces that composition recipes do
   not resolve mutable `releases/latest` URLs, and that any executable download
   (`.run`, `.tar.gz`, `.tgz`, `.rpm`, `.flatpak`, `.service`, `.timer`) via `curl`
-  or `wget` is verified against a digest (`sha256sum`, `sha512sum`, `--check`) or
-  signature (`cosign`, `gpg --verify`). Clearance is per-file. Flathub descriptor
+  or `wget` is verified against a digest (`sha256sum`, `sha512sum`) or
+  signature (`cosign`, `gpg --verify`). Clearance is scoped to the fetch: the
+  verifier must sit in the fetch's own `&&` chain (a backslash-continuation
+  run is one command) or within the ten lines that follow it, must be code
+  rather than comment text, and a bare `--check` never clears on its own --
+  `sha256sum --check` clears through `sha256sum`. Flathub descriptor
   downloads (`flathub.flatpakrepo`, `appstream`) and comment lines are exempt.
   Scanning is per *logical* line: backslash continuations are joined before
   matching, so a `curl` whose URL sits on a continuation line is still inspected

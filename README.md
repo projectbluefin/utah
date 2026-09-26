@@ -3,7 +3,7 @@
 <!-- BEGIN E2E VERIFICATION -->
 [![Verified ISO desktop](docs/verification/screenshots/installed-fastfetch.png)](docs/verification/README.md)
 
-*LUKS ISO test passed for commit `dbd1425a17e1`. [CI run](https://github.com/projectbluefin/utah/actions/runs/35469913325); [screenshots and provenance](docs/verification/README.md).*
+*LUKS ISO test passed for commit `d985064d3257`. [CI run](https://github.com/projectbluefin/utah/actions/runs/36143930533); [screenshots and provenance](docs/verification/README.md).*
 <!-- END E2E VERIFICATION -->
 
 †Utahraptor ostrommaysi
@@ -66,9 +66,9 @@ than being noticed later.
 
 | | count |
 | --- | --- |
-| Bluefin contract installed | **58** |
-| Utah additions (GNOME 51, base-image parity, device firmware, desktop services) | 49 |
-| Genuinely unavailable | **9** |
+| Bluefin contract installed | **57** |
+| Utah additions (GNOME 51, base-image parity, device firmware, desktop services) | 83 |
+| Genuinely unavailable | **10** |
 
 The install writes its resolved list to `/usr/share/utah/contract.txt` and the
 verify step asserts *that file*, so the two cannot disagree. These counts are

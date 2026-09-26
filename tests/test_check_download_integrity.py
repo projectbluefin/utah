@@ -4,8 +4,8 @@ The download integrity script ensures that no build recipe fetches unpinned,
 unverified executables or resolves mutable `releases/latest` URLs.
 These tests verify that the gate reliably rejects mutable and unverified
 downloads, sees downloads whose URL sits on a backslash continuation line,
-honors verifier tokens per-file, respects comments and allowlists,
-and passes on the shipped repository.
+honors verifier tokens only inside the download's own scope,
+respects comments and allowlists, and passes on the shipped repository.
 """
 
 from __future__ import annotations
@@ -40,10 +40,13 @@ GUARDED_EXTENSIONS = [
     "timer",
 ]
 
+# Clearance tokens, matched on word boundaries by the gate. A bare `--check`
+# is not one: it substring-matched flags like `--checkpoint`, while the real
+# forms `sha256sum --check` / `sha512sum --check` are covered by the digest
+# tokens themselves.
 VERIFIER_TOKENS = [
     "sha256sum",
     "sha512sum",
-    "--check",
     "cosign",
     "gpg --verify",
 ]
@@ -200,6 +203,88 @@ class DownloadIntegrityTests(unittest.TestCase):
             "scripts/configure-services.sh:4: executable download without a digest or signature check",
             result.stderr,
         )
+
+    def test_digest_before_the_fetch_does_not_clear_it(self):
+        # One token anywhere in the file used to clear every download in
+        # that file. Clearance runs from the fetch onward, not backward.
+        self.write_file(
+            "Containerfile",
+            "RUN echo 'expected' | sha256sum --check --strict\n"
+            "RUN curl -LO https://example.com/sneaky.rpm\n",
+        )
+        result = self.run_check()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(
+            "Containerfile:2: executable download without a digest or signature check",
+            result.stderr,
+        )
+
+    def test_digest_beyond_the_scope_window_does_not_clear(self):
+        lines = ["RUN curl -LO https://example.com/sneaky.rpm"]
+        lines += [f"# padding {number}" for number in range(1, 12)]
+        lines += ["RUN echo 'expected' | sha256sum --check --strict"]
+        self.write_file("Containerfile", "\n".join(lines) + "\n")
+        result = self.run_check()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(
+            "Containerfile:1: executable download without a digest or signature check",
+            result.stderr,
+        )
+
+    def test_verifier_inside_a_long_continuation_run_clears(self):
+        # The digest check sits past the line window but in the same
+        # backslash-joined command as the fetch, so it still vouches.
+        run = ["RUN curl -LO https://example.com/payload.rpm \\"]
+        run += [f"    -H 'X-pad{number}: 1' \\" for number in range(1, 12)]
+        run += ["    && echo 'expected' | sha256sum --check --strict"]
+        self.write_file("Containerfile", "\n".join(run) + "\n")
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_verifier_inside_a_long_and_chain_clears(self):
+        # Same for an `&&` chain written without backslashes: every line but
+        # the last ends in `&&`, and the chain is the fetch's scope.
+        chain = ["RUN curl -LO https://example.com/payload.rpm &&"]
+        chain += [f"    echo step{number} &&" for number in range(1, 12)]
+        chain += ["    echo 'expected' | sha256sum --check --strict"]
+        self.write_file("Containerfile", "\n".join(chain) + "\n")
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_comment_claiming_verification_does_not_clear(self):
+        self.write_file(
+            "Containerfile",
+            "RUN curl -LO https://example.com/payload.rpm\n"
+            "# verified with sha256sum before extraction\n",
+        )
+        result = self.run_check()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(
+            "Containerfile:1: executable download without a digest or signature check",
+            result.stderr,
+        )
+
+    def test_checklike_flags_do_not_clear(self):
+        # `--check` used to match as a bare substring anywhere in the file.
+        for flag_line in ("RUN tar --checkpoint=1 -xf /tmp/src.tar", "RUN tool --check config"):
+            with self.subTest(flag_line=flag_line):
+                with tempfile.TemporaryDirectory() as sub_tmp:
+                    sub_dir = Path(sub_tmp)
+                    target = sub_dir / "Containerfile"
+                    target.write_text(
+                        "RUN curl -LO https://example.com/payload.rpm\n" + flag_line + "\n"
+                    )
+                    result = subprocess.run(
+                        [sys.executable, str(SCRIPT)],
+                        cwd=sub_dir,
+                        capture_output=True,
+                        text=True,
+                    )
+                    self.assertEqual(result.returncode, 1, result.stderr)
+                    self.assertIn(
+                        "Containerfile:1: executable download without a digest or signature check",
+                        result.stderr,
+                    )
 
     def test_mutable_latest_release_rejected_even_with_verifier_present(self):
         self.write_file(

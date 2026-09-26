@@ -59,6 +59,23 @@ packages = [
     # ships glibc-all-langpacks; matching it is what makes Region & Language
     # a working control rather than a way to break the terminal.
     "glibc-all-langpacks",
+    # Files. Bluefin gets nautilus and localsearch (the indexer behind Files
+    # and Shell search) from its Silverblue base, so no Bluefin manifest names
+    # them and Utah shipped without a file manager (#100). Their dependency
+    # closure (libgexiv2, libportal, libosinfo, osinfo-db, ...) first
+    # published in the factory image of 2026-09-25.
+    "nautilus",
+    "localsearch",
+    # Phones (MTP, iOS) and cameras in Files. libgphoto2 is built without
+    # lockdev (no upstream source exists); only RS-232 serial cameras lose
+    # port locking.
+    "gvfs-mtp",
+    "gvfs-afc",
+    "gvfs-gphoto2",
+    # First-boot account setup, as on Bluefin and Dakota (#261). The
+    # installer's user step stays until an install is verified to boot into
+    # it; tests/test_installer_recipe.py allows dropping it after that.
+    "gnome-initial-setup",
 ]
 
 [parity]
@@ -74,26 +91,17 @@ packages = [
 # ALSA use-case profiles, the language pack and the core font set.
 #
 # Left out, with the dependency the pinned repositories do not carry:
-#   NetworkManager-wwan        requires ModemManager, whose factory build
-#                              needs libmbim, libqmi and libqrtr-glib that
-#                              nothing provides -- a factory gap
-#   NetworkManager-bluetooth   requires libnm-wwan.so from the wwan plugin,
-#                              so it falls with it
-#   poppler-utils              Hummingbird's poppler requires poppler-data,
-#                              which Hummingbird does not ship
-#   cups, cups-client          need cups-filters (utah-packages#144)
-#   vim-enhanced               needs libgpm.so.2 (vim-minimal is in the base)
 #   default-fonts-core-emoji   needs google-noto-emoji-color-fonts
 #   default-fonts-core-math    needs stix-fonts (both utah-packages#147)
-#   fprintd, fprintd-pam       in no repository (utah-packages#145)
 #   alsa-utils                 in no repository (utah-packages#146)
 #
-# NetworkManager-wifi is deliberately not here yet: Hummingbird's own build
-# Requires wireless-regdb and (wpa_supplicant or iwd), and none of the three
-# exists in any enabled repository. The factory builds them under
-# utah-packages#136; NetworkManager-wifi joins this list when the factory
-# image that carries them is pinned (#126). Firmware is the other half and
-# lives in [hardware] below -- the radio needs both.
+# Wi-Fi, printing, fingerprint login and PDF tools arrived with the factory
+# image published 2026-09-25 (sha256:9e17ca2c), the first publish since
+# 2026-08-30: it carries wpa_supplicant, wireless-regdb and iw (#262),
+# cups-filters (utah-packages#144), fprintd (utah-packages#145) and
+# poppler-data. NetworkManager-wifi comes from Hummingbird and needs
+# wireless-regdb and wpa_supplicant; firmware is the other half and lives in
+# [hardware] below -- the radio needs both.
 #
 # unzip is also in [build]; it is listed here because configure-services.sh
 # removes the build tooling after the extension build, and Bluefin ships
@@ -101,6 +109,15 @@ packages = [
 packages = [
     # Networking
     "NetworkManager-config-connectivity-fedora",
+    "NetworkManager-wifi",
+    "wpa_supplicant",
+    "wireless-regdb",
+    "iw",
+    # Mobile broadband and Bluetooth networking. ModemManager's libmbim, libqmi
+    # and libqrtr-glib first published in the factory image of 2026-09-26.
+    "ModemManager",
+    "NetworkManager-wwan",
+    "NetworkManager-bluetooth",
     "bind-utils",
     "iptables-nft",
     # Audio
@@ -131,6 +148,45 @@ packages = [
     "crypto-policies-scripts",
     "python3-pip",
     "systemd-container",
+    # Printing (driverless IPP Everywhere; ghostscript and cups-filters first
+    # published in the factory image of 2026-09-26), fingerprint login, PDF tools.
+    "cups",
+    "cups-client",
+    "cups-ipptool",
+    "fprintd",
+    "fprintd-pam",
+    "poppler-utils",
+    # Sensors, iPhone tools and the everyday editor Bluefin ships.
+    "lm_sensors",
+    "libimobiledevice-utils",
+    "vim-enhanced",
+    # Base-image parity measured from the published Bluefin image rather than
+    # its manifest (baselines/GAP.md, #263). Bluefin inherits all of these from
+    # Silverblue; each resolves today against Hummingbird and the pinned
+    # factory image. Printing (cups), ModemManager, iPhone tools, sensors,
+    # poppler-utils and vim need dependencies the factory has not published
+    # yet (#263); they follow the next factory publish.
+    "pciutils",
+    "pipewire-utils",
+    "pulseaudio-utils",
+    "glycin-thumbnailer",
+    "samba-client",
+    "samba-common-tools",
+    "krb5-workstation",
+    "bzip2",
+    "acl",
+    "attr",
+    "buildah",
+    # Network filesystems: base-image parity measured from the published
+    # Bluefin image (baselines/GAP.md, #263). Bluefin inherits the full samba
+    # closure from Silverblue; samba resolves today against the pinned
+    # utah-packages repository. samba-winbind and samba-winbind-clients do
+    # not yet resolve: they require libvarlink, which utah-packages does not
+    # currently ship (`nothing provides libvarlink.so.0()(64bit)`). cifs-utils,
+    # nfs-utils, rpcbind, autofs and davfs2 are also not yet in any enabled
+    # repository. All of these stay out until utah-packages builds their
+    # missing dependencies (#263).
+    "samba",
 ]
 
 [hardware]
@@ -276,13 +332,23 @@ packages = [
 #   more than dial-up: Hummingbird ships NetworkManager-ppp (1.58.0-1.hum1
 #   and 1.58.1-1.hum1) whose metadata carries Requires: ppp, so that plugin
 #   is uninstallable from their own repository and NetworkManager's PPPoE and
-#   PPTP paths cannot be installed at all. The same shape as avahi (#104) and
-#   nautilus (#100): a plugin shipped without the daemon behind it.
+#   PPTP paths cannot be installed at all. The same shape as avahi (#104):
+#   a plugin shipped without the daemon behind it.
 #   Tracked by #107.
 #
-# grub2-efi-x64-cdboot and pipewire-libs-extra are supplied by the pinned
-# September 10 factory candidate and return to the install contract (#35).
+# grub2-efi-x64-cdboot
+#   The factory supplies it, but it must be the same build as grub2-efi-x64,
+#   and the factory's grub2 is built for EFI/hummingbird. Installing it
+#   replaced the base's Fedora GRUB, the one paired with the base's Fedora
+#   shim, and installed systems could not boot. utah-packages.repo now
+#   excludes grub2*, which makes cdboot unavailable too. Nothing in Utah uses
+#   it (it is Bluefin parity). Returns when utah-packages#238 publishes a grub2
+#   built with efi_vendor=fedora. Tracked by #253.
+#
+# pipewire-libs-extra is supplied by the pinned September 10 factory candidate
+# and returns to the install contract (#35).
 packages = [
+    "grub2-efi-x64-cdboot",
     "anaconda-live",
     "evolution-ews-core",
     "firefox",

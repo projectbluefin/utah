@@ -22,6 +22,7 @@ jobs:
       actions: read
     outputs:
       matrix: ${{ steps.inputs.outputs.matrix }}
+      main_ref: ${{ steps.inputs.outputs.main_ref }}
       sha: ${{ steps.inputs.outputs.sha }}
       run: ${{ steps.inputs.outputs.run }}
     steps:
@@ -43,8 +44,13 @@ jobs:
           gh run download "$BUILD_RUN" --repo "$REPOSITORY" \
             --pattern 'image-digest-testing-*' --dir digests
           matrix=$(python3 scripts/resolve-e2e-inputs.py run.json digests "$REPOSITORY")
+          # The tacklebox live ISO builds the main flavor only (utah); the
+          # kernel flavors are covered by the luks job above. Resolve that one
+          # ref here so tacklebox-iso stays a single build, not a matrix.
+          main_ref=$(python3 -c "import json,sys; m=json.load(sys.stdin); print(next(x['ref'] for x in m['include'] if x['image']=='utah'))" <<<"$matrix")
           {
             echo "matrix=$matrix"
+            echo "main_ref=$main_ref"
             echo "sha=$(jq -r .head_sha run.json)"
             echo "run=$BUILD_RUN"
           } >> "$GITHUB_OUTPUT"
@@ -140,6 +146,78 @@ jobs:
           retention-days: 30
           path: docs/verification/
       # Never upload debug ISOs or test disks: they contain test passwords.
+
+  # Build the main image with tuna-os/tacklebox and prove the live-boot path:
+  # the ISO comes up and the UTAH_LIVE_READY marker appears on serial (#229).
+  # build-iso-tacklebox.sh runs two stages: a rootless Flatpak bake (bwrap
+  # needs the userns that tacklebox's rootful customize containers lack),
+  # then root assembly with configure-live.sh as the live_customize script.
+  # This is a DEBUG=1 build (test sshd/password), so unlike production-iso
+  # below the ISO itself is never uploaded -- diagnostics only.
+  tacklebox-iso:
+    needs: resolve
+    runs-on: ubuntu-26.04
+    timeout-minutes: 240
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          persist-credentials: false
+      - name: Prepare ISO and QEMU host
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          sudo apt-get update
+          sudo apt-get install -y podman skopeo uidmap slirp4netns fuse-overlayfs \
+            squashfs-tools xorriso dosfstools mtools qemu-system-x86 qemu-utils \
+            ovmf
+          mkdir -p evidence
+          df -h .
+      - name: Build the ISO with tacklebox
+        env:
+          MAIN_REF: ${{ needs.resolve.outputs.main_ref }}
+        run: |
+          set -euo pipefail
+          digest="${MAIN_REF##*@}"
+          [[ "$digest" == sha256:* ]] || { echo "main_ref is not a digest: $MAIN_REF" >&2; exit 1; }
+          sudo bash iso/scripts/build-iso-tacklebox.sh main testing ghcr "$digest" 1 \
+            2>&1 | tee evidence/tbx-build.log
+      - name: Verify the ISO with tacklebox
+        run: |
+          set -euo pipefail
+          sudo podman pull ghcr.io/tuna-os/tacklebox:latest
+          sudo podman run --rm --privileged --security-opt label=disable \
+            -v /dev:/dev -v "$PWD/output:/out:ro" ghcr.io/tuna-os/tacklebox:latest \
+            verify /out/utah-main-tacklebox.iso 2>&1 | tee evidence/tbx-verify.log
+      - name: Check the ISO is within the size budget
+        run: |
+          set -euo pipefail
+          # The live ISO must stay under the budget (#128): the embedded image,
+          # the Flatpaks, and the bootc-installer bundle all live inside it.
+          size_bytes=$(stat -c %s output/utah-main-tacklebox.iso)
+          limit=$((6 * 1024 * 1024 * 1024))
+          echo "utah-main-tacklebox.iso is $size_bytes bytes"
+          test "$size_bytes" -le "$limit" || { echo "ISO exceeds the size budget" >&2; exit 1; }
+      - name: Live-boot and observe the UTAH_LIVE_READY marker
+        env:
+          UTAH_ISO_BOOT_TIMEOUT: 1800
+        run: |
+          set -euo pipefail
+          # No KVM on GitHub-hosted runners: the gate falls back to TCG.
+          bash iso/scripts/tacklebox-boot-gate.sh "$PWD/output/utah-main-tacklebox.iso" UTAH_LIVE_READY \
+            2>&1 | tee evidence/tbx-boot.log
+      - name: Preserve diagnostics even on failure
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: tacklebox-iso-diagnostics-utah
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            evidence/
 
   # Test credentials are only present in the DEBUG=1 ISO above. Build this
   # artifact after the whole matrix passes, so a retained ISO is production

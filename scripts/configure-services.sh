@@ -78,6 +78,11 @@ enable_unit bootc-unified-storage.service
 # daemon running, udev autoload fails on input devices and the GUI prompts for
 # root credentials on launch. Enable it next to the desktop units; see #99.
 enable_unit input-remapper.service
+enable_unit ModemManager.service
+# Printing on demand, as Fedora's preset enables it for Bluefin; Hummingbird's
+# 99-default-disable would leave it off.
+enable_unit cups.socket
+enable_unit cups.path
 
 # Bluefin's Brewfile and Bazaar preinstall hook need the Flathub remote before
 # first boot. Keep this as a .flatpakrepo descriptor so the remote is available
@@ -136,6 +141,21 @@ else
 fi
 
 # These are global user-service presets, so systemctl needs --global.
+#
+# The desktop's per-user services. Hummingbird's user preset enables only
+# dbus and then disables everything else. Fedora's (and so Bluefin's) enables
+# these, and without them an installed Utah had no audio server at all. See
+# /usr/lib/systemd/user-preset/85-utah-desktop.preset; the desktop contract
+# asserts the result (services.user_enabled).
+for unit in pipewire.socket pipewire-pulse.socket wireplumber.service \
+            xdg-user-dirs.service grub-boot-success.timer \
+            obex.service mpris-proxy.service; do
+    if user_unit_exists "${unit}"; then
+        systemctl --global enable "${unit}"
+    else
+        echo "user unit ${unit} is not installed; skipping" >&2
+    fi
+done
 if user_unit_exists podman-auto-update.timer; then
     systemctl --global enable podman-auto-update.timer
 fi

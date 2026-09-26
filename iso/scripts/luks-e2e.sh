@@ -818,7 +818,10 @@ if [[ -n "${UTAH_E2E_FLATPAKS-x}" ]]; then
     fi
     missing_flatpaks=()
     for _ in $(seq 1 12); do
-        installed_flatpaks="$(ssh_target 'flatpak list --system --app --columns=application' 2>/dev/null || true)"
+        # No --app: the Brewfile's default set includes two runtimes, the
+        # adw-gtk3 GTK3 themes, and --app hides runtimes, so they read as
+        # missing even when present (post-testing-e2e run 36068751481).
+        installed_flatpaks="$(ssh_target 'flatpak list --system --columns=application' 2>/dev/null || true)"
         [[ -n "${installed_flatpaks}" ]] || { sleep 10; continue; }
         missing_flatpaks=()
         while IFS= read -r app; do

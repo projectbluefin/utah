@@ -31,6 +31,83 @@ ALLOWED_UNPINNED = (
     "dl.flathub.org/repo/appstream",
 )
 
+# A verifier vouches for a download only from inside that download's scope:
+# its own `&&` chain -- a backslash-continuation run is one command -- or the
+# few lines that follow the fetch. A digest token anywhere else in the file
+# says nothing about this fetch: file-wide clearance let one `sha256sum`
+# vouch for every download added to the file later, in exactly the files
+# that already do downloads.
+SCOPE_LINES = 10
+
+# Digest and signature evidence, matched on word boundaries. A bare `--check`
+# is deliberately absent: as a substring it matched flags such as
+# `--checkpoint`, and the real checks `sha256sum --check` and
+# `sha512sum --check` are already covered by the digest tokens themselves.
+VERIFIER_PATTERNS = tuple(
+    re.compile(pattern)
+    for pattern in (
+        r"\bsha256sum\b",
+        r"\bsha512sum\b",
+        r"\bcosign\b",
+        r"\bgpg --verify\b",
+    )
+)
+
+
+def continuation_run(lines: list[str], index: int) -> tuple[int, int]:
+    """First and last line of the backslash-continuation run holding index.
+
+    A command split across `\\` continuations is one command, so its scope
+    spans every line of the run, not just the line the fetch token is on.
+    """
+    start = index
+    while start > 0 and lines[start - 1].rstrip().endswith("\\"):
+        start -= 1
+    end = index
+    while end + 1 < len(lines) and lines[end].rstrip().endswith("\\"):
+        end += 1
+    return start, end
+
+
+def command_chain(lines: list[str], index: int) -> tuple[int, int]:
+    """Extent of the `&&` chain the command holding index runs in.
+
+    The command is its continuation run; the chain grows through neighbouring
+    commands that are `&&`-joined to it, in both directions. A comment line
+    never joins: prose that ends in `&&` chains nothing.
+    """
+    start, end = continuation_run(lines, index)
+    while start > 0:
+        previous = lines[start - 1].strip()
+        if previous.startswith("#") or not previous.rstrip("\\").strip().endswith("&&"):
+            break
+        start, _ = continuation_run(lines, start - 1)
+    while end + 1 < len(lines):
+        following = lines[end].strip()
+        if following.startswith("#") or not following.rstrip("\\").strip().endswith("&&"):
+            break
+        _, end = continuation_run(lines, end + 1)
+    return start, end
+
+
+def verified_in_scope(lines: list[str], index: int) -> bool:
+    """True when a verifier token appears inside the download's own scope.
+
+    Scope is the fetch's `&&` chain, widened to the SCOPE_LINES lines that
+    follow the fetch so a short verify helper after the download still
+    counts. Comment lines are skipped: prose that mentions a digest tool is
+    not a check.
+    """
+    start, end = command_chain(lines, index)
+    end = min(len(lines) - 1, max(end, index + SCOPE_LINES))
+    for position in range(start, end + 1):
+        stripped = lines[position].strip()
+        if stripped.startswith("#"):
+            continue
+        if any(pattern.search(stripped) for pattern in VERIFIER_PATTERNS):
+            return True
+    return False
+
 
 def is_allowed(line: str) -> bool:
     return any(marker in line for marker in ALLOWED_UNPINNED)
@@ -81,6 +158,7 @@ def check() -> list[str]:
         if not path.is_file():
             continue
         text = path.read_text()
+        lines = text.splitlines()
         for number, stripped in logical_lines(text):
             if stripped.startswith("#"):
                 continue
@@ -88,15 +166,12 @@ def check() -> list[str]:
                 problems.append(f"{path}:{number}: resolves a mutable latest release")
             # A raw github release/CDN download of an executable asset must be
             # verified. Flag fetches of .run/.tar.gz/.tgz/.rpm/.flatpak and of
-            # systemd units (.service/.timer run their payload as root) that do
-            # not have an accompanying digest or signature check in the file.
+            # systemd units (.service/.timer run their payload as root) that
+            # have no digest or signature check tied to the fetch: one in its
+            # own command chain, or in the lines that follow it.
             if re.search(r"(curl|wget)\b", stripped) and not is_allowed(stripped):
                 if re.search(r"\.(run|tar\.gz|tgz|rpm|flatpak|service|timer)\b", stripped):
-                    verified = any(
-                        token in text
-                        for token in ("sha256sum", "sha512sum", "--check", "cosign", "gpg --verify")
-                    )
-                    if not verified:
+                    if not verified_in_scope(lines, number - 1):
                         problems.append(
                             f"{path}:{number}: executable download without a digest or signature check"
                         )

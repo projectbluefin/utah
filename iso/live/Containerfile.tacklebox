@@ -1,0 +1,38 @@
+# Utah live-bake image for the tacklebox ISO path.
+# A disposable overlay around a normal Utah bootc image that pre-bakes the
+# live Flatpaks (installer bundle, Bluefin Brewfile set, Ghostty).
+#
+# Why a separate bake instead of baking in tacklebox live_customize:
+# flatpak's deploy sandbox (bwrap) must configure loopback, which needs a
+# user namespace. Tacklebox runs live_customize containers rootful with only
+# CAP_SYS_ADMIN, so the bake fails there with
+#   bwrap: loopback: Failed RTM_NEWADDR
+# `podman build` under the invoking (rootless) user provides the userns, the
+# same context iso/live/Containerfile already builds in.
+#
+# What this deliberately omits versus iso/live/Containerfile:
+# - the shim/GRUB Secure Boot assertion (tacklebox emits an unsigned
+#   systemd-boot chain; these ISOs boot with Secure Boot disabled only);
+# - configure-live.sh (runs as a tacklebox live_customize script instead, so
+#   TARGET_IMAGE/DEBUG stay recipe parameters, not bake inputs);
+# - the dmsquash-live dracut rebuild (tacklebox builds its own initramfs with
+#   the tbox-live modules from this image's kernel).
+ARG SOURCE_IMAGE=localhost/utah:testing
+FROM ${SOURCE_IMAGE}
+
+# dbus-daemon is for the build itself: install-flatpaks.sh starts a system bus
+# so flatpak can install into /var/lib, and Utah carries dbus-broker rather
+# than the reference daemon, so /usr/bin/dbus-daemon is not there. The package
+# is small and never leaves the live overlay.
+RUN dnf5 install -y --setopt=install_weak_deps=False \
+        dbus-daemon && \
+    dnf5 clean all && rm -rf /var/cache/dnf /var/cache/libdnf5
+
+# Bake the installer plus precisely the Flatpaks declared by the Bluefin
+# Brewfile. /tmp/flatpaks-list already holds bare application ids: the list
+# below converts the Brewfile the same way iso/live/Containerfile does, so
+# the contract stays the single source of truth.
+COPY src/install-flatpaks.sh /usr/local/libexec/utah-install-live-flatpaks
+RUN awk -F '"' '/^flatpak / {print $2}' /usr/share/ublue-os/homebrew/system-flatpaks.Brewfile > /tmp/flatpaks-list && \
+    chmod 0755 /usr/local/libexec/utah-install-live-flatpaks && \
+    /usr/local/libexec/utah-install-live-flatpaks

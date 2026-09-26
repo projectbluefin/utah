@@ -172,9 +172,9 @@ by default, so the workflow's last step explicitly dispatches
 which is what makes `just check-repos` catch a missing overlay source on the
 bump PR itself (see `docs/skills/ci-workflows.md`).
 
-Current counts, per the README "Package parity" section: 58 Bluefin contract
-packages installed, 49 Utah additions (GNOME 51, base-image parity, device
-firmware, desktop services), 9 genuinely unavailable. `scripts/check-doc-counts.py` (part of
+Current counts, per the README "Package parity" section: 57 Bluefin contract
+packages installed, 83 Utah additions (GNOME 51, base-image parity, device
+firmware, desktop services), 10 genuinely unavailable. `scripts/check-doc-counts.py` (part of
 `just check`) recomputes these from the manifests and fails if either
 document drifts from `site/data/packages.json`.
 
