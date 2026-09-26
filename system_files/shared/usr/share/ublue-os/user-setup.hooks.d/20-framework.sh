@@ -5,6 +5,14 @@
 # shellcheck source=/dev/null
 source /usr/lib/ublue/setup-services/libsetup.sh
 
+# Compat shim: common libsetup.sh builds older than projectbluefin/common #1196
+# stamp the version inside version-script itself and provide no
+# version-script-commit. Define a no-op so this hook works against both the old
+# (stamp-on-check) and the new (stamp-on-commit) contracts.
+if ! declare -F version-script-commit >/dev/null; then
+    version-script-commit() { :; }
+fi
+
 version-script 20-framework user 1 || exit 0
 
 set -euo pipefail
@@ -12,10 +20,15 @@ set -euo pipefail
 CHASSIS_VENDOR_PATH="/sys/devices/virtual/dmi/id/chassis_vendor"
 BREW_PREFIX="/home/linuxbrew/.linuxbrew"
 
-# Only run on Framework hardware
+# Only run on Framework hardware. An unreadable DMI node is transient (it may be
+# readable on a later boot), so skip without committing; a non-Framework vendor
+# is a deliberate skip that will never change, so commit and stop re-running.
 [[ -r "${CHASSIS_VENDOR_PATH}" ]] || exit 0
 chassis_vendor="$(cat "${CHASSIS_VENDOR_PATH}")"
-[[ "${chassis_vendor}" == "Framework" ]] || exit 0
+if [[ "${chassis_vendor}" != "Framework" ]]; then
+    version-script-commit 20-framework user 1
+    exit 0
+fi
 
 echo "Framework laptop detected — running Framework-specific user setup"
 
@@ -44,3 +57,7 @@ install_if_missing() {
 
 # Framework EC tool for hardware management (fan curves, battery charge limit, etc.)
 install_if_missing "fw-ectool"
+
+# Record success only after the body ran, so a failing first-boot hook retries
+# next boot instead of being permanently skipped (common #1196 new contract).
+version-script-commit 20-framework user 1
