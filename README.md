@@ -97,8 +97,8 @@ This is the honest list, and it is why the label above says pre-alpha.
   currently uses `systemd-boot-unsigned`, Secure Boot must be disabled in firmware
   to boot the live media until signed shim integration is complete. Custom OGC
   kernels, NVIDIA modules and the v4l2loopback virtual-camera module are all
-  compiled in-tree and unsigned, so they similarly require MOK enrollment or
-  Secure Boot disabled.
+  built from source during the image build and unsigned; module signing is not
+  implemented yet, so Secure Boot must be disabled for them to load.
 - **Cross-vendor switch and update timers (`bootc-fetch-apply-updates`).**
   Switching to Utah from Bluefin or other bootc images carries Bluefin's
   `/etc/systemd/system/timers.target.wants/bootc-fetch-apply-updates.timer`
