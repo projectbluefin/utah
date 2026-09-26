@@ -91,8 +91,7 @@ packages = [
 # ALSA use-case profiles, the language pack and the core font set.
 #
 # Left out, with the dependency the pinned repositories do not carry:
-#   default-fonts-core-emoji   needs google-noto-emoji-color-fonts
-#   default-fonts-core-math    needs stix-fonts (both utah-packages#147)
+#   default-fonts-core-math    needs stix-fonts (utah-packages#147)
 #   alsa-utils                 in no repository (utah-packages#146)
 #
 # Wi-Fi, printing, fingerprint login and PDF tools arrived with the factory
@@ -102,6 +101,14 @@ packages = [
 # poppler-data. NetworkManager-wifi comes from Hummingbird and needs
 # wireless-regdb and wpa_supplicant; firmware is the other half and lives in
 # [hardware] below -- the radio needs both.
+#
+# default-fonts-core-emoji joins the contract here (#290): its dependency
+# google-noto-emoji-color-fonts is provided by utah-packages'
+# google-noto-color-emoji-fonts recipe, imported in utah-packages#199
+# (resolves utah-packages#147) and confirmed present in the pinned package
+# image's repodata. Without it, colour emoji fell back to whatever symbol
+# font matched, which in GNOME 51 mostly meant empty boxes in chats and web
+# content.
 #
 # unzip is also in [build]; it is listed here because configure-services.sh
 # removes the build tooling after the extension build, and Bluefin ships
@@ -126,6 +133,7 @@ packages = [
     "langpacks-en",
     "langpacks-fonts-en",
     "abattis-cantarell-fonts",
+    "default-fonts-core-emoji",
     "default-fonts-core-sans",
     "default-fonts-core-serif",
     "default-fonts-core-mono",

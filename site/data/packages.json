@@ -114,6 +114,7 @@
         "cups-client",
         "cups-ipptool",
         "dbus-tools",
+        "default-fonts-core-emoji",
         "default-fonts-core-mono",
         "default-fonts-core-sans",
         "default-fonts-core-serif",
@@ -197,7 +198,7 @@
     }
   ],
   "totals": {
-    "installed": 140,
+    "installed": 141,
     "unavailable": 10
   },
   "unavailable": [
