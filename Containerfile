@@ -8,7 +8,7 @@ ARG PACKAGE_IMAGE_SHA=sha256:377715961b6a5af9021353d4dab8b8e5fdaa1d1c343bc617bb2
 # in containers-storage, where no registry digest is available.
 ARG PACKAGE_IMAGE_REF=${PACKAGE_IMAGE}@${PACKAGE_IMAGE_SHA}
 ARG COMMON_IMAGE=ghcr.io/projectbluefin/common
-ARG COMMON_IMAGE_SHA=sha256:6de966fbeced3ac5c0d8715dde35c49fd5be2115920ca6bce670008fb332f7d2
+ARG COMMON_IMAGE_SHA=sha256:57b4cada5f4dba3d61c01837f8ffae067bdba3d2968226abaecef5c6e88d8356
 ARG BREW_IMAGE=ghcr.io/ublue-os/brew
 ARG BREW_IMAGE_SHA=sha256:bc6f5a9fc4f28cded2fe567b31f74825c1f4481d5e43c537c3fcc0d3df6d22ab
 
