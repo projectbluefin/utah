@@ -51,7 +51,7 @@ jobs:
   execute:
     needs: [check-trigger, variants]
     if: needs.check-trigger.outputs.is-promotion == 'true'
-    uses: projectbluefin/actions/.github/workflows/reusable-execute-release.yml@3febbaafca01ca3fd1973eb71a7d07d0c2958090 # v1 (testsuite gate with preset-proof sshd)
+    uses: projectbluefin/actions/.github/workflows/reusable-execute-release.yml@52c87987ba73e7359b25e2e8010fb1de7b619bd9 # v1 (testsuite 66d6651: GNOME 51 gate fixes)
     permissions:
       actions: read
       contents: write
