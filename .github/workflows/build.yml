@@ -7,6 +7,16 @@ on:
   # Nightly scheduling lives in sync-main-to-testing so signatures and E2E
   # consistently refer to refs/heads/testing, not the default main branch.
   workflow_dispatch:
+    inputs:
+      # update-bluefin-parity.yml dispatches this on its unreviewed bump
+      # branch. A dispatch is not a pull_request event, so the reusable build
+      # would push and sign testing images from upstream content nobody has
+      # reviewed yet. contract_only runs the contract gates and nothing that
+      # builds or publishes.
+      contract_only:
+        description: Run only the contract checks; build and publish nothing
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -86,7 +96,7 @@ jobs:
     needs: contract
     # Only the OGC and NVIDIA flavors unpack this. While the matrix is main-only
     # it is 45 minutes spent on an image nothing consumes.
-    if: needs.contract.outputs.needs_kernel == 'true'
+    if: needs.contract.outputs.needs_kernel == 'true' && !inputs.contract_only
     runs-on: ubuntu-26.04
     # cosign reads the Docker keychain (${DOCKER_CONFIG}/config.json); it never
     # looks at podman's default authfile under ${XDG_RUNTIME_DIR}/containers.
@@ -205,7 +215,7 @@ jobs:
   # a cache miss cost main the same twenty minutes it cost nvidia-gaming.
   build_main:
     needs: contract
-    if: needs.contract.outputs.main_flavors != '[]'
+    if: needs.contract.outputs.main_flavors != '[]' && !inputs.contract_only
     uses: projectbluefin/actions/.github/workflows/reusable-build.yml@48a0112c6293d00357eef0ef3a4ce2e54dbdd94a # v1
     permissions:
       contents: read

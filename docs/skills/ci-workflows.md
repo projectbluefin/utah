@@ -27,7 +27,10 @@ or pinned third-party actions:
 
 - `.github/workflows/build.yml` -- pull requests, pushes to `testing`, a
   manual dispatch. Top-level `permissions: {}`; each job
-  grants its own. Cancels in-progress runs per workflow and ref.
+  grants its own. Cancels in-progress runs per workflow and ref. A dispatch
+  with `contract_only=true` runs only the `contract` job and skips
+  `kernel_cache`, `build_main` and `build_kernel`, so nothing is built,
+  pushed or signed.
 - `.github/workflows/promote-testing-to-main.yml` -- pushes to `testing`, a
   nightly cron, and manual dispatch.
 - `.github/workflows/sync-main-to-testing.yml` -- source pushes to `main`,
@@ -45,15 +48,18 @@ or pinned third-party actions:
   The bump PR would otherwise arrive with **no checks**: GitHub does not
   start `on: pull_request` workflows for pull requests created with the
   default `GITHUB_TOKEN`. The workflow's last step dispatches
-  `gh workflow run build.yml --ref automation/bluefin-parity` right after
-  `create-pull-request` runs, so the run attaches to the branch head, which
-  is the PR head, and `check-parity`/`check-repos` report on the bump PR
-  itself -- the same explicit-dispatch pattern `sync-main-to-testing.yml`
-  uses for the testing build. Needs `actions: write`, which the job holds.
+  `gh workflow run build.yml --ref automation/bluefin-parity -f
+  contract_only=true` right after `create-pull-request` runs, so the run
+  attaches to the branch head, which is the PR head, and
+  `check`/`check-parity`/`check-repos` report on the bump PR itself. It is
+  contract-only on purpose: a dispatch is not a `pull_request` event, so a
+  full build would push and sign `testing` images from an upstream package
+  set no maintainer has reviewed yet. The images are built when the merged
+  change reaches `testing`. Needs `actions: write`, which the job holds.
   Gated on `create-pull-request`'s own `pull-request-operation` output being
   `created` or `updated` (not on the parity diff alone), so a nightly run
-  against an unmerged, unchanged bump branch does not re-dispatch the whole
-  flavor matrix for nothing.
+  against an unmerged, unchanged bump branch does not re-dispatch for
+  nothing.
 - `.github/workflows/execute-release.yml` -- pushes to `main` carrying a
   promotion commit, or manual dispatch; promotes `:testing` to `:stable`
   through the release gate.
@@ -67,8 +73,10 @@ or pinned third-party actions:
 - `.github/workflows/image-baselines.yml` -- weekly (Monday 05:17 UTC) and
   manual dispatch. Runs `just baselines` to re-measure Utah against the
   published Bluefin and Dakota images and proposes the refreshed snapshots as
-  a pull request; `just check` then fails that PR if a Bluefin package Utah
-  lacks is not triaged in `baselines/triage.toml`.
+  a pull request. That PR is opened with the default `GITHUB_TOKEN` and has
+  no dispatch step, so no checks start on it by themselves; once CI runs on
+  it (a maintainer push, or closing and reopening it), `just check` fails it
+  if a Bluefin package Utah lacks is not triaged in `baselines/triage.toml`.
 
 CI delegates builds, vulnerability reporting, keyless signatures, provenance,
 and caching to `projectbluefin/actions@v1` (originated as a `docs/building.md`

@@ -84,9 +84,14 @@ jobs:
             README.md
             docs/skills/package-contract.md
 
-      - name: Start CI on the bump branch explicitly
+      - name: Start the contract checks on the bump branch explicitly
         if: contains(fromJSON('["created", "updated"]'), steps.propose.outputs.pull-request-operation)
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-        run: gh workflow run build.yml --repo "$REPOSITORY" --ref automation/bluefin-parity
+        # contract_only: a dispatch is not a pull_request event, so a full
+        # build here would push and sign testing images from the unreviewed
+        # upstream package set. Run the contract gates only.
+        run: |
+          gh workflow run build.yml --repo "$REPOSITORY" --ref automation/bluefin-parity \
+            -f contract_only=true
