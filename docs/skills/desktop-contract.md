@@ -44,7 +44,10 @@ The TOML's sections are the contract's table of contents:
   (`^cpe:/a:redhat:hummingbird:\d+$`) rather than a utah-branded exact value.
   `[branding.os_release_patterns]` shapes the fields the build generates:
   `PRETTY_NAME` is `Utah (Version: ...)`, `VERSION` carries `(Hummingbird)`,
-  `VARIANT_ID` starts with `utah`. The verifier reads `/usr/lib/os-release`.
+  `VARIANT_ID` starts with `utah`. The verifier checks both `/usr/lib/os-release` and
+  `/etc/os-release` (the file the GNOME About panel reads, which is a regular
+  file rather than a symlink on some bases), and fails if either is missing or
+  drifts from the contract.
 - **`[branding.image_info]`** — `/usr/share/ublue-os/image-info.json` must
   name image `utah`, vendor `projectbluefin`, base `hummingbird`, with the
   flavor pattern `(main|nvidia|gaming|nvidia-gaming)` and the matching
