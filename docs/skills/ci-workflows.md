@@ -1,7 +1,7 @@
 ---
 name: ci-workflows
 version: "1.0"
-last_updated: "2026-09-19"
+last_updated: "2026-09-29"
 id: ci-workflows
 one_line_purpose: Navigate Utah's build, promote, and sync workflow topology.
 entry_point: docs/skills/ci-workflows.md
@@ -111,6 +111,33 @@ cache hit and the job exits without building; only a miss builds
 `Containerfile.kernel` and pushes (step "Build the kernel cache image if it
 is not published yet", `.github/workflows/build.yml`). What the tag hashes
 and why lives in [kernel-cache.md](kernel-cache.md).
+
+A published tag is adopted only when its signature verifies; a miss is
+pushed, signed, and verified before the job calls itself done. Two
+boundaries decide whether that can work (job `env:` and the same step):
+
+- podman and cosign must share one credential store. `podman login` by
+  default writes `${XDG_RUNTIME_DIR}/containers/auth.json`, which cosign
+  never reads -- it uses the Docker keychain at
+  `${DOCKER_CONFIG}/config.json`. The job points both `DOCKER_CONFIG` and
+  `REGISTRY_AUTH_FILE` at one `.docker/config.json`, so the image push and
+  the signature upload authenticate with the same token; without it the
+  push succeeds and `cosign sign` fails UNAUTHORIZED (#316).
+- the signed digest must be the one the registry stored. After a push,
+  `podman image inspect ... RepoDigests` reports the *local* manifest
+  digest, which differs from the registry's, so the job signs the digest
+  `podman push --digestfile` reports instead. The cache-hit path needs no
+  such care: there the inspect runs after `podman pull`, which records the
+  registry digest.
+
+`cosign verify` pins the issuer and the identity to this exact workflow in
+this repo, then accepts any `refs/heads/*` or `refs/pull/N/merge` ref. A
+manual `workflow_dispatch` signs with `refs/heads/<branch>` -- and the
+Actions UI defaults to the default branch -- so a regexp naming only
+`testing` made a dispatched run sign the image and then fail its own
+verify. Everyone who can dispatch this workflow can already sign from an
+arbitrary branch via a same-repo pull request, so accepting branch heads
+widens nothing (#316).
 
 ## The build matrix calls reusable-build.yml twice
 

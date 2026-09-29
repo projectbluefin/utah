@@ -137,10 +137,19 @@ jobs:
         run: |
           set -euo pipefail
           ref="ghcr.io/${REPO_ORGANIZATION,,}/utah-kernel-cache:$(./scripts/kernel-cache-tag.sh)"
+          # The identity regexp pins the signature to this exact workflow in
+          # this repo; the ref suffix must cover every trigger that can reach
+          # `cosign sign` below. Same-repo pull requests run as
+          # refs/pull/N/merge, pushes arrive only from testing, but a manual
+          # workflow_dispatch -- whose UI defaults to main -- runs as
+          # refs/heads/<branch>. Pinning the suffix to testing alone made such
+          # a run sign the image and then fail its own verify, so accept any
+          # branch head: everyone who can dispatch this workflow can already
+          # sign from an arbitrary branch via a same-repo pull request.
           verify() {
             cosign verify "ghcr.io/${REPO_ORGANIZATION,,}/utah-kernel-cache@${1}" \
               --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-              --certificate-identity-regexp '^https://github\.com/projectbluefin/utah/\.github/workflows/build\.yml@refs/(heads/testing|pull/[0-9]+/merge)$'
+              --certificate-identity-regexp '^https://github\.com/projectbluefin/utah/\.github/workflows/build\.yml@refs/(heads/[^@]+|pull/[0-9]+/merge)$'
           }
           if podman pull -q "$ref" >/dev/null 2>&1; then
             digest="$(podman image inspect --format '{{ index .RepoDigests 0 }}' "$ref" | cut -d@ -f2)"
