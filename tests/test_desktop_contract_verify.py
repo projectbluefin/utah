@@ -250,6 +250,17 @@ class OsReleaseTests(VerifyModeTests):
         errors = self.assert_rejected(naming="/usr/lib/os-release ID must be 'utah', got 'fedora'")
         self.assertNotIn("/etc/os-release", errors)
 
+    def test_a_symlinked_etc_os_release_follows_the_canonical_file(self):
+        # Symlink bases: /etc/os-release -> ../usr/lib/os-release.
+        (self.root / "etc/os-release").unlink()
+        (self.root / "etc/os-release").symlink_to("../usr/lib/os-release")
+        code, _, errors = self.verify()
+        self.assertEqual(code, 0, errors)
+        values = dict(OS_RELEASE, ID="fedora")
+        self.write("/usr/lib/os-release", self.os_release_text(values))
+        errors = self.assert_rejected(naming="/etc/os-release ID must be 'utah', got 'fedora'")
+        self.assertIn("/usr/lib/os-release ID must be 'utah', got 'fedora'", errors)
+
     def test_a_missing_etc_os_release_is_reported(self):
         self.remove("/etc/os-release")
         self.assert_rejected(naming="required file is missing: /etc/os-release")
