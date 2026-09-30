@@ -637,7 +637,8 @@ class DesktopUnitEnablementTests(unittest.TestCase):
         # by design ("managed with bootctl"), so the image must carry the boot
         # manager binaries and run bootctl update itself. The gate keeps GRUB
         # and BIOS systems from touching an ESP that is not systemd-boot's:
-        # only a boot through systemd-boot (or a UKI stub) sets LoaderInfo.
+        # LoaderInfo is set by systemd-boot itself, so it marks exactly the
+        # boots whose ESP bootctl should update.
         self.assertIn("systemd-boot-update.service", self.script_units("enable_unit"))
         self.assertIn("systemd-boot-update.service", self.preset_directives("enable"))
 

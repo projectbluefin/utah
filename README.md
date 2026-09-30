@@ -110,6 +110,18 @@ This is the honest list, and it is why the label above says pre-alpha.
   `systemctl is-enabled bootc-fetch-apply-updates.timer` and can re-assert the
   mask (`systemctl mask --now bootc-fetch-apply-updates.timer bootc-fetch-apply-updates.service`)
   if a merged `/etc` wants symlink remains on disk (links #17, #101).
+- **systemd-boot installs keep their ESP through `bootctl`, not `bootupd`.**
+  On a system that boots through systemd-boot — for example one switched over
+  from Dakota — `bootupd` stands down by design and reports the ESP as
+  "managed with bootctl", so `bootupctl status` lists no components. That is
+  expected, not a broken install: Utah ships `systemd-boot-unsigned` and
+  enables `systemd-boot-update.service`, which runs `bootctl update` on each
+  boot that came through systemd-boot, so the boot manager binaries stay
+  current. GRUB and BIOS systems skip that service (a drop-in gates it on the
+  `LoaderInfo` EFI variable) and keep getting their `grub` and `shim` from
+  `bootupd`. Switchers can confirm the ESP is being maintained with
+  `bootctl status` (compare `Current` against `Available`) rather than
+  `bootupctl status` (links #363).
 - **Wi-Fi needs a package the factory has not built yet.** The image ships no
   device firmware of its own — the bootable base carries none, and Bluefin only
   appears to because Fedora's Silverblue base supplies `linux-firmware`. `[hardware]`

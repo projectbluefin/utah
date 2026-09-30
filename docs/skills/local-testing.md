@@ -176,7 +176,8 @@ Production live boot entries configure:
 
 ### Secure Boot strategy
 
-- **Live ISO bootloader**: The live image installs `systemd-boot-unsigned`.
+- **Live ISO bootloader**: The image carries `systemd-boot-unsigned`, which the
+  live ISO boots from.
   On hardware with Microsoft UEFI Secure Boot enabled, firmware will reject the
   unsigned EFI loader unless Secure Boot is temporarily disabled in UEFI setup.
   Production releases will incorporate Fedora's signed shim (`shimx64.efi`) and
