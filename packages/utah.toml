@@ -281,10 +281,20 @@ packages = [
 # -- and an installed system whose disk is encrypted could not manage its own
 # keys. The initramfs already carries the crypt and systemd-cryptsetup dracut
 # modules, so unlocking was never the gap; creating the volume was.
+#
+# systemd-boot-unsigned carries the boot manager binaries bootctl updates from.
+# bootupd stands down on systemd-boot systems by design ("managed with
+# bootctl"), so without this package a systemd-boot Utah -- for example one
+# switched over from Dakota -- can never update its ESP boot manager: bootctl
+# has nothing to install and the binaries freeze at whatever the previous
+# image carried (#363). It is the unsigned build, consistent with the alpha's
+# no-Secure-Boot posture; GRUB and shim stay the Secure Boot story and keep
+# flowing through bootupd.
 packages = [
     "cryptsetup",
     "flatpak",
     "fwupd",
+    "systemd-boot-unsigned",
     "systemd-resolved",
     "tailscale",
 ]

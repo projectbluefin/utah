@@ -73,6 +73,8 @@ enable_unit tailscaled.service
 enable_unit uupd.timer
 enable_unit ublue-system-setup.service
 enable_unit systemd-resolved.service
+# See the preset: gated on systemd-boot by drop-in, skipped elsewhere (#363).
+enable_unit systemd-boot-update.service
 enable_unit bootc-unified-storage.service
 # input-remapper is installed by Bluefin's package set, but without its root
 # daemon running, udev autoload fails on input devices and the GUI prompts for

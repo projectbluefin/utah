@@ -155,6 +155,7 @@ enabled = [
   "ModemManager.service",
   "ublue-system-setup.service",
   "uupd.timer",
+  "systemd-boot-update.service",
 ]
 # Per-user services, checked with `systemctl --global is-enabled`. Hummingbird's
 # user preset disables everything but dbus; without these an installed Utah had
