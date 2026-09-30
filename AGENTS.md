@@ -50,9 +50,12 @@ checks (`scripts/check-skill-frontmatter.sh`, `scripts/check-skill-index.sh`,
   workflow or Justfile recipe may name `utah-nvidia` or `utah-gaming`
   literally — `just check` fails on it. Retire a flavor by moving it under
   `retired` with the reason.
-- **Containerfile ARG digests are Renovate-managed pins** (`BASE_IMAGE`,
-  `PACKAGE_IMAGE_SHA`, `COMMON_IMAGE_SHA`, `BREW_IMAGE_SHA`). Do not bump them
-  by hand unless the task is exactly that. `Containerfile` and
+- **Containerfile ARG digests are pinned** (`BASE_IMAGE`, `PACKAGE_IMAGE_SHA`,
+  `COMMON_IMAGE_SHA`, `BREW_IMAGE_SHA`). Do not bump them by hand unless the
+  task is exactly that. `PACKAGE_IMAGE_SHA` has a rev path:
+  `scripts/bump-factory-pin.py` rewrites it from the registry, and
+  `.github/workflows/bump-factory-pin.yml` proposes that rev as a pull request
+  weekly (#336). `Containerfile` and
   `Containerfile.kernel` must share the same `BASE_IMAGE` line; `just check`
   asserts it.
 - **Layer discipline.** Read the comment block at the top of `Containerfile`
