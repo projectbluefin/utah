@@ -160,6 +160,10 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
 
 # Per-image arguments. Nothing above this line may read them; see the note on
 # layer discipline at the top.
+# Re-declared without a default so the provenance label at the end can read
+# the global pin's value: a global ARG is only in scope for FROM lines, and
+# without this the label baked empty (#371 follow-up).
+ARG PACKAGE_IMAGE_SHA
 ARG IMAGE_NAME=utah
 # Canonical OS identity, distinct from the repository name a flavor publishes
 # under. Always utah; never flavored.

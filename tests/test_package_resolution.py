@@ -145,6 +145,12 @@ class PackageResolutionTests(unittest.TestCase):
     def test_factory_digest_label_names_the_pin(self):
         text = (ROOT / "Containerfile").read_text()
         self.assertIn('LABEL io.projectbluefin.utah.factory-digest="${PACKAGE_IMAGE_SHA}"', text)
+        # A global ARG is only in scope for FROM lines; the main stage must
+        # re-declare it bare or the label bakes empty.
+        self.assertIsNotNone(
+            re.search(r"^ARG PACKAGE_IMAGE_SHA\s*$", text, re.M),
+            "main stage lost its bare 'ARG PACKAGE_IMAGE_SHA' re-declaration, "
+            "so the factory-digest label would bake empty")
 
     def test_evr_map_skips_unparseable_and_normalizes_epoch(self):
         lines = ["gnome-shell x86_64 (none):51.0-1.hum1.bfin",
