@@ -52,7 +52,9 @@ checks (`scripts/check-skill-frontmatter.sh`, `scripts/check-skill-index.sh`,
   `retired` with the reason.
 - **Containerfile ARG digests are pinned** (`BASE_IMAGE`, `PACKAGE_IMAGE_SHA`,
   `COMMON_IMAGE_SHA`, `BREW_IMAGE_SHA`). Do not bump them by hand unless the
-  task is exactly that. `PACKAGE_IMAGE_SHA` has a rev path:
+  task is exactly that. `BASE_IMAGE`, `COMMON_IMAGE_SHA` and `BREW_IMAGE_SHA`
+  are Renovate-managed. `PACKAGE_IMAGE_SHA` is not — Renovate cannot see it
+  through the `ARG` indirection — so it has its own rev path:
   `scripts/bump-factory-pin.py` rewrites it from the registry, and
   `.github/workflows/bump-factory-pin.yml` proposes that rev as a pull request
   weekly (#336). `Containerfile` and

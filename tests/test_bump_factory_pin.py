@@ -20,6 +20,7 @@ from __future__ import annotations
 import contextlib
 import importlib.util
 import io
+import os
 import subprocess
 import sys
 import tempfile
@@ -178,8 +179,12 @@ class MainTests(unittest.TestCase):
 class CommittedStateTests(unittest.TestCase):
     """The committed pin is behind the registry today (#336), and that is the
     point: the fix is a weekly pull request, not a hand edit, so the test that
-    guards the mechanism is that the script runs against the real file."""
+    guards the mechanism is that the script runs against the real file. It is
+    the only test here that talks to a registry, so it is opt-in: set
+    UTAH_NETWORK_TESTS=1 to keep `just check` offline and fast by default."""
 
+    @unittest.skipUnless(os.environ.get("UTAH_NETWORK_TESTS") == "1",
+                         "set UTAH_NETWORK_TESTS=1 to reach the registry")
     def test_script_parses_and_reports_the_committed_pin(self):
         result = subprocess.run(
             [sys.executable, str(SCRIPT), "--print"],

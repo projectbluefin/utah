@@ -286,16 +286,17 @@ does not compose from `PACKAGE_IMAGE`/`PACKAGE_IMAGE_SHA` (a bump that would
 never reach the build), and replaces exactly one line. Its three modes are
 `--print` (resolve and report, write nothing), `--check` (exit non-zero when
 the pin is stale, write nothing), and the default (rewrite), plus `--digest` to
-take a digest resolved by another job.
+take a digest resolved by another job. The suite is offline by default; the one
+test that talks to the registry runs only with `UTAH_NETWORK_TESTS=1`.
 
 The schedule is `.github/workflows/bump-factory-pin.yml`: Mondays 07:00 UTC and
 on demand, a read-only resolve job followed by a one-line pull request against
 `testing` opened with `peter-evans/create-pull-request` -- the same mechanism
 the ISO documentation PR already uses, under the same never-merge rule. Both
-jobs check out twice: the script from the commit carrying the workflow, the
-Containerfile from `testing` under `testing/`, because the script reaches
-`testing` only on the next nightly sync and a dispatch before it would 404 on
-its own tool.
+jobs check out `testing` once and run the script from that checkout, so a
+`workflow_dispatch` fired before `scripts/bump-factory-pin.py` has reached
+`testing` fails on the missing file: wait for the sync, or dispatch from a ref
+that already carries the script.
 
 That pull request arrives with no checks on it. `create-pull-request` authors
 it as `github-actions[bot]` using the default `GITHUB_TOKEN`, and GitHub does
