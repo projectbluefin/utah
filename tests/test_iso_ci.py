@@ -341,6 +341,22 @@ GNOME 51.beta
 Mutter (Wayland)
 """
 
+    # Verbatim excerpt from fastfetch-ocr.txt in the iso-diagnostics-utah-nvidia
+    # artifact of run 36769782907. Tesseract substituted inside the sentinel
+    # fragment itself ("E2E" read as "£26") while reading the "-FASTFETCH"
+    # suffix and the whole fastfetch body cleanly -- the same misread failed
+    # four consecutive flavors and runs (#375), and identical sentinel pixels
+    # read clean the rest of the time.
+    SUBSTITUTED_TRANSCRIPT = """\\‘uran-£26-FASTFETCH
+[utahtest@utah-luks-test ~]$
+
+Utah (Version: testing-20260930-9f3baa2)
+Linux 7.2.7-200.fc44.x86_64
+
+GNOME 51.0
+Mutter (Wayland)
+"""
+
     def matches(self, transcript):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "fastfetch-ocr.txt"
@@ -361,6 +377,22 @@ Mutter (Wayland)
 
     def test_rejects_fastfetch_body_without_the_sentinel(self):
         self.assertFalse(self.matches("Kernel: 7.1.8-100.fc43.x86_64\nGNOME 51.beta\n"))
+
+    def test_accepts_transcript_with_substituted_sentinel_fragment(self):
+        self.assertTrue(self.matches(self.SUBSTITUTED_TRANSCRIPT))
+
+    def test_rejects_suffix_with_kernel_but_no_second_body_token(self):
+        self.assertFalse(self.matches(
+            "uran-£26-FASTFETCH\nLinux 7.2.7-200.fc44.x86_64\n2 mins\n"))
+
+    def test_rejects_suffix_with_body_but_no_kernel_token(self):
+        self.assertFalse(self.matches(
+            "uran-£26-FASTFETCH\nGNOME 51.0\nMutter (Wayland)\n"))
+
+    def test_harness_rereads_the_same_screenshot_before_reshooting(self):
+        script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
+        self.assertIn("for _ocr in 1 2 3", script)
+        self.assertIn("break 2", script)
 
     def test_rejects_an_empty_or_missing_transcript(self):
         self.assertFalse(self.matches(""))

@@ -756,11 +756,16 @@ if [[ "${UTAH_E2E_REQUIRE_FASTFETCH:-0}" == 1 ]]; then
     for _ in $(seq 1 24); do
         shot installed-fastfetch "${MONITOR_INSTALLED}"
         if [[ -s "${SHOTS}/installed-fastfetch.png" ]]; then
-            tesseract "${SHOTS}/installed-fastfetch.png" "${WORK}/fastfetch-ocr" 2>/dev/null
-            if bash "${ROOT}/iso/scripts/fastfetch-ocr-match.sh" "${WORK}/fastfetch-ocr.txt"; then
-                fastfetch_seen=1
-                break
-            fi
+            # Tesseract misreads identical pixels differently between runs
+            # (#375), so re-read the same screenshot before waiting for a new
+            # one: a same-pixel re-read costs seconds, a new shot costs a sleep.
+            for _ocr in 1 2 3; do
+                tesseract "${SHOTS}/installed-fastfetch.png" "${WORK}/fastfetch-ocr" 2>/dev/null
+                if bash "${ROOT}/iso/scripts/fastfetch-ocr-match.sh" "${WORK}/fastfetch-ocr.txt"; then
+                    fastfetch_seen=1
+                    break 2
+                fi
+            done
         fi
         sleep 5
     done
