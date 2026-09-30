@@ -166,6 +166,70 @@ def installed(packages: list[str]) -> list[str]:
     return sorted(set(out.stdout.split()))
 
 
+EVR_QUERYFORMAT = "%{NAME} %{ARCH} %{EPOCH}:%{VERSION}-%{RELEASE}\n"
+
+
+def evr_map(lines: list[str]) -> dict[tuple[str, str], str]:
+    """(name, arch) -> EVR for rpm/repoquery --queryformat output lines.
+
+    Unparseable lines (rpm's "package X is not installed") are skipped, so a
+    package that is absent is simply not in the map. Epochs normalize to 0:
+    rpm prints "(none)" and repoquery agrees, but the comparison must not
+    depend on that.
+    """
+    out: dict[tuple[str, str], str] = {}
+    for line in lines:
+        parts = line.split()
+        if len(parts) == 3:
+            out[(parts[0], parts[1])] = parts[2].replace("(none):", "0:")
+    return out
+
+
+def installed_evr(packages: list[str]) -> dict[tuple[str, str], str]:
+    if not packages:
+        return {}
+    out = subprocess.run(
+        ["rpm", "-q", "--queryformat=" + EVR_QUERYFORMAT, *packages],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return evr_map(out.stdout.splitlines())
+
+
+def repo_evr(dnf: str, repoid: str, packages: list[str]) -> dict[tuple[str, str], str] | None:
+    """Latest EVR per (name, arch) the repository offers, or None when the
+    repository is unavailable (off-image runs, where the mount is absent)."""
+    if not packages:
+        return {}
+    out = subprocess.run(
+        [dnf, "repoquery", "--disablerepo=*", f"--enablerepo={repoid}",
+         "--latest-limit=1", "--queryformat=" + EVR_QUERYFORMAT, *packages],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if out.returncode != 0:
+        return None
+    return evr_map(out.stdout.splitlines())
+
+
+def find_skew(installed_map: dict[tuple[str, str], str],
+              available: dict[tuple[str, str], str]) -> list[str]:
+    """Installed packages whose EVR differs from the repository's latest.
+
+    Only packages present on both sides are compared: presence is the RPM
+    contract verifier's job, and a factory-section package the factory does
+    not (or no longer) offer is not skew against it.
+    """
+    skew = []
+    for key, ievr in sorted(installed_map.items()):
+        aevr = available.get(key)
+        if aevr is not None and aevr != ievr:
+            skew.append(f"{key[0]}.{key[1]} installed {ievr} but repository offers {aevr}")
+    return skew
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true")
@@ -274,6 +338,28 @@ def main() -> int:
             return rc
     else:
         print("No excluded packages found to remove.")
+
+    # Fail loud on a stale transaction. The contract verifier only asserts
+    # presence, so a layer-cached install of the previous factory's packages
+    # passed every gate and shipped (#371). The factory-exclusive sections
+    # must match what the mounted repository offers right now, not what an
+    # older transaction left behind.
+    factory = sorted(set(section(overlay, "gnome")) | set(section(overlay, "hardware")))
+    if factory:
+        available = repo_evr(dnf, "utah-packages", factory)
+        if available is None:
+            print("NOTE: utah-packages repository is unavailable; skipping version-skew check")
+        else:
+            have = installed_evr(factory)
+            skew = find_skew(have, available)
+            if skew:
+                print(f"ERROR: {len(skew)} installed packages differ from the pinned factory repository:",
+                      file=sys.stderr)
+                for line in skew:
+                    print(f"  - {line}", file=sys.stderr)
+                return 1
+            compared = sum(1 for key in have if key in available)
+            print(f"Factory versions verified against utah-packages for {compared} packages.")
     return 0
 
 

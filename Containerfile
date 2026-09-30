@@ -52,6 +52,9 @@ FROM ${BASE_IMAGE}
 # transaction reads. These, the pinned package image and the install script
 # are the whole input to the expensive layer, so everything else waits its
 # turn below them.
+# utah-packages.repo carries a `# factory-pin:` stamp mirroring
+# PACKAGE_IMAGE_SHA. It is the transaction's cache key for the factory: the
+# ARG change alone does not bust the layer on CI's buildah (#371).
 COPY packages/bluefin.toml packages/utah.toml contracts/bluefin-desktop.toml /usr/share/utah/
 COPY packages/hummingbird.repo packages/nvidia-container.repo packages/utah-packages.repo /etc/yum.repos.d/
 # Hummingbird signs its RPMs with Red Hat's release key 2 (fd431d51); the key
@@ -257,6 +260,7 @@ RUN /usr/local/libexec/utah-fix-home-labels --check && \
 LABEL org.opencontainers.image.title="Utah"
 LABEL org.opencontainers.image.description="A Hummingbird-based Bluefin GNOME workstation"
 LABEL org.opencontainers.image.source="https://github.com/projectbluefin/utah"
+LABEL io.projectbluefin.utah.factory-digest="${PACKAGE_IMAGE_SHA}"
 LABEL org.opencontainers.image.vendor="${IMAGE_VENDOR}"
 LABEL org.opencontainers.image.version="${VERSION}"
 LABEL containers.bootc=1

@@ -1,7 +1,7 @@
 ---
 name: containerfile
 version: "1.0"
-last_updated: "2026-09-26"
+last_updated: "2026-09-30"
 id: containerfile
 one_line_purpose: Edit the Containerfile without regressing layer count or cache hits.
 entry_point: docs/skills/containerfile.md
@@ -53,6 +53,13 @@ In summary:
   the digest-pinned OCI package repository for reproducible CI builds, while
   allowing local composition to inject a local image from containers-storage
   via `just build-local`.
+- A `PACKAGE_IMAGE_SHA` bump must also move the `# factory-pin:` stamp in
+  `packages/utah-packages.repo`. The transaction reads the `packages` stage
+  through a bind mount, which is not part of the RUN cache key, and the ARG
+  change alone does not bust the layer on CI's buildah -- a pin-only commit
+  rebuilt nothing and shipped the previous factory's packages (#371). The
+  stamp rides a COPY before the transaction, and COPY content always keys the
+  cache. A test fails the build when the two disagree.
 - External executable release assets (such as `uupd`) are pinned by version
   and verified with explicit sha256 checksums (`UUPD_SHA256`) before
   extraction.

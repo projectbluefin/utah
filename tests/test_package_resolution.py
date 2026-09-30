@@ -129,6 +129,61 @@ class PackageResolutionTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 checker.pinned_inputs(path)
 
+    def test_factory_pin_stamp_matches_containerfile(self):
+        arg = re.search(r"^ARG PACKAGE_IMAGE_SHA=(sha256:[0-9a-f]{64})$",
+                        (ROOT / "Containerfile").read_text(), re.M)
+        self.assertIsNotNone(arg)
+        stamp = re.search(r"^# factory-pin: (sha256:[0-9a-f]{64})$",
+                          (ROOT / "packages" / "utah-packages.repo").read_text(), re.M)
+        self.assertIsNotNone(stamp,
+                             "packages/utah-packages.repo lost its '# factory-pin:' stamp")
+        self.assertEqual(
+            stamp.group(1), arg.group(1),
+            "A pin bump must move the Containerfile ARG and the .repo stamp together: "
+            "the stamp is the transaction's layer-cache key (#371).")
+
+    def test_factory_digest_label_names_the_pin(self):
+        text = (ROOT / "Containerfile").read_text()
+        self.assertIn('LABEL io.projectbluefin.utah.factory-digest="${PACKAGE_IMAGE_SHA}"', text)
+
+    def test_evr_map_skips_unparseable_and_normalizes_epoch(self):
+        lines = ["gnome-shell x86_64 (none):51.0-1.hum1.bfin",
+                 "gdm x86_64 1:51.0-1.hum1.bfin",
+                 "package mutter is not installed"]
+        self.assertEqual(installer.evr_map(lines), {
+            ("gnome-shell", "x86_64"): "0:51.0-1.hum1.bfin",
+            ("gdm", "x86_64"): "1:51.0-1.hum1.bfin",
+        })
+
+    def test_repo_evr_returns_none_when_the_repository_is_absent(self):
+        with patch.object(installer.subprocess, "run", return_value=
+                          subprocess.CompletedProcess([], 1, stdout="", stderr="Error")) as run:
+            self.assertIsNone(installer.repo_evr("dnf5", "utah-packages", ["shell"]))
+            command = run.call_args.args[0]
+            self.assertIn("repoquery", command)
+            self.assertIn("--enablerepo=utah-packages", command)
+            self.assertIn("--latest-limit=1", command)
+        with patch.object(installer.subprocess, "run", return_value=
+                          subprocess.CompletedProcess(
+                              [], 0, stdout="shell x86_64 0:1.0-1.fc44\n")):
+            self.assertEqual(installer.repo_evr("dnf5", "utah-packages", ["shell"]),
+                             {("shell", "x86_64"): "0:1.0-1.fc44"})
+
+    def test_find_skew_names_mismatches_only(self):
+        have = {("gnome-shell", "x86_64"): "0:51~beta-1.hum1.bfin",
+                ("mutter", "x86_64"): "0:51.0-1.hum1.bfin",
+                ("removed", "x86_64"): "0:1.0-1.hum1.bfin"}
+        offered = {("gnome-shell", "x86_64"): "0:51.0-1.hum1.bfin",
+                   ("mutter", "x86_64"): "0:51.0-1.hum1.bfin",
+                   ("uninstalled", "x86_64"): "0:2.0-1.hum1.bfin"}
+        skew = installer.find_skew(have, offered)
+        self.assertEqual(len(skew), 1)
+        self.assertIn("gnome-shell.x86_64", skew[0])
+        self.assertIn("51~beta", skew[0])
+        self.assertIn("51.0-1", skew[0])
+        self.assertEqual(installer.find_skew(
+            {("mutter", "x86_64"): "0:51.0-1.hum1.bfin"}, offered), [])
+
     def test_install_repos_derived_from_packages(self):
         repos = installer.install_repos(ROOT / "packages")
         self.assertEqual(repos, ("utah-packages", "public-hummingbird-x86_64-rpms"))
