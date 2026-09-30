@@ -1,7 +1,7 @@
 ---
 name: ci-workflows
-version: "1.0"
-last_updated: "2026-09-29"
+version: "1.1"
+last_updated: "2026-09-30"
 id: ci-workflows
 one_line_purpose: Navigate Utah's build, promote, and sync workflow topology.
 entry_point: docs/skills/ci-workflows.md
@@ -13,9 +13,9 @@ dependencies: []
 tags: [ci, workflows, actions, promotion]
 description: >-
   build.yml contract gate, kernel-cache job, main/kernel matrix split,
-  promote-testing-to-main and sync-main-to-testing, actions@v1 delegation,
-  Renovate-managed factory pin. Use when changing .github/workflows/ or
-  debugging a red run.
+  promote-testing-to-main, sync-main-to-testing and update-bluefin-parity,
+  actions@v1 delegation, Renovate factory pin. Use when changing
+  .github/workflows/ or debugging a red run.
 metadata:
   type: reference
 ---
