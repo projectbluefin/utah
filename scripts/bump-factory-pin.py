@@ -15,7 +15,8 @@ like any other change. Nothing here merges anything, and a stale pin is still
 only ever *reported* by the caller; writing the file is opt-in by way of the
 absence of `--check`.
 
-Resolution is a plain registry HEAD on the tag, through the anonymous bearer
+Resolution is a plain registry manifest request on the tag, reading the digest
+off the `Docker-Content-Digest` response header, through the anonymous bearer
 token GHCR hands out for a public image, so there is no skopeo install and no
 credential in the log. `--image` and `--tag` exist so the tests and a future
 pin on a different factory tag do not have to edit this file.

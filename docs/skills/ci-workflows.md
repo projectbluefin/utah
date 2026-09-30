@@ -276,8 +276,9 @@ is the digest of `ghcr.io/projectbluefin/utah-packages`, the RPM repository
 every image installs from, and until this tool existed nothing revved it: the
 factory published GNOME 51 finals and the pin kept serving the previous digest
 until a human noticed. `scripts/bump-factory-pin.py` resolves the tag through
-the registry's own manifest HEAD -- anonymous bearer token, no skopeo install,
-no credential in the log -- and rewrites one line of the Containerfile.
+the registry's own manifest endpoint, reading `Docker-Content-Digest` off the
+response -- anonymous bearer token, no skopeo install, no credential in the
+log -- and rewrites one line of the Containerfile.
 
 The rewrite is deliberately timid, and `tests/test_bump_factory_pin.py` pins
 why: it refuses a pin it could not parse, refuses a `PACKAGE_IMAGE_REF` that
@@ -290,11 +291,19 @@ take a digest resolved by another job.
 The schedule is `.github/workflows/bump-factory-pin.yml`: Mondays 07:00 UTC and
 on demand, a read-only resolve job followed by a one-line pull request against
 `testing` opened with `peter-evans/create-pull-request` -- the same mechanism
-the ISO documentation PR already uses, under the same never-merge rule. It is
-proposed with #336 rather than committed: the token that authored the proposal
-carries `repo` but not `workflow`, and GitHub refuses a push touching
-`.github/workflows/` without it. A maintainer adds the file verbatim from the
-pull request description; until then the pin is still revved by hand.
+the ISO documentation PR already uses, under the same never-merge rule. Both
+jobs check out twice: the script from the commit carrying the workflow, the
+Containerfile from `testing` under `testing/`, because the script reaches
+`testing` only on the next nightly sync and a dispatch before it would 404 on
+its own tool.
+
+That pull request arrives with no checks on it. `create-pull-request` authors
+it as `github-actions[bot]` using the default `GITHUB_TOKEN`, and GitHub does
+not fire `on: pull_request` workflows for that token; this repository holds no
+App or PAT credential to author it with instead. The build matrix is therefore
+a manual step -- push an empty commit to `automation/factory-pin`, or close and
+reopen the pull request, and `build.yml` runs. An empty check list on one of
+these is not a passing build.
 
 Renovate is not the mechanism here because the pin is an `ARG` indirection, not
 a `FROM image@sha256:` -- the built-in dockerfile manager cannot see it, and
