@@ -98,6 +98,16 @@ COPY --from=brew /system_files /tmp/utah-brew
 COPY system_files/shared /tmp/utah-local
 
 
+# Neutral login-screen artwork, Bluefin-LTS style (#378). generic-logos provides
+# the same paths fedora-logos does, so system-logos dependents (gdm) stay
+# satisfied; the transaction then erases the files while keeping the rpmdb
+# record, which leaves GDM with no Fedora mark at all. Fedora repositories are
+# never enabled at runtime, so the noarch data RPM comes from the release
+# mirror directly: the signed build (kojipkgs ships the same payload unsigned),
+# pinned and checksummed like uupd. URL and digest move together by hand; the
+# RPM changes about yearly.
+ARG GENERIC_LOGOS_URL=https://download.fedoraproject.org/pub/fedora/linux/releases/44/Everything/x86_64/os/Packages/g/generic-logos-18.0.0-27.fc44.noarch.rpm
+ARG GENERIC_LOGOS_SHA256=2f9247f480788ef5cea4bc9f872bc5653ae0578fb7bec045f8b807cacc50699e
 # The v4l2loopback stage's output is bind mounted rather than copied: it is two
 # files, and a COPY would be a layer of its own.
 RUN --mount=type=bind,from=v4l2loopback,source=/out,target=/tmp/utah-v4l2loopback,ro \
@@ -123,7 +133,9 @@ RUN --mount=type=bind,from=v4l2loopback,source=/out,target=/tmp/utah-v4l2loopbac
     cp -a /tmp/utah-local/. / && \
     cp -a /tmp/utah-v4l2loopback/. / && \
     rm -rf /tmp/utah-scripts /tmp/utah-common /tmp/utah-bluefin /tmp/utah-brew /tmp/utah-local && \
-    rm -f /etc/dconf/db/distro.d/05-bluefin-searchlight-extension
+    rm -f /etc/dconf/db/distro.d/05-bluefin-searchlight-extension && \
+    curl -fsSL "${GENERIC_LOGOS_URL}" -o /tmp/generic-logos.rpm && \
+    echo "${GENERIC_LOGOS_SHA256}  /tmp/generic-logos.rpm" | sha256sum --check --strict
 # The last line drops Common's settings for the Search Light extension. Utah no
 # longer ships that extension: its shader code calls set_shader_source, which
 # GNOME 51 removed, so it errored at load and failed the ISO end-to-end test.

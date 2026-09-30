@@ -230,6 +230,48 @@ def find_skew(installed_map: dict[tuple[str, str], str],
     return skew
 
 
+FEDORA_LOGO_FILES = ["fedora-gdm-logo.png", "fedora-logo.png", "fedora-logo-small.png"]
+
+
+def logo_files_present(pixmaps: Path = Path("/usr/share/pixmaps")) -> list[str]:
+    """Fedora logo files still on disk below the pixmaps directory."""
+    return sorted(name for name in FEDORA_LOGO_FILES if (pixmaps / name).exists())
+
+
+def swap_distro_logos(rpm_path: Path,
+                      pixmaps: Path = Path("/usr/share/pixmaps")) -> int:
+    """Swap fedora-logos for generic-logos, Bluefin-LTS style (#378).
+
+    generic-logos provides the same paths (and system-logos, which gdm
+    requires), so dependents stay satisfied; erasing it --nodeps --nodb then
+    removes the files while keeping the rpmdb record, which leaves GDM with
+    no vendor logo file at all. Returns 0 on success, 1 with the reason on
+    stderr otherwise.
+    """
+    if not rpm_path.exists():
+        print(f"ERROR: {rpm_path} is missing; the Containerfile downloads it.", file=sys.stderr)
+        return 1
+    if not installed(["fedora-logos"]):
+        print("NOTE: fedora-logos is not installed; nothing to swap")
+    elif run("rpm", "--erase", "--nodeps", "fedora-logos"):
+        return 1
+    elif run("rpm", "--install", str(rpm_path)):
+        return 1
+    elif run("rpm", "--erase", "--nodeps", "--nodb", "generic-logos"):
+        return 1
+    problems = []
+    if installed(["fedora-logos"]):
+        problems.append("fedora-logos is still installed")
+    problems.extend(f"{name} is still on disk" for name in logo_files_present(pixmaps))
+    if problems:
+        print("ERROR: the logo swap did not take:", file=sys.stderr)
+        for line in problems:
+            print(f"  - {line}", file=sys.stderr)
+        return 1
+    print("Distro logos swapped for generic-logos (files erased, rpmdb kept).")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true")
@@ -338,6 +380,9 @@ def main() -> int:
             return rc
     else:
         print("No excluded packages found to remove.")
+
+    if swap_distro_logos(Path("/tmp/generic-logos.rpm")):
+        return 1
 
     # Fail loud on a stale transaction. The contract verifier only asserts
     # presence, so a layer-cached install of the previous factory's packages

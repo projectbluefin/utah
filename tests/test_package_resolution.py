@@ -175,6 +175,65 @@ class PackageResolutionTests(unittest.TestCase):
             self.assertEqual(installer.repo_evr("dnf5", "utah-packages", ["shell"]),
                              {("shell", "x86_64"): "0:1.0-1.fc44"})
 
+    def test_containerfile_pins_generic_logos(self):
+        text = (ROOT / "Containerfile").read_text()
+        url = re.search(r"^ARG GENERIC_LOGOS_URL=(\S+)$", text, re.M)
+        self.assertIsNotNone(url)
+        self.assertTrue(url.group(1).endswith(".noarch.rpm"), url.group(1))
+        sha = re.search(r"^ARG GENERIC_LOGOS_SHA256=([0-9a-f]{64})$", text, re.M)
+        self.assertIsNotNone(sha)
+        self.assertIn("curl -fsSL \"${GENERIC_LOGOS_URL}\" -o /tmp/generic-logos.rpm", text)
+        self.assertIn('echo "${GENERIC_LOGOS_SHA256}  /tmp/generic-logos.rpm" | sha256sum --check --strict', text)
+
+    def test_swap_distro_logos_runs_erase_install_erase(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rpm = Path(tmp) / "generic-logos.rpm"
+            rpm.touch()
+            with patch.object(installer.subprocess, "run", side_effect=[
+                    subprocess.CompletedProcess([], 0, stdout="fedora-logos"),
+                    subprocess.CompletedProcess([], 0, stdout=""),
+                    subprocess.CompletedProcess([], 0, stdout=""),
+                    subprocess.CompletedProcess([], 0, stdout=""),
+                    subprocess.CompletedProcess([], 0, stdout=""),
+            ]) as run:
+                self.assertEqual(installer.swap_distro_logos(rpm, Path(tmp)), 0)
+            argv = [call.args[0] for call in run.call_args_list]
+            self.assertEqual(len(argv), 5)
+            self.assertEqual(argv[1][:4], ("rpm", "--erase", "--nodeps", "fedora-logos"))
+            self.assertEqual(argv[2][:3], ("rpm", "--install", str(rpm)))
+            self.assertEqual(argv[3], ("rpm", "--erase", "--nodeps", "--nodb", "generic-logos"))
+
+    def test_swap_skips_when_fedora_logos_is_absent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rpm = Path(tmp) / "generic-logos.rpm"
+            rpm.touch()
+            with patch.object(installer.subprocess, "run", return_value=
+                              subprocess.CompletedProcess([], 0, stdout="")) as run:
+                self.assertEqual(installer.swap_distro_logos(rpm, Path(tmp)), 0)
+            for call in run.call_args_list:
+                self.assertEqual(call.args[0][:2], ["rpm", "-qa"])
+
+    def test_swap_fails_when_a_logo_file_survives(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rpm = Path(tmp) / "generic-logos.rpm"
+            rpm.touch()
+            (Path(tmp) / "fedora-gdm-logo.png").touch()
+            with patch.object(installer.subprocess, "run", side_effect=[
+                    subprocess.CompletedProcess([], 0, stdout="fedora-logos"),
+                    subprocess.CompletedProcess([], 0, stdout=""),
+                    subprocess.CompletedProcess([], 0, stdout=""),
+                    subprocess.CompletedProcess([], 0, stdout=""),
+                    subprocess.CompletedProcess([], 0, stdout=""),
+            ]):
+                self.assertEqual(installer.swap_distro_logos(rpm, Path(tmp)), 1)
+
+    def test_swap_fails_when_the_rpm_is_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(installer.subprocess, "run") as run:
+                self.assertEqual(
+                    installer.swap_distro_logos(Path(tmp) / "absent.rpm", Path(tmp)), 1)
+            run.assert_not_called()
+
     def test_find_skew_names_mismatches_only(self):
         have = {("gnome-shell", "x86_64"): "0:51~beta-1.hum1.bfin",
                 ("mutter", "x86_64"): "0:51.0-1.hum1.bfin",
