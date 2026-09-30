@@ -138,11 +138,12 @@
         "hooks",
         "first-boot",
         "version-script",
-        "libsetup"
+        "libsetup",
+        "bootupd"
       ],
       "description": "First-boot setup hooks stamp completion through libsetup.sh. Use when editing a hook, migrating one off the legacy `version-script` gate, or debugging a hook that never runs or runs every boot.",
       "version": "1.0",
-      "last_updated": "2026-09-27",
+      "last_updated": "2026-09-30",
       "doc_type": "procedure"
     },
     {

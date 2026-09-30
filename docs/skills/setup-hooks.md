@@ -1,7 +1,7 @@
 ---
 name: setup-hooks
 version: "1.0"
-last_updated: "2026-09-27"
+last_updated: "2026-09-30"
 id: setup-hooks
 one_line_purpose: Change a first-boot setup hook without breaking the once-only contract.
 entry_point: docs/skills/setup-hooks.md
@@ -10,7 +10,7 @@ mcp_compliance_level: partial
 optimization_status: draft
 status: active
 dependencies: []
-tags: [hooks, first-boot, version-script, libsetup]
+tags: [hooks, first-boot, version-script, libsetup, bootupd]
 description: >-
   First-boot setup hooks stamp completion through libsetup.sh. Use when editing
   a hook, migrating one off the legacy `version-script` gate, or debugging a
@@ -70,14 +70,41 @@ if ! declare -F version-script-check >/dev/null; then
 fi
 ```
 
-As of this writing only `20-home-labels.sh` carries the shim. The other Utah
-hooks (`10-tailscale.sh`, `11-framework-ucsi-workaround.sh`, `99-flatpaks.sh`,
+As of this writing only `20-home-labels.sh` and `05-bootupctl-adopt.sh` carry
+the shim. The other Utah hooks (`10-tailscale.sh`,
+`11-framework-ucsi-workaround.sh`, `99-flatpaks.sh`,
 `user-setup.hooks.d/20-framework.sh`) still call the legacy `version-script`
 helper, pending #259.
+
+## First-boot hook inventory
+
+Every hook in `privileged-setup.hooks.d/` runs in lexicographic order from
+`ublue-privileged-setup`. New hooks pick a number lower than 10 so they run
+before any of the existing defaults; 05 is the lowest prefix currently in
+use.
+
+| Hook | Purpose |
+|------|---------|
+| `05-bootupctl-adopt.sh` | Run `bootupctl adopt-and-update` on first boot so a switched-into-Utah system sees its on-disk shim and GRUB as managed by `bootupd`. Skips live sessions (`/sysroot` on `erofs`/`squashfs`) and image variants without `bootupctl` installed, both without committing so a later switch retries. Tracked by #363. |
+| `10-tailscale.sh` | Set the local user as the Tailscale operator. |
+| `11-framework-ucsi-workaround.sh` | Append the `usbcore.autosuspend=-1` karg on Intel-Core-Ultra Frameworks. |
+| `20-home-labels.sh` | Relabel `/var/home` once on systems installed before #261. |
+| `99-flatpaks.sh` | Drop the Firefox system-config defaults at first boot. |
+
+`05-bootupctl-adopt.sh` is the canonical example of a transient-skip body:
+each guard (`command -v bootupctl`, the live-session check) exits without
+committing so a later `bootc switch` that brings bootupctl in or moves off
+the live root retries cleanly. `20-home-labels.sh` is the deliberate-skip
+example: a `restorecon` that finds no work to do commits and stops
+re-running.
 
 ## Tests
 
 `tests/test_setup_hook_version_contract.py` asserts the contract on
-`20-home-labels.sh`; run the suite with `just test`. `just check` syntax-checks
+`20-home-labels.sh`; `tests/test_bootupctl_adopt_hook.py` asserts the
+contract on `05-bootupctl-adopt.sh` and additionally drives the real hook
+against fake `libsetup.sh` and `bootupctl` stubs for the four state
+transitions (fresh install, re-run after commit, live session, missing
+`bootupctl`). Run the suite with `just test`. `just check` syntax-checks
 every hook (`bash -n`) through `scripts/check-script-syntax.py`; there is no
 shellcheck gate in the Justfile or CI.
