@@ -324,6 +324,20 @@ class ServiceMaskParityTests(unittest.TestCase):
         self.assertIn("bootc-fetch-apply-updates.timer", masked)
         self.assertIn("bootc-fetch-apply-updates.service", masked)
 
+    def test_grub_boot_success_timer_not_enabled(self):
+        # /boot is read-only at runtime, so the boot-success mark can never be
+        # written and the timer fails on every boot; nothing consumes the flag.
+        preset = (ROOT / "system_files/shared/usr/lib/systemd/user-preset/85-utah-desktop.preset").read_text()
+        self.assertNotIn("enable grub-boot-success.timer", preset)
+        self.assertIn("#364", preset)
+
+        config_services = (ROOT / "scripts/configure-services.sh").read_text()
+        config_code = "\n".join(
+            line for line in config_services.splitlines()
+            if not line.strip().startswith("#")
+        )
+        self.assertNotIn("grub-boot-success.timer", config_code)
+
     def test_unit_masked_helper_verifies_dev_null_symlink(self):
         import tempfile
         import importlib.util

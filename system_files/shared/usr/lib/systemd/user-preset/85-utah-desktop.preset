@@ -3,10 +3,15 @@
 # Hummingbird ships 90-default-user.preset enabling only dbus, then
 # 99-default-disable.preset with "disable *". Fedora's user preset, which Bluefin
 # inherits, also enables the desktop's per-user services. Without these, an
-# installed Utah had no audio server (so no volume control and no sound), no
-# XDG user directories for new accounts, and no GRUB boot-success mark for
-# 14_menu_show_once. Presets are read in lexicographic order and the first
-# match wins, so this file outranks 90-* and 99-*.
+# installed Utah had no audio server (so no volume control and no sound) and no
+# XDG user directories for new accounts. Presets are read in lexicographic
+# order and the first match wins, so this file outranks 90-* and 99-*.
+#
+# Fedora also enables grub-boot-success.timer, but Utah deliberately does not
+# (#364): /boot is read-only at runtime, so the boot-success mark can never be
+# written and the timer fails on every boot, on GRUB and systemd-boot alike.
+# Nothing consumes the flag either -- the bootupd-managed grub.cfg carries no
+# boot counting. Do not re-add it for parity without a writable grubenv story.
 #
 # Global user presets are not applied by bootc's first-boot preset-all, so
 # configure-services.sh also enables these at build time. The desktop
@@ -15,6 +20,5 @@ enable pipewire.socket
 enable pipewire-pulse.socket
 enable wireplumber.service
 enable xdg-user-dirs.service
-enable grub-boot-success.timer
 enable obex.service
 enable mpris-proxy.service
