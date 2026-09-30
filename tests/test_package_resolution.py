@@ -635,10 +635,12 @@ class DesktopUnitEnablementTests(unittest.TestCase):
     def test_systemd_boot_update_enabled_and_gated_on_the_loader(self):
         # projectbluefin/utah#363: on systemd-boot systems bootupd stands down
         # by design ("managed with bootctl"), so the image must carry the boot
-        # manager binaries and run bootctl update itself. The gate keeps GRUB
-        # and BIOS systems from touching an ESP that is not systemd-boot's:
-        # LoaderInfo is set by systemd-boot itself, so it marks exactly the
-        # boots whose ESP bootctl should update.
+        # manager binaries and run bootctl update itself. The gate keeps BIOS
+        # systems (no efivars) off an ESP that is not systemd-boot's; Fedora
+        # GRUB-EFI also sets LoaderInfo via grub2's bli module, where bootctl
+        # update is a harmless no-op. Secure Boot systems must be excluded
+        # outright, or the unsigned build would overwrite a signed sd-boot and
+        # the firmware would reject the next boot.
         self.assertIn("systemd-boot-update.service", self.script_units("enable_unit"))
         self.assertIn("systemd-boot-update.service", self.preset_directives("enable"))
 
@@ -654,9 +656,9 @@ class DesktopUnitEnablementTests(unittest.TestCase):
             "LoaderInfo-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f",
             text,
         )
+        self.assertIn("ConditionSecurity=!uefi-secureboot", text)
         self.assertIn("#363", text)
 
-        import tomllib
         contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
         self.assertIn(
             "systemd-boot-update.service",

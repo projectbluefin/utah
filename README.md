@@ -117,8 +117,13 @@ This is the honest list, and it is why the label above says pre-alpha.
   expected, not a broken install: Utah ships `systemd-boot-unsigned` and
   enables `systemd-boot-update.service`, which runs `bootctl update` on each
   boot that came through systemd-boot, so the boot manager binaries stay
-  current. GRUB and BIOS systems skip that service (a drop-in gates it on the
-  `LoaderInfo` EFI variable) and keep getting their `grub` and `shim` from
+  current. A drop-in gates that service on the `LoaderInfo` EFI variable and on
+  Secure Boot being off: BIOS systems have no efivars and skip it outright,
+  Fedora GRUB-EFI systems do set `LoaderInfo` (grub2 embeds the `bli` module)
+  but `bootctl update` is a no-op there because it refuses to replace a boot
+  manager it does not recognise as its own, and Secure Boot systems are skipped
+  so the unsigned build cannot overwrite a signed `sd-boot`. Either way GRUB
+  systems keep getting their `grub` and `shim` from
   `bootupd`. Switchers can confirm the ESP is being maintained with
   `bootctl status` (compare `Current` against `Available`) rather than
   `bootupctl status` (links #363).
