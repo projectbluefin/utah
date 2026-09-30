@@ -47,6 +47,18 @@ ARG PACKAGE_IMAGE_REF=${{PACKAGE_IMAGE}}@${{PACKAGE_IMAGE_SHA}}
 ARG COMMON_IMAGE=ghcr.io/projectbluefin/common
 """
 
+REPO_FILE_TEXT = f"""\
+# Digest-pinned OCI repository copied from projectbluefin/utah-packages.
+# factory-pin: {OLD}
+[utah-packages]
+# utah-install: true
+name=Utah package factory
+baseurl=file:///etc/utah-packages
+enabled=1
+gpgcheck=0
+priority=1
+"""
+
 
 class RewriteTests(unittest.TestCase):
     def test_rewrite_moves_only_the_pin_line(self):
@@ -79,6 +91,24 @@ class RewriteTests(unittest.TestCase):
         updated = bump.rewrite(doubled, NEW)
         self.assertEqual(updated.count(NEW), 1)
         self.assertIn(f"ARG OTHER_PIN={OLD}", updated)
+
+    def test_rewrite_stamp_moves_only_the_stamp_line(self):
+        updated = bump.rewrite_stamp(REPO_FILE_TEXT, NEW)
+        self.assertIn(f"# factory-pin: {NEW}", updated)
+        self.assertNotIn(OLD, updated)
+        before = REPO_FILE_TEXT.splitlines()
+        after = updated.splitlines()
+        self.assertEqual(len(before), len(after))
+        differing = [i for i, (a, b) in enumerate(zip(before, after)) if a != b]
+        self.assertEqual(differing, [before.index(f"# factory-pin: {OLD}")])
+
+    def test_rewrite_stamp_refuses_a_malformed_digest(self):
+        with self.assertRaises(bump.PinError):
+            bump.rewrite_stamp(REPO_FILE_TEXT, "sha256:nothex")
+
+    def test_current_stamp_rejects_a_missing_stamp(self):
+        with self.assertRaises(bump.PinError):
+            bump.current_stamp("[utah-packages]\nenabled=1\n")
 
 
 class ShapeTests(unittest.TestCase):
@@ -120,6 +150,9 @@ class MainTests(unittest.TestCase):
         self.dir = tempfile.TemporaryDirectory()
         self.path = Path(self.dir.name) / "Containerfile"
         self.path.write_text(CONTAINERFILE_HEADER)
+        self.repo = Path(self.dir.name) / "packages" / "utah-packages.repo"
+        self.repo.parent.mkdir()
+        self.repo.write_text(REPO_FILE_TEXT)
         self.addCleanup(self.dir.cleanup)
 
     def run_main(self, *argv):
@@ -133,6 +166,20 @@ class MainTests(unittest.TestCase):
         with mock.patch.object(bump, "resolve_digest", return_value=NEW):
             self.assertEqual(self.run_main(), 0)
         self.assertIn(f"ARG PACKAGE_IMAGE_SHA={NEW}", self.path.read_text())
+        self.assertIn(f"# factory-pin: {NEW}", self.repo.read_text())
+
+    def test_a_stamp_that_disagrees_with_the_pin_stops_the_bump(self):
+        self.repo.write_text(REPO_FILE_TEXT.replace(OLD, NEW))
+        with mock.patch.object(bump, "resolve_digest", return_value="sha256:" + "4" * 64):
+            self.assertEqual(self.run_main(), 1)
+        self.assertIn(f"ARG PACKAGE_IMAGE_SHA={OLD}", self.path.read_text())
+        self.assertIn(f"# factory-pin: {NEW}", self.repo.read_text())
+
+    def test_a_missing_stamp_stops_the_bump(self):
+        self.repo.write_text("[utah-packages]\nenabled=1\n")
+        with mock.patch.object(bump, "resolve_digest", return_value=NEW):
+            self.assertEqual(self.run_main(), 1)
+        self.assertIn(f"ARG PACKAGE_IMAGE_SHA={OLD}", self.path.read_text())
 
     def test_explicit_digest_wins_over_resolution(self):
         def explode(*_args, **_kwargs):

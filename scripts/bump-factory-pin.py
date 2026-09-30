@@ -10,13 +10,21 @@ whatever the pin said until someone noticed by hand (#336).
 
 The fix is to make the rev a routine pull request instead of a discovery. A
 scheduled workflow (`.github/workflows/bump-factory-pin.yml`) runs this script
-against `testing`, and the resulting diff -- one line -- is reviewed and merged
-like any other change. Nothing here merges anything, and a stale pin is still
-only ever *reported* by the caller; writing the file is opt-in by way of the
+against `testing`, and the resulting diff is reviewed and merged like any
+other change. Nothing here merges anything, and a stale pin is still only
+ever *reported* by the caller; writing the files is opt-in by way of the
 absence of `--check`.
 
+The bump moves two lines that must agree: the Containerfile ARG and the
+`# factory-pin:` stamp in `packages/utah-packages.repo`. The stamp is the
+transaction's layer-cache key -- the ARG change alone does not bust the
+cached package layer on CI's buildah, so a pin-only ARG commit rebuilt
+nothing and shipped the previous factory's packages (#371). A stamp that
+already disagrees with the ARG stops the bump: something hand-edited one
+side, and the proposal must not paper over it.
+
 Resolution is a plain registry manifest request on the tag, reading the digest
-off the `Docker-Content-Digest` response header, through the anonymous bearer
+off the `Docker-Content-Digest` response header, through the anonymous Bearer [REDACTED]
 token GHCR hands out for a public image, so there is no skopeo install and no
 credential in the log. `--image` and `--tag` exist so the tests and a future
 pin on a different factory tag do not have to edit this file.
@@ -34,6 +42,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 CONTAINERFILE = ROOT / "Containerfile"
+REPO_FILE = ROOT / "packages" / "utah-packages.repo"
 
 DEFAULT_IMAGE = "ghcr.io/projectbluefin/utah-packages"
 DEFAULT_TAG = "latest"
@@ -44,6 +53,8 @@ SHA_ARG_RE = re.compile(
     r"^ARG PACKAGE_IMAGE_SHA=(?P<digest>\S+)\s*$", re.MULTILINE)
 REF_ARG_RE = re.compile(
     r"^ARG PACKAGE_IMAGE_REF=(?P<ref>\S+)\s*$", re.MULTILINE)
+STAMP_RE = re.compile(
+    r"^# factory-pin: (?P<digest>\S+)\s*$", re.MULTILINE)
 
 MANIFEST_ACCEPT = ", ".join((
     "application/vnd.oci.image.index.v1+json",
@@ -141,6 +152,27 @@ def rewrite(text: str, digest: str) -> str:
     return SHA_ARG_RE.sub(f"ARG PACKAGE_IMAGE_SHA={digest}", text, count=1)
 
 
+def current_stamp(text: str) -> str:
+    """The digest the .repo stamp carries, or PinError if it is unusable."""
+    match = STAMP_RE.search(text)
+    if not match:
+        raise PinError("utah-packages.repo has no '# factory-pin:' stamp")
+    digest = match.group("digest")
+    if not DIGEST_RE.match(digest):
+        raise PinError(
+            f"# factory-pin: {digest} is not a sha256 digest; this "
+            "script will not rewrite a stamp it does not understand")
+    return digest
+
+
+def rewrite_stamp(text: str, digest: str) -> str:
+    """The same .repo file with the factory-pin stamp moved to digest."""
+    if not DIGEST_RE.match(digest):
+        raise PinError(f"refusing to write a malformed digest: {digest!r}")
+    current_stamp(text)  # refuse to rewrite a line we could not have parsed
+    return STAMP_RE.sub(f"# factory-pin: {digest}", text, count=1)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true",
@@ -156,10 +188,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--containerfile", type=Path, default=CONTAINERFILE)
     args = parser.parse_args(argv)
 
+    repo_file = args.containerfile.parent / "packages" / "utah-packages.repo"
     try:
         text = args.containerfile.read_text()
         verify_shape(text)
         pinned = current_pin(text)
+        stamped = current_stamp(repo_file.read_text())
+        if stamped != pinned:
+            raise PinError(
+                f"the Containerfile pins {pinned} but utah-packages.repo "
+                f"stamps {stamped}; move both together by hand (#371) before "
+                "the automation proposes anything")
         latest = args.digest or resolve_digest(args.image, args.tag)
     except (PinError, OSError, urllib.error.URLError, KeyError) as error:
         print(f"error: {error}", file=sys.stderr)
@@ -184,6 +223,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     args.containerfile.write_text(rewrite(text, latest))
+    repo_file.write_text(rewrite_stamp(repo_file.read_text(), latest))
     print(f"bumped: {pinned} -> {latest}")
     return 0
 

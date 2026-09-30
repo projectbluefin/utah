@@ -77,9 +77,11 @@ jobs:
 
             Proposed weekly by `bump-factory-pin.yml` (#336). The pin is a
             reviewable digest, not a floating tag, so this diff is the whole
-            change: one line, and the package set the image installs from.
+            change: the ARG plus the `# factory-pin:` stamp that keys the
+            transaction's layer cache (#371).
 
             Opened against `testing`; `main` receives it through the promotion.
           add-paths: |
             Containerfile
+            packages/utah-packages.repo
           labels: chore/deps
