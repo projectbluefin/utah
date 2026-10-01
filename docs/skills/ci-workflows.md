@@ -256,10 +256,11 @@ rerun), not just one workflow.
 
 The cadence is RFC'd in #336. What runs today:
 
-- `testing` is the integration branch. `build.yml` runs on every pull request
-  and on every push to `testing`; `main` receives the promotion merge from
-  `promote-testing-to-main.yml` and nothing else. `sync-main-to-testing.yml`
-  carries the promotion back down nightly.
+- Open pull requests against `main`, never `testing`. `sync-main-to-testing.yml`
+  resets `testing` to `main` on every push to `main`, so a commit merged
+  straight into `testing` is orphaned: #404 was lost this way and had to be
+  re-landed. `build.yml` runs on every pull request and on every push to
+  `testing`, which is how a `main` commit reaches the image tags.
 - `:testing` advances per green build, not on a clock: the tags move in
   `post-testing-e2e.yml`, after the LUKS ISO matrix and the production-ISO
   composition both pass. `promote-testing-to-main.yml` is the daily 04:00 UTC
