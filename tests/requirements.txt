@@ -1,0 +1,15 @@
+# Third-party modules the host-side suite (`just test` -> tests/run_suite.py)
+# needs. A clean checkout has neither, and without them 46 of the 563 tests
+# error out instead of failing honestly -- a missing dependency then looks
+# exactly like a regression.
+#
+#   pip install -r tests/requirements.txt
+#
+# pyyaml      scripts/check_workflow_outputs.py parses workflow YAML; the
+#             tests invoke it as a subprocess, so the import failure surfaces
+#             as a wrong return code rather than as a skip.
+#             (tests/test_check_workflow_outputs.py)
+# jsonschema  scripts/generate_skill_index.py validates the generated index
+#             against its schema. (tests/test_generate_skill_index.py)
+pyyaml
+jsonschema

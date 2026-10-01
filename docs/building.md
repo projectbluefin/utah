@@ -15,6 +15,18 @@ just boot-vm
 ENABLE_SSHD=1 just build-ghcr utah testing main
 ```
 
+`just check` ends in `just test`, the host-side suite under `tests/`. It needs
+two third-party Python modules — `pyyaml` and `jsonschema` — which a clean
+checkout does not have. They are declared in
+[`tests/requirements.txt`](../tests/requirements.txt); install them once:
+
+```bash
+pip install -r tests/requirements.txt
+```
+
+`just test` refuses to run and names the file when either is missing, so a
+missing dependency never arrives disguised as a test failure.
+
 The image is tagged `localhost/utah:testing`. `generate-bootable-image` uses
 `bootc install to-disk` to create `output/bootable.raw`; `boot-vm` runs that disk
 with `ghcr.io/qemus/qemu` and serves the graphical console at the printed URL.
