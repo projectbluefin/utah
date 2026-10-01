@@ -67,7 +67,7 @@ than being noticed later.
 | | count |
 | --- | --- |
 | Bluefin contract installed | **61** |
-| Utah additions (GNOME 51, base-image parity, device firmware, desktop services) | 86 |
+| Utah additions (GNOME 51, base-image parity, device firmware, desktop services) | 88 |
 | Genuinely unavailable | **6** |
 
 The install writes its resolved list to `/usr/share/utah/contract.txt` and the

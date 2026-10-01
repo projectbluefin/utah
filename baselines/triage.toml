@@ -299,6 +299,10 @@ status = "planned"
 area = "hardware-power"
 issue = "#263"
 
+# zram-generator ships in packages/utah.toml [services] as of #384, but the
+# baselines are extracted from the published image, so it stays a gap -- and so
+# needs an entry here -- until `just baselines` reruns against an image that
+# carries it. Drop this entry then.
 [package.zram-generator]
 status = "planned"
 area = "hardware-power"
