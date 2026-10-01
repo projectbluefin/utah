@@ -163,10 +163,15 @@ second mechanism, not the pixmap overlay.
 GDM uses its own dconf profile (`/etc/dconf/profile/gdm`, provided by the
 gdm RPM). Utah ships a single keyfile,
 `system_files/shared/etc/dconf/db/gdm.d/01-bluefin-gdm-logo`, that sets
-`logo` to the same `bluefin.png` the desktop contract already asserts
-under `/usr/share/ublue-os/bluefin-logos/`. That avoids a duplicate asset
-in the overlay and means a brand refresh in `common` flows to both the
-desktop shell and the greeter without a second commit here.
+`logo` to `/usr/share/pixmaps/bluefin-gdm-logo.png`, a 150x61 Bluefin
+wordmark Utah ships in `system_files/shared/usr/share/pixmaps/`. It is a
+copy of `common`'s `fedora-gdm-logo.png` under a Utah-owned name, so no logos
+RPM owns or erases it.
+
+**Do not point `logo` at `bluefin-logos/bluefin.png`.** gnome-shell draws the
+greeter logo at its natural size; that file is 372x493 and fills the login
+screen. Bluefin-LTS keeps the greeter logo small by using `common`'s 150x61
+`fedora-gdm-logo.png`. A unit test caps the shipped logo at 256x128.
 
 `scripts/configure-branding.sh` runs `dconf update` after stamping the
 contract files, so the greeter database is compiled at build time and a
@@ -177,8 +182,8 @@ so it is a no-op on a host without the gnome-desktop stack (CI without
 
 `dconf update` does **not** validate the logo path — it compiles keyfiles
 and stores `logo` as an opaque string, so a dangling path compiles
-cleanly. The image itself is guarded by the pre-existing `[branding].files`
-entry for `/usr/share/ublue-os/bluefin-logos/bluefin.png` in
+cleanly. The image itself is guarded by the new `[branding].files`
+entry for `/usr/share/pixmaps/bluefin-gdm-logo.png` in
 `contracts/bluefin-desktop.toml`, enforced by
 `utah-verify-desktop-contract` in the same `RUN` layer.
 

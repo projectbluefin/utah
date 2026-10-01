@@ -6,6 +6,7 @@
 [branding]
 files = [
   "/usr/share/ublue-os/bluefin-logos/bluefin.png",
+  "/usr/share/pixmaps/bluefin-gdm-logo.png",
   "/usr/share/ublue-os/bluefin-logos/chicken.png",
   "/usr/share/ublue-os/bluefin-logos/symbols/bluefin",
   "/usr/share/backgrounds/bluefin/01-bluefin.xml",
@@ -78,11 +79,11 @@ files = [
 ]
 # The login screen logo must point at the Bluefin mark. Asserting both the
 # schema and the asset path guards against reverting to the Fedora fallback
-# or pointing somewhere other than the bluefin.png that [branding].files
-# already asserts is shipped. See #378.
+# or to the full-size bluefin.png, which renders far too large. The path must
+# be the small wordmark that [branding].files asserts is shipped. See #378.
 "/etc/dconf/db/gdm.d/01-bluefin-gdm-logo" = [
   "[org/gnome/login-screen]",
-  "logo='/usr/share/ublue-os/bluefin-logos/bluefin.png'",
+  "logo='/usr/share/pixmaps/bluefin-gdm-logo.png'",
 ]
 
 [flatpak]
