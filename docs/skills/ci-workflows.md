@@ -257,10 +257,15 @@ rerun), not just one workflow.
 The cadence is RFC'd in #336. What runs today:
 
 - Open pull requests against `main`, never `testing`. `sync-main-to-testing.yml`
-  resets `testing` to `main` on every push to `main`, so a commit merged
-  straight into `testing` is orphaned: #404 was lost this way and had to be
-  re-landed. `build.yml` runs on every pull request and on every push to
-  `testing`, which is how a `main` commit reaches the image tags.
+  resets `testing` to `main` on every push to `main` and again nightly on its
+  own `20 22 * * *` schedule, so a commit merged straight into `testing` is
+  orphaned: #404 was lost this way and had to be re-landed. `build.yml` runs on
+  every pull request and declares `push: branches: [testing]`, but that trigger
+  is not how a `main` commit reaches the image tags: the sync pushes `testing`
+  with the workflow's own `GITHUB_TOKEN`, and a `GITHUB_TOKEN` push starts no
+  workflow. `sync-main-to-testing.yml`'s `build` job therefore dispatches the
+  build explicitly (`gh workflow run build.yml --ref testing`) once the sync
+  job returns, which is the path that actually produces the images.
 - `:testing` advances per green build, not on a clock: the tags move in
   `post-testing-e2e.yml`, after the LUKS ISO matrix and the production-ISO
   composition both pass. `promote-testing-to-main.yml` is the daily 04:00 UTC

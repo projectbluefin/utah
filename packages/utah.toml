@@ -300,8 +300,15 @@ packages = [
 # one zram device sized zram-size = min(ram, 8192), i.e. all of RAM capped at
 # 8 GiB. That is exactly what Bluefin ships (it has no custom zram config of
 # its own), so the size is the package default, not something restated here.
-# systemd-oomd-defaults is a related memory-pressure follow-up left out on
-# purpose (see PR body).
+# Not verified in-tree: #384's acceptance check is `swapon -s` showing a zram
+# device on a booted install, and no e2e job here asserts in-VM swap. Run it
+# against the next `testing` image before closing #384.
+# systemd-oomd-defaults is the related memory-pressure half of #384 and is
+# deliberately not taken here: #404 kept itself to one logical change (the
+# swap device), and the issue left the OOM decision to its author. Utah
+# therefore runs with zram swap and stock kernel OOM handling, not
+# systemd-oomd's pressure-based kills. Revisit it as its own change against
+# #384's OOM question rather than assuming the omission was an oversight.
 packages = [
     "cryptsetup",
     "flatpak",
