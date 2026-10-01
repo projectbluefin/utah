@@ -11,14 +11,14 @@
 # Root-cause ticket: #398. This dconf override is the working fix and does
 # not need the overlay PNG to land on disk.
 #
-# The image is the same bluefin-logos/bluefin.png the desktop contract asserts
-# under /usr/share/ublue-os/bluefin-logos/ -- the file Common ships. Using the
-# existing asset avoids duplicating a ~285 KB PNG in two places, and a single
-# source means a brand refresh in Common flows to both the desktop shell and
-# the greeter without a second commit here. That the PNG exists is enforced by
-# the [branding].files entry in contracts/bluefin-desktop.toml, not by dconf:
-# the value below is an opaque string to dconf and a dangling path compiles
-# without complaint.
+# The image is a small Bluefin wordmark (150x61), not the full-size
+# bluefin-logos/bluefin.png (372x493): gnome-shell draws the greeter logo at
+# its natural size, so the mascot artwork fills the login screen. The file is
+# a copy of Common's Bluefin-branded fedora-gdm-logo.png, shipped under a
+# Utah-owned name so no logos RPM (fedora-logos, generic-logos) owns or erases
+# it. That the PNG exists is enforced by the [branding].files entry in
+# contracts/bluefin-desktop.toml, not by dconf: the value below is an opaque
+# string to dconf and a dangling path compiles without complaint.
 #
 # The GDM dconf profile is provided by the gdm RPM itself
 # (system-db:gdm,file-db:/usr/share/gdm/greeter-dconf-defaults); Utah only
@@ -28,4 +28,4 @@
 # first boot, which is what issue #378 caught.
 
 [org/gnome/login-screen]
-logo='/usr/share/ublue-os/bluefin-logos/bluefin.png'
+logo='/usr/share/pixmaps/bluefin-gdm-logo.png'

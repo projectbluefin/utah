@@ -459,7 +459,7 @@ class GdmGreeterLogoTests(unittest.TestCase):
 
     CONTRACT_PATH = ROOT / "contracts/bluefin-desktop.toml"
     KEYFILE_PATH = ROOT / "system_files/shared/etc/dconf/db/gdm.d/01-bluefin-gdm-logo"
-    BLUEFIN_LOGO = "/usr/share/ublue-os/bluefin-logos/bluefin.png"
+    BLUEFIN_LOGO = "/usr/share/pixmaps/bluefin-gdm-logo.png"
 
     def test_shipped_contract_declares_gdm_keyfile(self):
         import tomllib
@@ -489,6 +489,20 @@ class GdmGreeterLogoTests(unittest.TestCase):
         content = self.KEYFILE_PATH.read_text()
         self.assertIn("[org/gnome/login-screen]", content)
         self.assertIn(f"logo='{self.BLUEFIN_LOGO}'", content)
+
+    def test_logo_is_a_small_wordmark_shipped_in_the_overlay(self):
+        """gnome-shell draws the greeter logo at natural size.
+
+        The full-size ``bluefin.png`` (372x493) fills the login screen, so the
+        logo must be the small wordmark Utah ships itself.
+        """
+        import struct
+        png = ROOT / "system_files/shared" / self.BLUEFIN_LOGO.lstrip("/")
+        data = png.read_bytes()
+        self.assertEqual(data[:8], b"\x89PNG\r\n\x1a\n")
+        width, height = struct.unpack(">II", data[16:24])
+        self.assertLessEqual(width, 256)
+        self.assertLessEqual(height, 128)
 
     def test_keyfile_does_not_reference_fedora_fallback(self):
         """A regression to the Fedora wordmark must be caught at the source.
