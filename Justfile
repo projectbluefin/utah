@@ -174,22 +174,28 @@ check-desktop-contract image_ref="localhost/utah:testing":
 # three slow dnf resolves to reach the same answer.
 #
 # Resolves dependencies on the pinned base and package image. Needs podman and network.
+# Then probes each [unavailable] entry the same way: a blocked entry that now
+# resolves is stale parity debt, and the base image is already cached.
 check-repos:
     #!/usr/bin/env bash
     set -uo pipefail
-    for attempt in 1 2 3; do
-      python3 scripts/check-repo-availability.py packages/bluefin.toml packages/utah.toml
-      status=$?
-      if [ "$status" -ne 125 ]; then
-        exit "$status"
-      fi
-      echo "check-repos: container engine could not run (exit 125), attempt ${attempt}/3" >&2
-      if [ "$attempt" -ne 3 ]; then
-        sleep $(( attempt * 15 ))
-      fi
-    done
-    echo "check-repos: giving up after 3 engine failures; the registry is not serving the pinned image" >&2
-    exit 125
+    gate() {
+      for attempt in 1 2 3; do
+        python3 scripts/check-repo-availability.py "$@"
+        status=$?
+        if [ "$status" -ne 125 ]; then
+          return "$status"
+        fi
+        echo "check-repos: container engine could not run (exit 125), attempt ${attempt}/3" >&2
+        if [ "$attempt" -ne 3 ]; then
+          sleep $(( attempt * 15 ))
+        fi
+      done
+      echo "check-repos: giving up after 3 engine failures; the registry is not serving the pinned image" >&2
+      return 125
+    }
+    gate packages/bluefin.toml packages/utah.toml || exit "$?"
+    gate --check-unavailable packages/bluefin.toml packages/utah.toml
 
 # packages/bluefin.toml is a verbatim copy of Bluefin's base.toml pinned to
 # the revision in packages/.bluefin-parity-ref.  Drift here is a parity bug,

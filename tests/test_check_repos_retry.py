@@ -12,6 +12,11 @@ would only get later and quieter. The recipe therefore discriminates on 125,
 and these tests pin both halves of that contract -- retry on 125, pass straight
 through on everything else.
 
+The recipe runs the gate twice: the full transaction resolve, then the
+[unavailable]-entry probe against the already-cached base image. Each call
+gets its own 125 retries, and a real failure in the first call stops the
+recipe before the second runs.
+
 The recipe body is extracted from the Justfile and executed with `python3` and
 `sleep` stubbed on PATH, so the assertions are about what the shell actually
 does rather than about the text of the recipe.
@@ -69,10 +74,10 @@ def recipe_body(name: str) -> str:
 
 
 class CheckReposRetry(unittest.TestCase):
-    def run_recipe(self, exit_codes: list[int]) -> tuple[int, int, int]:
+    def run_recipe(self, exit_codes: list[int]) -> tuple[int, list[str], int]:
         """Run the recipe with `python3` yielding `exit_codes` in order.
 
-        Returns (recipe exit status, python3 invocations, sleep invocations).
+        Returns (recipe exit status, python3 argument lines, sleep invocations).
         """
         with tempfile.TemporaryDirectory(prefix="utah-check-repos-") as tmp:
             scratch = Path(tmp)
@@ -113,37 +118,66 @@ class CheckReposRetry(unittest.TestCase):
                 "scripts/check-repo-availability.py", line,
                 "the recipe must retry the availability gate itself",
             )
-        return result.returncode, len(invoked), naps
+        return result.returncode, invoked, naps
 
-    def test_success_runs_the_gate_exactly_once(self):
-        status, invocations, naps = self.run_recipe([0])
+    def test_success_runs_each_gate_exactly_once(self):
+        status, calls, naps = self.run_recipe([0])
         self.assertEqual(status, 0)
-        self.assertEqual(invocations, 1)
+        self.assertEqual(len(calls), 2)
         self.assertEqual(naps, 0)
+        self.assertNotIn("--check-unavailable", calls[0])
+        self.assertIn("--check-unavailable", calls[1])
 
     def test_resolution_failure_is_not_retried(self):
         """A real failure must stay immediate: one run, its own exit status."""
-        status, invocations, naps = self.run_recipe([1])
+        status, calls, naps = self.run_recipe([1])
         self.assertEqual(status, 1)
-        self.assertEqual(invocations, 1, "a resolution failure must not be retried")
+        self.assertEqual(len(calls), 1, "a resolution failure must not be retried")
         self.assertEqual(naps, 0)
 
+    def test_first_gate_failure_skips_the_second_gate(self):
+        status, calls, _ = self.run_recipe([1])
+        self.assertEqual(status, 1)
+        self.assertNotIn("--check-unavailable", calls[0])
+
     def test_engine_failure_that_clears_is_retried_to_success(self):
-        status, invocations, _ = self.run_recipe([125, 0])
+        status, calls, _ = self.run_recipe([125, 0])
         self.assertEqual(status, 0, "a transient engine failure must not fail the gate")
-        self.assertEqual(invocations, 2)
+        self.assertEqual(len(calls), 3)
+        self.assertNotIn("--check-unavailable", calls[0])
+        self.assertNotIn("--check-unavailable", calls[1])
+        self.assertIn("--check-unavailable", calls[2])
+
+    def test_second_gate_engine_failure_is_retried_on_its_own(self):
+        status, calls, naps = self.run_recipe([0, 125, 0])
+        self.assertEqual(status, 0)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(naps, 1)
+        self.assertIn("--check-unavailable", calls[1])
+        self.assertIn("--check-unavailable", calls[2])
+
+    def test_second_gate_failure_reports_its_own_status(self):
+        status, calls, _ = self.run_recipe([0, 1])
+        self.assertEqual(status, 1)
+        self.assertEqual(len(calls), 2)
 
     def test_engine_failure_gives_up_after_three_attempts(self):
-        status, invocations, naps = self.run_recipe([125, 125, 125])
+        status, calls, naps = self.run_recipe([125, 125, 125])
         self.assertEqual(status, 125)
-        self.assertEqual(invocations, 3, "the gate must bound its retries")
+        self.assertEqual(len(calls), 3, "the gate must bound its retries")
+        self.assertEqual(naps, 2, "no backoff is paid after the final attempt")
+
+    def test_second_gate_gives_up_after_three_attempts(self):
+        status, calls, naps = self.run_recipe([0, 125, 125, 125])
+        self.assertEqual(status, 125)
+        self.assertEqual(len(calls), 4)
         self.assertEqual(naps, 2, "no backoff is paid after the final attempt")
 
     def test_a_late_resolution_failure_still_surfaces_its_own_status(self):
         """125 then a real failure reports the real failure, not 125."""
-        status, invocations, _ = self.run_recipe([125, 3])
+        status, calls, _ = self.run_recipe([125, 3])
         self.assertEqual(status, 3)
-        self.assertEqual(invocations, 2)
+        self.assertEqual(len(calls), 2)
 
 
 if __name__ == "__main__":

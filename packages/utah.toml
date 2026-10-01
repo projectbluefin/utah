@@ -306,23 +306,18 @@ packages = [
 #   #10.
 #
 # fish
-#   Fedora's fish spec uses %cargo_generate_buildrequires, which requires
-#   every Rust crate as a system RPM (rust-anstyle, rust-clap, ...). Fedora
-#   44 does not ship Rust crate binary packages -- they exist only in
-#   Rawhide -- so the buildroot cannot satisfy them. Building fish needs a
-#   vendored/cargo-fetch rebuild of the spec rather than the system-crate
-#   model.
-#
-# zsh
-#   The HTML docs build target pulls texi2html, which drags Fedora's ruby
-#   (ruby-default-gems) into a buildroot that already carries Hummingbird's
-#   ruby4.0. The two conflict on file paths, so the transaction fails. Needs
-#   either a ruby exclusion in the buildroot or dropping the html subpackage.
+#   Deliberately excluded, not blocked: the factory builds it and it resolves,
+#   but Bluefin classic shipping every shell was a mistake Utah does not repeat
+#   (bare-metal audit #382). Users who want fish get it from Homebrew.
 #
 # firefox
+#   Neither enabled repository provides the firefox RPM: the factory does
+#   not build it and Hummingbird's server repository does not carry it.
 #   Utah installs org.mozilla.firefox as a Flatpak through the desktop
-#   contract. The RPM browser is deliberately excluded, while mozjs140 is
-#   retained for GNOME Shell. Tracked by #35 and utah-packages#112.
+#   contract, so if the factory ever builds the RPM this entry becomes a
+#   deliberate exclusion rather than a contract addition -- the gate fires
+#   and a human decides. mozjs140 is retained for GNOME Shell regardless.
+#   Tracked by #35 and utah-packages#112.
 #
 # anaconda-live, slitherer
 #   Utah's ISO uses bootc-installer. Both alternative installer packages need
@@ -330,23 +325,6 @@ packages = [
 #   needs a working GHmac backend in Hummingbird's GLib. Slitherer also lacks
 #   its Qt WebEngine dependency closure. Match the factory's installer policy
 #   until that path is supported; tracked by #83.
-#
-# libgda, libgda-sqlite
-#   Upstream added both as runtime dependencies for the maintained Copyous
-#   extension (bluefin#1210). Neither is in the pinned factory image or in
-#   public-hummingbird-x86_64-rpms -- Hummingbird carries no package whose
-#   name contains gda at all. One factory recipe would cover both, because
-#   libgda-sqlite is a subpackage of the libgda SRPM rather than its own
-#   source. Tracked by #106.
-#
-# ppp
-#   In neither repository, and nothing in either Provides it. This one costs
-#   more than dial-up: Hummingbird ships NetworkManager-ppp (1.58.0-1.hum1
-#   and 1.58.1-1.hum1) whose metadata carries Requires: ppp, so that plugin
-#   is uninstallable from their own repository and NetworkManager's PPPoE and
-#   PPTP paths cannot be installed at all. The same shape as avahi (#104):
-#   a plugin shipped without the daemon behind it.
-#   Tracked by #107.
 #
 # grub2-efi-x64-cdboot
 #   The factory supplies it, but it must be the same build as grub2-efi-x64,
@@ -365,11 +343,7 @@ packages = [
     "evolution-ews-core",
     "firefox",
     "fish",
-    "libgda",
-    "libgda-sqlite",
-    "ppp",
     "slitherer",
-    "zsh",
 ]
 
 # nvidia-container-toolkit was recorded here as a second gap. It is not one, and

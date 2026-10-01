@@ -149,6 +149,33 @@ def dnf_path() -> str:
     return dnf
 
 
+# DNF exits nonzero when --assumeno declines a valid transaction, so the exit
+# status alone cannot tell "declined a valid transaction" from "no such
+# package". A missing package or dependency must never be accepted as the
+# declined case: the error patterns fail the verdict even beside a summary,
+# and a verdict without a summary or an "already installed" line is not one.
+RESOLVE_ERRORS = r"No match for argument|nothing provides|conflicting requests|cannot install both|Error:|Failed to"
+RESOLVE_SUMMARY = r"(?m)^Transaction Summary:?\s*$|^Nothing to do\.?\s*$"
+
+
+def dnf_assumeno(dnf: str, repos: tuple[str, ...], packages: list[str]) -> subprocess.CompletedProcess:
+    """Resolve an install transaction without installing anything."""
+    return subprocess.run(
+        [dnf, "--assumeno", "--disablerepo=*",
+         *(f"--enablerepo={r}" for r in repos),
+         "-x", "PackageKit*", "install", *packages],
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        env={**os.environ, "LC_ALL": "C"}, check=False,
+    )
+
+
+def transaction_resolves(result: subprocess.CompletedProcess) -> bool:
+    """Whether a declined dnf transaction resolved every argument."""
+    return (result.returncode in (0, 1)
+            and not re.search(RESOLVE_ERRORS, result.stdout, re.IGNORECASE)
+            and re.search(RESOLVE_SUMMARY, result.stdout) is not None)
+
+
 def run(*args: str) -> int:
     print("+", " ".join(args), flush=True)
     return subprocess.run(args, check=False).returncode
@@ -235,16 +262,35 @@ def main() -> int:
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--resolve", action="store_true",
                         help="resolve the full transaction without installing packages")
+    parser.add_argument("--resolve-one", metavar="NAME", default=None,
+                        help="resolve one package without installing it; "
+                             "exit 0 when it resolves, 1 when it does not")
     parser.add_argument("--repos-dir", type=Path, default=None,
                         help="directory containing .repo files (defaults to /etc/yum.repos.d or packages/)")
-    parser.add_argument("manifest", type=Path)
+    parser.add_argument("manifest", type=Path, nargs="?",
+                        help="required unless --resolve-one is given")
     parser.add_argument(
         "overlay", type=Path, nargs="?", default=None,
         help="defaults to utah.toml alongside the Bluefin manifest",
     )
     args = parser.parse_args()
-    overlay = args.overlay or args.manifest.with_name("utah.toml")
+    if args.resolve_one is not None:
+        if args.check or args.resolve:
+            parser.error("--resolve-one cannot be combined with --check or --resolve")
+    elif args.manifest is None:
+        parser.error("manifest is required unless --resolve-one is given")
+    overlay = args.overlay or (args.manifest.with_name("utah.toml") if args.manifest else None)
     repos = install_repos(args.repos_dir)
+
+    if args.resolve_one is not None:
+        # The single-name probe the unavailable-entry gate loops over. The
+        # full dnf output stays in the log for debugging; the marker line is
+        # what the gate parses.
+        result = dnf_assumeno(dnf_path(), repos, [args.resolve_one])
+        print(result.stdout, end="", flush=True)
+        verdict = 0 if transaction_resolves(result) else 1
+        print(f"UTAH_RESOLVE_ONE {args.resolve_one} {verdict}", flush=True)
+        return verdict
 
     if args.check:
         # No rpmdb to consult off-image, so validate the manifests only.
@@ -271,21 +317,9 @@ def main() -> int:
     excluded = section(args.manifest, "excluded")
 
     if args.resolve:
-        result = subprocess.run(
-            [dnf, "--assumeno", "--disablerepo=*",
-             *(f"--enablerepo={r}" for r in repos),
-             "-x", "PackageKit*", "install", *packages, *build_deps],
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-            env={**os.environ, "LC_ALL": "C"}, check=False,
-        )
+        result = dnf_assumeno(dnf, repos, [*packages, *build_deps])
         print(result.stdout, end="", flush=True)
-        # DNF exits nonzero when --assumeno declines a valid transaction.
-        # A missing package or dependency must never be accepted as that case.
-        errors = r"No match for argument|nothing provides|conflicting requests|cannot install both|Error:|Failed to"
-        summary = r"(?m)^Transaction Summary:?\s*$|^Nothing to do\.?\s*$"
-        if (result.returncode not in (0, 1)
-                or re.search(errors, result.stdout, re.IGNORECASE)
-                or not re.search(summary, result.stdout)):
+        if not transaction_resolves(result):
             return 1
         print(f"Resolved {len(set(packages + build_deps))} runtime and build packages on the pinned base")
         return 0

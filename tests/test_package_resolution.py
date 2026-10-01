@@ -9,6 +9,7 @@ from pathlib import Path
 import subprocess
 import tarfile
 import tempfile
+import tomllib
 import unittest
 from unittest.mock import patch
 
@@ -240,6 +241,138 @@ class PackageResolutionTests(unittest.TestCase):
                 with self.assertRaises(ValueError) as ctx:
                     installer.main()
                 self.assertIn("public-hummingbird-x86_64-rpms", str(ctx.exception))
+
+
+class ResolveOneTests(unittest.TestCase):
+    """--resolve-one is the single-name probe the unavailable-entry gate loops over."""
+
+    def probe(self, output, code=1):
+        with patch("sys.argv", ["install", "--resolve-one", "candidate"]), \
+             patch.object(installer, "dnf_path", return_value="dnf5"), \
+             patch.object(installer, "install_repos", return_value=("utah-packages",)), \
+             patch.object(installer.subprocess, "run", return_value=
+                          subprocess.CompletedProcess([], code, stdout=output)) as run, \
+             contextlib.redirect_stdout(io.StringIO()) as stdout:
+            return installer.main(), run.call_args.args[0], stdout.getvalue()
+
+    def test_resolving_package_exits_zero_with_a_marker(self):
+        rc, command, log = self.probe(
+            "Transaction Summary:\nInstall 1 Package\nOperation aborted.\n")
+        self.assertEqual(rc, 0)
+        self.assertEqual(command, ["dnf5", "--assumeno", "--disablerepo=*",
+                                   "--enablerepo=utah-packages",
+                                   "-x", "PackageKit*", "install", "candidate"])
+        self.assertIn("UTAH_RESOLVE_ONE candidate 0", log.splitlines())
+
+    def test_already_installed_counts_as_resolves(self):
+        # A package the base already carries is the most stale an
+        # [unavailable] entry can be: it resolves trivially.
+        rc, _, log = self.probe("Nothing to do.\n", code=0)
+        self.assertEqual(rc, 0)
+        self.assertIn("UTAH_RESOLVE_ONE candidate 0", log.splitlines())
+
+    def test_unresolvable_package_exits_one(self):
+        for output in ("No match for argument: candidate\n",
+                       "nothing provides libmissing.so.1\n",
+                       "Error: Failed to download metadata\n",
+                       "Operation aborted.\n"):
+            with self.subTest(output=output):
+                rc, _, log = self.probe(output)
+                self.assertEqual(rc, 1)
+                self.assertIn("UTAH_RESOLVE_ONE candidate 1", log.splitlines())
+
+    def test_unexpected_exit_code_fails_even_with_summary(self):
+        rc, _, log = self.probe("Transaction Summary\n", code=125)
+        self.assertEqual(rc, 1)
+        self.assertIn("UTAH_RESOLVE_ONE candidate 1", log.splitlines())
+
+    def test_full_dnf_output_stays_in_the_log(self):
+        rc, _, log = self.probe("No match for argument: candidate\n")
+        self.assertEqual(rc, 1)
+        self.assertIn("No match for argument: candidate", log)
+
+    def test_cannot_combine_with_resolve_or_check(self):
+        for flag in ("--resolve", "--check"):
+            with self.subTest(flag=flag), \
+                 patch("sys.argv", ["install", "--resolve-one", "candidate",
+                                    flag, "bluefin.toml", "utah.toml"]), \
+                 contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    installer.main()
+
+
+class UnavailableContractTests(unittest.TestCase):
+    """[unavailable] is documented parity debt: every entry carries a tracking
+    issue, none of it is in the install set, and the deliberate exclusions
+    are policy rather than accidents."""
+
+    OVERLAY = ROOT / "packages/utah.toml"
+
+    def names(self):
+        return checker.unavailable_names(self.OVERLAY)
+
+    def section_text(self):
+        # Line-based: an earlier section's prose mentions "[unavailable]",
+        # so a substring split would cut mid-comment.
+        lines = self.OVERLAY.read_text().splitlines()
+        start = lines.index("[unavailable]")
+        end = next((index for index in range(start + 1, len(lines))
+                    if lines[index].startswith("[")), len(lines))
+        return "\n".join(lines[start:end])
+
+    def comment_block(self, name):
+        """The #-comment block whose header names this entry.
+
+        Headers start at column zero in lowercase ("# anaconda-live,
+        slitherer"); body lines are indented, blank, or lone "#", so the
+        block runs to the next header, blank line, or non-comment line.
+        """
+        lines = self.section_text().splitlines()
+        starts = [index for index, line in enumerate(lines)
+                  if re.search(rf"^#.*\b{re.escape(name)}\b", line)]
+        self.assertTrue(starts, f"{name} has no comment block in [unavailable]")
+        block = []
+        for line in lines[starts[0] + 1:]:
+            if not line.startswith("#") or re.match(r"^# [a-z0-9]", line):
+                break
+            block.append(line)
+        return "\n".join([lines[starts[0]], *block])
+
+    def test_fish_stays_excluded(self):
+        self.assertIn("fish", self.names(),
+                      "Bluefin classic shipping every shell was a mistake Utah "
+                      "does not repeat (bare-metal audit #382)")
+
+    def test_firefox_rpm_stays_excluded(self):
+        self.assertIn("firefox", self.names(),
+                      "Utah ships the browser as the org.mozilla.firefox Flatpak")
+
+    def test_deliberate_exclusions_are_all_in_the_overlay(self):
+        self.assertLessEqual(set(checker.DELIBERATELY_EXCLUDED), set(self.names()),
+                             "a deliberate exclusion left [unavailable] without "
+                             "repealing the policy")
+
+    def test_every_entry_carries_a_tracking_issue(self):
+        for name in self.names():
+            with self.subTest(name=name):
+                self.assertIsNotNone(re.search(r"#\d+", self.comment_block(name)),
+                                     f"{name} lost its tracking issue")
+
+    def test_unavailable_entries_are_absent_from_the_install_contract(self):
+        # The raw Bluefin sections legitimately list these names -- that is
+        # what makes them parity debt. The assertion belongs on contract(),
+        # which must subtract every one of them on every Fedora major the
+        # manifest defines a section for.
+        base = ROOT / "packages/bluefin.toml"
+        majors = [None] + [section.removeprefix("fedora_v")
+                           for section in tomllib.loads(base.read_text())
+                           if section.startswith("fedora_v")]
+        install = set(installer.section(self.OVERLAY, "build"))
+        for major in majors:
+            install |= set(installer.contract(base, self.OVERLAY, major))
+        overlap = sorted(set(self.names()) & install)
+        self.assertEqual(overlap, [],
+                         f"[unavailable] entries still installed: {overlap}")
 
 
 class ParityContractTests(unittest.TestCase):

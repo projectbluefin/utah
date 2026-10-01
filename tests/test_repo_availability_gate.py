@@ -177,7 +177,7 @@ class RepositoryMetadataTests(unittest.TestCase):
 class MainTests(unittest.TestCase):
     """The CLI resolves against the pins and hands CI the resolver's verdict."""
 
-    def run_main(self, argv, returncode=0):
+    def run_main(self, argv, returncode=0, stdout=""):
         """Run main() with the registry read and the engine stubbed out."""
         calls = {}
 
@@ -189,13 +189,18 @@ class MainTests(unittest.TestCase):
         def fake_run(command, **kwargs):
             calls["command"] = list(command)
             calls["metadata_present"] = (calls["destination"] / "repodata").is_dir()
-            return subprocess.CompletedProcess(command, returncode)
+            return subprocess.CompletedProcess(command, returncode, stdout=stdout)
 
+        out = io.StringIO()
+        err = io.StringIO()
         with patch.object(checker, "repository_metadata", fake_metadata), \
                 patch("subprocess.run", fake_run), \
                 patch.object(sys, "argv", ["check-repo-availability.py", *argv]), \
-                contextlib.redirect_stdout(io.StringIO()):
+                contextlib.redirect_stdout(out), \
+                contextlib.redirect_stderr(err):
             calls["exit"] = checker.main()
+        calls["stdout"] = out.getvalue()
+        calls["stderr"] = err.getvalue()
         return calls
 
     def manifest(self):
@@ -262,6 +267,85 @@ class MainTests(unittest.TestCase):
             with self.subTest(returncode=returncode):
                 calls = self.run_main([self.manifest()], returncode=returncode)
                 self.assertEqual(calls["exit"], returncode)
+
+
+class CheckUnavailableTests(unittest.TestCase):
+    """--check-unavailable fails when an [unavailable] entry no longer
+    describes reality: a blocked entry that resolves is stale debt, and a
+    deliberate exclusion that stops resolving has lost its justification."""
+
+    def markers(self, verdicts):
+        return "".join(f"UTAH_RESOLVE_ONE {name} {verdict}\n"
+                       for name, verdict in verdicts.items())
+
+    def healthy(self):
+        """Every blocked entry still blocked, every deliberate exclusion
+        still resolving: the only state that passes."""
+        names = checker.unavailable_names(ROOT / "packages/utah.toml")
+        return {name: 0 if name in checker.DELIBERATELY_EXCLUDED else 1
+                for name in names}
+
+    def run_check(self, overlay=None, **kwargs):
+        argv = ["--check-unavailable", str(ROOT / "packages/bluefin.toml")]
+        if overlay is not None:
+            argv.append(str(overlay))
+        return MainTests().run_main(argv, **kwargs)
+
+    def test_passes_when_every_entry_still_describes_reality(self):
+        calls = self.run_check(stdout=self.markers(self.healthy()))
+
+        self.assertEqual(calls["exit"], 0, calls["stderr"])
+        self.assertIn("still describe reality", calls["stdout"])
+
+    def test_probes_every_entry_in_one_container_run(self):
+        calls = self.run_check(stdout=self.markers(self.healthy()))
+        command = calls["command"]
+
+        self.assertEqual(command[-len(self.healthy()) - 1], "utah-resolve-one")
+        self.assertEqual(set(command[-len(self.healthy()):]), set(self.healthy()))
+        self.assertIn("--resolve-one", " ".join(command))
+
+    def test_names_a_blocked_entry_that_now_resolves(self):
+        verdicts = self.healthy()
+        stale = next(name for name in verdicts if name not in checker.DELIBERATELY_EXCLUDED)
+        verdicts[stale] = 0
+        calls = self.run_check(stdout=self.markers(verdicts))
+
+        self.assertEqual(calls["exit"], 1)
+        self.assertIn(stale, calls["stderr"])
+        self.assertIn("move it out of [unavailable] into the contract", calls["stderr"])
+
+    def test_fails_when_a_deliberate_exclusion_stops_resolving(self):
+        verdicts = self.healthy()
+        verdicts["fish"] = 1
+        calls = self.run_check(stdout=self.markers(verdicts))
+
+        self.assertEqual(calls["exit"], 1)
+        self.assertIn("fish", calls["stderr"])
+        self.assertIn("deliberately excluded but no longer resolves", calls["stderr"])
+
+    def test_fails_when_a_deliberate_exclusion_leaves_the_overlay(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            overlay = Path(tmp) / "utah.toml"
+            overlay.write_text('[unavailable]\npackages=["anaconda-live"]\n')
+            calls = self.run_check(
+                overlay=overlay,
+                stdout="UTAH_RESOLVE_ONE anaconda-live 1\n")
+
+        self.assertEqual(calls["exit"], 1)
+        self.assertIn("fish", calls["stderr"])
+        self.assertIn("policy was dropped, not repealed", calls["stderr"])
+
+    def test_refuses_to_pass_without_a_verdict(self):
+        calls = self.run_check(stdout="container printed no markers\n")
+
+        self.assertEqual(calls["exit"], 1)
+        self.assertIn("no probe verdict", calls["stderr"])
+
+    def test_propagates_engine_failure_for_the_justfile_retry(self):
+        calls = self.run_check(returncode=125)
+
+        self.assertEqual(calls["exit"], 125)
 
 
 if __name__ == "__main__":

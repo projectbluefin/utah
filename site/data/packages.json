@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-27",
+  "generated_at": "2026-09-30",
   "generator": "scripts/generate-site-data.py",
   "groups": [
     {
@@ -43,6 +43,8 @@
         "libblockdev-mpath",
         "libcamera-gstreamer",
         "libcamera-tools",
+        "libgda",
+        "libgda-sqlite",
         "libratbag-ratbagd",
         "libva-utils",
         "libxcrypt-compat",
@@ -54,6 +56,7 @@
         "openrgb-udev-rules",
         "openssh-askpass",
         "pipewire-libs-extra",
+        "ppp",
         "python3-gnome-ponytail-daemon",
         "squashfs-tools",
         "switcheroo-control",
@@ -62,7 +65,8 @@
         "wl-clipboard",
         "xdg-terminal-exec",
         "xorriso",
-        "zenity"
+        "zenity",
+        "zsh"
       ],
       "title": "Bluefin contract",
       "transient": false
@@ -199,8 +203,8 @@
     }
   ],
   "totals": {
-    "installed": 142,
-    "unavailable": 10
+    "installed": 146,
+    "unavailable": 6
   },
   "unavailable": [
     {
@@ -231,31 +235,9 @@
     },
     {
       "issues": [
-        106
-      ],
-      "name": "libgda"
-    },
-    {
-      "issues": [
-        106
-      ],
-      "name": "libgda-sqlite"
-    },
-    {
-      "issues": [
-        107
-      ],
-      "name": "ppp"
-    },
-    {
-      "issues": [
         83
       ],
       "name": "slitherer"
-    },
-    {
-      "issues": [],
-      "name": "zsh"
     }
   ]
 }
