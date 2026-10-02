@@ -67,7 +67,7 @@ class PackageResolutionTests(unittest.TestCase):
             for name, _ in pairs:
                 (source / name).write_bytes((ROOT / "scripts" / name).read_bytes())
             script = loop.replace("/tmp/utah-scripts", str(source)).replace(
-                "/usr/libexec", str(destination))
+                "/usr/local/libexec", str(destination))
             subprocess.run(["bash", "-eu", "-c", script], check=True)
             self.assertEqual({p.name for p in destination.iterdir()}, {p[1] for p in pairs})
             for name, installed in pairs:

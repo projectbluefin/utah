@@ -335,7 +335,7 @@ These fallbacks do not add packages or enable Fedora runtime repositories.
 For #446, `report` overrides Common's `bonedigger-report` recipe so bug
 reports route to `projectbluefin/utah` instead of falling through Common's
 `ublue-image-repo` grammar. The override sets
-`UBLUE_IMAGE_REPO_BIN=/usr/libexec/utah-image-repo`; that Utah-local
+`UBLUE_IMAGE_REPO_BIN=/usr/local/libexec/utah-image-repo`; that Utah-local
 shim short-circuits every `utah*` name to `projectbluefin/utah` and forwards
 every other name to Common's authoritative resolver (so non-Utah images
 inheriting from this image still resolve correctly). The shim itself is

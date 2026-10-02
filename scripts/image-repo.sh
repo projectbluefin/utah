@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 # image-repo.sh — Utah's image-name -> upstream GitHub repo resolver,
-# installed as /usr/libexec/utah-image-repo.
+# installed as /usr/local/libexec/utah-image-repo.
 #
 # Routes `utah*` to projectbluefin/utah; forwards every other call to
 # common's `/usr/libexec/ublue-image-repo`, which remains the authoritative

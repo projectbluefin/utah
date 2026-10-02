@@ -175,7 +175,7 @@ check-desktop-contract image_ref="localhost/utah:testing":
       -v "$PWD/scripts/verify-desktop-contract.py:/tmp/verify-desktop-contract.py:ro" \
       "{{ image_ref }}" /tmp/verify-desktop-contract.py /tmp/bluefin-desktop.toml
     podman run --rm --entrypoint /usr/bin/python3 \
-      "{{ image_ref }}" /usr/libexec/utah-verify-gnome-extensions
+      "{{ image_ref }}" /usr/local/libexec/utah-verify-gnome-extensions
 
 # Fail fast when a contract package is in none of the repositories the image
 # actually enables, instead of discovering it twenty minutes into a build.

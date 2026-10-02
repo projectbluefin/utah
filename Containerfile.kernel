@@ -27,18 +27,18 @@ COPY packages/hummingbird.repo /etc/yum.repos.d/hummingbird.repo
 # hummingbird.repo runs with gpgcheck=1; the key it names has to exist here too.
 COPY packages/RPM-GPG-KEY-redhat-release-2 /etc/pki/rpm-gpg/
 COPY packages/fedora-44.repo /etc/yum.repos.d/fedora-44.repo
-RUN mkdir -p /usr/libexec
-COPY scripts/install-ogc-kernel.sh /usr/libexec/utah-install-ogc-kernel
-COPY scripts/install-nvidia.sh /usr/libexec/utah-install-nvidia
+RUN mkdir -p /usr/local/libexec
+COPY scripts/install-ogc-kernel.sh /usr/local/libexec/utah-install-ogc-kernel
+COPY scripts/install-nvidia.sh /usr/local/libexec/utah-install-nvidia
 
 # nvidia-gaming is the superset: it produces a module for the base kernel and
 # one for the OGC kernel, so a single cache image serves all three flavors.
-RUN chmod 0755 /usr/libexec/utah-install-ogc-kernel /usr/libexec/utah-install-nvidia && \
+RUN chmod 0755 /usr/local/libexec/utah-install-ogc-kernel /usr/local/libexec/utah-install-nvidia && \
     mkdir -p /cache-out && \
     UTAH_KERNEL_CACHE_OUT=/cache-out/ogc.tar \
-      /usr/libexec/utah-install-ogc-kernel && \
+      /usr/local/libexec/utah-install-ogc-kernel && \
     UTAH_NVIDIA_MODULES_ONLY=1 UTAH_KERNEL_CACHE_OUT_DIR=/cache-out \
-      /usr/libexec/utah-install-nvidia nvidia-gaming && \
+      /usr/local/libexec/utah-install-nvidia nvidia-gaming && \
     ls -l /cache-out
 
 # The builder's toolchain, kernel tree and object files stay behind in the

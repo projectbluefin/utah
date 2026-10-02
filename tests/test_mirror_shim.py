@@ -127,7 +127,7 @@ class MirrorShimTests(unittest.TestCase):
 class ContainerfileWiringTests(unittest.TestCase):
     def test_the_containerfile_calls_the_script_and_not_the_old_chain(self):
         text = (ROOT / "Containerfile").read_text()
-        self.assertIn("/usr/libexec/utah-mirror-shim", text)
+        self.assertIn("/usr/local/libexec/utah-mirror-shim", text)
         self.assertIn("mirror-shim.sh:utah-mirror-shim", text)
         self.assertIn("scripts/mirror-shim.sh \\", text)
         # The inline chain hardcoded the old layout and hid the failure.

@@ -302,7 +302,7 @@ class UjustOverridesTests(unittest.TestCase):
         # for bonedigger-report at runtime, not the default from common.
         self.assertTrue(calls.startswith("bonedigger \n"),
                         f"bonedigger stub did not run; calls={calls!r}")
-        self.assertIn("/usr/libexec/utah-image-repo", calls,
+        self.assertIn("/usr/local/libexec/utah-image-repo", calls,
                       "ujust report must set UBLUE_IMAGE_REPO_BIN to the Utah shim")
         self.assertNotIn("unset", calls,
                           "UBLUE_IMAGE_REPO_BIN must be set by the recipe, "
@@ -321,7 +321,7 @@ class UjustOverridesTests(unittest.TestCase):
         )
         body = match.group("body")
         self.assertIn(
-            'UBLUE_IMAGE_REPO_BIN="/usr/libexec/utah-image-repo"',
+            'UBLUE_IMAGE_REPO_BIN="/usr/local/libexec/utah-image-repo"',
             body,
             "ujust report must set UBLUE_IMAGE_REPO_BIN to the Utah shim",
         )

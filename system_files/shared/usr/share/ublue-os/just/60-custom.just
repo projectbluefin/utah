@@ -87,6 +87,6 @@ enroll-secure-boot-key:
 # Collect a previewed, privacy-respecting report and create an issue directly with gh.
 [group('System')]
 report *args:
-    UBLUE_IMAGE_REPO_BIN="/usr/libexec/utah-image-repo" \
+    UBLUE_IMAGE_REPO_BIN="/usr/local/libexec/utah-image-repo" \
     BONEDIGGER_BRAND="🐦 Utah Bug Report" \
     /usr/libexec/bonedigger-report {{ args }}

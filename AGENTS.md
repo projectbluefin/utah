@@ -71,7 +71,7 @@ checks (`scripts/check-skill-frontmatter.sh`, `scripts/check-skill-index.sh`,
   `packages/hummingbird.repo` (`scripts/kernel-cache-tag.sh`). Any edit to
   those files — comments included — forces a ~45-minute cache rebuild. That is
   deliberate; just know it before you touch them.
-- **Utah scripts install as `/usr/libexec/utah-*`** via one staged COPY
+- **Utah scripts install as `/usr/local/libexec/utah-*`** via one staged COPY
   and a rename loop in the Containerfile. A new script means updating the COPY
   list, the rename loop, and `just check`.
 - **`ENABLE_SSHD=1` is local-diagnostic only.** Never in a published image.

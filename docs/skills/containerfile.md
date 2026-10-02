@@ -132,19 +132,14 @@ pushed once.
 
 ## Adding a script
 
-Hummingbird symlinks `/usr/local` to `../var/usrlocal`, and `clean-stage` drops
-`/var` seed content during composition. Utah image helpers belong in immutable
-`/usr/libexec` so they survive cleanup and remain available at runtime, while
-preserving `/usr/local` for writable host administrator software.
-
 All of Utah's scripts arrive in one COPY, staged under `/tmp/utah-scripts/`
 because a multi-source COPY cannot rename, and installed by name into
-`/usr/libexec/` by the rename loop in the same RUN (comment and loop,
+`/usr/local/libexec/` by the rename loop in the same RUN (comment and loop,
 `Containerfile`). The checklist for a new script:
 
 1. Add the file to the `COPY scripts/... /tmp/utah-scripts/` list.
 2. Add a `source:utah-<name>` pair to the rename loop so it lands at
-   `/usr/libexec/utah-<name>` -- every downstream path expects the
+   `/usr/local/libexec/utah-<name>` -- every downstream path expects the
    `utah-` prefix.
 3. Run `just check`.
 

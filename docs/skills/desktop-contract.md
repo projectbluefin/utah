@@ -128,7 +128,7 @@ its `metadata.json`. It runs in two modes from the same script:
   tree; this is what `just check` runs.
 - **Installed mode** — the default checks `/usr/share/gnome-shell/extensions`
   under an image root; this is what runs in the Containerfile as
-  `/usr/libexec/utah-verify-gnome-extensions`, right after
+  `/usr/local/libexec/utah-verify-gnome-extensions`, right after
   `utah-build-gnome-extensions`.
 
 Building GSConnect runs meson install. Because `desktop-file-utils` is not
@@ -296,7 +296,7 @@ or a CI artifact can be checked after the fact (recipe comment, `Justfile`,
   `localhost/utah:testing`) podman-runs both verifiers inside an
   already-composed image: the desktop verifier and the contract are
   bind-mounted from the working tree, the extension verifier runs from the
-  image's own `/usr/libexec`.
+  image's own `/usr/local/libexec`.
 - **Off-image** — `verify-desktop-contract.py --check` validates the contract
   TOML itself in source-only CI and is part of `just check`; it asserts
   nothing about any image.

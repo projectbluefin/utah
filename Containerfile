@@ -25,8 +25,8 @@ FROM ${PACKAGE_IMAGE_REF} AS packages
 FROM ${BASE_IMAGE} AS v4l2loopback
 COPY packages/hummingbird.repo packages/fedora-44.repo /etc/yum.repos.d/
 COPY packages/RPM-GPG-KEY-redhat-release-2 packages/RPM-GPG-KEY-fedora-44-primary /etc/pki/rpm-gpg/
-COPY scripts/install-v4l2loopback.sh /usr/libexec/utah-install-v4l2loopback
-RUN /usr/libexec/utah-install-v4l2loopback base /out
+COPY scripts/install-v4l2loopback.sh /usr/local/libexec/utah-install-v4l2loopback
+RUN /usr/local/libexec/utah-install-v4l2loopback base /out
 
 FROM ${BASE_IMAGE}
 
@@ -137,7 +137,7 @@ RUN --mount=type=bind,from=v4l2loopback,source=/out,target=/tmp/utah-v4l2loopbac
                 fix-home-labels.sh:utah-fix-home-labels \
                 install-v4l2loopback.sh:utah-install-v4l2loopback \
                 image-repo.sh:utah-image-repo; do \
-      install -Dm 0755 "/tmp/utah-scripts/${pair%%:*}" "/usr/libexec/${pair##*:}" || exit 1; \
+      install -Dm 0755 "/tmp/utah-scripts/${pair%%:*}" "/usr/local/libexec/${pair##*:}" || exit 1; \
     done && \
     cp -a /tmp/utah-common/. / && \
     cp -a /tmp/utah-bluefin/. / && \
@@ -175,11 +175,11 @@ RUN --mount=type=bind,from=v4l2loopback,source=/out,target=/tmp/utah-v4l2loopbac
 # out in this RUN as well, the two copies drifted and the contract check was
 # asserting a different set than the install had asked for.
 RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages,ro \
-    /usr/libexec/utah-install-packages \
+    /usr/local/libexec/utah-install-packages \
       /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
-    IMAGE_FLAVOR=main /usr/libexec/utah-verify-rpm-contract \
+    IMAGE_FLAVOR=main /usr/local/libexec/utah-verify-rpm-contract \
       /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
-    /usr/libexec/utah-fix-home-labels && \
+    /usr/local/libexec/utah-fix-home-labels && \
     DNF="$(command -v dnf5 || command -v dnf)" && \
     "$DNF" clean all && rm -rf /var/cache/libdnf5 /var/cache/dnf
 
@@ -238,14 +238,14 @@ RUN mkdir -p /tmp/uupd && \
       -o /tmp/uupd/uupd.timer && \
     echo "${UUPD_SERVICE_SHA256}  /tmp/uupd/uupd.service" | sha256sum --check --strict && \
     echo "${UUPD_TIMER_SHA256}  /tmp/uupd/uupd.timer" | sha256sum --check --strict && \
-    /usr/libexec/utah-build-gnome-extensions && \
-    /usr/libexec/utah-verify-gnome-extensions && \
+    /usr/local/libexec/utah-build-gnome-extensions && \
+    /usr/local/libexec/utah-verify-gnome-extensions && \
     glib-compile-schemas /usr/share/glib-2.0/schemas && \
-    ENABLE_SSHD="${ENABLE_SSHD}" /usr/libexec/utah-configure-services && \
-    /usr/libexec/utah-configure-branding && \
-    /usr/libexec/utah-verify-desktop-contract /usr/share/utah/bluefin-desktop.toml && \
-    /usr/libexec/utah-mirror-shim && \
-    /usr/libexec/utah-verify-efi-chain
+    ENABLE_SSHD="${ENABLE_SSHD}" /usr/local/libexec/utah-configure-services && \
+    /usr/local/libexec/utah-configure-branding && \
+    /usr/local/libexec/utah-verify-desktop-contract /usr/share/utah/bluefin-desktop.toml && \
+    /usr/local/libexec/utah-mirror-shim && \
+    /usr/local/libexec/utah-verify-efi-chain
 
 # Dakota-compatible flavors: OGC is built and asserted before NVIDIA so the
 # NVIDIA path can bind its module to the exact kernel tree it will boot.
@@ -254,20 +254,20 @@ RUN mkdir -p /tmp/uupd && \
 # is registered and asserted, and the gaming flavors compile one for OGC.
 RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages,ro \
     case "${IMAGE_FLAVOR}" in \
-      gaming|nvidia-gaming) /usr/libexec/utah-install-ogc-kernel ;; \
+      gaming|nvidia-gaming) /usr/local/libexec/utah-install-ogc-kernel ;; \
       main|nvidia) ;; \
       *) echo "Unknown Utah image flavor: ${IMAGE_FLAVOR}" >&2; exit 2 ;; \
     esac && \
     case "${IMAGE_FLAVOR}" in \
-      nvidia|nvidia-gaming) /usr/libexec/utah-install-nvidia "${IMAGE_FLAVOR}" ;; \
+      nvidia|nvidia-gaming) /usr/local/libexec/utah-install-nvidia "${IMAGE_FLAVOR}" ;; \
       main|gaming) ;; \
     esac && \
-    /usr/libexec/utah-install-v4l2loopback base && \
+    /usr/local/libexec/utah-install-v4l2loopback base && \
     case "${IMAGE_FLAVOR}" in \
-      gaming|nvidia-gaming) /usr/libexec/utah-install-v4l2loopback ogc ;; \
+      gaming|nvidia-gaming) /usr/local/libexec/utah-install-v4l2loopback ogc ;; \
       main|nvidia) ;; \
     esac && \
-    IMAGE_FLAVOR="${IMAGE_FLAVOR}" /usr/libexec/utah-verify-rpm-contract \
+    IMAGE_FLAVOR="${IMAGE_FLAVOR}" /usr/local/libexec/utah-verify-rpm-contract \
       /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
     # The package repository is now only ever bind mounted, so it is absent from
     # the committed image. Flip it disabled here -- the last step that installs
@@ -282,8 +282,8 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
 # is the NVIDIA and OGC step, not after the main transaction. The lint that
 # checks the result runs in the same layer: nothing can change between the two.
 # The home-label check runs first: clean-stage removes the utah-* helpers.
-RUN /usr/libexec/utah-fix-home-labels --check && \
-    /usr/libexec/utah-clean-stage && \
+RUN /usr/local/libexec/utah-fix-home-labels --check && \
+    /usr/local/libexec/utah-clean-stage && \
     bootc container lint --fatal-warnings --skip nonempty-boot
 
 LABEL org.opencontainers.image.title="Utah"
