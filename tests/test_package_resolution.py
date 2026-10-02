@@ -291,7 +291,7 @@ class PackageResolutionTests(unittest.TestCase):
             overlay = dirpath / "utah.toml"
             base.write_text('[fedora]\npackages=["base"]\n')
             overlay.write_text('[gnome]\npackages=[]\n')
-            
+
             # Missing hummingbird
             repos_dir = dirpath / "repos"
             repos_dir.mkdir()
