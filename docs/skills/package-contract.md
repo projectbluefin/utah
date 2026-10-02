@@ -112,11 +112,12 @@ precede base Hummingbird packages (`priority=10`). Repositories without this mar
 the desktop package transaction.
 
 The pinned package image is an RPM repository, not a runtime dependency. It is
-bind-mounted into the RUN steps that install from it (`Containerfile` L61-69)
-and never copied into a layer: a COPY of the whole ~4 GB repository would leave
-a permanent layer behind, so reproducibility now comes from the digest-pinned
-`packages` stage being the only source the package transaction can see rather
-than from the repository contents living in the image.
+bind-mounted into the two RUN steps that install from it (`Containerfile`
+L165 and L243) and never copied into a layer: a COPY of the whole ~4 GB
+repository would leave a permanent layer behind, so reproducibility now comes
+from the digest-pinned `packages` stage being the only source the package
+transaction can see rather than from the repository contents living in the
+image.
 
 ## Supply-chain download verification
 
