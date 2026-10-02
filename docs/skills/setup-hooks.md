@@ -70,11 +70,16 @@ if ! declare -F version-script-check >/dev/null; then
 fi
 ```
 
-As of this writing only `20-home-labels.sh` and `05-bootupctl-adopt.sh` carry
-the shim. The other Utah hooks (`10-tailscale.sh`,
-`11-framework-ucsi-workaround.sh`, `99-flatpaks.sh`,
+As of this writing `20-home-labels.sh`, `05-bootupctl-adopt.sh` and
+`user-setup.hooks.d/30-ghostty.sh` carry the shim. The other Utah hooks
+(`10-tailscale.sh`, `11-framework-ucsi-workaround.sh`, `99-flatpaks.sh`,
 `user-setup.hooks.d/20-framework.sh`) still call the legacy `version-script`
 helper, pending #259.
+
+`30-ghostty.sh` is the case that shows why the legacy gate is not good enough
+for a body that moves files: it migrates the user's only real Ghostty config
+out of the flatpak's per-app directory, so a body that aborts part-way must get
+another attempt rather than burn the stamp on a half-done migration.
 
 ## First-boot hook inventory
 
@@ -105,6 +110,10 @@ re-running.
 contract on `05-bootupctl-adopt.sh` and additionally drives the real hook
 against fake `libsetup.sh` and `bootupctl` stubs for the four state
 transitions (fresh install, re-run after commit, live session, missing
-`bootupctl`). Run the suite with `just test`. `just check` syntax-checks
-every hook (`bash -n`) through `scripts/check-script-syntax.py`; there is no
-shellcheck gate in the Justfile or CI.
+`bootupctl`). `tests/test_ghostty_hook.py` follows the same shape for
+`user-setup.hooks.d/30-ghostty.sh`, driving it against scratch homes for the
+fresh, migrate, already-symlinked and reverse-symlink (`~/.config/ghostty`
+pointing into the per-app dir) transitions. Run the suite with `just test`.
+`just check` syntax-checks every hook (`bash -n`) through
+`scripts/check-script-syntax.py`; there is no shellcheck gate in the Justfile
+or CI.
