@@ -97,7 +97,7 @@ Runtime repositories are the pinned `utah-packages` repository (listed first)
 plus Hummingbird's own repository only. **Fedora repositories are never
 enabled at runtime** — they are bootstrap material for the package factory's
 buildroot, not a source of installed packages (Containerfile package-RUN
-comment, `Containerfile` ~L155; repo files copied at `Containerfile` L59).
+comment, `Containerfile` ~L168; repo files copied at `Containerfile` L59).
 `Containerfile.kernel`'s builder stage may use the pinned Fedora 44 repository
 (`packages/fedora-44.repo`) strictly as a builder-only toolchain.
 
@@ -112,11 +112,12 @@ precede base Hummingbird packages (`priority=10`). Repositories without this mar
 the desktop package transaction.
 
 The pinned package image is an RPM repository, not a runtime dependency. It is
-bind-mounted into the RUN steps that install from it (`Containerfile` L61-69)
-and never copied into a layer: a COPY of the whole ~4 GB repository would leave
-a permanent layer behind, so reproducibility now comes from the digest-pinned
-`packages` stage being the only source the package transaction can see rather
-than from the repository contents living in the image.
+bind-mounted into the RUN steps that install from it (`Containerfile`
+L177 and L255) and never copied into a layer: a COPY of the whole ~4 GB
+repository would leave a permanent layer behind, so reproducibility now comes
+from the digest-pinned `packages` stage being the only source the package
+transaction can see rather than from the repository contents living in the
+image.
 
 ## Supply-chain download verification
 
