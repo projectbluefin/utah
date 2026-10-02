@@ -9,6 +9,10 @@ enable tailscaled.service
 enable uupd.timer
 enable ublue-system-setup.service
 enable systemd-resolved.service
+# Keep the ESP boot manager current on systemd-boot systems (#363). A drop-in
+# gates the service on a boot through systemd-boot, so GRUB and BIOS systems
+# skip it and bootupd keeps managing their grub and shim.
+enable systemd-boot-update.service
 enable bootc-unified-storage.service
 enable dconf-update.service
 enable input-remapper.service

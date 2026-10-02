@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-27",
+  "generated_at": "2026-10-02",
   "generator": "scripts/generate-site-data.py",
   "groups": [
     {
@@ -43,6 +43,8 @@
         "libblockdev-mpath",
         "libcamera-gstreamer",
         "libcamera-tools",
+        "libgda",
+        "libgda-sqlite",
         "libratbag-ratbagd",
         "libva-utils",
         "libxcrypt-compat",
@@ -54,6 +56,7 @@
         "openrgb-udev-rules",
         "openssh-askpass",
         "pipewire-libs-extra",
+        "ppp",
         "python3-gnome-ponytail-daemon",
         "squashfs-tools",
         "switcheroo-control",
@@ -62,7 +65,8 @@
         "wl-clipboard",
         "xdg-terminal-exec",
         "xorriso",
-        "zenity"
+        "zenity",
+        "zsh"
       ],
       "title": "Bluefin contract",
       "transient": false
@@ -178,8 +182,11 @@
         "cryptsetup",
         "flatpak",
         "fwupd",
+        "systemd-boot-unsigned",
         "systemd-resolved",
-        "tailscale"
+        "tailscale",
+        "zram-generator",
+        "zram-generator-defaults"
       ],
       "title": "Desktop services",
       "transient": false
@@ -199,8 +206,8 @@
     }
   ],
   "totals": {
-    "installed": 142,
-    "unavailable": 10
+    "installed": 149,
+    "unavailable": 7
   },
   "unavailable": [
     {
@@ -220,7 +227,9 @@
       "name": "firefox"
     },
     {
-      "issues": [],
+      "issues": [
+        419
+      ],
       "name": "fish"
     },
     {
@@ -231,31 +240,15 @@
     },
     {
       "issues": [
-        106
+        451
       ],
-      "name": "libgda"
-    },
-    {
-      "issues": [
-        106
-      ],
-      "name": "libgda-sqlite"
-    },
-    {
-      "issues": [
-        107
-      ],
-      "name": "ppp"
+      "name": "nvtop"
     },
     {
       "issues": [
         83
       ],
       "name": "slitherer"
-    },
-    {
-      "issues": [],
-      "name": "zsh"
     }
   ]
 }

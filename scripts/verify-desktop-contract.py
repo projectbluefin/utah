@@ -141,15 +141,21 @@ def main() -> int:
             if not Path(file_name).is_file():
                 errors.append(f"required file is missing: {file_name}")
 
-    os_release = read_os_release(Path("/usr/lib/os-release"))
-    errors.extend(
-        verify_values(
-            "os-release",
-            os_release,
-            branding.get("os_release", {}),
-            branding.get("os_release_patterns", {}),
+    # /usr/lib/os-release is the canonical file; /etc/os-release is what the
+    # GNOME About panel reads. On bases where it is a regular file rather than a
+    # symlink, it can keep the base identity, so both must satisfy the contract.
+    for os_release_path in ("/usr/lib/os-release", "/etc/os-release"):
+        if not Path(os_release_path).is_file():
+            errors.append(f"required file is missing: {os_release_path}")
+            continue
+        errors.extend(
+            verify_values(
+                os_release_path,
+                read_os_release(Path(os_release_path)),
+                branding.get("os_release", {}),
+                branding.get("os_release_patterns", {}),
+            )
         )
-    )
 
     image_info_path = Path("/usr/share/ublue-os/image-info.json")
     if image_info_path.is_file():

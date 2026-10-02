@@ -8,13 +8,19 @@ Before=flatpak-add-fedora-repos.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/bin/flatpak remote-delete --system fedora
-ExecStart=/usr/bin/flatpak remote-delete --system fedora-testing
+ExecStartPre=/usr/bin/mkdir -p /var/lib/flatpak
+# A missing remote makes flatpak exit 1, which is expected here, so each
+# remote-delete carries the `-` prefix. That is deliberately preferred over
+# SuccessExitStatus=1: the latter also swallows a real exit 1 from the
+# `touch` below, hiding a failure to stamp .fedora-initialized.
+# No --force: with installed refs present, remote-delete fails with
+# remote-in-use and exits 1, which the `-` prefix ignores. That leaves those
+# apps attached to their origin. See docs/skills/desktop-contract.md.
+ExecStart=-/usr/bin/flatpak remote-delete --system fedora
+ExecStart=-/usr/bin/flatpak remote-delete --system fedora-testing
 # Make sure even if flatpak-add-fedora-repos.service  exists, it
 # won't run.
 ExecStart=/usr/bin/touch /var/lib/flatpak/.fedora-initialized
-# Flatpak will fail if the remote doesn't exist, but we don't mind
-SuccessExitStatus=1
 
 [Install]
 WantedBy=multi-user.target

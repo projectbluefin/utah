@@ -93,9 +93,6 @@ jobs:
     # The two formats are identical, so pointing podman at the docker path
     # gives both tools one credential store and lets cosign push the signature.
     # Without this the image pushes and `cosign sign` fails UNAUTHORIZED.
-    env:
-      DOCKER_CONFIG: ${{ github.workspace }}/.docker
-      REGISTRY_AUTH_FILE: ${{ github.workspace }}/.docker/config.json
     permissions:
       contents: read
       packages: write
@@ -115,6 +112,12 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
                       /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
           df -h /
+      - name: Configure isolated registry credentials
+        run: |
+          {
+            echo "DOCKER_CONFIG=${RUNNER_TEMP}/utah-registry"
+            echo "REGISTRY_AUTH_FILE=${RUNNER_TEMP}/utah-registry/config.json"
+          } >> "$GITHUB_ENV"
       - name: Log in to GHCR
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -193,6 +196,9 @@ jobs:
           cosign sign --yes "ghcr.io/${REPO_ORGANIZATION,,}/utah-kernel-cache@${digest}"
           verify "$digest"
           echo "available=true" >> "$GITHUB_OUTPUT"
+      - name: Remove registry credentials
+        if: always()
+        run: rm -rf "${DOCKER_CONFIG}"
 
   # main starts the moment the contract check passes. It never pulls the kernel
   # cache, so there is no reason for it to wait on that job; before this split
@@ -200,7 +206,7 @@ jobs:
   build_main:
     needs: contract
     if: needs.contract.outputs.main_flavors != '[]'
-    uses: projectbluefin/actions/.github/workflows/reusable-build.yml@b4b35cf94038a24dc2b22329a08d38fdbda39a92 # v1
+    uses: projectbluefin/actions/.github/workflows/reusable-build.yml@ab62f2774eb465d912b61b5c0cd9cd230c811768 # v1
     permissions:
       contents: read
       packages: write
@@ -250,7 +256,7 @@ jobs:
   build_kernel:
     needs: [contract, kernel_cache]
     if: ${{ !cancelled() && needs.contract.result == 'success' && needs.kernel_cache.result == 'success' && needs.kernel_cache.outputs.available == 'true' && needs.contract.outputs.kernel_flavors != '[]' }}
-    uses: projectbluefin/actions/.github/workflows/reusable-build.yml@b4b35cf94038a24dc2b22329a08d38fdbda39a92 # v1
+    uses: projectbluefin/actions/.github/workflows/reusable-build.yml@ab62f2774eb465d912b61b5c0cd9cd230c811768 # v1
     permissions:
       contents: read
       packages: write

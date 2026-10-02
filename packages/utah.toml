@@ -10,7 +10,10 @@
 #   [parity]       what Bluefin gets from Fedora's base image and Hummingbird has
 #   [hardware]     device firmware the bootable base leaves out entirely
 #   [build]        toolchain needed to build the pinned GNOME extensions
-#   [unavailable]  Bluefin contract packages none of Utah's repositories provide
+#   [services]     desktop daemons enabled after the server base (cryptsetup, flatpak, fwupd, ...)
+#   [unavailable]  Bluefin parity gaps none of Utah's enabled repositories
+#                  provide -- from the copied base.toml contract or from the
+#                  published Bluefin image snapshot (baselines/bluefin/rpms.tsv)
 #
 # On [multimedia_overrides], which Utah deliberately does not install:
 #
@@ -23,10 +26,10 @@
 #   and the practical consequence is hardware-accelerated codec support.
 #
 #   This is why they are absent from the contract rather than listed under
-#   [unavailable]: [unavailable] means "no source provides this name at all",
-#   which is false of these. Recording them as missing would be wrong, and
-#   recording them as satisfied would hide a real functional difference from
-#   Bluefin.
+#   [unavailable]: [unavailable] means "no repository Utah enables provides this
+#   name at all", which is false of these. Recording them as missing would be
+#   wrong, and recording them as satisfied would hide a real functional
+#   difference from Bluefin.
 #
 #   The factory is already building several of them for Hummingbird --
 #   intel-gmmlib, intel-mediasdk, intel-vpl-gpu-rt, libheif and libva all built
@@ -230,10 +233,11 @@ packages = [
 # CPU errata updates need a factory recipe first and are worth their own
 # issue.
 #
-# Necessary, not sufficient: with the firmware present the driver loads, but
-# NetworkManager still does not manage the interface until NetworkManager-wifi
-# can be installed. That half is blocked on the factory, and [parity] above
-# records why.
+# Firmware lets the driver load its device blob; NetworkManager's Wi-Fi
+# support also needs the userspace stack. [parity] above installs
+# NetworkManager-wifi, wpa_supplicant, wireless-regdb and iw now that the
+# factory dependencies are published. Package coverage is not proof that
+# every wireless device works; validate association on the target hardware.
 packages = [
     "linux-firmware",
     "iwlwifi-dvm-firmware",
@@ -280,18 +284,57 @@ packages = [
 # -- and an installed system whose disk is encrypted could not manage its own
 # keys. The initramfs already carries the crypt and systemd-cryptsetup dracut
 # modules, so unlocking was never the gap; creating the volume was.
+#
+# systemd-boot-unsigned carries the boot manager binaries bootctl updates from.
+# bootupd stands down on systemd-boot systems by design ("managed with
+# bootctl"), so without this package a systemd-boot Utah -- for example one
+# switched over from Dakota -- can never update its ESP boot manager: bootctl
+# has nothing to install and the binaries freeze at whatever the previous
+# image carried (#363). It is the unsigned build, consistent with the alpha's
+# no-Secure-Boot posture; GRUB and shim stay the Secure Boot story and keep
+# flowing through bootupd.
+#
+# zram-generator + zram-generator-defaults are the bare-metal swap (#384). The
+# audit found swapon -s empty and zramctl showing nothing: the server base
+# ships no swap at all. zram-generator-defaults ships
+# /usr/lib/systemd/zram-generator.conf, which the generator reads at boot, so
+# installing the two packages both adds the swap and enables the generator --
+# one zram device sized zram-size = min(ram, 8192), i.e. all of RAM capped at
+# 8 GiB. That is exactly what Bluefin ships (it has no custom zram config of
+# its own), so the size is the package default, not something restated here.
+# Not verified in-tree: #384's acceptance check is `swapon -s` showing a zram
+# device on a booted install, and no e2e job here asserts in-VM swap. Run it
+# against the next `testing` image before closing #384.
+# systemd-oomd-defaults is the related memory-pressure half of #384 and is
+# deliberately not taken here: #404 kept itself to one logical change (the
+# swap device), and the issue left the OOM decision to its author. Utah
+# therefore runs with zram swap and stock kernel OOM handling, not
+# systemd-oomd's pressure-based kills. Revisit it as its own change against
+# #384's OOM question rather than assuming the omission was an oversight.
 packages = [
     "cryptsetup",
     "flatpak",
     "fwupd",
+    "systemd-boot-unsigned",
     "systemd-resolved",
     "tailscale",
+    "zram-generator",
+    "zram-generator-defaults",
 ]
 
 [unavailable]
-# Packages Bluefin ships that none of Utah's repositories provide.  Each entry
-# MUST carry a tracking issue: this list is the documented parity debt, not a
-# dumping ground for packages that are merely inconvenient.
+# Bluefin parity gaps none of Utah's enabled repositories provide.  Two kinds
+# of gap land here and both count as parity debt:
+#
+#   contract gaps  names in packages/bluefin.toml (the copied base.toml) that
+#                  neither utah-packages nor Hummingbird's repository carries
+#   image gaps     names Bluefin's published image ships from a build file
+#                  outside the copied contract, recorded in the snapshot at
+#                  baselines/bluefin/rpms.tsv and triaged in
+#                  baselines/triage.toml
+#
+# Each entry MUST carry a tracking issue: this list is the documented parity
+# debt, not a dumping ground for packages that are merely inconvenient.
 #
 # evolution-ews-core
 #
@@ -306,23 +349,18 @@ packages = [
 #   #10.
 #
 # fish
-#   Fedora's fish spec uses %cargo_generate_buildrequires, which requires
-#   every Rust crate as a system RPM (rust-anstyle, rust-clap, ...). Fedora
-#   44 does not ship Rust crate binary packages -- they exist only in
-#   Rawhide -- so the buildroot cannot satisfy them. Building fish needs a
-#   vendored/cargo-fetch rebuild of the spec rather than the system-crate
-#   model.
-#
-# zsh
-#   The HTML docs build target pulls texi2html, which drags Fedora's ruby
-#   (ruby-default-gems) into a buildroot that already carries Hummingbird's
-#   ruby4.0. The two conflict on file paths, so the transaction fails. Needs
-#   either a ruby exclusion in the buildroot or dropping the html subpackage.
+#   Deliberately excluded, not blocked: the factory builds it and it resolves,
+#   but Bluefin classic shipping every shell was a mistake Utah does not repeat.
+#   Users who want fish get it from Homebrew. Tracked by #419.
 #
 # firefox
+#   Neither enabled repository provides the firefox RPM: the factory does
+#   not build it and Hummingbird's server repository does not carry it.
 #   Utah installs org.mozilla.firefox as a Flatpak through the desktop
-#   contract. The RPM browser is deliberately excluded, while mozjs140 is
-#   retained for GNOME Shell. Tracked by #35 and utah-packages#112.
+#   contract, so if the factory ever builds the RPM this entry becomes a
+#   deliberate exclusion rather than a contract addition -- the gate fires
+#   and a human decides. mozjs140 is retained for GNOME Shell regardless.
+#   Tracked by #35 and utah-packages#112.
 #
 # anaconda-live, slitherer
 #   Utah's ISO uses bootc-installer. Both alternative installer packages need
@@ -330,23 +368,6 @@ packages = [
 #   needs a working GHmac backend in Hummingbird's GLib. Slitherer also lacks
 #   its Qt WebEngine dependency closure. Match the factory's installer policy
 #   until that path is supported; tracked by #83.
-#
-# libgda, libgda-sqlite
-#   Upstream added both as runtime dependencies for the maintained Copyous
-#   extension (bluefin#1210). Neither is in the pinned factory image or in
-#   public-hummingbird-x86_64-rpms -- Hummingbird carries no package whose
-#   name contains gda at all. One factory recipe would cover both, because
-#   libgda-sqlite is a subpackage of the libgda SRPM rather than its own
-#   source. Tracked by #106.
-#
-# ppp
-#   In neither repository, and nothing in either Provides it. This one costs
-#   more than dial-up: Hummingbird ships NetworkManager-ppp (1.58.0-1.hum1
-#   and 1.58.1-1.hum1) whose metadata carries Requires: ppp, so that plugin
-#   is uninstallable from their own repository and NetworkManager's PPPoE and
-#   PPTP paths cannot be installed at all. The same shape as avahi (#104):
-#   a plugin shipped without the daemon behind it.
-#   Tracked by #107.
 #
 # grub2-efi-x64-cdboot
 #   The factory supplies it, but it must be the same build as grub2-efi-x64,
@@ -359,17 +380,38 @@ packages = [
 #
 # pipewire-libs-extra is supplied by the pinned September 10 factory candidate
 # and returns to the install contract (#35).
+#
+# nvtop
+#   Interactive GPU process monitor (htop-like for NVIDIA / AMD / Intel).
+#   Unlike the other entries here, nvtop is not in packages/bluefin.toml: it is
+#   an image-level parity gap, recorded in the published Bluefin image snapshot
+#   (baselines/bluefin/rpms.tsv, nvtop 3.3.2-1.fc44) and triaged in
+#   baselines/triage.toml, so Bluefin installs it from a build file outside the
+#   copied base.toml contract -- it is not inherited from Fedora's Silverblue
+#   base, which does not ship it. The package exists in Fedora 44 proper
+#   (3.3.2-1.fc44, verified from
+#   dl.fedoraproject.org/pub/fedora/linux/releases/44/Everything/x86_64/os/
+#   Packages/n/nvtop-3.3.2-1.fc44.x86_64.rpm) but Utah's install transaction
+#   resolves against `utah-packages` and `public-hummingbird-x86_64-rpms`
+#   only -- Fedora 44 is a builder-stage toolchain in Containerfile.kernel,
+#   not a runtime source. The Homebrew formula is deprecated upstream
+#   (formulae.brew.sh/formula/nvtop) and slated for disablement on
+#   2027-09-17, which is what surfaces the request on the NVIDIA flavor.
+#   Homebrew's stated reason is that the release tarball checksum changed
+#   after publication, so upstream may have been compromised; the factory
+#   recipe must pin a source verified against upstream's retagged release
+#   rather than reuse the brew formula's URL (recorded as an acceptance
+#   requirement on utah-packages#311). Add `nvtop` to `[parity]` once
+#   utah-packages#311 publishes an Hummingbird-targeted build, which must only
+#   happen after that verification. Tracked by #451 and utah-packages#311.
 packages = [
     "grub2-efi-x64-cdboot",
     "anaconda-live",
     "evolution-ews-core",
     "firefox",
     "fish",
-    "libgda",
-    "libgda-sqlite",
-    "ppp",
+    "nvtop",
     "slitherer",
-    "zsh",
 ]
 
 # nvidia-container-toolkit was recorded here as a second gap. It is not one, and

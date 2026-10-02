@@ -16,10 +16,25 @@ default:
 # under tests/ that holds test modules. Bare `unittest discover` rooted at
 # tests/ skipped subdirectories such as tests/unit/ silently -- it reported
 # OK whether the tests there passed, failed, or never ran.
+#
+# The third-party modules the suite needs are declared in
+# tests/requirements.txt, not installed silently here. A quiet `pip install ||
+# true` hid its own failure: the modules stayed missing and the suite reported
+# 46 errors that read like regressions instead of one message naming the
+# dependency.
 test:
     #!/usr/bin/env bash
     set -euo pipefail
-    pip install --quiet pyyaml 2>/dev/null || true
+    missing=()
+    for module in yaml jsonschema; do
+        python3 -c "import ${module}" 2>/dev/null || missing+=("${module}")
+    done
+    if [ ${#missing[@]} -gt 0 ]; then
+        echo "host test dependencies missing: ${missing[*]}" >&2
+        echo "they are declared in tests/requirements.txt; install them with:" >&2
+        echo "    pip install -r tests/requirements.txt" >&2
+        exit 1
+    fi
     python3 tests/run_suite.py
 
 check:
@@ -56,6 +71,7 @@ check:
     test -f scripts/verify-gnome-extensions.py
     test -f scripts/mirror-shim.sh
     test -f scripts/install-v4l2loopback.sh
+    test -f scripts/image-repo.sh
     test -f packages/RPM-GPG-KEY-fedora-44-primary
     test -f contracts/bluefin-desktop.toml
     # The reusable image workflow checks out this repository without
@@ -159,7 +175,7 @@ check-desktop-contract image_ref="localhost/utah:testing":
       -v "$PWD/scripts/verify-desktop-contract.py:/tmp/verify-desktop-contract.py:ro" \
       "{{ image_ref }}" /tmp/verify-desktop-contract.py /tmp/bluefin-desktop.toml
     podman run --rm --entrypoint /usr/bin/python3 \
-      "{{ image_ref }}" /usr/local/libexec/utah-verify-gnome-extensions
+      "{{ image_ref }}" /usr/libexec/utah-verify-gnome-extensions
 
 # Fail fast when a contract package is in none of the repositories the image
 # actually enables, instead of discovering it twenty minutes into a build.
@@ -174,22 +190,28 @@ check-desktop-contract image_ref="localhost/utah:testing":
 # three slow dnf resolves to reach the same answer.
 #
 # Resolves dependencies on the pinned base and package image. Needs podman and network.
+# Then probes each [unavailable] entry the same way: a blocked entry that now
+# resolves is stale parity debt, and the base image is already cached.
 check-repos:
     #!/usr/bin/env bash
     set -uo pipefail
-    for attempt in 1 2 3; do
-      python3 scripts/check-repo-availability.py packages/bluefin.toml packages/utah.toml
-      status=$?
-      if [ "$status" -ne 125 ]; then
-        exit "$status"
-      fi
-      echo "check-repos: container engine could not run (exit 125), attempt ${attempt}/3" >&2
-      if [ "$attempt" -ne 3 ]; then
-        sleep $(( attempt * 15 ))
-      fi
-    done
-    echo "check-repos: giving up after 3 engine failures; the registry is not serving the pinned image" >&2
-    exit 125
+    gate() {
+      for attempt in 1 2 3; do
+        python3 scripts/check-repo-availability.py "$@"
+        status=$?
+        if [ "$status" -ne 125 ]; then
+          return "$status"
+        fi
+        echo "check-repos: container engine could not run (exit 125), attempt ${attempt}/3" >&2
+        if [ "$attempt" -ne 3 ]; then
+          sleep $(( attempt * 15 ))
+        fi
+      done
+      echo "check-repos: giving up after 3 engine failures; the registry is not serving the pinned image" >&2
+      return 125
+    }
+    gate packages/bluefin.toml packages/utah.toml || exit "$?"
+    gate --check-unavailable packages/bluefin.toml packages/utah.toml
 
 # packages/bluefin.toml is a verbatim copy of Bluefin's base.toml pinned to
 # the revision in packages/.bluefin-parity-ref.  Drift here is a parity bug,
@@ -232,6 +254,62 @@ baselines bluefin="ghcr.io/ublue-os/bluefin:stable" utah="ghcr.io/projectbluefin
     python3 scripts/image-baseline.py dakota "$run" baselines/dakota
     python3 scripts/image-baseline.py gap
 
+# Partition every Bluefin package Utah lacks by where it could come from:
+# hummingbird-available / factory-built / nowhere. The 2026-09-30 bare-metal
+# audit (#382) ran this pipeline by hand against the OCI image feeds. This
+# is the same pipeline as a single recipe so a future audit -- or a
+# scheduled drift report -- does not reinvent the manual sequence.
+#
+# Pulls the pinned factory OCI repodata (Containerfile PACKAGE_IMAGE_SHA)
+# and Hummingbird's primary.xml directly. No podman run is started; the
+# audit is a static-repodata read against the same pinned inputs
+# scripts/check-repo-availability.py mounts for `just check-repos`, so
+# the verdict and the install transaction cannot disagree on what the
+# repositories offer.
+#
+#   just audit-bluefin-parity                # partition + print, do not write
+#   just audit-bluefin-parity --write        # record the new baseline after printing
+#   just audit-bluefin-parity --check        # compare against the recorded baseline
+#
+# Pass `--ref=<sha|tag|branch>` to audit against a Bluefin revision that
+# is not yet committed to packages/.bluefin-parity-ref. The default is the
+# pinned SHA in that file.
+#
+# Args are interpolated into the body with `{{args}}`, not read from `$@`: a
+# `just` shebang recipe receives no positional parameters (`$# = 0`), so a
+# `"$@"` loop never sees the flags. Value flags use the `--key=value` form
+# because that is all the forwarding script's `case` matches; the flags are
+# re-parsed there.
+audit-bluefin-parity *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    subcommand="run"
+    forward=()
+    for arg in {{args}}; do
+      case "$arg" in
+        --check) subcommand="check" ;;
+        --write) forward+=(--write) ;;
+        --ref=*) forward+=("$arg") ;;
+        *) echo "audit-bluefin-parity: unknown argument: $arg" >&2; exit 64 ;;
+      esac
+    done
+    python3 scripts/audit-bluefin-parity.py "$subcommand" "${forward[@]+"${forward[@]}"}"
+
+# Gate: fail when an audit partition grew past baselines/audit-baseline.json.
+# The script also fails on a missing baseline; first run is `just
+# audit-bluefin-parity --write` to record the starting state of the debt.
+check-audit-parity *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    forward=()
+    for arg in {{args}}; do
+      case "$arg" in
+        --ref=*) forward+=("$arg") ;;
+        *) echo "check-audit-parity: unknown argument: $arg" >&2; exit 64 ;;
+      esac
+    done
+    python3 scripts/audit-bluefin-parity.py check "${forward[@]+"${forward[@]}"}"
+
 image_name base_name stream flavor:
     @python3 scripts/flavors.py image "{{ flavor }}"
 
@@ -267,6 +345,9 @@ build-ghcr base_name stream flavor kernel_pin="":
     # for non-PR events -- so pulling either would 401 on exactly the runs that
     # need them most.  It passes GITHUB_TOKEN through to this recipe, so use it.
     if [ -n "${GITHUB_TOKEN:-}" ]; then
+      auth_dir="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/utah-registry.XXXXXX")"
+      trap 'rm -rf "$auth_dir"' EXIT
+      export DOCKER_CONFIG="$auth_dir" REGISTRY_AUTH_FILE="$auth_dir/config.json"
       echo "${GITHUB_TOKEN}" | podman login ghcr.io -u "${GITHUB_ACTOR:-x}" --password-stdin
     fi
     # main builds neither the OGC kernel nor an NVIDIA module, so it keeps the
@@ -277,17 +358,32 @@ build-ghcr base_name stream flavor kernel_pin="":
     if [ "{{ flavor }}" != main ]; then
       cache_ref="$(./scripts/kernel-cache-tag.sh)"
       cache_ref="ghcr.io/{{ repo_organization }}/{{ kernel_cache_image }}:${cache_ref}"
-      # The content-hash tag commits to the build inputs, not to the pushed
-      # bytes: the kernel_cache job (build.yml) cosign-signs the image at the
-      # digest the tag resolves to. Verify that signature here, before the tag
-      # becomes the image base, so a forged cache image fails the build rather
-      # than being layered into every kernel flavor. Local dev builds use a
-      # localhost/ ref, which is not signed and is skipped.
-      if [[ "$cache_ref" == ghcr.io/* ]] && command -v cosign >/dev/null 2>&1; then
-        cosign verify "$cache_ref" \
-          --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-          --certificate-identity-regexp '^https://github\.com/projectbluefin/utah/\.github/workflows/build\.yml@refs/(heads/testing|pull/[0-9]+/merge)$'
+      # Verify immutable bytes, never a mutable tag that FROM can re-resolve.
+      # The reusable builder runs this via sudo, whose secure_path drops tools
+      # installed through GITHUB_PATH. Bootstrap a checksummed binary outside
+      # the context in CI and invoke it by absolute path; local builds require it.
+      cosign_bin="$(command -v cosign || true)"
+      if [ "${GITHUB_ACTIONS:-false}" = true ]; then
+        case "$(uname -m)" in
+          x86_64) cosign_arch=amd64; cosign_sha=783b5d6c74105401c63946c68d9b2a4e1aab3c8abce043e06b8510b02b623ec9 ;;
+          aarch64) cosign_arch=arm64; cosign_sha=bffabe4cf183122b7de3111257a863c99e7dc6cf1093bfd7bf961de1795589b8 ;;
+          *) echo "Unsupported cosign architecture" >&2; exit 1 ;;
+        esac
+        cosign_bin="${RUNNER_TEMP:?}/utah-tools/cosign"
+        mkdir -p "${cosign_bin%/*}"
+        curl -fsSL "https://github.com/sigstore/cosign/releases/download/v2.5.3/cosign-linux-${cosign_arch}" -o "$cosign_bin"
+        echo "${cosign_sha}  ${cosign_bin}" | sha256sum --check --strict
+        chmod 0755 "$cosign_bin"
       fi
+      if [ -z "$cosign_bin" ]; then
+        echo "cosign is required to verify the kernel cache before building" >&2
+        exit 1
+      fi
+      digest="$(skopeo inspect "docker://${cache_ref}" | python3 -c 'import json, sys; print(json.load(sys.stdin)["Digest"])')"
+      cache_ref="${cache_ref%:*}@${digest}"
+      "$cosign_bin" verify "$cache_ref" \
+        --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+        --certificate-identity-regexp '^https://github\.com/projectbluefin/utah/\.github/workflows/build\.yml@refs/(heads/[^@]+|pull/[0-9]+/merge)$'
       base_args=(--build-arg BASE_IMAGE="$cache_ref")
     fi
     # Registry layer cache, the same arrangement Bluefin uses.  The package

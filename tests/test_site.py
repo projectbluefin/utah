@@ -88,11 +88,11 @@ class GeneratedDataTests(unittest.TestCase):
         self.assertEqual(shown & gaps, set())
 
     def test_tracking_issues_come_only_from_the_tracked_by_clause(self):
-        """ppp's entry cites #104 and #100 to draw a comparison and is tracked
-        by #107. Scraping every number in the paragraph attributed all three to
-        ppp, which sent readers to the wrong issues."""
+        """grub2-efi-x64-cdboot's entry cites utah-packages#238 as context and
+        is tracked by #253. Scraping every number in the paragraph attributed
+        both to the entry, which sent readers to the wrong issues."""
         reasons = self.generator.unavailable_reasons(ROOT / "packages/utah.toml")
-        self.assertEqual(reasons.get("ppp"), [107])
+        self.assertEqual(reasons.get("grub2-efi-x64-cdboot"), [253])
         # Cross-repository references (utah-packages#112) are not this repo's
         # issue numbers and must not be rendered as links into it.
         self.assertEqual(reasons.get("firefox"), [35])

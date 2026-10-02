@@ -1,14 +1,14 @@
-ARG BASE_IMAGE=quay.io/hummingbird-community/bootc-os:latest@sha256:ee9a5d4d23795b064d0192a3ebdd91f6c9f21fbc61567b2acf5364727964fc54
+ARG BASE_IMAGE=quay.io/hummingbird-community/bootc-os:latest@sha256:ddf19cc52fccb9ad4819b0fb9289f26912894c95555ccb4e95dc38e1dab4dc12
 # The package factory publishes a complete, digest-addressable RPM repository.
 # Keep this pin in Utah so an image build is reproducible and can be reviewed
 # against the exact package set it consumes.
 ARG PACKAGE_IMAGE=ghcr.io/projectbluefin/utah-packages
-ARG PACKAGE_IMAGE_SHA=sha256:377715961b6a5af9021353d4dab8b8e5fdaa1d1c343bc617bb24320ecee270b6
+ARG PACKAGE_IMAGE_SHA=sha256:0f04cff2dd0b085604ff3cd79d538ab14b97cbe356980f7d365a35dfc70c857b
 # CI keeps PACKAGE_IMAGE_SHA pinned. PACKAGE_IMAGE_REF supports a local image
 # in containers-storage, where no registry digest is available.
 ARG PACKAGE_IMAGE_REF=${PACKAGE_IMAGE}@${PACKAGE_IMAGE_SHA}
 ARG COMMON_IMAGE=ghcr.io/projectbluefin/common
-ARG COMMON_IMAGE_SHA=sha256:57b4cada5f4dba3d61c01837f8ffae067bdba3d2968226abaecef5c6e88d8356
+ARG COMMON_IMAGE_SHA=sha256:360450d64699f2baf0e4b17c9c36e0925bb1d92d0b88447ba894e98d32461c36
 ARG BREW_IMAGE=ghcr.io/ublue-os/brew
 ARG BREW_IMAGE_SHA=sha256:bc6f5a9fc4f28cded2fe567b31f74825c1f4481d5e43c537c3fcc0d3df6d22ab
 
@@ -25,8 +25,8 @@ FROM ${PACKAGE_IMAGE_REF} AS packages
 FROM ${BASE_IMAGE} AS v4l2loopback
 COPY packages/hummingbird.repo packages/fedora-44.repo /etc/yum.repos.d/
 COPY packages/RPM-GPG-KEY-redhat-release-2 packages/RPM-GPG-KEY-fedora-44-primary /etc/pki/rpm-gpg/
-COPY scripts/install-v4l2loopback.sh /usr/local/libexec/utah-install-v4l2loopback
-RUN /usr/local/libexec/utah-install-v4l2loopback base /out
+COPY scripts/install-v4l2loopback.sh /usr/libexec/utah-install-v4l2loopback
+RUN /usr/libexec/utah-install-v4l2loopback base /out
 
 FROM ${BASE_IMAGE}
 
@@ -52,6 +52,9 @@ FROM ${BASE_IMAGE}
 # transaction reads. These, the pinned package image and the install script
 # are the whole input to the expensive layer, so everything else waits its
 # turn below them.
+# utah-packages.repo carries a `# factory-pin:` stamp mirroring
+# PACKAGE_IMAGE_SHA. It is the transaction's cache key for the factory: the
+# ARG change alone does not bust the layer on CI's buildah (#371).
 COPY packages/bluefin.toml packages/utah.toml contracts/bluefin-desktop.toml /usr/share/utah/
 COPY packages/hummingbird.repo packages/nvidia-container.repo packages/utah-packages.repo /etc/yum.repos.d/
 # Hummingbird signs its RPMs with Red Hat's release key 2 (fd431d51); the key
@@ -84,6 +87,7 @@ COPY scripts/install-packages.py \
      scripts/verify-efi-chain.sh \
      scripts/fix-home-labels.sh \
      scripts/install-v4l2loopback.sh \
+     scripts/image-repo.sh \
      /tmp/utah-scripts/
 # Common publishes Bluefin artwork, desktop defaults, Brewfiles, and setup
 # hooks in a separate profile from its shared system files. Both are required:
@@ -95,8 +99,28 @@ COPY --from=brew /system_files /tmp/utah-brew
 COPY system_files/shared /tmp/utah-local
 
 
+# Neutral login-screen artwork, Bluefin-LTS style (#378). generic-logos provides
+# the same paths fedora-logos does, so system-logos dependents (gdm) stay
+# satisfied; the transaction then erases the files while keeping the rpmdb
+# record, which leaves GDM with no Fedora mark at all. Fedora repositories are
+# never enabled at runtime, so the noarch data RPM comes from the release
+# mirror directly: the signed build (kojipkgs ships the same payload unsigned),
+# pinned and checksummed like uupd. URL and digest move together by hand; the
+# RPM changes about yearly.
+ARG GENERIC_LOGOS_URL=https://download.fedoraproject.org/pub/fedora/linux/releases/44/Everything/x86_64/os/Packages/g/generic-logos-18.0.0-27.fc44.noarch.rpm
+ARG GENERIC_LOGOS_SHA256=2f9247f480788ef5cea4bc9f872bc5653ae0578fb7bec045f8b807cacc50699e
 # The v4l2loopback stage's output is bind mounted rather than copied: it is two
 # files, and a COPY would be a layer of its own.
+# After Common's files are copied into place we rename its `00-entry.just` to
+# `00-common.just` so Utah's entry point (`system_files/.../00-entry.just`,
+# staged on the next line of this same RUN by `cp -a /tmp/utah-local/. /`)
+# can re-import it from a shallower depth than Common's recipes. On `just`
+# >= 1.56 the shallower import wins duplicate resolution, so Utah's
+# `60-custom.just` overrides Common's recipes in the live image. Earlier
+# `just` releases deduplicated the shared AST to the deeper import and
+# Common's recipes silently shadowed ours, so every override reverted
+# (issue #449). The `just` >= 1.56 floor is enforced by
+# tests/test_ujust_overrides.py.
 RUN --mount=type=bind,from=v4l2loopback,source=/out,target=/tmp/utah-v4l2loopback,ro \
     for pair in install-packages.py:utah-install-packages \
                 verify-rpm-contract.py:utah-verify-rpm-contract \
@@ -111,16 +135,20 @@ RUN --mount=type=bind,from=v4l2loopback,source=/out,target=/tmp/utah-v4l2loopbac
                 mirror-shim.sh:utah-mirror-shim \
                 verify-efi-chain.sh:utah-verify-efi-chain \
                 fix-home-labels.sh:utah-fix-home-labels \
-                install-v4l2loopback.sh:utah-install-v4l2loopback; do \
-      install -Dm 0755 "/tmp/utah-scripts/${pair%%:*}" "/usr/local/libexec/${pair##*:}" || exit 1; \
+                install-v4l2loopback.sh:utah-install-v4l2loopback \
+                image-repo.sh:utah-image-repo; do \
+      install -Dm 0755 "/tmp/utah-scripts/${pair%%:*}" "/usr/libexec/${pair##*:}" || exit 1; \
     done && \
     cp -a /tmp/utah-common/. / && \
     cp -a /tmp/utah-bluefin/. / && \
     cp -a /tmp/utah-brew/. / && \
+    mv /usr/share/ublue-os/just/00-entry.just /usr/share/ublue-os/just/00-common.just && \
     cp -a /tmp/utah-local/. / && \
     cp -a /tmp/utah-v4l2loopback/. / && \
     rm -rf /tmp/utah-scripts /tmp/utah-common /tmp/utah-bluefin /tmp/utah-brew /tmp/utah-local && \
-    rm -f /etc/dconf/db/distro.d/05-bluefin-searchlight-extension
+    rm -f /etc/dconf/db/distro.d/05-bluefin-searchlight-extension && \
+    curl -fsSL "${GENERIC_LOGOS_URL}" -o /tmp/generic-logos.rpm && \
+    echo "${GENERIC_LOGOS_SHA256}  /tmp/generic-logos.rpm" | sha256sum --check --strict
 # The last line drops Common's settings for the Search Light extension. Utah no
 # longer ships that extension: its shader code calls set_shader_source, which
 # GNOME 51 removed, so it errored at load and failed the ISO end-to-end test.
@@ -147,16 +175,20 @@ RUN --mount=type=bind,from=v4l2loopback,source=/out,target=/tmp/utah-v4l2loopbac
 # out in this RUN as well, the two copies drifted and the contract check was
 # asserting a different set than the install had asked for.
 RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages,ro \
-    /usr/local/libexec/utah-install-packages \
+    /usr/libexec/utah-install-packages \
       /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
-    IMAGE_FLAVOR=main /usr/local/libexec/utah-verify-rpm-contract \
+    IMAGE_FLAVOR=main /usr/libexec/utah-verify-rpm-contract \
       /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
-    /usr/local/libexec/utah-fix-home-labels && \
+    /usr/libexec/utah-fix-home-labels && \
     DNF="$(command -v dnf5 || command -v dnf)" && \
     "$DNF" clean all && rm -rf /var/cache/libdnf5 /var/cache/dnf
 
 # Per-image arguments. Nothing above this line may read them; see the note on
 # layer discipline at the top.
+# Re-declared without a default so the provenance label at the end can read
+# the global pin's value: a global ARG is only in scope for FROM lines, and
+# without this the label baked empty (#371 follow-up).
+ARG PACKAGE_IMAGE_SHA
 ARG IMAGE_NAME=utah
 # Canonical OS identity, distinct from the repository name a flavor publishes
 # under. Always utah; never flavored.
@@ -206,14 +238,14 @@ RUN mkdir -p /tmp/uupd && \
       -o /tmp/uupd/uupd.timer && \
     echo "${UUPD_SERVICE_SHA256}  /tmp/uupd/uupd.service" | sha256sum --check --strict && \
     echo "${UUPD_TIMER_SHA256}  /tmp/uupd/uupd.timer" | sha256sum --check --strict && \
-    /usr/local/libexec/utah-build-gnome-extensions && \
-    /usr/local/libexec/utah-verify-gnome-extensions && \
+    /usr/libexec/utah-build-gnome-extensions && \
+    /usr/libexec/utah-verify-gnome-extensions && \
     glib-compile-schemas /usr/share/glib-2.0/schemas && \
-    ENABLE_SSHD="${ENABLE_SSHD}" /usr/local/libexec/utah-configure-services && \
-    /usr/local/libexec/utah-configure-branding && \
-    /usr/local/libexec/utah-verify-desktop-contract /usr/share/utah/bluefin-desktop.toml && \
-    /usr/local/libexec/utah-mirror-shim && \
-    /usr/local/libexec/utah-verify-efi-chain
+    ENABLE_SSHD="${ENABLE_SSHD}" /usr/libexec/utah-configure-services && \
+    /usr/libexec/utah-configure-branding && \
+    /usr/libexec/utah-verify-desktop-contract /usr/share/utah/bluefin-desktop.toml && \
+    /usr/libexec/utah-mirror-shim && \
+    /usr/libexec/utah-verify-efi-chain
 
 # Dakota-compatible flavors: OGC is built and asserted before NVIDIA so the
 # NVIDIA path can bind its module to the exact kernel tree it will boot.
@@ -222,20 +254,20 @@ RUN mkdir -p /tmp/uupd && \
 # is registered and asserted, and the gaming flavors compile one for OGC.
 RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages,ro \
     case "${IMAGE_FLAVOR}" in \
-      gaming|nvidia-gaming) /usr/local/libexec/utah-install-ogc-kernel ;; \
+      gaming|nvidia-gaming) /usr/libexec/utah-install-ogc-kernel ;; \
       main|nvidia) ;; \
       *) echo "Unknown Utah image flavor: ${IMAGE_FLAVOR}" >&2; exit 2 ;; \
     esac && \
     case "${IMAGE_FLAVOR}" in \
-      nvidia|nvidia-gaming) /usr/local/libexec/utah-install-nvidia "${IMAGE_FLAVOR}" ;; \
+      nvidia|nvidia-gaming) /usr/libexec/utah-install-nvidia "${IMAGE_FLAVOR}" ;; \
       main|gaming) ;; \
     esac && \
-    /usr/local/libexec/utah-install-v4l2loopback base && \
+    /usr/libexec/utah-install-v4l2loopback base && \
     case "${IMAGE_FLAVOR}" in \
-      gaming|nvidia-gaming) /usr/local/libexec/utah-install-v4l2loopback ogc ;; \
+      gaming|nvidia-gaming) /usr/libexec/utah-install-v4l2loopback ogc ;; \
       main|nvidia) ;; \
     esac && \
-    IMAGE_FLAVOR="${IMAGE_FLAVOR}" /usr/local/libexec/utah-verify-rpm-contract \
+    IMAGE_FLAVOR="${IMAGE_FLAVOR}" /usr/libexec/utah-verify-rpm-contract \
       /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
     # The package repository is now only ever bind mounted, so it is absent from
     # the committed image. Flip it disabled here -- the last step that installs
@@ -250,13 +282,14 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
 # is the NVIDIA and OGC step, not after the main transaction. The lint that
 # checks the result runs in the same layer: nothing can change between the two.
 # The home-label check runs first: clean-stage removes the utah-* helpers.
-RUN /usr/local/libexec/utah-fix-home-labels --check && \
-    /usr/local/libexec/utah-clean-stage && \
+RUN /usr/libexec/utah-fix-home-labels --check && \
+    /usr/libexec/utah-clean-stage && \
     bootc container lint --fatal-warnings --skip nonempty-boot
 
 LABEL org.opencontainers.image.title="Utah"
 LABEL org.opencontainers.image.description="A Hummingbird-based Bluefin GNOME workstation"
 LABEL org.opencontainers.image.source="https://github.com/projectbluefin/utah"
+LABEL io.projectbluefin.utah.factory-digest="${PACKAGE_IMAGE_SHA}"
 LABEL org.opencontainers.image.vendor="${IMAGE_VENDOR}"
 LABEL org.opencontainers.image.version="${VERSION}"
 LABEL containers.bootc=1

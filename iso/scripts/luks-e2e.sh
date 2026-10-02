@@ -583,6 +583,18 @@ if [[ -n "${UTAH_E2E_PAYLOAD_CHECK-x}" ]]; then
     echo "  booted image: ${booted_image}"
 fi
 
+# clean-stage removes /var/lib from the image. Check boot-created state
+# before starting logrotate so the test cannot repair a missing tmpfiles rule.
+echo "Verifying logrotate state on the installed system..."
+ssh_target "
+    printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' sh -eu -c '
+        test -d /var/lib/logrotate
+        systemctl start logrotate.service
+        test -s /var/lib/logrotate/logrotate.status
+    '
+" || fail "logrotate state directory or service failed on the installed system"
+echo "  logrotate.service: succeeded with a nonempty state file"
+
 echo "=== Phase 7/7: log in and prove the desktop starts ==="
 ssh_target 'systemctl is-active gdm.service' 2>/dev/null | grep -qx active \
     || fail "gdm is not running on the installed system"
@@ -756,11 +768,16 @@ if [[ "${UTAH_E2E_REQUIRE_FASTFETCH:-0}" == 1 ]]; then
     for _ in $(seq 1 24); do
         shot installed-fastfetch "${MONITOR_INSTALLED}"
         if [[ -s "${SHOTS}/installed-fastfetch.png" ]]; then
-            tesseract "${SHOTS}/installed-fastfetch.png" "${WORK}/fastfetch-ocr" 2>/dev/null
-            if bash "${ROOT}/iso/scripts/fastfetch-ocr-match.sh" "${WORK}/fastfetch-ocr.txt"; then
-                fastfetch_seen=1
-                break
-            fi
+            # Tesseract misreads identical pixels differently between runs
+            # (#375), so re-read the same screenshot before waiting for a new
+            # one: a same-pixel re-read costs seconds, a new shot costs a sleep.
+            for _ocr in 1 2 3; do
+                tesseract "${SHOTS}/installed-fastfetch.png" "${WORK}/fastfetch-ocr" 2>/dev/null
+                if bash "${ROOT}/iso/scripts/fastfetch-ocr-match.sh" "${WORK}/fastfetch-ocr.txt"; then
+                    fastfetch_seen=1
+                    break 2
+                fi
+            done
         fi
         sleep 5
     done

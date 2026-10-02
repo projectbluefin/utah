@@ -176,7 +176,8 @@ Production live boot entries configure:
 
 ### Secure Boot strategy
 
-- **Live ISO bootloader**: The live image installs `systemd-boot-unsigned`.
+- **Live ISO bootloader**: The image carries `systemd-boot-unsigned`, which the
+  live ISO boots from.
   On hardware with Microsoft UEFI Secure Boot enabled, firmware will reject the
   unsigned EFI loader unless Secure Boot is temporarily disabled in UEFI setup.
   Production releases will incorporate Fedora's signed shim (`shimx64.efi`) and
@@ -271,6 +272,15 @@ read falls back to `sudo` when `bootc status --json` returns nothing to the
 unprivileged test user.
 Read the recipe and script prerequisites before running it: it creates test
 accounts and requires local QEMU/KVM access, not a production installation.
+
+The installed-boot gate also checks `/var/lib/logrotate` before starting
+`logrotate.service`, then requires a nonempty `logrotate.status` state file.
+Do not create the directory in the test: `scripts/clean-stage.sh` removes
+`/var/lib` during composition, so writable service state must be recreated at
+boot by a rule shipped under `system_files/shared/usr/lib/tmpfiles.d/`.
+`utah-logrotate.conf` supplies the root-owned directory for logrotate (#386).
+A build-time `mkdir` or a clean bootc lint result alone does not prove that
+service state exists on a fresh installed system.
 
 Passing runs refresh `docs/verification/README.md`, its screenshots, and the
 delimited verification block in the root README. These are historical local

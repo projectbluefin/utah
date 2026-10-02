@@ -32,11 +32,11 @@ jobs:
 
   promote:
     needs: variants
-    uses: projectbluefin/actions/.github/workflows/reusable-promote-squash.yml@b4b35cf94038a24dc2b22329a08d38fdbda39a92 # v1
+    uses: projectbluefin/actions/.github/workflows/reusable-promote-squash.yml@ab62f2774eb465d912b61b5c0cd9cd230c811768 # v1
     with:
       registry: ghcr.io/${{ github.repository_owner }}
       variants: ${{ needs.variants.outputs.list }}
       cosign_identity_regexp: >-
-        ^https://github\.com/projectbluefin/utah/\.github/workflows/build\.yml@refs/heads/testing$
+        ^https://github\.com/projectbluefin/actions/\.github/workflows/reusable-build\.yml@[0-9a-f]{40}$
       run_e2e: false
     secrets: inherit

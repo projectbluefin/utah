@@ -36,11 +36,13 @@ just kernel-cache-ref     # ghcr.io/<owner>/utah-kernel-cache:<hash>
 just build-kernel-cache
 ```
 
-CI builds and pushes the cache image only when that tag is not already
-published, and the three flavors that need it use it as their base image;
-`main` uses the pristine Hummingbird base and pulls none of it (step "Build
-the kernel cache image if it is not published yet", `.github/workflows/build.yml`;
-recipe comment, `Justfile`, `build-ghcr`).
+CI reuses a published cache only when its digest is signed by this repository's
+`build.yml` (GitHub OIDC issuer; branch heads and same-repo PR merge refs).
+Misses and unsigned or wrongly signed hits are built, pushed, signed and
+verified. The consumer resolves the content tag once, requires cosign, verifies
+that immutable digest with the same identity regexp, and passes only those
+verified bytes as `BASE_IMAGE`. A missing verifier is an error, not a skip.
+`main` keeps the pristine Hummingbird base and pulls none of the cache.
 
 ## What the tag hashes
 

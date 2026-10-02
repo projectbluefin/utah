@@ -26,6 +26,7 @@ next to the code, and the skills cite them.
 | Validate changes end-to-end in a VM or live ISO | [`skills/local-testing.md`](skills/local-testing.md) |
 | Change branding, desktop defaults, or first-boot Flatpak policy | [`skills/desktop-contract.md`](skills/desktop-contract.md) |
 | Change `.github/workflows/` or debug a red run | [`skills/ci-workflows.md`](skills/ci-workflows.md) |
+| Edit a first-boot setup hook or its once-only stamp | [`skills/setup-hooks.md`](skills/setup-hooks.md) |
 | Decide whether to write or update a skill | [`skills/skill-improvement.md`](skills/skill-improvement.md) |
 | Onboard into the factory / cross-repo rules | common's `docs/skills/factory-onboarding.md` |
 

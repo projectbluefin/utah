@@ -1,7 +1,7 @@
 ---
 name: package-contract
 version: "1.0"
-last_updated: "2026-09-22"
+last_updated: "2026-10-01"
 id: package-contract
 one_line_purpose: Maintain Bluefin package parity and Utah's overlay manifest.
 entry_point: docs/skills/package-contract.md
@@ -53,12 +53,28 @@ policy for changing them.
     and iwlegacy packages are named explicitly — the X230's
     `iwlwifi-6000g2a-6.ucode` ships in `iwlwifi-dvm-firmware` (#97).
   - `[services]` — desktop services Bluefin adds on top of the server base.
-  - `[unavailable]` — Bluefin contract packages none of Utah's repositories
-    provide.
+  - `[unavailable]` — Bluefin parity gaps none of Utah's enabled repositories
+    provide, whether the name comes from the copied `base.toml` contract or
+    from the published Bluefin image snapshot
+    (`baselines/bluefin/rpms.tsv`).
+
+## Wi-Fi documentation currency
+
+Wi-Fi needs both `[hardware]` firmware and the `[parity]` userspace stack:
+`NetworkManager-wifi`, `wpa_supplicant`, `wireless-regdb` and `iw`. These names
+are now in the install contract; the former factory dependency blocker is
+not a current gap. When a dependency lands, update both the nearby manifest
+comments and the README gap list. Keep package availability separate from
+runtime evidence: only testing device detection and association on the target
+hardware establishes that its radio works.
 
 ## [unavailable] rules
 
-`[unavailable]` means "no source provides this name at all". Each entry
+`[unavailable]` means "no repository Utah enables provides this name at all".
+It covers both kinds of parity gap: names in the copied `base.toml` contract,
+and names Bluefin's published image ships from a build file outside that
+contract (recorded in `baselines/bluefin/rpms.tsv` and triaged in
+`baselines/triage.toml` — `nvtop` is the current example). Each entry
 **MUST carry a tracking issue**: the list is the documented parity debt, not
 a dumping ground for packages that are merely inconvenient (header comment,
 `packages/utah.toml`).
@@ -101,9 +117,12 @@ precede base Hummingbird packages (`priority=10`). Repositories without this mar
 (such as `nvidia-container-toolkit` or builder-only `fedora-44`) are excluded from
 the desktop package transaction.
 
-The pinned package image is an RPM repository, not a runtime dependency: its
-contents are copied into the image so the package transaction is reproducible
-and does not depend on a mutable mirror (`Containerfile` L41-44).
+The pinned package image is an RPM repository, not a runtime dependency. It is
+bind-mounted into the RUN steps that install from it (`Containerfile` L61-69)
+and never copied into a layer: a COPY of the whole ~4 GB repository would leave
+a permanent layer behind, so reproducibility now comes from the digest-pinned
+`packages` stage being the only source the package transaction can see rather
+than from the repository contents living in the image.
 
 ## Supply-chain download verification
 
@@ -122,6 +141,24 @@ drifted once, so a contract package was installed and never verified
 (install-packages.py:~125, verify-rpm-contract.py:~60). The manifest path in
 the verifier is only the off-image `--check` fallback and asserts nothing
 about installation.
+
+The install transaction follows a strict execution sequence tested in
+`tests/test_package_install.py`:
+1. **Contract record**: The resolved contract packages (excluding `[build]`
+   tooling and `[unavailable]` packages) are written to
+   `/usr/share/utah/contract.txt`. If the path is unwritable, the script warns
+   and continues (fails open).
+2. **Install**: DNF runs with `--disablerepo=*`, enables only marked
+   `# utah-install: true` repositories in ascending priority order, excludes
+   `PackageKit*`, and installs the contract plus `[build]` tooling.
+3. **Mark user**: `dnf mark user` marks all installed contract packages and
+   build dependencies as user-installed before excluded package removal. This
+   prevents DNF autoremove cascades from uninstalling contract packages (such as
+   `xdg-desktop-portal-gnome`).
+4. **Excluded removal**: `rpm -qa` is queried for packages declared in
+   `[excluded]`. Only those actually present are removed with
+   `dnf remove --no-autoremove`. Position after the subcommand is mandatory
+   for DNF5 compatibility.
 
 On NVIDIA flavors (`IMAGE_FLAVOR=nvidia` or `nvidia-gaming`),
 `scripts/verify-rpm-contract.py` also asserts that the kernel module
@@ -164,9 +201,9 @@ parity gate tests against a known revision rather than moving with Bluefin's
 default branch, preventing unrelated upstream changes from breaking Utah's CI.
 Update it whenever synchronizing `packages/bluefin.toml` with upstream.
 
-Current counts, per the README "Package parity" section: 57 Bluefin contract
-packages installed, 85 Utah additions (GNOME 51, base-image parity, device
-firmware, desktop services), 10 genuinely unavailable. `scripts/check-doc-counts.py` (part of
+Current counts, per the README "Package parity" section: 61 Bluefin contract
+packages installed, 88 Utah additions (GNOME 51, base-image parity, device
+firmware, desktop services), 7 genuinely unavailable. `scripts/check-doc-counts.py` (part of
 `just check`) recomputes these from the manifests and fails if either
 document drifts from `site/data/packages.json`.
 
@@ -186,12 +223,135 @@ assert a package in every section reaches the install set and is counted under
 its own heading, so a section wired into one place and not another fails the
 suite rather than shipping quietly.
 
+## Re-runnable parity audit (issue #402)
+
+`scripts/image-baseline.py` measures what files Bluefin ships that Utah
+does not (`baselines/GAP.md`). It does not say *where* the missing name
+could come from, only that it is missing. That gap was the 2026-09-30
+bare-metal audit (#382): `rpm -qa` both images, `comm` the difference,
+then partition each gap name by which repository could supply it.
+
+`scripts/audit-bluefin-parity.py` is the re-runnable version of that
+pipeline. Every name Bluefin ships that Utah does not install (and does
+not list in `[unavailable]`) lands in one of three partitions:
+
+- **hummingbird-available** — resolves against Hummingbird today. The
+  smallest move to close the gap is to add the name to `[parity]`
+  (or `[hardware]`, etc.); the manifest is the only thing in the way.
+- **factory-built** — absent from Hummingbird, present in the pinned
+  factory repository. The factory already builds what we need; this is a
+  manifest gap, not a factory gap.
+- **nowhere** — neither repository provides it. A factory recipe must
+  land first; until then, the name belongs in `[unavailable]` with a
+  tracking issue.
+
+The script reads the same pinned inputs as `just check-repos` (the
+Containerfile `PACKAGE_IMAGE_SHA` for the factory OCI; the baseurl in
+`packages/hummingbird.repo` for Hummingbird) and parses the
+`primary.xml` from each, so the verdict and the install transaction
+cannot disagree on what the repositories offer. No podman run is
+involved — the audit is a static repodata read.
+
+The audit writes `baselines/audit-baseline.json` (only when the
+`--write` flag is passed; the default is report-only, matching the
+2026-09-30 audit's "look before you leap" posture). The check
+subcommand compares the current run to the baseline and exits nonzero when
+a partition grows past the recorded state; a name moving from
+`factory-built` to `hummingbird-available` is a Hummingbird rebuild
+landing and is silent. A name disappearing from the baseline (an operator
+moved it into `[parity]` and closed the gap) is silent too — only new
+names that did not exist anywhere in the baseline trigger the gate.
+
+The baseline records the Bluefin ref and factory pin it was captured
+against (`ref` / `factory_ref` in the JSON). `check` compares those back
+against the current audit before it diffs the partitions: a Bluefin-ref or
+factory-pin bump that leaves the package set unchanged would otherwise read
+as "no growth" and pass silently, so it is reported as a stale baseline
+instead. Rewrite the baseline against the new ref with `--write` before the
+gate can meaningfully run. A stale-baseline verdict is reported before any
+partition-growth message, so it is never masked by a growth report, and the
+failing summary line names the stale baseline rather than claiming the
+partitions grew.
+
+Bootstrap is a one-time manual command: on a fresh checkout where
+`baselines/audit-baseline.json` is missing, `just check-audit-parity`
+exits 2 with a clear message; running `just audit-bluefin-parity --write`
+once commits the starting state of the debt and turns the gate on.
+Subsequent runs gate against that baseline.
+
+```bash
+just audit-bluefin-parity              # partition + print, do not write
+just audit-bluefin-parity --write      # record the new baseline
+just check-audit-parity                # fail on partition growth
+just check-audit-parity --ref=HEAD     # audit against an unpinned Bluefin ref
+```
+
+The recipes read their flags from a `*args` parameter that is interpolated
+into the shebang body with `{{args}}`. A `just` shebang recipe receives no
+positional parameters (`$# = 0`), so a `"$@"` loop there is a silent no-op:
+the flags never reach the script and the recipe falls back to report-only
+`run`. Value flags use the `--key=value` form, which is what the recipe's
+`case` re-parses.
+
+The audit needs network (the factory OCI metadata layer and Hummingbird's
+`repodata/`); it is a sibling of `just check-repos`, not part of `just
+check`, which stays offline.
+
 ## Verification
 
 ```bash
 just check-parity
 just check-repos
+just check-audit-parity
 python3 scripts/install-packages.py --check packages/bluefin.toml
 python3 scripts/verify-rpm-contract.py --check packages/bluefin.toml
 python3 scripts/check-doc-counts.py
 ```
+
+## Runtime ujust dependencies
+
+Common's `00-entry.just` imports `60-custom.just` after the shared recipes
+with duplicate recipes enabled, but earlier imports win at equal depth.
+The Containerfile preserves Common's entry point as `00-common.just` before
+installing Utah's local overlay. Utah's `00-entry.just` imports that file and
+`60-custom.just` at the same depth, so Utah's custom recipes are shallower
+than Common's defaults and take precedence. Common still supplies the default
+command and unrelated recipes. Keep these overrides small and test them through
+`just`, including import precedence, when changing Common's pin or runtime
+dependencies. The required Common import deliberately fails if composition
+forgets to preserve the original entry point.
+
+For #394, `device-info` prints a local report when `fpaste` is missing and
+only uploads after confirmation when it is available. Its temporary report is
+private and removed on exit. `changelogs` keeps Common's image/repository
+selection but prints Markdown directly when `glow` is absent; HTTP and parsing
+errors must remain failures. Enrollment reports the unsupported capability
+without running `sudo` or `mokutil`: Utah has no module-signing certificate,
+and shipping one without signing the modules would not fix Secure Boot.
+Signing and enrollment remain tracked by #395. Common's guarded
+`check-idle-power-draw` stays unchanged until the factory supplies `powerstat`.
+These fallbacks do not add packages or enable Fedora runtime repositories.
+
+For #446, `report` overrides Common's `bonedigger-report` recipe so bug
+reports route to `projectbluefin/utah` instead of falling through Common's
+`ublue-image-repo` grammar. The override sets
+`UBLUE_IMAGE_REPO_BIN=/usr/libexec/utah-image-repo`; that Utah-local
+shim short-circuits every `utah*` name to `projectbluefin/utah` and forwards
+every other name to Common's authoritative resolver (so non-Utah images
+inheriting from this image still resolve correctly). The shim itself is
+installed by `Containerfile` from `scripts/image-repo.sh` (alongside the
+other `utah-*` helpers, under the same `<name>.sh` -> `utah-<name>`
+rename) and listed in `just check`'s presence assertion. Its option
+loop mirrors Common's exactly — `--` and the first non-option both end
+option parsing — and the remaining positionals are forwarded verbatim,
+so an empty `IMAGE_NAME` keeps its slot instead of promoting
+`IMAGE_TAG` into it.
+
+Two deliberate differences from Common's `report` recipe: the override sets
+`BONEDIGGER_BRAND="🐦 Utah Bug Report"` so the prompt names Utah rather than
+Bluefin, and it does not forward Common's `BONEDIGGER_VERSION` because
+`bonedigger-report` never reads that variable and it is not in scope for a
+Utah-local recipe. The `--list` description is kept on a single comment line
+immediately above `[group('System')]`; `just` uses only that line, so the
+explanatory block above it must stay separated by a blank line or `ujust
+--list` would print an implementation-comment fragment instead.

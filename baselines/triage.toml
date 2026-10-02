@@ -299,10 +299,14 @@ status = "planned"
 area = "hardware-power"
 issue = "#263"
 
+# zram-generator ships in packages/utah.toml [services] as of #384, but the
+# baselines are extracted from the published image, so it stays a gap -- and so
+# needs an entry here -- until `just baselines` reruns against an image that
+# carries it. Drop this entry then.
 [package.zram-generator]
 status = "planned"
 area = "hardware-power"
-issue = "#263"
+issue = "#384"
 
 [package.lm_sensors]
 status = "planned"
@@ -755,9 +759,13 @@ area = "cli-tools"
 issue = "#263"
 
 [package.nvtop]
-status = "planned"
+status = "unavailable"
 area = "cli-tools"
-issue = "#263"
+reason = "packages/utah.toml [unavailable]"
+issue = "utah-packages#311"
+# User-facing request: projectbluefin/utah#451. Homebrew nvtop is deprecated
+# (disabled 2027-09-17), so the factory build at utah-packages#311 is the
+# only path to keep the tool on NVIDIA images once the brew formula goes.
 
 [package.lsof]
 status = "planned"

@@ -13,8 +13,9 @@ dependencies: []
 tags: [ci, workflows, actions, promotion]
 description: >-
   build.yml contract gate, kernel-cache job, main/kernel matrix split,
-  promote-testing-to-main and sync-main-to-testing, actions@v1 delegation.
-  Use when changing .github/workflows/ or debugging a red run.
+  promote-testing-to-main and sync-main-to-testing, actions@v1 delegation,
+  weekly factory-pin bump. Use when changing .github/workflows/ or debugging a
+  red run.
 metadata:
   type: reference
 ---
@@ -100,16 +101,15 @@ loudly there, because an invalid matrix creates no image job at all and the
 only symptom is `build_container: failure` from the aggregator (comment,
 `.github/workflows/build.yml`).
 
-## kernel_cache: skipped unless needed, skipped when published
+## kernel_cache: skipped unless needed, reused only when signed
 
 The kernel cache job runs only when `needs_kernel` is `true` -- while the
 matrix is main-only, building it is 45 minutes spent on an image nothing
 consumes (comment, `.github/workflows/build.yml`). When it does run, it
 frees runner disk, logs in to GHCR with `GITHUB_TOKEN`, and probes the
-content-hash tag with `podman pull`: a tag that is already published is a
-cache hit and the job exits without building; only a miss builds
-`Containerfile.kernel` and pushes (step "Build the kernel cache image if it
-is not published yet", `.github/workflows/build.yml`). What the tag hashes
+content-hash tag with `podman pull`. A published tag is a cache hit only if
+its digest verifies; unsigned or wrongly signed hits are rebuilt from the
+checkout, pushed, signed and verified just like misses. What the tag hashes
 and why lives in [kernel-cache.md](kernel-cache.md).
 
 A published tag is adopted only when its signature verifies; a miss is
@@ -120,9 +120,10 @@ boundaries decide whether that can work (job `env:` and the same step):
   default writes `${XDG_RUNTIME_DIR}/containers/auth.json`, which cosign
   never reads -- it uses the Docker keychain at
   `${DOCKER_CONFIG}/config.json`. The job points both `DOCKER_CONFIG` and
-  `REGISTRY_AUTH_FILE` at one `.docker/config.json`, so the image push and
-  the signature upload authenticate with the same token; without it the
-  push succeeds and `cosign sign` fails UNAUTHORIZED (#316).
+  `REGISTRY_AUTH_FILE` at one `${RUNNER_TEMP}/utah-registry/config.json`,
+  outside the image build context, and removes it in an always-run step.
+  The image push and signature upload then authenticate with the same token;
+  without it the push succeeds and `cosign sign` fails UNAUTHORIZED (#316).
 - the signed digest must be the one the registry stored. After a push,
   `podman image inspect ... RepoDigests` reports the *local* manifest
   digest, which differs from the registry's, so the job signs the digest
@@ -138,6 +139,15 @@ Actions UI defaults to the default branch -- so a regexp naming only
 verify. Everyone who can dispatch this workflow can already sign from an
 arbitrary branch via a same-repo pull request, so accepting branch heads
 widens nothing (#316).
+
+The consumer (`build-ghcr`) also fails closed: CI downloads cosign v2.5.3
+with the platform SHA-256 pinned by `sigstore/cosign-installer@d58896d6…`,
+outside the context under `${RUNNER_TEMP}/utah-tools`, and invokes its absolute
+path because the reusable builder uses `sudo` with `secure_path`. Local kernel
+builds require cosign on PATH. The tag is resolved once through `skopeo`, the
+same issuer/ref regexp verifies the resulting immutable digest, and only that
+digest reaches `BASE_IMAGE`. Registry credentials use a private temporary
+Docker keychain outside the checkout and are removed at recipe exit.
 
 ## The build matrix calls reusable-build.yml twice
 
@@ -277,6 +287,72 @@ the ISO is written. Successful post-fix E2E run `35469913325` measured 3.9G
 headroom for the largest flavor. The guard lives in the build script, so it
 holds for every caller (local `just iso`, the CI LUKS job, and any deliberate
 rerun), not just one workflow.
+
+## Release and branch cadence, and the factory pin
+
+The cadence is RFC'd in #336. What runs today:
+
+- Open pull requests against `main`, never `testing`. `sync-main-to-testing.yml`
+  resets `testing` to `main` on every push to `main` and again nightly on its
+  own `20 22 * * *` schedule, so a commit merged straight into `testing` is
+  orphaned: #404 was lost this way and had to be re-landed. `build.yml` runs on
+  every pull request and declares `push: branches: [testing]`, but that trigger
+  is not how a `main` commit reaches the image tags: the sync pushes `testing`
+  with the workflow's own `GITHUB_TOKEN`, and a `GITHUB_TOKEN` push starts no
+  workflow. `sync-main-to-testing.yml`'s `build` job therefore dispatches the
+  build explicitly (`gh workflow run build.yml --ref testing`) once the sync
+  job returns, which is the path that actually produces the images.
+- `:testing` advances per green build, not on a clock: the tags move in
+  `post-testing-e2e.yml`, after the LUKS ISO matrix and the production-ISO
+  composition both pass. `promote-testing-to-main.yml` is the daily 04:00 UTC
+  heartbeat, so `:testing` is at most a day behind `main` and `main` is at
+  most a day behind the newest validated `testing` image.
+- `:stable` moves in `execute-release.yml` on every promotion push to `main`,
+  gated by `run_release_gate: true` over `smoke,common`. A weekly promotion
+  rather than a per-promotion one is still an open question in #336 -- that is
+  a maintainer policy call, not a code gap, and nothing in this tree should
+  encode a guess at it.
+
+`bump-factory-pin` is the part of #336 that is code. `ARG PACKAGE_IMAGE_SHA`
+is the digest of `ghcr.io/projectbluefin/utah-packages`, the RPM repository
+every image installs from, and until this tool existed nothing revved it: the
+factory published GNOME 51 finals and the pin kept serving the previous digest
+until a human noticed. `scripts/bump-factory-pin.py` resolves the tag through
+the registry's own manifest endpoint, reading `Docker-Content-Digest` off the
+response -- anonymous bearer token, no skopeo install, no credential in the
+log -- and rewrites one line of the Containerfile.
+
+The rewrite is deliberately timid, and `tests/test_bump_factory_pin.py` pins
+why: it refuses a pin it could not parse, refuses a `PACKAGE_IMAGE_REF` that
+does not compose from `PACKAGE_IMAGE`/`PACKAGE_IMAGE_SHA` (a bump that would
+never reach the build), and replaces exactly one line. Its three modes are
+`--print` (resolve and report, write nothing), `--check` (exit non-zero when
+the pin is stale, write nothing), and the default (rewrite), plus `--digest` to
+take a digest resolved by another job. The suite is offline by default; the one
+test that talks to the registry runs only with `UTAH_NETWORK_TESTS=1`.
+
+The schedule is `.github/workflows/bump-factory-pin.yml`: Mondays 07:00 UTC and
+on demand, a read-only resolve job followed by a one-line pull request against
+`testing` opened with `peter-evans/create-pull-request` -- the same mechanism
+the ISO documentation PR already uses, under the same never-merge rule. Both
+jobs check out `testing` once and run the script from that checkout, so a
+`workflow_dispatch` fired before `scripts/bump-factory-pin.py` has reached
+`testing` fails on the missing file: wait for the sync, or dispatch from a ref
+that already carries the script.
+
+That pull request arrives with no checks on it. `create-pull-request` authors
+it as `github-actions[bot]` using the default `GITHUB_TOKEN`, and GitHub does
+not fire `on: pull_request` workflows for that token; this repository holds no
+App or PAT credential to author it with instead. The build matrix is therefore
+a manual step -- push an empty commit to `automation/factory-pin`, or close and
+reopen the pull request, and `build.yml` runs. An empty check list on one of
+these is not a passing build.
+
+Renovate is not the mechanism here because the pin is an `ARG` indirection, not
+a `FROM image@sha256:` -- the built-in dockerfile manager cannot see it, and
+the org custom manager only covers `image-versions.yml`. A future
+`image-versions.yml` in this repository would make that a duplicate; do not
+add one without retiring this workflow.
 
 ## Verification
 

@@ -14,7 +14,7 @@
         "actions",
         "promotion"
       ],
-      "description": "build.yml contract gate, kernel-cache job, main/kernel matrix split, promote-testing-to-main and sync-main-to-testing, actions@v1 delegation. Use when changing .github/workflows/ or debugging a red run.",
+      "description": "build.yml contract gate, kernel-cache job, main/kernel matrix split, promote-testing-to-main and sync-main-to-testing, actions@v1 delegation, weekly factory-pin bump. Use when changing .github/workflows/ or debugging a red run.",
       "version": "1.0",
       "last_updated": "2026-09-29",
       "doc_type": "reference"
@@ -34,7 +34,7 @@
       ],
       "description": "Layer discipline: COPY folding, late per-image ARGs, script staging, clean+lint in one layer. Use when modifying the Containerfile, adding a script, or investigating build time.",
       "version": "1.0",
-      "last_updated": "2026-09-26",
+      "last_updated": "2026-10-02",
       "doc_type": "policy"
     },
     {
@@ -52,7 +52,7 @@
       ],
       "description": "The runtime desktop contract in contracts/bluefin-desktop.toml and its in-image verifiers. Use when changing branding, os-release, service presets, GNOME extensions, or first-boot Flatpak behavior.",
       "version": "1.0",
-      "last_updated": "2026-09-22",
+      "last_updated": "2026-09-30",
       "doc_type": "policy"
     },
     {
@@ -124,8 +124,27 @@
       ],
       "description": "Bluefin parity contract: verbatim bluefin.toml, utah.toml overlay, device firmware, [unavailable] rules, repository policy. Use when adding, removing, or debugging packages or parity/check-repos failures.",
       "version": "1.0",
-      "last_updated": "2026-09-22",
+      "last_updated": "2026-10-01",
       "doc_type": "policy"
+    },
+    {
+      "id": "setup-hooks",
+      "name": "setup-hooks",
+      "one_line_purpose": "Change a first-boot setup hook without breaking the once-only contract.",
+      "entry_point": "docs/skills/setup-hooks.md",
+      "category": "meta",
+      "status": "active",
+      "tags": [
+        "hooks",
+        "first-boot",
+        "version-script",
+        "libsetup",
+        "bootupd"
+      ],
+      "description": "First-boot setup hooks stamp completion through libsetup.sh. Use when editing a hook, migrating one off the legacy `version-script` gate, or debugging a hook that never runs or runs every boot.",
+      "version": "1.0",
+      "last_updated": "2026-09-30",
+      "doc_type": "procedure"
     },
     {
       "id": "skill-improvement",

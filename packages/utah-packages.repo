@@ -1,6 +1,15 @@
 # Digest-pinned OCI repository copied from projectbluefin/utah-packages.
 # RPMs are authenticated by the pinned package image and its OCI provenance;
 # the repository itself does not carry an RPM GPG key.
+# factory-pin: sha256:0f04cff2dd0b085604ff3cd79d538ab14b97cbe356980f7d365a35dfc70c857b
+# The stamp above mirrors ARG PACKAGE_IMAGE_SHA in the Containerfile, and a pin
+# bump must move both together (a test enforces it). The ARG alone does not
+# invalidate the package transaction's registry layer cache on CI's buildah:
+# the transaction reads the `packages` stage through a bind mount, which is
+# not part of the RUN cache key, and the global ARG change does not bust the
+# layer either -- so a pin-only commit rebuilt nothing and shipped the previous
+# factory's packages (#371). This file is COPY'd before the transaction, and
+# COPY content always keys the cache, so the stamp is what forces a rebuild.
 [utah-packages]
 # utah-install: true
 name=Utah package factory

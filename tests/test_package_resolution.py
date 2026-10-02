@@ -9,6 +9,7 @@ from pathlib import Path
 import subprocess
 import tarfile
 import tempfile
+import tomllib
 import unittest
 from unittest.mock import patch
 
@@ -66,7 +67,7 @@ class PackageResolutionTests(unittest.TestCase):
             for name, _ in pairs:
                 (source / name).write_bytes((ROOT / "scripts" / name).read_bytes())
             script = loop.replace("/tmp/utah-scripts", str(source)).replace(
-                "/usr/local/libexec", str(destination))
+                "/usr/libexec", str(destination))
             subprocess.run(["bash", "-eu", "-c", script], check=True)
             self.assertEqual({p.name for p in destination.iterdir()}, {p[1] for p in pairs})
             for name, installed in pairs:
@@ -129,6 +130,126 @@ class PackageResolutionTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 checker.pinned_inputs(path)
 
+    def test_factory_pin_stamp_matches_containerfile(self):
+        arg = re.search(r"^ARG PACKAGE_IMAGE_SHA=(sha256:[0-9a-f]{64})$",
+                        (ROOT / "Containerfile").read_text(), re.M)
+        self.assertIsNotNone(arg)
+        stamp = re.search(r"^# factory-pin: (sha256:[0-9a-f]{64})$",
+                          (ROOT / "packages" / "utah-packages.repo").read_text(), re.M)
+        self.assertIsNotNone(stamp,
+                             "packages/utah-packages.repo lost its '# factory-pin:' stamp")
+        self.assertEqual(
+            stamp.group(1), arg.group(1),
+            "A pin bump must move the Containerfile ARG and the .repo stamp together: "
+            "the stamp is the transaction's layer-cache key (#371).")
+
+    def test_factory_digest_label_names_the_pin(self):
+        text = (ROOT / "Containerfile").read_text()
+        self.assertIn('LABEL io.projectbluefin.utah.factory-digest="${PACKAGE_IMAGE_SHA}"', text)
+        # A global ARG is only in scope for FROM lines; the main stage must
+        # re-declare it bare or the label bakes empty.
+        self.assertIsNotNone(
+            re.search(r"^ARG PACKAGE_IMAGE_SHA\s*$", text, re.M),
+            "main stage lost its bare 'ARG PACKAGE_IMAGE_SHA' re-declaration, "
+            "so the factory-digest label would bake empty")
+
+    def test_evr_map_skips_unparseable_and_normalizes_epoch(self):
+        lines = ["gnome-shell x86_64 (none):51.0-1.hum1.bfin",
+                 "gdm x86_64 1:51.0-1.hum1.bfin",
+                 "package mutter is not installed"]
+        self.assertEqual(installer.evr_map(lines), {
+            ("gnome-shell", "x86_64"): "0:51.0-1.hum1.bfin",
+            ("gdm", "x86_64"): "1:51.0-1.hum1.bfin",
+        })
+
+    def test_repo_evr_returns_none_when_the_repository_is_absent(self):
+        with patch.object(installer.subprocess, "run", return_value=
+                          subprocess.CompletedProcess([], 1, stdout="", stderr="Error")) as run:
+            self.assertIsNone(installer.repo_evr("dnf5", "utah-packages", ["shell"]))
+            command = run.call_args.args[0]
+            self.assertIn("repoquery", command)
+            self.assertIn("--enablerepo=utah-packages", command)
+            self.assertIn("--latest-limit=1", command)
+        with patch.object(installer.subprocess, "run", return_value=
+                          subprocess.CompletedProcess(
+                              [], 0, stdout="shell x86_64 0:1.0-1.fc44\n")):
+            self.assertEqual(installer.repo_evr("dnf5", "utah-packages", ["shell"]),
+                             {("shell", "x86_64"): "0:1.0-1.fc44"})
+
+    def test_containerfile_pins_generic_logos(self):
+        text = (ROOT / "Containerfile").read_text()
+        url = re.search(r"^ARG GENERIC_LOGOS_URL=(\S+)$", text, re.M)
+        self.assertIsNotNone(url)
+        self.assertTrue(url.group(1).endswith(".noarch.rpm"), url.group(1))
+        sha = re.search(r"^ARG GENERIC_LOGOS_SHA256=([0-9a-f]{64})$", text, re.M)
+        self.assertIsNotNone(sha)
+        self.assertIn("curl -fsSL \"${GENERIC_LOGOS_URL}\" -o /tmp/generic-logos.rpm", text)
+        self.assertIn('echo "${GENERIC_LOGOS_SHA256}  /tmp/generic-logos.rpm" | sha256sum --check --strict', text)
+
+    def test_swap_distro_logos_runs_erase_install_erase(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rpm = Path(tmp) / "generic-logos.rpm"
+            rpm.touch()
+            with patch.object(installer.subprocess, "run", side_effect=[
+                    subprocess.CompletedProcess([], 0, stdout="fedora-logos"),
+                    subprocess.CompletedProcess([], 0, stdout=""),
+                    subprocess.CompletedProcess([], 0, stdout=""),
+                    subprocess.CompletedProcess([], 0, stdout=""),
+                    subprocess.CompletedProcess([], 0, stdout=""),
+            ]) as run:
+                self.assertEqual(installer.swap_distro_logos(rpm, Path(tmp)), 0)
+            argv = [call.args[0] for call in run.call_args_list]
+            self.assertEqual(len(argv), 5)
+            self.assertEqual(argv[1][:4], ("rpm", "--erase", "--nodeps", "fedora-logos"))
+            self.assertEqual(argv[2][:3], ("rpm", "--install", str(rpm)))
+            self.assertEqual(argv[3], ("rpm", "--erase", "--nodeps", "--nodb", "generic-logos"))
+
+    def test_swap_skips_when_fedora_logos_is_absent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rpm = Path(tmp) / "generic-logos.rpm"
+            rpm.touch()
+            with patch.object(installer.subprocess, "run", return_value=
+                              subprocess.CompletedProcess([], 0, stdout="")) as run:
+                self.assertEqual(installer.swap_distro_logos(rpm, Path(tmp)), 0)
+            for call in run.call_args_list:
+                self.assertEqual(call.args[0][:2], ["rpm", "-qa"])
+
+    def test_swap_fails_when_a_logo_file_survives(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rpm = Path(tmp) / "generic-logos.rpm"
+            rpm.touch()
+            (Path(tmp) / "fedora-gdm-logo.png").touch()
+            with patch.object(installer.subprocess, "run", side_effect=[
+                    subprocess.CompletedProcess([], 0, stdout="fedora-logos"),
+                    subprocess.CompletedProcess([], 0, stdout=""),
+                    subprocess.CompletedProcess([], 0, stdout=""),
+                    subprocess.CompletedProcess([], 0, stdout=""),
+                    subprocess.CompletedProcess([], 0, stdout=""),
+            ]):
+                self.assertEqual(installer.swap_distro_logos(rpm, Path(tmp)), 1)
+
+    def test_swap_fails_when_the_rpm_is_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(installer.subprocess, "run") as run:
+                self.assertEqual(
+                    installer.swap_distro_logos(Path(tmp) / "absent.rpm", Path(tmp)), 1)
+            run.assert_not_called()
+
+    def test_find_skew_names_mismatches_only(self):
+        have = {("gnome-shell", "x86_64"): "0:51~beta-1.hum1.bfin",
+                ("mutter", "x86_64"): "0:51.0-1.hum1.bfin",
+                ("removed", "x86_64"): "0:1.0-1.hum1.bfin"}
+        offered = {("gnome-shell", "x86_64"): "0:51.0-1.hum1.bfin",
+                   ("mutter", "x86_64"): "0:51.0-1.hum1.bfin",
+                   ("uninstalled", "x86_64"): "0:2.0-1.hum1.bfin"}
+        skew = installer.find_skew(have, offered)
+        self.assertEqual(len(skew), 1)
+        self.assertIn("gnome-shell.x86_64", skew[0])
+        self.assertIn("51~beta", skew[0])
+        self.assertIn("51.0-1", skew[0])
+        self.assertEqual(installer.find_skew(
+            {("mutter", "x86_64"): "0:51.0-1.hum1.bfin"}, offered), [])
+
     def test_install_repos_derived_from_packages(self):
         repos = installer.install_repos(ROOT / "packages")
         self.assertEqual(repos, ("utah-packages", "public-hummingbird-x86_64-rpms"))
@@ -170,7 +291,7 @@ class PackageResolutionTests(unittest.TestCase):
             overlay = dirpath / "utah.toml"
             base.write_text('[fedora]\npackages=["base"]\n')
             overlay.write_text('[gnome]\npackages=[]\n')
-            
+
             # Missing hummingbird
             repos_dir = dirpath / "repos"
             repos_dir.mkdir()
@@ -179,6 +300,138 @@ class PackageResolutionTests(unittest.TestCase):
                 with self.assertRaises(ValueError) as ctx:
                     installer.main()
                 self.assertIn("public-hummingbird-x86_64-rpms", str(ctx.exception))
+
+
+class ResolveOneTests(unittest.TestCase):
+    """--resolve-one is the single-name probe the unavailable-entry gate loops over."""
+
+    def probe(self, output, code=1):
+        with patch("sys.argv", ["install", "--resolve-one", "candidate"]), \
+             patch.object(installer, "dnf_path", return_value="dnf5"), \
+             patch.object(installer, "install_repos", return_value=("utah-packages",)), \
+             patch.object(installer.subprocess, "run", return_value=
+                          subprocess.CompletedProcess([], code, stdout=output)) as run, \
+             contextlib.redirect_stdout(io.StringIO()) as stdout:
+            return installer.main(), run.call_args.args[0], stdout.getvalue()
+
+    def test_resolving_package_exits_zero_with_a_marker(self):
+        rc, command, log = self.probe(
+            "Transaction Summary:\nInstall 1 Package\nOperation aborted.\n")
+        self.assertEqual(rc, 0)
+        self.assertEqual(command, ["dnf5", "--assumeno", "--disablerepo=*",
+                                   "--enablerepo=utah-packages",
+                                   "-x", "PackageKit*", "install", "candidate"])
+        self.assertIn("UTAH_RESOLVE_ONE candidate 0", log.splitlines())
+
+    def test_already_installed_counts_as_resolves(self):
+        # A package the base already carries is the most stale an
+        # [unavailable] entry can be: it resolves trivially.
+        rc, _, log = self.probe("Nothing to do.\n", code=0)
+        self.assertEqual(rc, 0)
+        self.assertIn("UTAH_RESOLVE_ONE candidate 0", log.splitlines())
+
+    def test_unresolvable_package_exits_one(self):
+        for output in ("No match for argument: candidate\n",
+                       "nothing provides libmissing.so.1\n",
+                       "Error: Failed to download metadata\n",
+                       "Operation aborted.\n"):
+            with self.subTest(output=output):
+                rc, _, log = self.probe(output)
+                self.assertEqual(rc, 1)
+                self.assertIn("UTAH_RESOLVE_ONE candidate 1", log.splitlines())
+
+    def test_unexpected_exit_code_fails_even_with_summary(self):
+        rc, _, log = self.probe("Transaction Summary\n", code=125)
+        self.assertEqual(rc, 1)
+        self.assertIn("UTAH_RESOLVE_ONE candidate 1", log.splitlines())
+
+    def test_full_dnf_output_stays_in_the_log(self):
+        rc, _, log = self.probe("No match for argument: candidate\n")
+        self.assertEqual(rc, 1)
+        self.assertIn("No match for argument: candidate", log)
+
+    def test_cannot_combine_with_resolve_or_check(self):
+        for flag in ("--resolve", "--check"):
+            with self.subTest(flag=flag), \
+                 patch("sys.argv", ["install", "--resolve-one", "candidate",
+                                    flag, "bluefin.toml", "utah.toml"]), \
+                 contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    installer.main()
+
+
+class UnavailableContractTests(unittest.TestCase):
+    """[unavailable] is documented parity debt: every entry carries a tracking
+    issue, none of it is in the install set, and the deliberate exclusions
+    are policy rather than accidents."""
+
+    OVERLAY = ROOT / "packages/utah.toml"
+
+    def names(self):
+        return checker.unavailable_names(self.OVERLAY)
+
+    def section_text(self):
+        # Line-based: an earlier section's prose mentions "[unavailable]",
+        # so a substring split would cut mid-comment.
+        lines = self.OVERLAY.read_text().splitlines()
+        start = lines.index("[unavailable]")
+        end = next((index for index in range(start + 1, len(lines))
+                    if lines[index].startswith("[")), len(lines))
+        return "\n".join(lines[start:end])
+
+    def comment_block(self, name):
+        """The #-comment block whose header names this entry.
+
+        Headers start at column zero in lowercase ("# anaconda-live,
+        slitherer"); body lines are indented, blank, or lone "#", so the
+        block runs to the next header, blank line, or non-comment line.
+        """
+        lines = self.section_text().splitlines()
+        starts = [index for index, line in enumerate(lines)
+                  if re.search(rf"^#.*\b{re.escape(name)}\b", line)]
+        self.assertTrue(starts, f"{name} has no comment block in [unavailable]")
+        block = []
+        for line in lines[starts[0] + 1:]:
+            if not line.startswith("#") or re.match(r"^# [a-z0-9]", line):
+                break
+            block.append(line)
+        return "\n".join([lines[starts[0]], *block])
+
+    def test_fish_stays_excluded(self):
+        self.assertIn("fish", self.names(),
+                      "Bluefin classic shipping every shell was a mistake Utah "
+                      "does not repeat (bare-metal audit #382)")
+
+    def test_firefox_rpm_stays_excluded(self):
+        self.assertIn("firefox", self.names(),
+                      "Utah ships the browser as the org.mozilla.firefox Flatpak")
+
+    def test_deliberate_exclusions_are_all_in_the_overlay(self):
+        self.assertLessEqual(set(checker.DELIBERATELY_EXCLUDED), set(self.names()),
+                             "a deliberate exclusion left [unavailable] without "
+                             "repealing the policy")
+
+    def test_every_entry_carries_a_tracking_issue(self):
+        for name in self.names():
+            with self.subTest(name=name):
+                self.assertIsNotNone(re.search(r"#\d+", self.comment_block(name)),
+                                     f"{name} lost its tracking issue")
+
+    def test_unavailable_entries_are_absent_from_the_install_contract(self):
+        # The raw Bluefin sections legitimately list these names -- that is
+        # what makes them parity debt. The assertion belongs on contract(),
+        # which must subtract every one of them on every Fedora major the
+        # manifest defines a section for.
+        base = ROOT / "packages/bluefin.toml"
+        majors = [None] + [section.removeprefix("fedora_v")
+                           for section in tomllib.loads(base.read_text())
+                           if section.startswith("fedora_v")]
+        install = set(installer.section(self.OVERLAY, "build"))
+        for major in majors:
+            install |= set(installer.contract(base, self.OVERLAY, major))
+        overlap = sorted(set(self.names()) & install)
+        self.assertEqual(overlap, [],
+                         f"[unavailable] entries still installed: {overlap}")
 
 
 class ParityContractTests(unittest.TestCase):
@@ -234,6 +487,13 @@ class ParityContractTests(unittest.TestCase):
         self.assertIn(f"  - {target}\n", stderr.getvalue())
 
     def test_parity_ref_exists_and_contains_valid_commit_sha(self):
+        """Verifies the #152 pinned-parity-ref invariant.
+
+        These assertions belong to the pinned-ref work (#152), not the
+        contract-composition change that bundled them in; they pin the
+        parity revision the build must track. Kept in ParityContractTests
+        because that is where the parity file is read.
+        """
         ref_file = ROOT / "packages/.bluefin-parity-ref"
         self.assertTrue(ref_file.is_file(), "packages/.bluefin-parity-ref must exist")
         ref = ref_file.read_text().strip()
@@ -244,6 +504,12 @@ class ParityContractTests(unittest.TestCase):
         )
 
     def test_check_parity_recipe_guards_the_ref_format(self):
+        """Covers the #152 pinned-ref format guard in the Justfile.
+
+        Part of the pinned-ref work (#152) that was bundled into an
+        unrelated PR; asserts the check-parity recipe rejects a ref that is
+        not a full 40-character SHA before it is fetched.
+        """
         justfile = (ROOT / "Justfile").read_text()
         self.assertIn("packages/.bluefin-parity-ref", justfile)
         self.assertRegex(
@@ -365,6 +631,44 @@ class DesktopUnitEnablementTests(unittest.TestCase):
             with self.subTest(unit=unit):
                 self.assertIn(unit, self.script_units("enable_unit"))
                 self.assertIn(unit, self.preset_directives("enable"))
+
+    def test_systemd_boot_update_enabled_and_gated_on_the_loader(self):
+        # projectbluefin/utah#363: on systemd-boot systems bootupd stands down
+        # by design ("managed with bootctl"), so the image must carry the boot
+        # manager binaries and run bootctl update itself. The gate keeps BIOS
+        # systems (no efivars) off an ESP that is not systemd-boot's; Fedora
+        # GRUB-EFI also sets LoaderInfo via grub2's bli module, where bootctl
+        # update is a harmless no-op. Secure Boot systems must be excluded
+        # outright, or the unsigned build would overwrite a signed sd-boot and
+        # the firmware would reject the next boot.
+        self.assertIn("systemd-boot-update.service", self.script_units("enable_unit"))
+        self.assertIn("systemd-boot-update.service", self.preset_directives("enable"))
+
+        dropin = ROOT / (
+            "system_files/shared/usr/lib/systemd/system/"
+            "systemd-boot-update.service.d/10-only-on-systemd-boot.conf"
+        )
+        self.assertTrue(dropin.is_file(), f"missing loader gate: {dropin}")
+        text = dropin.read_text()
+        self.assertIn("[Unit]", text)
+        self.assertIn(
+            "ConditionPathExists=/sys/firmware/efi/efivars/"
+            "LoaderInfo-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f",
+            text,
+        )
+        self.assertIn("ConditionSecurity=!uefi-secureboot", text)
+        self.assertIn("#363", text)
+
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        self.assertIn(
+            "systemd-boot-update.service",
+            contract.get("services", {}).get("enabled", []),
+        )
+        overlay = tomllib.loads((ROOT / "packages/utah.toml").read_text())
+        self.assertIn(
+            "systemd-boot-unsigned",
+            overlay.get("services", {}).get("packages", []),
+        )
 
 
 if __name__ == "__main__":

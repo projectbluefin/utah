@@ -93,7 +93,11 @@ mkdir -p /var/fisherman-tmp
 # tag that the ISO builder imports into the VFS store, never the build host's
 # localhost source ref.
 mkdir -p /usr/share/bootc-installer/images /etc/bootc-installer
-install -Dm0644 /usr/share/ublue-os/bluefin-logos/chicken.png \
+# utahraptor.png is the current black-outline Bluefin look art, rendered at
+# 512x512 from projectbluefin/artwork assets/vector/dinos/jacob-schnurr/
+# bluefin-look/bluefin-look-original/optimized/bluefin-look-optimized.svg.
+# Common's chicken.png is the older blue-outline version.
+install -Dm0644 "${SCRIPT_DIR}/images/utahraptor.png" \
     /usr/share/bootc-installer/images/utahraptor.png
 cp "${SCRIPT_DIR}/etc/bootc-installer/images.json" /etc/bootc-installer/images.json
 python3 - <<PY
