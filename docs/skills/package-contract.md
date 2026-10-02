@@ -254,7 +254,15 @@ a partition grows past the recorded state; a name moving from
 `factory-built` to `hummingbird-available` is a Hummingbird rebuild
 landing and is silent. A name disappearing from the baseline (an operator
 moved it into `[parity]` and closed the gap) is silent too — only new
-names that did not exist anywhere in the baseline trigger the gate.
+names that did not exist anywhere in the baseline trigger the partition gate.
+
+The check also compares the current Hummingbird baseurl with the recorded
+`hummingbird_baseurl`. A URL change makes the baseline stale even when all
+package names are unchanged; the error shows both URLs. Review the source
+change, then run `just audit-bluefin-parity --write` to record a fresh baseline.
+Legacy baselines without this field retain the partition-only comparison.
+This is a source-identity check, not a repodata freshness check: content can
+change at the same URL without triggering it.
 
 Bootstrap is a one-time manual command: on a fresh checkout where
 `baselines/audit-baseline.json` is missing, `just check-audit-parity`

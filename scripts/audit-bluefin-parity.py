@@ -435,8 +435,13 @@ def baseline_record(parts: dict[str, list[str]], ref: str, factory_ref: str,
     }
 
 
-def compare_to_baseline(parts: dict[str, list[str]], baseline: dict) -> list[str]:
-    """Diff each partition against the recorded baseline.
+def compare_to_baseline(parts: dict[str, list[str]], baseline: dict,
+                        baseurl: str) -> list[str]:
+    """Check the Hummingbird source and diff partitions against the baseline.
+
+    A changed recorded Hummingbird URL invalidates the baseline even when
+    the package names did not change. Legacy baselines without that field
+    still use the partition comparison.
 
     A name migrating between partitions is celebrated as a rebuild
     landing, not flagged as drift. The "moved elsewhere" set per partition
@@ -456,6 +461,11 @@ def compare_to_baseline(parts: dict[str, list[str]], baseline: dict) -> list[str
     all_old = set().union(*old_names_by_partition.values())
 
     msgs: list[str] = []
+    if "hummingbird_baseurl" in baseline and baseline["hummingbird_baseurl"] != baseurl:
+        msgs.append(
+            "stale baseline: hummingbird_baseurl changed from "
+            f"{baseline['hummingbird_baseurl']!r} to {baseurl!r}"
+        )
     for partition_name in ("hummingbird-available", "factory-built", "nowhere"):
         old = old_names_by_partition[partition_name]
         new = set(parts[partition_name])
@@ -591,9 +601,9 @@ def cmd_run(args) -> int:
 
 
 def cmd_check(args) -> int:
-    """Partition and fail if any partition grew past the baseline.
+    """Partition and fail on a changed Hummingbird URL or partition growth.
 
-    The check is silent on a clean run (no growth); on growth it prints
+    The check is silent on a clean run; on growth it prints
     which partitions grew, by how much, and which names. The operator then
     either runs `--write` to commit the new debt or files the issue that
     closed the gap in the other direction.
@@ -605,12 +615,12 @@ def cmd_check(args) -> int:
               file=sys.stderr)
         return 2
 
-    ref, parts, *_ = fetch_partition(args)
-    growth = compare_to_baseline(parts, baseline)
+    ref, parts, hummingbird, factory, factory_ref, baseurl = fetch_partition(args)
+    growth = compare_to_baseline(parts, baseline, baseurl)
     if growth:
         for msg in growth:
             print(f"ERROR: {msg}", file=sys.stderr)
-        print(f"ERROR: partitions grew past {baseline_path()}; "
+        print(f"ERROR: audit differs from {baseline_path()}; "
               "either fix the underlying gap or run `just audit-bluefin-parity --write` "
               "to commit the new debt", file=sys.stderr)
         return 1

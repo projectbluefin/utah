@@ -174,7 +174,7 @@ class BaselineTests(unittest.TestCase):
             "factory-built": ["modem"],
             "nowhere": ["obscure", "libgda"],
         }
-        msgs = audit.compare_to_baseline(new, baseline)
+        msgs = audit.compare_to_baseline(new, baseline, "https://hummingbird/")
         self.assertEqual(msgs, ["nowhere: +1 ['libgda']"])
 
     def test_compare_silent_when_no_growth(self):
@@ -188,7 +188,7 @@ class BaselineTests(unittest.TestCase):
             "factory-built": ["router"],
             "nowhere": ["obscure"],
         }
-        self.assertEqual(audit.compare_to_baseline(new, baseline), [])
+        self.assertEqual(audit.compare_to_baseline(new, baseline, "https://hummingbird/"), [])
 
     def test_compare_reports_shrink_as_noop(self):
         # A name dropping from a partition because the operator closed
@@ -203,7 +203,7 @@ class BaselineTests(unittest.TestCase):
             "factory-built": ["modem"],
             "nowhere": ["obscure"],
         }
-        self.assertEqual(audit.compare_to_baseline(new, baseline), [])
+        self.assertEqual(audit.compare_to_baseline(new, baseline, "https://hummingbird/"), [])
 
     def test_compare_reports_regression_in_every_partition(self):
         # A brand-new name in any partition is a regression; the gate
@@ -219,7 +219,7 @@ class BaselineTests(unittest.TestCase):
             "factory-built": ["modem", "modem-new"],
             "nowhere": ["obscure", "nowhere-new"],
         }
-        msgs = audit.compare_to_baseline(new, baseline)
+        msgs = audit.compare_to_baseline(new, baseline, "https://hummingbird/")
         self.assertEqual(len(msgs), 3)
         self.assertIn("hummingbird-available: +1 ['shell-new']", msgs)
         self.assertIn("factory-built: +1 ['modem-new']", msgs)
@@ -233,6 +233,64 @@ class BaselineTests(unittest.TestCase):
         self.assertEqual(record["hummingbird-available"], ["shell"])
         # JSON round-trips: the recorded baseline is the file on disk.
         self.assertEqual(json.loads(json.dumps(record))["ref"], "deadbeef")
+
+
+class HummingbirdBaselineTests(unittest.TestCase):
+    def setUp(self):
+        self.baseurl = "https://hummingbird.example/repo/"
+        self.parts = {
+            "hummingbird-available": ["shell"],
+            "factory-built": [],
+            "nowhere": [],
+        }
+        self.baseline = audit.baseline_record(
+            self.parts, "deadbeef", "registry/name@sha256:abc", self.baseurl
+        )
+
+    def test_matching_url_is_silent(self):
+        self.assertEqual(audit.compare_to_baseline(
+            self.parts, self.baseline, self.baseurl
+        ), [])
+
+    def test_changed_url_fails_with_unchanged_packages(self):
+        changed = "https://hummingbird.example/other/"
+        messages = audit.compare_to_baseline(self.parts, self.baseline, changed)
+        self.assertEqual(messages, [
+            "stale baseline: hummingbird_baseurl changed from "
+            f"{self.baseurl!r} to {changed!r}"
+        ])
+
+    def test_legacy_baseline_without_url_is_silent(self):
+        del self.baseline["hummingbird_baseurl"]
+        self.assertEqual(audit.compare_to_baseline(
+            self.parts, self.baseline, self.baseurl
+        ), [])
+
+    def test_staleness_does_not_hide_growth(self):
+        self.parts["nowhere"] = ["new-package"]
+        messages = audit.compare_to_baseline(
+            self.parts, self.baseline, "https://hummingbird.example/other/"
+        )
+        self.assertIn("stale baseline: hummingbird_baseurl", messages[0])
+        self.assertEqual(messages[1], "nowhere: +1 ['new-package']")
+
+    def test_check_threads_url_and_reports_failure(self):
+        from argparse import Namespace
+        from contextlib import redirect_stderr
+        from io import StringIO
+        from unittest.mock import patch
+
+        changed = "https://hummingbird.example/other/"
+        fetched = ("deadbeef", self.parts, {}, {}, "registry/name@sha256:abc", changed)
+        stderr = StringIO()
+        with patch.object(audit, "load_baseline", return_value=self.baseline), \
+             patch.object(audit, "fetch_partition", return_value=fetched), \
+             redirect_stderr(stderr):
+            self.assertEqual(audit.cmd_check(Namespace(ref=None)), 1)
+        self.assertIn("stale baseline: hummingbird_baseurl", stderr.getvalue())
+        self.assertIn(self.baseurl, stderr.getvalue())
+        self.assertIn(changed, stderr.getvalue())
+        self.assertIn("--write", stderr.getvalue())
 
 
 class PrimaryParsingTests(unittest.TestCase):
