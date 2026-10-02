@@ -39,7 +39,12 @@ or pinned third-party actions:
 - `.github/workflows/update-bluefin-parity.yml` -- nightly and manual
   dispatch. It resolves Bluefin `main` and uses one fixed branch,
   `automation/bluefin-parity`, so `create-pull-request` updates the existing
-  review rather than opening duplicates. It does not auto-merge. Before
+  review rather than opening duplicates. It does not auto-merge. That branch is
+  disposable: `create-pull-request` rebuilds it from `main` plus the generated
+  changes each run and force-resets it when the result differs, so a commit
+  pushed onto the open bump PR is discarded at the next run. Overlay fixes the
+  bump needs go in their own pull request against `main`, not onto the bump
+  branch; see `package-contract.md`. Before
   proposing, it reruns `scripts/generate-site-data.py` and
   `scripts/check-doc-counts.py --write`, so the bump carries the new
   `site/data/packages.json` and the README / `package-contract.md` counts
