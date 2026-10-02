@@ -97,7 +97,7 @@ Runtime repositories are the pinned `utah-packages` repository (listed first)
 plus Hummingbird's own repository only. **Fedora repositories are never
 enabled at runtime** — they are bootstrap material for the package factory's
 buildroot, not a source of installed packages (Containerfile package-RUN
-comment, `Containerfile` ~L94; repo files copied at `Containerfile` L40).
+comment, `Containerfile` ~L155; repo files copied at `Containerfile` L59).
 `Containerfile.kernel`'s builder stage may use the pinned Fedora 44 repository
 (`packages/fedora-44.repo`) strictly as a builder-only toolchain.
 
