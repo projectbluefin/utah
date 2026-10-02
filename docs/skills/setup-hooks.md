@@ -88,15 +88,20 @@ use.
 | `05-bootupctl-adopt.sh` | Run `bootupctl adopt-and-update` on first boot so a switched-into-Utah system sees its on-disk shim and GRUB as managed by `bootupd`. Skips live sessions (`/sysroot` on `erofs`/`squashfs`) and image variants without `bootupctl` installed, both without committing so a later switch retries. Tracked by #363. |
 | `10-tailscale.sh` | Set the local user as the Tailscale operator. |
 | `11-framework-ucsi-workaround.sh` | Append the `usbcore.autosuspend=-1` karg on Intel-Core-Ultra Frameworks. |
-| `20-home-labels.sh` | Relabel `/var/home` once on systems installed before #261. |
+| `20-home-labels.sh` | Relabel `/var/home` once on systems installed before #261, repairing a mis-keyed active `file_contexts.homedirs` first (#474). |
 | `99-flatpaks.sh` | Drop the Firefox system-config defaults at first boot. |
 
 `05-bootupctl-adopt.sh` is the canonical example of a transient-skip body:
 each guard (`command -v bootupctl`, the live-session check) exits without
 committing so a later `bootc switch` that brings bootupctl in or moves off
-the live root retries cleanly. `20-home-labels.sh` is the deliberate-skip
-example: a `restorecon` that finds no work to do commits and stops
-re-running.
+the live root retries cleanly. `20-home-labels.sh` commits only after it
+verifies the real on-disk label, not merely that `restorecon` exited zero
+(#474): `file_contexts.subs_dist` aliases `/var/home` to `/home`, so a rule
+keyed on the wrong root is unreachable and `restorecon` silently relabels
+nothing. The hook detects that condition by comparing the active
+`file_contexts.homedirs` against the image's own `/usr/etc` default,
+reinstalls the pristine copy when they disagree on the home root, and only
+then trusts a post-`restorecon` `stat` of `/var/home`.
 
 ## Tests
 
