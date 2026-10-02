@@ -113,7 +113,9 @@ transitions (fresh install, re-run after commit, live session, missing
 `bootupctl`). `tests/test_ghostty_hook.py` follows the same shape for
 `user-setup.hooks.d/30-ghostty.sh`, driving it against scratch homes for the
 fresh, migrate, already-symlinked and reverse-symlink (`~/.config/ghostty`
-pointing into the per-app dir) transitions. Run the suite with `just test`.
+pointing into the per-app dir) transitions, plus the two user-managed layouts
+the hook must not disturb: the per-app path symlinked at a dotfiles directory,
+and both paths symlinked at one. Run the suite with `just test`.
 `just check` syntax-checks every hook (`bash -n`) through
 `scripts/check-script-syntax.py`; there is no shellcheck gate in the Justfile
 or CI.

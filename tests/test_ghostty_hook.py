@@ -255,6 +255,55 @@ class GhosttyHookBehaviourTests(unittest.TestCase):
         self.assertEqual((dotfiles / "config").read_text(), "font-size = 9\n")
         self.assertEqual(self.sandbox_dir.resolve(), dotfiles.resolve())
 
+    def test_sandbox_symlink_to_dotfiles_is_left_alone(self):
+        """The per-app path already symlinked at a user's dotfiles directory is
+        this same fix by hand. Replacing it with a link to an empty, freshly
+        seeded ~/.config/ghostty would silently ignore their config -- the very
+        bug this hook exists to fix."""
+        dotfiles = self.home / "dotfiles" / "ghostty"
+        dotfiles.mkdir(parents=True)
+        (dotfiles / "config").write_text("font-size = 17\n")
+        self.sandbox_dir.parent.mkdir(parents=True)
+        self.sandbox_dir.symlink_to(dotfiles)
+
+        r = self.run_hook()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertTrue(self.sandbox_dir.is_symlink())
+        self.assertEqual(self.sandbox_dir.resolve(), dotfiles.resolve())
+        self.assertEqual((dotfiles / "config").read_text(), "font-size = 17\n")
+        self.assertFalse(
+            self.host_dir.exists(),
+            "the hook must not conjure an empty host config directory",
+        )
+        self.assertFalse(
+            self.marker.exists(),
+            "leaving without doing the work must not burn the stamp, so a "
+            "later boot can still set this up if the user drops their link",
+        )
+
+    def test_both_paths_symlinked_at_one_dotfiles_dir_keeps_the_config(self):
+        """Both ~/.config/ghostty and the per-app path pointing at the same
+        third directory makes the two `readlink -f` targets equal, which used
+        to trip the reverse-symlink repair: it deleted the host link while the
+        `mv` declined to put anything back, losing both links to the config."""
+        dotfiles = self.home / "dotfiles" / "ghostty"
+        dotfiles.mkdir(parents=True)
+        (dotfiles / "config").write_text("font-size = 19\n")
+        self.host_dir.parent.mkdir(parents=True, exist_ok=True)
+        self.host_dir.symlink_to(dotfiles)
+        self.sandbox_dir.parent.mkdir(parents=True)
+        self.sandbox_dir.symlink_to(dotfiles)
+
+        r = self.run_hook()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertTrue(
+            self.host_dir.is_symlink(), "the user's host link must survive"
+        )
+        self.assertEqual(self.host_dir.resolve(), dotfiles.resolve())
+        self.assertEqual(self.sandbox_dir.resolve(), dotfiles.resolve())
+        self.assertEqual((dotfiles / "config").read_text(), "font-size = 19\n")
+        self.assertEqual(self.migrated_dirs(), [])
+
     def test_already_symlinked_run_is_idempotent(self):
         first = self.run_hook()
         self.assertEqual(first.returncode, 0, first.stderr)
