@@ -105,7 +105,15 @@ def dakota(run: str, out: Path) -> None:
         if not ref.endswith(".bst"):
             continue  # "-N" entries are the sources of an element, not elements
         rows.add((ref, pkg.get("name") or "", pkg.get("versionInfo") or ""))
-    lines = ["# element\tname\tversion"] + ["\t".join(r) for r in sorted(rows)]
+    # Drop trailing empty cells so the file carries no trailing tabs; the
+    # trailing-whitespace pre-commit hook otherwise flips this file on every
+    # regeneration (only 1146 of 1147 lines have a third column today).
+    def _trim(*row: str) -> str:
+        cells = list(row)
+        while cells and not cells[-1]:
+            cells.pop()
+        return "\t".join(cells)
+    lines = ["# element\tname\tversion"] + [_trim(*r) for r in sorted(rows)]
     (out / "elements.tsv").write_text("\n".join(lines) + "\n")
     (out / "source.txt").write_text(
         f"projectbluefin/dakota publish.yml run {run}, artifact sbom-dakota\n")
