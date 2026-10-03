@@ -1,7 +1,7 @@
 ---
 name: package-contract
 version: "1.0"
-last_updated: "2026-10-01"
+last_updated: "2026-10-02"
 id: package-contract
 one_line_purpose: Maintain Bluefin package parity and Utah's overlay manifest.
 entry_point: docs/skills/package-contract.md
@@ -12,9 +12,10 @@ status: active
 dependencies: []
 tags: [packages, parity, bluefin, contracts]
 description: >-
-  Bluefin parity contract: verbatim bluefin.toml, utah.toml overlay, device
-  firmware, [unavailable] rules, repository policy. Use when adding, removing,
-  or debugging packages or parity/check-repos failures.
+  Bluefin parity contract (verbatim bluefin.toml), utah.toml overlay, device
+  firmware, [unavailable] rules, repository policy (on-image /etc/yum.repos.d
+  scan), and supply-chain attestation. Add, remove, or debug packages or
+  parity/check-repo failures.
 metadata:
   type: policy
 ---
@@ -38,7 +39,11 @@ policy for changing them.
   addition to* or *instead of* the contract lives here. The full rules are in
   the header comment of that file (cite it; do not move or copy it):
 
-  - `[gnome]` — GNOME 51 desktop contract Hummingbird does not ship.
+  - `[gnome]` — GNOME desktop contract Hummingbird does not ship. Each entry
+    is also a **version + release-identity assertion**: the resolved package
+    must match the major declared in `[gnome.versions]` and carry a factory or
+    Hummingbird release tag (`verify_gnome_contract`), so a GNOME package that
+    silently resolves to a bare Fedora release fails the contract.
   - `[build]` — toolchain needed to build the pinned GNOME extensions
     (`scripts/build-gnome-extensions.sh`).
   - `[parity]` — what Bluefin inherits from Fedora's base image and Hummingbird
@@ -123,6 +128,72 @@ and never copied into a layer: a COPY of the whole ~4 GB repository would leave
 a permanent layer behind, so reproducibility now comes from the digest-pinned
 `packages` stage being the only source the package transaction can see rather
 than from the repository contents living in the image.
+
+## Supply-chain attestation
+
+`verify-rpm-contract.py` asserts more than package-name presence. Beyond the
+install-set check it attests the supply chain the image is composed from
+(issue #21):
+
+- **GNOME version and release identity** (`verify_gnome_contract`) — every
+  package in `[gnome]` must resolve to the major version declared in
+  `[gnome.versions]`, and its release must carry the factory or Hummingbird
+  identity (a `.bfin`/`.hum` release tag). A GNOME package resolving to a bare
+  Fedora release is rejected: the factory builds GNOME, not the runtime base.
+- **Parity origin** (`verify_parity_origin`) — a Bluefin parity package named
+  in `[factory] parity` must carry the factory's `.bfin` release identity, so a
+  package the factory supplies cannot silently resolve from another repository;
+  every other parity package is rejected if it resolves to a bare Fedora
+  release. This runs on-image only, against the releases RPM actually resolved:
+  `--check` has no installed packages to read and does not call it. `--check`
+  asserts that `[factory].packages` names GNOME packages and `[factory].parity`
+  names parity packages. Both modes reject declarations outside those sections.
+- **Repository allowlist** (`verify_repository_policy`) — source `.repo` files
+  reject enabled Fedora/unapproved repositories and pin every allowlisted
+  origin, including the disabled NVIDIA repository. Proxy/TLS drift on an
+  allowlisted repo is rejected. A `# builder-only: true` file is skipped only
+  when the Containerfile copies it into a builder and never the final stage.
+  `--check` scans `packages/*.repo`; on-image verification scans the real
+  `/etc/yum.repos.d` with no builder exemptions, including inherited files.
+  The exact pinned base (`sha256:ddf19cc52fccb9ad4819b0fb9289f26912894c95555ccb4e95dc38e1dab4dc12`)
+  was inspected: it ships only `hummingbird.repo` there, with
+  `[public-hummingbird-$basearch-rpms]` and the `/public-hummingbird/$arch/`
+  baseurl, plus a disabled source section. Utah's runtime COPY replaces that
+  file with its explicit x86_64 pin. A renamed/new inherited enabled repository
+  must fail the gate; do not delete inherited files to make it pass. A future
+  base pin requires fresh inventory and a real composed-image verification.
+  Repository security is declared per ID in `[repositories.security]`:
+  `gpgcheck`, `repo_gpgcheck`, `sslverify`, and `proxy` must match the effective
+  settings. The OCI factory digest and NVIDIA's signed-repodata arrangement
+  remain explicit signature-check exceptions, not a global bypass.
+  Runtime loading follows DNF5 5.4.6.0's `Base::load_config` and
+  `RepoSack::create_repos_from_system_configuration`: combine distribution
+  `/usr/share/dnf5/libdnf.conf.d/*.conf` with user
+  `/etc/dnf/libdnf5.conf.d/*.conf` (user basename masks distribution), sort,
+  then load `/etc/dnf/dnf.conf` last. Repository options inherit the effective
+  main values before repository-specific options. Repositories come from
+  `dnf.conf` plus `reposdir` (defaults: `/etc/yum.repos.d`, `/etc/distro.repos.d`,
+  `/usr/share/dnf5/repos.d`). Finally apply masked, sorted
+  `/usr/share/dnf5/repos.override.d/*.repo` and
+  `/etc/dnf/repos.override.d/*.repo`, whose section IDs support globs and modify
+  only existing repositories. A later override can restore or weaken earlier
+  values; attest the final result, not every historical text assignment.
+  DNF5's `pkg_gpgcheck` alias and `gpgcheck_policy` expansion also participate.
+  `/etc/dnf/libdnf5.conf` and `/etc/yum/repos.d` are not DNF5 defaults.
+  Primary references: [configuration reference](https://dnf5.readthedocs.io/en/latest/dnf5.conf.5.html),
+  [base loader](https://github.com/rpm-software-management/dnf5/blob/5.4.6.0/libdnf5/base/base.cpp),
+  [repo loader](https://github.com/rpm-software-management/dnf5/blob/5.4.6.0/libdnf5/repo/repo_sack.cpp),
+  [signature defaults/policy](https://github.com/rpm-software-management/dnf5/blob/5.4.6.0/libdnf5/conf/config_main.cpp).
+- **Build provenance** (`generate_provenance_report`) — the resolved
+  package-origin/NEVRA data is written as JSON plus a human-readable report to
+  `$UTAH_REPORT_DIR` (default `/usr/share/utah`), retaining the image flavor,
+  the factory pin read from the `# factory-pin:` stamp in
+  `/etc/yum.repos.d/utah-packages.repo`, the `BASE_IMAGE` reference and its
+  digest, per-package origin and section, and the allowed-repository list. The
+  build timestamp is recorded only when `SOURCE_DATE_EPOCH` is exported;
+  otherwise `timestamp` is null and `timestamp_source` is `unset`. A sentinel
+  epoch used to be stamped instead, which asserted a build date that was never
+  true.
 
 ## Supply-chain download verification
 

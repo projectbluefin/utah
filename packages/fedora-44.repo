@@ -1,6 +1,10 @@
 # Fedora 44 is the Hummingbird buildroot pairing, not a runtime repository.
 # Keep this enabled only in Containerfile.kernel's builder stage: the runtime
 # image deliberately ships Hummingbird plus the Utah package repository.
+# Marked builder-only so verify-rpm-contract.py --check skips it (issue #21):
+# it exists in packages/ for the kernel-builder stage but is never enabled at
+# runtime.
+# builder-only: true
 [fedora-44]
 name=Fedora 44 - $basearch
 baseurl=https://dl.fedoraproject.org/pub/fedora/linux/releases/44/Everything/$basearch/os/

@@ -71,10 +71,15 @@ than being noticed later.
 | Genuinely unavailable | **7** |
 
 The install writes its resolved list to `/usr/share/utah/contract.txt` and the
-verify step asserts *that file*, so the two cannot disagree. The unavailable
-row is not limited to the copied contract: it also holds image-level parity
-gaps — names Bluefin's published image ships from a build file outside
-`base.toml`, recorded in `baselines/bluefin/rpms.tsv` and triaged in
+verify step asserts *that file*, so the two cannot disagree. Presence is only
+the first claim: the same step attests that GNOME packages carry the declared
+major version and an approved factory (`.bfin`) or Hummingbird (`.hum`) release
+identity, that parity packages resolved from the repository that is supposed to
+supply them, and that the runtime repository allowlist holds. It retains the
+resolved origin/NEVRA set with build provenance as
+`/usr/share/utah/package-origins.json` and `package-origins.txt`. The unavailable
+row also holds image-level parity gaps: names Bluefin's published image ships
+outside `base.toml`, recorded in `baselines/bluefin/rpms.tsv` and triaged in
 `baselines/triage.toml` (`nvtop` is the current example). These counts are
 generated from `packages/bluefin.toml` and `packages/utah.toml`
 (`scripts/generate-site-data.py`, `site/data/packages.json`); `just check`

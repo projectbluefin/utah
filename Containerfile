@@ -189,6 +189,10 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
 # the global pin's value: a global ARG is only in scope for FROM lines, and
 # without this the label baked empty (#371 follow-up).
 ARG PACKAGE_IMAGE_SHA
+# Same reason, for the package-origin report: verify-rpm-contract.py records
+# which base image the contract's NEVRAs sit on, and a global ARG is in scope
+# only for FROM lines until it is re-declared here.
+ARG BASE_IMAGE
 ARG IMAGE_NAME=utah
 # Canonical OS identity, distinct from the repository name a flavor publishes
 # under. Always utah; never flavored.
@@ -267,7 +271,9 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
       gaming|nvidia-gaming) /usr/local/libexec/utah-install-v4l2loopback ogc ;; \
       main|nvidia) ;; \
     esac && \
-    IMAGE_FLAVOR="${IMAGE_FLAVOR}" /usr/local/libexec/utah-verify-rpm-contract \
+    IMAGE_FLAVOR="${IMAGE_FLAVOR}" BASE_IMAGE="${BASE_IMAGE}" \
+    IMAGE_NAME="${IMAGE_NAME}" VERSION="${VERSION}" \
+      /usr/local/libexec/utah-verify-rpm-contract \
       /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
     # The package repository is now only ever bind mounted, so it is absent from
     # the committed image. Flip it disabled here -- the last step that installs

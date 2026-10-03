@@ -7,6 +7,7 @@ name=public-hummingbird-x86_64-rpms
 baseurl=https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/
 enabled=1
 sslverify=1
+repo_gpgcheck=0
 # Hummingbird's own repo file ships gpgcheck=0 so that their lockfile tooling
 # fails loudly instead of silently on a bad signature. Their RPMs are signed
 # (RSA/SHA256, key ID 199e2f91fd431d51, Red Hat release key 2), so an image

@@ -21,6 +21,7 @@ baseurl=file:///etc/utah-packages
 enabled=1
 gpgcheck=0
 repo_gpgcheck=0
+sslverify=1
 priority=1
 # The factory's grub2 is built with Hummingbird's efi_vendor (EFI/hummingbird)
 # and would replace the base's Fedora GRUB, which is the one paired with the
