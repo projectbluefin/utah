@@ -76,6 +76,7 @@ enable_unit systemd-resolved.service
 # See the preset: gated on systemd-boot by drop-in, skipped elsewhere (#363).
 enable_unit systemd-boot-update.service
 enable_unit bootc-unified-storage.service
+enable_unit bluefin-stats-refresh.timer
 # input-remapper is installed by Bluefin's package set, but without its root
 # daemon running, udev autoload fails on input devices and the GUI prompts for
 # root credentials on launch. Enable it next to the desktop units; see #99.

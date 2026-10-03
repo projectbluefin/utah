@@ -115,6 +115,19 @@ then trusts a post-`restorecon` `stat` of `/var/home`.
 
 ## Tests
 
+`tests/test_first_boot.py` is collected by unittest discovery through
+`tests/run_suite.py` (`just test`, also invoked by `just check`). It exercises
+Tailscale absence/recovery, invalid and root callers, successful once-only
+grants on both libsetup contracts, and failed-grant retry with the new pair.
+Firefox's missing and present branches use actual scratch source/destination
+trees and real `/usr/bin/cp`; the present case relocates the fixture beneath a
+temporary path containing spaces, without assuming `/tmp`. Copy failure must
+leave no completion stamp.
+All fixtures register cleanup. The tests replace only filesystem roots in a
+temporary hook copy and restrict PATH, so they never write to host
+`/var/lib/flatpak`, even when the test runner itself has root privileges.
+These host tests do not prove a repeat VM boot or network/Flathub availability.
+
 `tests/test_setup_hook_version_contract.py` asserts the contract on
 `20-home-labels.sh`; `tests/test_bootupctl_adopt_hook.py` asserts the
 contract on `05-bootupctl-adopt.sh` and additionally drives the real hook

@@ -282,6 +282,24 @@ flashing still goes through the daemon, which keeps its existing root
 lifecycle. The pairing is asserted by `FwupdRefreshDropInTests` in
 `tests/test_desktop_contract.py`.
 
+## First-boot hooks are validated at runtime
+
+`tests/test_first_boot.py` executes Tailscale and Firefox setup hooks against
+scratch filesystem roots. It rejects root/invalid pkexec callers, exercises
+deferred setup and retry-after-failure with the read-only libsetup API, and
+checks successful operator grants run once. The Firefox present branch must
+successfully copy real preference bytes with `/usr/bin/cp` into a scratch
+Flatpak tree; tracing an attempted copy is not successful-copy evidence.
+The absent branch must succeed without copying. See [setup-hooks.md](setup-hooks.md)
+for the versioning contract and fixture isolation.
+
+The preset and desktop contract require `bluefin-stats-refresh.timer` and
+`input-remapper.service` to be enabled. Input-remapper's enablement predates
+this first-boot fix; the new policy addition is the stats refresh timer.
+The unittest module is collected by `tests/run_suite.py`, via `just test` and
+`just check`. It is host-side hook coverage, not evidence of a real repeat
+boot or of offline/network Flatpak deployment; those require the VM harness.
+
 ## The verifiers run twice
 
 The same verifier runs in the Containerfile and on demand, so a local image
