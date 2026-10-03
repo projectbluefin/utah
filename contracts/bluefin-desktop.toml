@@ -7,6 +7,13 @@
 files = [
   "/usr/share/ublue-os/bluefin-logos/bluefin.png",
   "/usr/share/pixmaps/bluefin-gdm-logo.png",
+  # Control Center has compile-time logo paths, independent of os-release.
+  "/usr/share/pixmaps/fedora_logo_med.png",
+  "/usr/share/pixmaps/fedora_whitelogo_med.png",
+  "/usr/share/pixmaps/fedora-logo.png",
+  "/usr/share/pixmaps/system-logo-white.png",
+  "/usr/share/icons/hicolor/scalable/actions/ublue-logo-symbolic.svg",
+  "/usr/share/icons/hicolor/icon-theme.cache",
   "/usr/share/ublue-os/bluefin-logos/chicken.png",
   "/usr/share/ublue-os/bluefin-logos/symbols/bluefin",
   "/usr/share/backgrounds/bluefin/01-bluefin.xml",
@@ -73,6 +80,7 @@ files = [
 "/etc/dconf/db/distro.d/04-bluefin-custom-command-menu" = [
   "Bazaar App Store",
   "docs.projectbluefin.io",
+  "menuicon-setting='ublue-logo-symbolic'",
 ]
 "/etc/dconf/db/distro.d/02-bluefin-keybindings" = [
   "xdg-terminal-exec",

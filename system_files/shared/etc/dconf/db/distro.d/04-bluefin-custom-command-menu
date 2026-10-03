@@ -14,5 +14,5 @@ command6=('Bazaar App Store', '/usr/bin/flatpak run io.github.kolunmi.Bazaar', '
 command7=('Extensions', 'flatpak run com.mattjakeman.ExtensionManager', '', true)
 command8=('Terminal', 'xdg-terminal-exec', '', true)
 command9=('---Help', '', '', true)
-command10=('Documentation', 'xdg-open https://docs.projectbluefin.io/', '', true)
-command11=('Ask Bluefin', 'xdg-open https://ask.projectbluefin.io', '', true)
+command10=('Documentation', 'gio open https://docs.projectbluefin.io/', '', true)
+command11=('Ask Bluefin', 'gio open https://ask.projectbluefin.io', '', true)

@@ -82,6 +82,19 @@ fi
 # and matches the files shipped by Bluefin.
 printf '…\n' >/usr/share/ublue-os/fastfetch-user-count
 printf '…\n' >/usr/share/ublue-os/bazaar-install-count
+# GNOME Control Center's distro builds use these compile-time PNG paths, not
+# os-release NAME/LOGO. The RPM transaction erased Common's earlier overlay
+# while swapping distro logos. Restore Bluefin's matching light/dark artwork
+# only after the transaction, from the digest-pinned Common stage bind mount.
+for logo in fedora_logo_med.png fedora_whitelogo_med.png fedora-logo.png system-logo-white.png; do
+    install -Dm0644 "/tmp/utah-bluefin-pixmaps/${logo}" "/usr/share/pixmaps/${logo}"
+done
+
+# St.Icon in custom-command-menu resolves menuicon-setting through the theme.
+# Keep Bluefin's icon name and menu behavior; rebuild the index after every
+# overlay and logos-RPM operation so it includes our shipped symbolic SVG.
+gtk-update-icon-cache --force /usr/share/icons/hicolor
+
 
 # Compile the system dconf databases now so the GDM greeter picks up the
 # org.gnome.login-screen logo override (etc/dconf/db/gdm.d/01-bluefin-gdm-logo)

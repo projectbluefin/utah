@@ -192,6 +192,46 @@ entry for `/usr/share/pixmaps/bluefin-gdm-logo.png` in
 asset path so a stray edit that points `logo` somewhere else fails the
 build.
 
+## About artwork and the panel icon (#318)
+
+The About page's OS name is separate from its artwork. GNOME 51's
+`setup_os_logo` uses `DISTRIBUTOR_LOGO` and `DARK_MODE_DISTRIBUTOR_LOGO` before
+consulting os-release `LOGO`; Utah's factory spec configures Fedora's
+`fedora_logo_med.png`/`fedora_whitelogo_med.png` paths, or the RHEL
+`fedora-logo.png`/`system-logo-white.png` pair. Common ships Bluefin artwork
+under all four names, but the later logos-RPM swap erases the early overlay.
+The desktop RUN therefore bind-mounts Common's pinned pixmaps and branding
+restores those four files after the RPM transaction, without adding a COPY
+layer or changing the scanner-facing OS identity.
+
+The pinned command-menu extension creates `St.Icon` from `menuicon-setting`.
+Keep Bluefin's `ublue-logo-symbolic`, command labels/order/location and help
+URLs unchanged; position keys and absolute Flatpak commands do not repair an
+icon. Documentation and Ask Bluefin use native `gio open`: the actual Utah
+guest has GLib's launcher but no `xdg-open`, so the inherited help commands
+could not start a browser. The evidence is the captured guest surface, not the
+build transaction: `baselines/utah/rpms.tsv` contains no `xdg-utils` (only
+`xdg-desktop-portal*`, `xdg-terminal-exec`, `xdg-user-dirs`) and
+`baselines/utah/surface.tsv` lists no `/usr/bin/xdg-open`, while
+`baselines/GAP.md` tracks `xdg-utils` as still `planned` for Utah (#263).
+`glib2 2.89.3-1.hum1` does ship `/usr/bin/gio`, so `gio open` resolves on the
+guest today and stays correct if `xdg-utils` later lands. The optional host
+console opener is a separate host-side use and remains unchanged.
+The contract requires the SVG and the compiled hicolor cache, which branding regenerates
+after all overlays and package operations. Files alone are not visual proof:
+boot the candidate, inspect icon-theme lookup, and use Ponytail on its GNOME
+session to capture the panel menu plus About in light and dark mode. The menu
+must show the mark (not a placeholder), retain all commands, open Documentation
+at `docs.projectbluefin.io`, and show Bluefin artwork with the Utah OS name.
+
+The bundled symbolic glyph is the Universal Blue U mark. Verify it against
+the shipped SVG rather than treating that artwork as a missing-icon box.
+In the candidate GNOME session, Ponytail's Commands → About action renders
+the Bluefin light/dark artwork and Utah identity; GTK accessibility may omit
+that window, so retain the actual rendered frame as evidence as well.
+
+
+
 ## Services and login defaults
 
 Hummingbird defaults to a server preset and disables unlisted services, so
