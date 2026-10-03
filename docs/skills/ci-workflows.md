@@ -1,7 +1,7 @@
 ---
 name: ci-workflows
-version: "1.0"
-last_updated: "2026-09-29"
+version: "1.1"
+last_updated: "2026-10-03"
 id: ci-workflows
 one_line_purpose: Navigate Utah's build, promote, and sync workflow topology.
 entry_point: docs/skills/ci-workflows.md
@@ -216,6 +216,18 @@ Source pushes to `main` and the nightly schedule call
 `testing` with `actions: write`. README/verification-only pushes are excluded
 to avoid evidence-update build loops. Nightly runs still sync those changes.
 
+The dispatch API rejects a SHA in the `ref` field ("No ref found for:
+<hash>"), so `build.yml` cannot be told directly to check out the SHA
+`reusable-sync-branches` just pushed. Instead, `sync-main-to-testing.yml`
+queries `git/ref/heads/testing` after the sync job succeeds and passes the
+captured SHA to `build.yml` as the `target_sha` dispatch input. The two
+checkouts in `build.yml` (`contract` and `kernel_cache`) honor that input via
+`ref: ${{ inputs.target_sha || github.sha }}`, so the dispatched run cannot
+drift to a different `testing` tip between the API call and the runner
+starting (#371). Push events to `testing` and pull requests are unaffected:
+`target_sha` is empty for them, so the checkouts fall back to the default
+`github.sha` behavior.
+
 ## ISO LUKS gate and screenshots
 
 `post-testing-e2e.yml` downloads the originating build's digest artifacts.
@@ -310,8 +322,14 @@ The cadence is RFC'd in #336. What runs today:
   is not how a `main` commit reaches the image tags: the sync pushes `testing`
   with the workflow's own `GITHUB_TOKEN`, and a `GITHUB_TOKEN` push starts no
   workflow. `sync-main-to-testing.yml`'s `build` job therefore dispatches the
-  build explicitly (`gh workflow run build.yml --ref testing`) once the sync
-  job returns, which is the path that actually produces the images.
+  build explicitly (`gh workflow run build.yml --ref testing -f
+  target_sha=<sha>`) once the sync job returns, which is the path that
+  actually produces the images. The `--ref testing` branch name is required
+  by the dispatch API (which rejects a SHA in `ref`), so the dispatcher
+  queries `git/ref/heads/testing` after the sync job to capture the SHA
+  `reusable-sync-branches` just pushed and passes it as the `target_sha`
+  input; `build.yml`'s checkouts then pin to that SHA via
+  `ref: ${{ inputs.target_sha || github.sha }}` (#371).
 - `:testing` advances per green build, not on a clock: the tags move in
   `post-testing-e2e.yml`, after the LUKS ISO matrix and the production-ISO
   composition both pass. `promote-testing-to-main.yml` is the daily 04:00 UTC

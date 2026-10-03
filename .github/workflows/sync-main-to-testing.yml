@@ -30,4 +30,21 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-        run: gh workflow run build.yml --repo "$REPOSITORY" --ref testing
+        run: |
+          set -euo pipefail
+          # Capture the commit testing points at right now -- the SHA
+          # reusable-sync-branches either fast-forwarded to or force-reset
+          # testing to in the `sync` job above. Passing it to build.yml as the
+          # `target_sha` dispatch input pins every checkout in that run to this
+          # exact commit, so the build cannot drift to a different testing
+          # tip between this API call and the runner actually starting (#371).
+          # The dispatch API itself refuses a SHA as `ref` ("No ref found for:
+          # <hash>"), so the ref stays as the floating branch name and the
+          # build uses the captured SHA as its checkout ref.
+          TARGET_SHA="$(gh api \
+              -H 'Accept: application/vnd.github+json' \
+              "/repos/$REPOSITORY/git/ref/heads/testing" \
+              --jq '.object.sha')"
+          echo "Dispatching build.yml against testing@$TARGET_SHA"
+          gh workflow run build.yml --repo "$REPOSITORY" --ref testing \
+              -f "target_sha=$TARGET_SHA"
