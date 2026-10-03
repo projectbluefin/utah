@@ -22,8 +22,8 @@ metadata:
 
 # CI Workflows
 
-Nine workflows, all thin callers into `projectbluefin/actions@v1` reusables
-or pinned third-party actions:
+This overview covers the build, promotion, branch-sync, parity-sync, and
+post-build verification workflows, not the complete workflow inventory:
 
 - `.github/workflows/build.yml` -- pull requests, pushes to `testing`, a
   manual dispatch. Top-level `permissions: {}`; each job
@@ -69,27 +69,8 @@ or pinned third-party actions:
   `created` or `updated` (not on the parity diff alone), so a nightly run
   against an unmerged, unchanged bump branch does not re-dispatch for
   nothing.
-- `.github/workflows/execute-release.yml` -- pushes to `main` carrying a
-  promotion commit, or manual dispatch; promotes `:testing` to `:stable`
-  through the release gate.
 - `.github/workflows/post-testing-e2e.yml` -- successful non-PR testing builds
   explicitly dispatch this, or manually supply a successful testing build run ID.
-- `.github/workflows/pages.yml` -- pushes to `main` touching `site/**`, the
-  package manifests, or the site generator, plus manual dispatch. It verifies
-  the committed site data matches the manifests (`generate-site-data.py
-  --check`) before deploying to GitHub Pages; deployments are serialized and
-  never cancelled in flight.
-- `.github/workflows/image-baselines.yml` -- weekly (Monday 05:17 UTC) and
-  manual dispatch. Runs `just baselines` to re-measure Utah against the
-  published Bluefin and Dakota images and proposes the refreshed snapshots as
-  a pull request. That PR is opened with the default `GITHUB_TOKEN` and has
-  no dispatch step, so no checks start on it by themselves; once CI runs on
-  it (a maintainer push, or closing and reopening it), `just check` fails it
-  if a Bluefin package Utah lacks is not triaged in `baselines/triage.toml`.
-- `.github/workflows/bump-factory-pin.yml` -- Mondays 07:00 UTC and manual
-  dispatch. Resolves the `utah-packages` digest and opens a one-line pull
-  request against `testing` that bumps `ARG PACKAGE_IMAGE_SHA`; see
-  "`bump-factory-pin`" below.
 
 CI delegates builds, vulnerability reporting, keyless signatures, provenance,
 and caching to `projectbluefin/actions@v1` (originated as a `docs/building.md`
