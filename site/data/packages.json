@@ -224,7 +224,7 @@
   ],
   "totals": {
     "installed": 166,
-    "unavailable": 7
+    "unavailable": 8
   },
   "unavailable": [
     {
@@ -254,6 +254,12 @@
         253
       ],
       "name": "grub2-efi-x64-cdboot"
+    },
+    {
+      "issues": [
+        499
+      ],
+      "name": "nss-mdns"
     },
     {
       "issues": [

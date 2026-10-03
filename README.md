@@ -102,7 +102,7 @@ than being noticed later.
 | --- | --- |
 | Bluefin contract installed | **61** |
 | Utah additions (GNOME 51, base-image parity, device firmware, desktop services) | 105 |
-| Genuinely unavailable | **7** |
+| Genuinely unavailable | **8** |
 
 The install writes its resolved list to `/usr/share/utah/contract.txt` and the
 verify step asserts *that file*, so the two cannot disagree. The unavailable

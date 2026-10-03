@@ -250,7 +250,7 @@ Update it whenever synchronizing `packages/bluefin.toml` with upstream.
 
 Current counts, per the README "Package parity" section: 61 Bluefin contract
 packages installed, 105 Utah additions (GNOME 51, base-image parity, device
-firmware, desktop services), 7 genuinely unavailable. `scripts/check-doc-counts.py` (part of
+firmware, desktop services), 8 genuinely unavailable. `scripts/check-doc-counts.py` (part of
 `just check`) recomputes these from the manifests and fails if either
 document drifts from `site/data/packages.json`.
 

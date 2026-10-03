@@ -479,6 +479,21 @@ packages = [
 #   requirement on utah-packages#311). Add `nvtop` to `[parity]` once
 #   utah-packages#311 publishes an Hummingbird-targeted build, which must only
 #   happen after that verification. Tracked by #451 and utah-packages#311.
+#
+# nss-mdns
+#   nss-mdns is the Name Service Switch module that resolves .local hostnames
+#   over mDNS, so `ping foo.local` resolves. Bluefin ships it
+#   (baselines/bluefin/rpms.tsv, nss-mdns 0.15.1-28.fc44); Utah does not, and
+#   Hummingbird's repository does not carry it either -- verified in
+#   repodata/primary.xml, where nss-mdns appears only as a Recommends of cups
+#   (a virtual provide) and never as an installable <name>. It is an
+#   image-level parity gap, not inherited from the copied base.toml contract
+#   (nss-mdns is not in packages/bluefin.toml) and not built by the
+#   utah-packages factory, so no repository Utah enables at runtime supplies it.
+#   Enabling avahi-daemon restores mDNS service browsing but not .local name
+#   resolution, which is what this module provides; the two are separate
+#   (found while reviewing #411). Returns once the factory builds nss-mdns for
+#   Hummingbird and utah-packages publishes the build; tracked by #499.
 packages = [
     "grub2-efi-x64-cdboot",
     "anaconda-live",
@@ -486,6 +501,7 @@ packages = [
     "firefox",
     "fish",
     "nvtop",
+    "nss-mdns",
     "slitherer",
 ]
 
