@@ -30,6 +30,12 @@ RUN /usr/local/libexec/utah-install-v4l2loopback base /out
 
 FROM ${BASE_IMAGE}
 
+# RPM 6 uses SOURCE_DATE_EPOCH for INSTALLTIME and INSTALLTID. It must be
+# exported before the first transaction, not only for final font-cache cleanup:
+# those header bytes remain in rpmdb.sqlite even after every mtime is pinned.
+ARG SOURCE_DATE_EPOCH=1704067200
+ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
+
 # Layer discipline, because it is where the build time goes.
 #
 # Every instruction below commits a layer, and committing a layer means walking
@@ -192,7 +198,15 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
       /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
     /usr/local/libexec/utah-fix-home-labels && \
     DNF="$(command -v dnf5 || command -v dnf)" && \
-    "$DNF" clean all && rm -rf /var/cache/libdnf5 /var/cache/dnf
+    "$DNF" clean all && rm -rf /var/cache/libdnf5 /var/cache/dnf && \
+    # These regenerated files contain timestamps or process-local SQLite state.
+    # Remove them in the producing layer, not only from the final merged rootfs.
+    rm -f /usr/lib/sysimage/libdnf5/transaction_history.sqlite \
+          /usr/lib/sysimage/libdnf5/transaction_history.sqlite-shm \
+          /usr/lib/sysimage/libdnf5/transaction_history.sqlite-wal \
+          /var/log/dnf5.log* /var/cache/ibus/bus/registry \
+          /var/cache/ldconfig/aux-cache \
+          /var/cache/swcatalog/cache/C-local-metainfo.xb
 
 # Per-image arguments. Nothing above this line may read them; see the note on
 # layer discipline at the top.
@@ -256,7 +270,15 @@ RUN mkdir -p /tmp/uupd && \
     /usr/local/libexec/utah-configure-branding && \
     /usr/local/libexec/utah-verify-desktop-contract /usr/share/utah/bluefin-desktop.toml && \
     /usr/local/libexec/utah-mirror-shim && \
-    /usr/local/libexec/utah-verify-efi-chain
+    /usr/local/libexec/utah-verify-efi-chain && \
+    # configure-services removes RPMs and regenerates transaction/cache residue.
+    # Keep the desktop layer itself deterministic, without sweeping build inputs.
+    rm -f /usr/lib/sysimage/libdnf5/transaction_history.sqlite \
+          /usr/lib/sysimage/libdnf5/transaction_history.sqlite-shm \
+          /usr/lib/sysimage/libdnf5/transaction_history.sqlite-wal \
+          /var/log/dnf5.log* /var/cache/ibus/bus/registry \
+          /var/cache/ldconfig/aux-cache \
+          /var/cache/swcatalog/cache/C-local-metainfo.xb
 
 # Dakota-compatible flavors: OGC is built and asserted before NVIDIA so the
 # NVIDIA path can bind its module to the exact kernel tree it will boot.
@@ -292,7 +314,10 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
 # with no tmpfiles.d entry. This must run after the last package install, which
 # is the NVIDIA and OGC step, not after the main transaction. The lint that
 # checks the result runs in the same layer: nothing can change between the two.
-# The home-label check runs first: clean-stage removes the utah-* helpers.
+# This step normalizes the final merged rootfs (utah#313): it drops dnf5
+# transaction history and pins mtimes the build wrote, preserving RPM mtimes.
+# Native layer headers and RPM transaction tags are separately fixed by the
+# source epoch exported above and the builder's rewrite-timestamp option.
 RUN /usr/local/libexec/utah-fix-home-labels --check && \
     /usr/local/libexec/utah-clean-stage && \
     bootc container lint --fatal-warnings --skip nonempty-boot

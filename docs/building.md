@@ -49,6 +49,8 @@ just luks-test                  # install to an encrypted disk over SSH, boot it
 just try-installed              # re-boot the disk luks-test installed, with a browser console
 just check-desktop-contract     # branding, services, and Flatpak policy against a built image
 just check-repos                # every contract package resolves in the enabled repositories
+just check-reproducible main    # two real uncached builds; compare ordered layers
+just check-reproducible gaming  # same signed kernel-cache route as CI; needs cosign
 ```
 
 `just luks-test` drives `iso/scripts/luks-e2e.sh`: it installs from the ISO's

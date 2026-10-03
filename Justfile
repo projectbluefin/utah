@@ -341,6 +341,7 @@ build-kernel-cache:
 build-ghcr base_name stream flavor kernel_pin="":
     #!/usr/bin/env bash
     set -euo pipefail
+    source_date_epoch="${SOURCE_DATE_EPOCH:-$(git show -s --format=%ct HEAD)}"
     version="{{ stream }}-$(date -u +%Y%m%d)-$(git rev-parse --short HEAD)"
     image_name="$(python3 scripts/flavors.py image '{{ flavor }}')"
     # The kernel cache image and the layer cache below are both published
@@ -445,6 +446,8 @@ build-ghcr base_name stream flavor kernel_pin="":
     fi
     echo "Hummingbird repository day: ${hb_revision}"
     podman build \
+      --source-date-epoch "$source_date_epoch" \
+      --rewrite-timestamp \
       "${base_args[@]}" \
       "${layer_cache_args[@]}" \
       --build-arg HUMMINGBIRD_REPO_DAY="$hb_revision" \
@@ -458,6 +461,13 @@ build-ghcr base_name stream flavor kernel_pin="":
       --tag "localhost/$image_name:{{ stream }}" \
       --file Containerfile .
 
+# Prove a rebuild that changes nothing produces the same image (utah#313).
+# Builds the flavor twice, uncached, with the wall-clock build args held
+# constant, and diffs the ordered layer digests. Two full builds: slow, and
+# deliberately not part of `just check` or the PR matrix.
+check-reproducible flavor="main":
+    bash scripts/check-reproducible-build.sh "{{ flavor }}"
+
 # Compose with an RPM repository already in local containers-storage. This uses
 # the same Containerfile transaction as CI without waiting for publication.
 build-local stream="testing" package_image="localhost/utah-packages:local-merged":
@@ -469,7 +479,10 @@ build-local stream="testing" package_image="localhost/utah-packages:local-merged
       exit 1
     }
     version="local-{{ stream }}-$(git rev-parse --short HEAD)"
+    source_date_epoch="${SOURCE_DATE_EPOCH:-$(git show -s --format=%ct HEAD)}"
     podman build \
+      --source-date-epoch "$source_date_epoch" \
+      --rewrite-timestamp \
       --build-arg PACKAGE_IMAGE_REF="$package_image" \
       --build-arg IMAGE_NAME="{{ image }}" \
       --build-arg IMAGE_ID="{{ image }}" \
