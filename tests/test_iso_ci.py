@@ -447,30 +447,81 @@ class FlatpakRetryTests(unittest.TestCase):
         result = self.drive("flatpak() { attempts=$((attempts+1)); return 1; }")
         self.assertEqual(result.stdout.strip(), "rc=1 attempts=5", result.stderr)
 
-    def test_every_network_install_goes_through_the_retry(self):
-        script = self.SCRIPT.read_text()
-        installs = [line for line in script.splitlines()
-                    if line.startswith("flatpak install")
-                    or line.startswith("retry_flatpak install")]
-        self.assertTrue(installs)
-        for line in installs:
-            with self.subTest(line=line):
-                self.assertTrue(line.startswith("retry_flatpak install"),
-                                f"unretried network install: {line}")
+    def drive_preinstall(self, resolve_on_attempt):
+        """Execute the real bake's install/verification block in a temp tree.
 
-    def test_every_retried_install_is_idempotent(self):
-        # The retry is only safe if re-running it is a no-op for a ref that
-        # already completed. Without --or-update, an attempt that installed the
-        # app but still exited nonzero makes the next attempt fail with
-        # "already installed" -- the retry would turn a flaky success into a
-        # hard failure, which is the opposite of why it was added.
-        script = self.SCRIPT.read_text()
-        calls = re.findall(r"^retry_flatpak install.*?(?=\n\S|\Z)", script,
-                           re.MULTILINE | re.DOTALL)
-        self.assertTrue(calls)
-        for call in calls:
-            with self.subTest(call=call.splitlines()[0]):
-                self.assertIn("--or-update", call)
+        Model flatpak's documented zero-exit metadata skip, not a failed
+        command: only the bake's declared-set verification can trigger retry.
+        """
+        source = self.SCRIPT.read_text()
+        block = source.split(
+            "# Install everything the image declares in preinstall.d:", 1,
+        )[1].split("\n", 1)[1].split("# `uninstall --unused`", 1)[0]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            declarations = root / "preinstall.d"
+            declarations.mkdir()
+            (declarations / "defaults.preinstall").write_text(
+                "[Flatpak Preinstall io.github.kolunmi.Bazaar]\nBranch=stable\n"
+                "[Flatpak Preinstall com.mitchellh.ghostty]\nBranch=master\n"
+            )
+            installed = root / "installed"
+            installed.mkdir()
+            harness = root / "bake.sh"
+            harness.write_text('''set -euo pipefail
+PREINSTALL_DIR="$1"
+state="$2"
+resolve_on_attempt="$3"
+attempts=0
+sleep() { :; }
+flatpak() {
+    case "$1" in
+        preinstall)
+            attempts=$((attempts + 1))
+            printf '%s\\n' "$attempts" > "$state/attempts"
+            if (( attempts >= resolve_on_attempt )); then
+                : > "$state/io.github.kolunmi.Bazaar"
+                : > "$state/com.mitchellh.ghostty"
+            fi
+            return 0 ;;
+        info) [[ -f "$state/$3" ]] ;;
+        *) return 90 ;;
+    esac
+}
+''' + block)
+            result = subprocess.run(
+                ["bash", str(harness), str(declarations), str(installed),
+                 str(resolve_on_attempt)], capture_output=True, text=True,
+            )
+            attempts = int((installed / "attempts").read_text())
+            present = {path.name for path in installed.iterdir() if path.name != "attempts"}
+            return result, attempts, present
+
+    def test_preinstall_retries_a_zero_exit_with_missing_declared_refs(self):
+        result, attempts, present = self.drive_preinstall(3)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(attempts, 3)
+        self.assertEqual(present, {"io.github.kolunmi.Bazaar", "com.mitchellh.ghostty"})
+
+    def test_preinstall_recovers_from_a_longer_metadata_outage(self):
+        result, attempts, present = self.drive_preinstall(5)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(attempts, 5)
+        self.assertIn("com.mitchellh.ghostty", present)
+
+    def test_preinstall_persistent_missing_refs_fail_after_five_attempts(self):
+        result, attempts, present = self.drive_preinstall(6)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(attempts, 5)
+        self.assertEqual(present, set())
+        self.assertIn("ERROR: declared", result.stderr)
+        self.assertIn("com.mitchellh.ghostty", result.stderr)
+
+    def test_preinstall_does_not_retry_a_complete_declared_set(self):
+        result, attempts, present = self.drive_preinstall(1)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(attempts, 1)
+        self.assertEqual(present, {"io.github.kolunmi.Bazaar", "com.mitchellh.ghostty"})
 
 
 class OgcKernelConfigGateTests(unittest.TestCase):

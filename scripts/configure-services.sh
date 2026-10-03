@@ -86,13 +86,46 @@ enable_unit ModemManager.service
 enable_unit cups.socket
 enable_unit cups.path
 
-# Bluefin's Brewfile and Bazaar preinstall hook need the Flathub remote before
-# first boot. Keep this as a .flatpakrepo descriptor so the remote is available
-# to both flatpak-preinstall and brew-setup without baking mutable /var state.
+# Bluefin's Brewfile, the Bazaar preinstall hook, and Utah's Ghostty need their
+# remotes before first boot. Keep these as .flatpakrepo descriptors so each
+# remote is available to both flatpak-preinstall and brew-setup without baking
+# mutable /var state. TunaOS's descriptor, which Ghostty resolves from, is
+# vendored in system_files/shared/etc/flatpak/remotes.d rather than fetched
+# here. This pins the remote URL, not a signing key: TunaOS uses OCI over TLS
+# and its descriptor contains no GPGKey.
 install -d -m0755 /etc/flatpak/remotes.d
 curl --fail --retry 3 --silent --show-error \
     --output /etc/flatpak/remotes.d/flathub.flatpakrepo \
     https://dl.flathub.org/repo/flathub.flatpakrepo
+
+# Declare the Bluefin parity Brewfile's Flatpaks in preinstall.d, in the image,
+# so every ISO builder that runs `flatpak preinstall` -- and
+# flatpak-preinstall.service whenever it runs -- sees the same set the live ISO
+# bakes. (That service is enabled above but has no preset entry, so bootc's
+# first-boot preset application disables it on installed systems; see #257.)
+# The entries are generated from the Brewfile rather than re-listed, so the two
+# can never drift. No CollectionID: Utah's Flathub remote has none, and an
+# entry that names one no remote carries is silently skipped.
+brewfile=/usr/share/ublue-os/homebrew/system-flatpaks.Brewfile
+brew_preinstall=/usr/share/flatpak/preinstall.d/brewfile.preinstall
+install -d -m0755 /usr/share/flatpak/preinstall.d
+: > "${brew_preinstall}"
+while IFS= read -r id; do
+    [ -n "${id}" ] || continue
+    # bazaar.preinstall (system_files) already declares Bazaar.
+    [ "${id}" = "io.github.kolunmi.Bazaar" ] && continue
+    # The org.gtk.Gtk3theme.* entries are runtimes on the 3.22 branch, not
+    # applications on stable; everything else in the Brewfile is an app.
+    if [[ "${id}" == org.gtk.Gtk3theme.* ]]; then
+        printf '[Flatpak Preinstall %s]\nBranch=3.22\nIsRuntime=true\n\n' "${id}"
+    else
+        printf '[Flatpak Preinstall %s]\nBranch=stable\nIsRuntime=false\n\n' "${id}"
+    fi
+done < <(awk -F'"' '/^flatpak / && NF >= 2 {print $2}' "${brewfile}") >> "${brew_preinstall}"
+if ! grep -q '^\[Flatpak Preinstall ' "${brew_preinstall}"; then
+    echo "No Flatpaks generated from ${brewfile}; the Brewfile conversion is broken" >&2
+    exit 1
+fi
 
 disable_unit flatpak-add-fedora-repos.service
 

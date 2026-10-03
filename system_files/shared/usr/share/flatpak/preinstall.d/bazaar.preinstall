@@ -1,4 +1,3 @@
 [Flatpak Preinstall io.github.kolunmi.Bazaar]
 Branch=stable
 IsRuntime=false
-CollectionID=org.flathub.Stable

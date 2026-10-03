@@ -89,7 +89,15 @@ files = [
 [flatpak]
 files = [
   "/etc/flatpak/remotes.d/flathub.flatpakrepo",
+  # Utah's default set is declared in preinstall.d, in the image: the live ISO
+  # bake reads it, as does flatpak-preinstall.service whenever that service
+  # runs (it is enabled at build time but has no preset entry, so bootc
+  # disables it again on an installed system -- see #257).
+  # brewfile.preinstall is generated from the Brewfile by configure-services.sh.
+  "/etc/flatpak/remotes.d/tuna-os.flatpakrepo",
   "/usr/share/flatpak/preinstall.d/bazaar.preinstall",
+  "/usr/share/flatpak/preinstall.d/brewfile.preinstall",
+  "/usr/share/flatpak/preinstall.d/ghostty.preinstall",
   "/usr/share/ublue-os/privileged-setup.hooks.d/99-flatpaks.sh",
   "/usr/share/ublue-os/homebrew/system-flatpaks.Brewfile",
 ]

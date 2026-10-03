@@ -12,7 +12,7 @@
 #   7. log in at the GDM greeter and prove a GNOME session is running
 #
 # A trailing check, after phase 7's desktop and fastfetch evidence, confirms
-# the Brewfile's default Flatpak set is also present offline -- deferred
+# the preinstall.d default Flatpak set is also present offline -- deferred
 # because it deploys asynchronously on first boot and checking right after
 # login undercounts it.
 #
@@ -819,23 +819,27 @@ fi
 # in, and (when required) proving fastfetch on screen, so deployment has had
 # real time to complete; the loop below still tolerates a little more.
 #
-# Same Brewfile-to-list conversion iso/live/Containerfile uses to seed the
-# ISO's own Flatpak repo, run here against the installed contract's copy so
-# this checks the actual default set rather than one app (Ghostty) picked
-# only because the terminal-automation phase above happens to need it --
-# install-flatpaks.sh keeps Ghostty out of the Brewfile-derived list on
-# purpose, as Utah's own addition rather than the Bluefin parity contract.
+# The expected set is read from the installed system's own preinstall.d -- the
+# source of truth install-flatpaks.sh bakes the ISO from, and that
+# flatpak-preinstall.service would apply if it ran (it is disabled on installed
+# systems, see #257, so what is on disk came from the bake via fisherman) -- so
+# this checks the actual default set rather than one app (Ghostty) picked only
+# because the terminal-automation phase above happens to need it. It was
+# derived from the Brewfile before, which silently excluded Utah's own
+# additions: Ghostty is kept out of the Brewfile-derived brewfile.preinstall on
+# purpose, as Utah's addition rather than the Bluefin parity contract, so an
+# ISO with no Ghostty -- the motivating symptom -- passed this check.
 # UTAH_E2E_FLATPAKS overrides the expected set directly; empty to skip.
 if [[ -n "${UTAH_E2E_FLATPAKS-x}" ]]; then
     if [[ -n "${UTAH_E2E_FLATPAKS-}" ]]; then
         expected_flatpaks="${UTAH_E2E_FLATPAKS}"
     else
-        expected_flatpaks="$(ssh_target "awk -F '\"' '/^flatpak / {print \$2}' /usr/share/ublue-os/homebrew/system-flatpaks.Brewfile" 2>/dev/null || true)"
-        [[ -n "${expected_flatpaks}" ]] || fail "could not read the default Flatpak Brewfile on the installed system"
+        expected_flatpaks="$(ssh_target "sed -n 's/^\\[Flatpak Preinstall \\(.*\\)\\]\$/\\1/p' /usr/share/flatpak/preinstall.d/*.preinstall | sort -u" 2>/dev/null || true)"
+        [[ -n "${expected_flatpaks}" ]] || fail "could not read the default Flatpak preinstall.d on the installed system"
     fi
     missing_flatpaks=()
     for _ in $(seq 1 12); do
-        # No --app: the Brewfile's default set includes two runtimes, the
+        # No --app: the default set includes two runtimes, the
         # adw-gtk3 GTK3 themes, and --app hides runtimes, so they read as
         # missing even when present (post-testing-e2e run 36068751481).
         installed_flatpaks="$(ssh_target 'flatpak list --system --columns=application' 2>/dev/null || true)"
@@ -909,8 +913,9 @@ the check beside it passed.
    offline embedded payload, not a substitute reached over a network this
    guest does not have.
 7. The user logs in at the GDM greeter and gets a GNOME session.
-8. Every default Flatpak in the Brewfile contract is present and listed by
-   \`flatpak\` on the installed, network-isolated system.
+8. Every default Flatpak the image declares in
+   \`/usr/share/flatpak/preinstall.d\` is present and listed by \`flatpak\` on
+   the installed, network-isolated system.
 
 ## Screenshots
 
