@@ -223,7 +223,21 @@ releases or emit missing-module errors with empty kernel names.
 `packages/bluefin.toml` is synchronized with. The reference exists so Utah's
 parity gate tests against a known revision rather than moving with Bluefin's
 default branch, preventing unrelated upstream changes from breaking Utah's CI.
-Update it whenever synchronizing `packages/bluefin.toml` with upstream.
+
+`.github/workflows/update-bluefin-parity.yml` moves it: nightly it resolves
+Bluefin `main`, and when the upstream contract differs it opens or refreshes a
+single review PR on `automation/bluefin-parity` carrying the new
+`packages/bluefin.toml`, the new SHA here, and the regenerated counts. It never
+auto-merges. Editing the reference by hand is only needed when synchronizing
+`packages/bluefin.toml` outside that workflow.
+
+**Do not commit overlay fixes to `automation/bluefin-parity`.** That branch is
+disposable: `create-pull-request` rebuilds it from `main` plus the generated
+working-tree changes on every run and force-resets it whenever the result
+differs, so a `packages/utah.toml` fix pushed onto the open bump PR is
+discarded at the next nightly run while upstream still differs from `main`.
+Raise the overlay change as its own pull request against `main`; the bump PR
+then picks the fix up on its next rebuild.
 
 Current counts, per the README "Package parity" section: 61 Bluefin contract
 packages installed, 90 Utah additions (GNOME 51, base-image parity, device
