@@ -23,6 +23,8 @@ jobs:
     outputs:
       matrix: ${{ steps.inputs.outputs.matrix }}
       main_ref: ${{ steps.inputs.outputs.main_ref }}
+      digests: ${{ steps.inputs.outputs.digests }}
+      suites: ${{ steps.inputs.outputs.suites }}
       sha: ${{ steps.inputs.outputs.sha }}
       run: ${{ steps.inputs.outputs.run }}
     steps:
@@ -48,9 +50,24 @@ jobs:
           # kernel flavors are covered by the luks job above. Resolve that one
           # ref here so tacklebox-iso stays a single build, not a matrix.
           main_ref=$(python3 -c "import json,sys; m=json.load(sys.stdin); print(next(x['ref'] for x in m['include'] if x['image']=='utah'))" <<<"$matrix")
+          digests=$(jq -c 'reduce .include[] as $i ({}; . + {($i.image): $i.ref})' <<< "$matrix")
+          suites_json=$(python3 scripts/flavors.py suites)
+          # Fail before the gate boots anything if a flavor has no published
+          # exact digest: an empty image input would fail later and confusingly,
+          # hiding the real cause (a missing build artifact) behind four.
+          missing=$(jq -r --argjson d "$digests" \
+            '[.[] | .image | select(($d[.]) == null or ($d[.] | length) == 0)]
+            | (if length == 0 then "" else ": \(join(", "))" end)' \
+            <<< "$suites_json")
+          if [ -n "$missing" ]; then
+            echo "::error::gate: no published exact-digest for flavor(s)$missing — promotion would boot an empty image"
+            exit 1
+          fi
           {
             echo "matrix=$matrix"
             echo "main_ref=$main_ref"
+            echo "digests=$digests"
+            echo "suites=$suites_json"
             echo "sha=$(jq -r .head_sha run.json)"
             echo "run=$BUILD_RUN"
           } >> "$GITHUB_OUTPUT"
@@ -283,8 +300,35 @@ jobs:
             output/utah-live.iso
             output/utah-live.iso.sha256
 
+
+  # Test each exact digest without replacing it with a composed-image tag.
+  # The pinned reusable composes every call to run-${GITHUB_RUN_ID}; all flavor
+  # calls share that ID, so default composition races and can boot another flavor.
+  # Keep all configured suites. NVIDIA scenarios at this test ref are excluded
+  # as hardware-blocked; suite shards run in parallel, not in listed order.
+  # Any failed suite blocks promotion, leaving :testing untouched.
+  gate:
+    needs: resolve
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.resolve.outputs.suites) }}
+    uses: projectbluefin/testsuite/.github/workflows/e2e.yml@ee82d53a4f86617d807df831a60ad1deaa0d5366
+    with:
+      image: ${{ fromJSON(needs.resolve.outputs.digests)[matrix.image] }}
+      # Preserve the candidate digest; the reusable's runtime tool setup remains
+      # enabled. Do not hide missing zsh/fish or GPU checks by dropping suites.
+      compose_image: false
+      suites: ${{ matrix.suites }}
+      test_repository: projectbluefin/testsuite
+      test_ref: 4c053fd2ea7837d1d92788adb2812122fa666e65
+
   promote-to-testing:
-    needs: [resolve, luks, production-iso]
+    needs: [resolve, luks, production-iso, gate]
     runs-on: ubuntu-26.04
     permissions:
       contents: read
@@ -310,7 +354,7 @@ jobs:
           done < <(jq -r '.include[].ref' <<< "$MATRIX")
 
   documentation:
-    needs: [resolve, luks, production-iso]
+    needs: [resolve, luks, production-iso, gate]
     runs-on: ubuntu-26.04
     permissions:
       contents: write

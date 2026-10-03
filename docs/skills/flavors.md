@@ -1,7 +1,7 @@
 ---
 name: flavors
 version: "1.0"
-last_updated: "2026-09-18"
+last_updated: "2026-10-02"
 id: flavors
 one_line_purpose: Add, remove, or retire an image flavor safely.
 entry_point: docs/skills/flavors.md
@@ -83,9 +83,18 @@ group on that name; Utah's Justfile ignores it when naming images.
 - `image FLAVOR` -- the published image name for a flavor (e.g. `utah` or
   `utah-nvidia`), called directly by the recipes that build, tag, or publish
   images, and exposed to outside callers as `just image_name`.
+- `suites` -- each flavor's image with the testsuite suites its exact digest
+  must pass before `:testing` advances, read from the `suites` map in
+  `config/flavors.json` (the `gate` matrix in `post-testing-e2e.yml`). A
+  flavor with no `suites` entry is a hard error, so a new flavor needs its
+  suites alongside it in the same file.
 
 Unknown names in `flavors` are a hard error at read time, so a typo in the
 config fails before any matrix is built from it.
+
+`tests/test_flavors.py` exercises custom suite values, active-flavor order,
+retired entries, and missing suite mappings; listing images alone does not
+prove the promotion gate has coverage for every active flavor.
 
 ## Verification
 

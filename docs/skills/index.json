@@ -14,9 +14,9 @@
         "actions",
         "promotion"
       ],
-      "description": "build.yml contract gate, kernel-cache job, main/kernel matrix split, promote-testing-to-main and sync-main-to-testing, actions@v1 delegation, weekly factory-pin bump. Use when changing .github/workflows/ or debugging a red run.",
+      "description": "Build contract and kernel-cache jobs, promotion and branch sync, actions@v1 delegation, factory-pin bumps, exact-digest flavor VM suites. Use when changing .github/workflows/ or debugging a red run.",
       "version": "1.0",
-      "last_updated": "2026-09-29",
+      "last_updated": "2026-10-02",
       "doc_type": "reference"
     },
     {
@@ -69,7 +69,7 @@
       ],
       "description": "config/flavors.json is the single source for build, promote, and release matrices. Use when changing the flavor set or debugging a matrix that names an image nothing builds.",
       "version": "1.0",
-      "last_updated": "2026-09-18",
+      "last_updated": "2026-10-02",
       "doc_type": "procedure"
     },
     {

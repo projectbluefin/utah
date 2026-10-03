@@ -5,5 +5,11 @@
     "gaming",
     "nvidia-gaming"
   ],
+  "suites": {
+    "main": "smoke,common",
+    "nvidia": "smoke,common,nvidia",
+    "gaming": "smoke,common",
+    "nvidia-gaming": "smoke,common,nvidia"
+  },
   "retired": {}
 }
