@@ -152,6 +152,8 @@
         "lm_sensors",
         "man-db",
         "pciutils",
+        "pcsc-lite",
+        "pcsc-lite-ccid",
         "pipewire-config-raop",
         "pipewire-utils",
         "poppler-utils",
@@ -163,6 +165,7 @@
         "setools-console",
         "stix-fonts",
         "systemd-container",
+        "tpm2-tools",
         "unzip",
         "vim-enhanced",
         "which",
@@ -223,7 +226,7 @@
     }
   ],
   "totals": {
-    "installed": 166,
+    "installed": 169,
     "unavailable": 7
   },
   "unavailable": [

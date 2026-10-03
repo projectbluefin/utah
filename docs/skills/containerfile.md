@@ -1,7 +1,7 @@
 ---
 name: containerfile
 version: "1.0"
-last_updated: "2026-10-02"
+last_updated: "2026-10-03"
 id: containerfile
 one_line_purpose: Edit the Containerfile without regressing layer count or cache hits.
 entry_point: docs/skills/containerfile.md
@@ -184,6 +184,25 @@ runs again in the flavor step, finds the staged module, and only registers and
 asserts it; `utah-install-v4l2loopback ogc` compiles against the OGC tree that
 `install-ogc-kernel.sh` preserves, which needs `CONFIG_VIDEO_DEV` in that
 kernel (enforced by its `required_config`).
+
+## The initramfs is regenerated after the last package install
+
+The base image ships an initramfs built before Utah installs anything, and
+bootc boots it as-is. Left alone it carried no early CPU microcode and none of
+Common's TPM/passkey unlock modules (`90-passkeys-tpm.conf`), which went
+unnoticed because the image booted fine (#564). `utah-regenerate-initramfs`
+runs at the end of the NVIDIA and OGC step, after `utah-verify-rpm-contract`:
+it rebuilds the initramfs of the one kernel with a `vmlinuz` under
+`/usr/lib/modules` (`dracut --no-hostonly --reproducible`; everything else
+comes from `dracut.conf.d`) and fails the build unless `lsinitrd` shows the
+early microcode cpio with both vendors' blobs and the `bootc ostree fido2
+tpm2-tss pkcs11 pcsc` modules.
+
+dracut refuses a module whose binaries are missing instead of skipping it, so
+a dracut.conf.d file from Common that names a new module means a package in
+`utah.toml` too: `tpm2-tss` needs `tpm2` (tpm2-tools) and `pcsc` needs
+`pcscd` (pcsc-lite). Check with
+`dracut --no-hostonly -f /var/tmp/t.img <kver>` on a booted VM.
 
 ## Clean and lint share a layer
 
