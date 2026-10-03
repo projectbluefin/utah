@@ -255,6 +255,53 @@ class CheckModeTests(unittest.TestCase):
         unit.assert_not_called()
 
 
+class FlatpaksModeTests(unittest.TestCase):
+    """`--flatpaks BREWFILE` is the single entry point for the Brewfile flatpak
+    set (see #510/#511). Print the ordered app IDs and exit 0; reject a
+    contract argument in --flatpaks mode and require a contract when neither
+    mode is selected.
+    """
+
+    def run_flatpaks(self, brewfile_text):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "Brewfile"
+            path.write_text(brewfile_text)
+            with patch.object(
+                desktop.sys, "argv", ["verify", "--flatpaks", str(path)]
+            ), patch("sys.stdout", new_callable=__import__("io").StringIO) as out:
+                rc = desktop.main()
+                return rc, out.getvalue()
+
+    def test_prints_ordered_app_ids(self):
+        rc, out = self.run_flatpaks(
+            '# comment\nbrew "gh"\nflatpak "org.gnome.Calculator"\n'
+            'flatpak "org.mozilla.firefox"\n'
+        )
+        self.assertEqual(rc, 0)
+        self.assertEqual(
+            out.splitlines(), ["org.gnome.Calculator", "org.mozilla.firefox"]
+        )
+
+    def test_rejects_a_contract_argument(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            brewfile = Path(tmp) / "Brewfile"
+            brewfile.write_text('flatpak "org.gnome.Calculator"\n')
+            with patch.object(
+                desktop.sys,
+                "argv",
+                ["verify", "--flatpaks", str(brewfile), str(ROOT / "contracts/bluefin-desktop.toml")],
+            ):
+                with self.assertRaises(SystemExit) as cm:
+                    desktop.main()
+                self.assertEqual(cm.exception.code, 2)
+
+    def test_requires_a_contract_when_neither_mode_is_given(self):
+        with patch.object(desktop.sys, "argv", ["verify"]):
+            with self.assertRaises(SystemExit) as cm:
+                desktop.main()
+            self.assertEqual(cm.exception.code, 2)
+
+
 class GnomeExtensionTests(unittest.TestCase):
     def shipped_tree(self, tmp, versions="51", uuids=None):
         base = Path(tmp) / "usr/share/gnome-shell/extensions"
