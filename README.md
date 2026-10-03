@@ -3,7 +3,7 @@
 <!-- BEGIN E2E VERIFICATION -->
 [![Verified ISO desktop](docs/verification/screenshots/installed-fastfetch.png)](docs/verification/README.md)
 
-*LUKS ISO test passed for commit `b0d302a49016`. [CI run](https://github.com/projectbluefin/utah/actions/runs/37095998562); [screenshots and provenance](docs/verification/README.md).*
+*LUKS ISO test passed for commit `fe660b5184e0`. [CI run](https://github.com/projectbluefin/utah/actions/runs/37102342829); [screenshots and provenance](docs/verification/README.md).*
 <!-- END E2E VERIFICATION -->
 
 †Utahraptor ostrommaysi
