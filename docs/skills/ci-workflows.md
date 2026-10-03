@@ -150,8 +150,8 @@ verify. Everyone who can dispatch this workflow can already sign from an
 arbitrary branch via a same-repo pull request, so accepting branch heads
 widens nothing (#316).
 
-The consumer (`build-ghcr`) also fails closed: CI downloads cosign v2.5.3
-with the platform SHA-256 pinned by `sigstore/cosign-installer@d58896d6…`,
+The consumer (`build-ghcr`) also fails closed: CI downloads cosign v2.6.1
+with the platform SHA-256 pinned by `sigstore/cosign-installer@7e8b541e…`,
 outside the context under `${RUNNER_TEMP}/utah-tools`, and invokes its absolute
 path because the reusable builder uses `sudo` with `secure_path`. Local kernel
 builds require cosign on PATH. The tag is resolved once through `skopeo`, the

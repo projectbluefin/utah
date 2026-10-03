@@ -365,13 +365,13 @@ build-ghcr base_name stream flavor kernel_pin="":
       cosign_bin="$(command -v cosign || true)"
       if [ "${GITHUB_ACTIONS:-false}" = true ]; then
         case "$(uname -m)" in
-          x86_64) cosign_arch=amd64; cosign_sha=783b5d6c74105401c63946c68d9b2a4e1aab3c8abce043e06b8510b02b623ec9 ;;
-          aarch64) cosign_arch=arm64; cosign_sha=bffabe4cf183122b7de3111257a863c99e7dc6cf1093bfd7bf961de1795589b8 ;;
+          x86_64) cosign_arch=amd64; cosign_sha=064954c5d8c7e3b28188eee5b1727b31c411550bc5fefd41aa672d3c761d103a ;;
+          aarch64) cosign_arch=arm64; cosign_sha=56a16480bdd56ec789abaa65924402f6b92c0041f06885995853c05567b76f34 ;;
           *) echo "Unsupported cosign architecture" >&2; exit 1 ;;
         esac
         cosign_bin="${RUNNER_TEMP:?}/utah-tools/cosign"
         mkdir -p "${cosign_bin%/*}"
-        curl -fsSL "https://github.com/sigstore/cosign/releases/download/v2.5.3/cosign-linux-${cosign_arch}" -o "$cosign_bin"
+        curl -fsSL "https://github.com/sigstore/cosign/releases/download/v2.6.1/cosign-linux-${cosign_arch}" -o "$cosign_bin"
         echo "${cosign_sha}  ${cosign_bin}" | sha256sum --check --strict
         chmod 0755 "$cosign_bin"
       fi
