@@ -81,6 +81,28 @@ packages = [
     "gnome-initial-setup",
 ]
 
+# Required major versions for the GNOME desktop contract packages above. The
+# supply-chain attestation (scripts/verify-rpm-contract.py) fails a build whose
+# installed GNOME shell/mutter/etc. is a different major release than the one
+# this manifest promises, so a downstream rebuild cannot silently downgrade the
+# desktop. gtk4 and libadwaita are pinned to their own majors; glibc-all-
+# langpacks is glibc-versioned, not a GNOME component, so it is not asserted.
+# nautilus and gnome-initial-setup track the GNOME release and are asserted
+# with the rest of the desktop; localsearch and the gvfs backends version
+# independently of GNOME, so they are not.
+[gnome.versions]
+gnome-control-center = "51"
+gnome-initial-setup = "51"
+gnome-session = "51"
+gnome-settings-daemon = "51"
+gnome-shell = "51"
+gsettings-desktop-schemas = "51"
+mutter = "51"
+nautilus = "51"
+xdg-desktop-portal-gnome = "51"
+gtk4 = "4"
+libadwaita = "1"
+
 [parity]
 # Packages Bluefin's image carries without naming them in bluefin.toml, because
 # Fedora's Silverblue base supplies them, and which Hummingbird's repository
@@ -136,6 +158,8 @@ packages = [
     # Dakota parity gap this resolves (utah-packages#146, now published).
     "alsa-ucm",
     "alsa-utils",
+    # Bluetooth printer backend, published by the pinned factory (#390).
+    "bluez-cups",
     # Locale and fonts
     "langpacks-en",
     "langpacks-fonts-en",
@@ -168,8 +192,6 @@ packages = [
     "cups",
     "cups-client",
     "cups-ipptool",
-    # Bluetooth printer backend, published by the pinned factory (#390).
-    "bluez-cups",
     "fprintd",
     "fprintd-pam",
     "poppler-utils",
@@ -452,3 +474,61 @@ packages = [
 # against one of NVIDIA CUDA images gets the full toolkit with GPU access and
 # nothing in the base image. That is a better answer than 7.68 GB of it baked in,
 # so this stays out unless someone asks for it with that trade-off in view.
+
+# Final-runtime repository allowlist (issue #21). Only these repositories may be
+# enabled when the image runs; Fedora repositories are bootstrap material for the
+# factory buildroot, never a source of installed packages. Each allowed id must
+# also pin its origin in [repositories.baseurls], otherwise the allowlist would
+# certify a name without a source and could be satisfied by anything served
+# under that section id.
+[repositories]
+allowed = ["public-hummingbird-x86_64-rpms", "utah-packages", "nvidia-container-toolkit"]
+
+# The exact origin each allowlisted repository serves. verify-rpm-contract.py
+# fails a build that enables an allowlisted repository with a different baseurl,
+# a metalink/mirrorlist (which DNF merges with any baseurl the section declares),
+# or no baseurl at all -- and rejects proxy= or sslverify=0 on an allowlisted
+# repository, which reroute or weaken the fetch.
+[repositories.baseurls]
+public-hummingbird-x86_64-rpms = ["https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/"]
+utah-packages = ["file:///etc/utah-packages"]
+nvidia-container-toolkit = ["https://nvidia.github.io/libnvidia-container/stable/rpm/$basearch"]
+
+# GNOME desktop components the utah-packages factory rebuilds with the .bfin
+# release tag, so a Bluefin image is never built against Hummingbird's server
+# packages. Only GNOME desktop components are listed: their factory build is the
+# thing being asserted. gtk4, libadwaita and xdg-desktop-portal are not -- they
+# are not always rebuilt by the factory, and asserting them here would make the
+# general .hum-or-.bfin check on them fail on a legitimate Hummingbird build.
+#
+# This is not the same set as the factory-exclusive one in
+# scripts/install-packages.py, which compares every [gnome] and [hardware]
+# package against what the mounted utah-packages repository offers *right now*
+# to catch a stale layer-cached transaction (#371). That is an availability and
+# version-skew question about the repository; this section is the narrower
+# identity question about the installed release, so a package can be checked for
+# skew without its release tag being contractually pinned to the factory.
+#
+# `parity` names the [parity] packages the factory itself supplies. The factory
+# publishes as `.hum<N>.bfin`, which outranks Hummingbird's own `.hum<N>`, so a
+# copy of one of these without `.bfin` means the transaction silently resolved
+# somewhere else (issue #21). Add a name here only once the factory publishes
+# it: each of these has a recipe in utah-packages and is recorded above in the
+# [parity] header as shipped by the factory image.
+[factory]
+packages = [
+    "gnome-shell",
+    "mutter",
+    "gnome-session",
+    "gnome-settings-daemon",
+    "gnome-control-center",
+    "gsettings-desktop-schemas",
+]
+parity = [
+    "wpa_supplicant",
+    "wireless-regdb",
+    "iw",
+    "alsa-utils",
+    "fprintd",
+    "fprintd-pam",
+]

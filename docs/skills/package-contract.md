@@ -13,7 +13,8 @@ dependencies: []
 tags: [packages, parity, bluefin, contracts]
 description: >-
   Bluefin parity contract: verbatim bluefin.toml, utah.toml overlay, device
-  firmware, [unavailable] rules, repository policy. Use when adding, removing,
+  firmware, [unavailable] rules, repository policy (on-image reposdir
+  scan). Use when adding, removing,
   or debugging packages or parity/check-repos failures.
 metadata:
   type: policy
@@ -124,6 +125,23 @@ repository would leave a permanent layer behind, so reproducibility now comes
 from the digest-pinned `packages` stage being the only source the package
 transaction can see rather than from the repository contents living in the
 image.
+
+The allowlist also runs **on-image**, against the composed image's runtime RPM
+repositories, not just the source files in `packages/`. `verify-rpm-contract.py`
+scans dnf5's default `reposdir` paths — `/etc/yum.repos.d`,
+`/etc/distro.repos.d`, `/usr/share/dnf5/repos.d` — so a `.repo` file the base
+image ships anywhere in those paths is subject to the same allowlist (#454).
+This covers all three: a repo file the base ships in `/etc/distro.repos.d` or
+`/usr/share/dnf5/repos.d` is enabled at runtime exactly as one in
+`/etc/yum.repos.d`, so scanning only the first would leave it invisible to the
+gate (issue #513).
+
+It also scans dnf5's two repo-override drop-in dirs — `/etc/dnf/repos.override.d`
+and `/usr/share/dnf5/repos.override.d` (issue #524). dnf5 applies overrides from
+there, so a `.repo` file can flip `enabled=`/`baseurl=` on a repo id defined in
+the scanned dirs; a base-image override that re-enables a repo the gate saw
+disabled is gated the same way. A repo the base ships in an override dir is
+subject to the allowlist exactly as one in a `reposdir`.
 
 ## Printing and scanning gaps
 
