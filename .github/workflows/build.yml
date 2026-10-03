@@ -128,7 +128,7 @@ jobs:
           echo "$GITHUB_TOKEN" | podman login ghcr.io -u "${{ github.actor }}" --password-stdin \
             || echo "::warning title=ghcr login failed::continuing; a cache hit can still be read anonymously"
       - name: Install cosign
-        uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
+        uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
       - name: Build the kernel cache image if it is not published yet
         id: cache
         env:
