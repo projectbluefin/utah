@@ -15,27 +15,11 @@
 #                  provide -- from the copied base.toml contract or from the
 #                  published Bluefin image snapshot (baselines/bluefin/rpms.tsv)
 #
-# On [multimedia_overrides], which Utah deliberately does not install:
-#
-#   Those twelve entries -- mesa-libGL, mesa-vulkan-drivers, libva,
-#   intel-mediasdk, libheif and friends -- are not extra packages. They are the
-#   same package names Fedora already ships, which Bluefin *replaces* with
-#   negativo17 builds by enabling fedora-multimedia. Utah does not enable that
-#   repository, so it installs Fedora's builds of those names instead. Nothing
-#   is missing from the image; what differs is which build of them it carries,
-#   and the practical consequence is hardware-accelerated codec support.
-#
-#   This is why they are absent from the contract rather than listed under
-#   [unavailable]: [unavailable] means "no repository Utah enables provides this
-#   name at all", which is false of these. Recording them as missing would be
-#   wrong, and recording them as satisfied would hide a real functional
-#   difference from Bluefin.
-#
-#   The factory is already building several of them for Hummingbird --
-#   intel-gmmlib, intel-mediasdk, intel-vpl-gpu-rt, libheif and libva all built
-#   in projectbluefin/hummingbird-github. When that overlay is published and enabled
-#   here, it becomes the source that negativo17 is for Bluefin, and these can
-#   move into the contract as a version assertion rather than a name one.
+# Bluefin's [multimedia_overrides] selects replacement builds from negativo17.
+# Utah does not enable that repository or install that section wholesale.
+# Names in that section are not proof of installation on Hummingbird: the
+# Intel media packages must be requested explicitly in [parity] below (#383).
+# Matching package names does not establish codec parity with Bluefin.
 
 [gnome]
 # Hummingbird supplies the bootable base but not a desktop.  The pinned
@@ -136,6 +120,14 @@ packages = [
     # Dakota parity gap this resolves (utah-packages#146, now published).
     "alsa-ucm",
     "alsa-utils",
+    # Intel VA-API iHD and both Media SDK/oneVPL runtime generations (#383).
+    "intel-gmmlib",
+    "libva-intel-media-driver",
+    "intel-mediasdk",
+    "intel-vpl-gpu-rt",
+    "libvpl",
+    # GStreamer bad-free and Totem remain omitted pending their dependency
+    # closures (SoundTouch/faad/openal/srtp2 and uchardet); tracked by #383.
     # Locale and fonts
     "langpacks-en",
     "langpacks-fonts-en",

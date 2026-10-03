@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-02",
+  "generated_at": "2026-10-03",
   "generator": "scripts/generate-site-data.py",
   "groups": [
     {
@@ -132,6 +132,9 @@
         "google-noto-sans-symbols-2-fonts",
         "google-noto-serif-vf-fonts",
         "hostname",
+        "intel-gmmlib",
+        "intel-mediasdk",
+        "intel-vpl-gpu-rt",
         "iptables-nft",
         "iw",
         "keyutils",
@@ -140,6 +143,8 @@
         "langpacks-fonts-en",
         "less",
         "libimobiledevice-utils",
+        "libva-intel-media-driver",
+        "libvpl",
         "lm_sensors",
         "man-db",
         "pciutils",
@@ -206,7 +211,7 @@
     }
   ],
   "totals": {
-    "installed": 149,
+    "installed": 154,
     "unavailable": 7
   },
   "unavailable": [
