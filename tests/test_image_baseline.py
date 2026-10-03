@@ -95,6 +95,20 @@ class GapTests(unittest.TestCase):
         self.assertIn("gnome-build-meta.bst-core-gnome-initial-setup.bst", report)
         self.assertIn("1 user unit", report)
 
+    def test_report_classifies_missing_firefox_defaults_and_ignores_shipped_assets(self):
+        path = "/usr/share/ublue-os/firefox-config/01-bluefin-global.js"
+        self.write("bluefin/surface.tsv", f"firefox-defaults\t{path}\n")
+        ib.write_report()
+        self.assertEqual(ib.gaps(), {"firefox-defaults": [path]})
+        self.assertIn("| firefox-defaults | **new** | 1 ublue asset |",
+                      (self.base / "GAP.md").read_text())
+
+        # Common's overlay can ship the same asset without owning an RPM.
+        self.write("utah/surface.tsv", f"(unowned)\t{path}\n")
+        ib.write_report()
+        self.assertEqual(ib.gaps(), {})
+        self.assertNotIn("| firefox-defaults |", (self.base / "GAP.md").read_text())
+
     def test_report_renders_the_triage_reason_and_its_issue(self):
         self.write("triage.toml",
                    '[package.gnome-initial-setup]\n'
@@ -264,7 +278,10 @@ class DakotaSbomTests(unittest.TestCase):
             "gnome-initial-setup\t51.0", self.dakota())
 
     def test_an_element_without_name_or_version_still_lands(self):
-        self.assertIn("base.bst\t\t\n", self.dakota())
+        # Trailing empties are stripped so the file carries no trailing tabs
+        # (the trailing-whitespace pre-commit hook otherwise flips it on every
+        # regeneration).
+        self.assertIn("base.bst\n", self.dakota())
 
     def test_the_file_is_sorted_and_carries_the_column_header(self):
         rows = self.dakota().splitlines()

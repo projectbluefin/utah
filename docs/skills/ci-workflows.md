@@ -112,7 +112,17 @@ the build before expensive compilation or container builds run:
   run is one command) or within the ten lines that follow it, must be code
   rather than comment text, and a bare `--check` never clears on its own --
   `sha256sum --check` clears through `sha256sum`. Flathub descriptor
-  downloads (`flathub.flatpakrepo`, `appstream`) and comment lines are exempt.
+  downloads (`flathub.flatpakrepo`, `appstream`) and comment lines are exempt
+  from the extension heuristic only; `scripts/configure-services.sh` still
+  pins `flathub.flatpakrepo` by sha256, because the descriptor carries the
+  `Url=` and `GPGKey=` every Flatpak on the image is verified against.
+  Verify the trust behavior by running `configure-services.sh` in a disposable
+  image: a matching descriptor must install unchanged, while a hash mismatch
+  must exit nonzero without replacing an existing remote. Source ordering or
+  string assertions do not prove that rejection path.
+  `tests/test_flathub_descriptor.py` runs the whole script against scratch
+  filesystem roots and a committed descriptor fixture, with real hashing and
+  installation. It covers matching bytes and rejection without remote replacement.
   Scanning is per *logical* line: backslash continuations are joined before
   matching, so a `curl` whose URL sits on a continuation line is still inspected
   and is reported at the line the command starts on. Matching raw lines instead
@@ -138,17 +148,53 @@ loudly there, because an invalid matrix creates no image job at all and the
 only symptom is `build_container: failure` from the aggregator (comment,
 `.github/workflows/build.yml`).
 
-## kernel_cache: skipped unless needed, skipped when published
+## kernel_cache: skipped unless needed, reused only when signed
 
 The kernel cache job runs only when `needs_kernel` is `true` -- while the
 matrix is main-only, building it is 45 minutes spent on an image nothing
 consumes (comment, `.github/workflows/build.yml`). When it does run, it
 frees runner disk, logs in to GHCR with `GITHUB_TOKEN`, and probes the
-content-hash tag with `podman pull`: a tag that is already published is a
-cache hit and the job exits without building; only a miss builds
-`Containerfile.kernel` and pushes (step "Build the kernel cache image if it
-is not published yet", `.github/workflows/build.yml`). What the tag hashes
+content-hash tag with `podman pull`. A published tag is a cache hit only if
+its digest verifies; unsigned or wrongly signed hits are rebuilt from the
+checkout, pushed, signed and verified just like misses. What the tag hashes
 and why lives in [kernel-cache.md](kernel-cache.md).
+
+A published tag is adopted only when its signature verifies; a miss is
+pushed, signed, and verified before the job calls itself done. Two
+boundaries decide whether that can work (job `env:` and the same step):
+
+- podman and cosign must share one credential store. `podman login` by
+  default writes `${XDG_RUNTIME_DIR}/containers/auth.json`, which cosign
+  never reads -- it uses the Docker keychain at
+  `${DOCKER_CONFIG}/config.json`. The job points both `DOCKER_CONFIG` and
+  `REGISTRY_AUTH_FILE` at one `${RUNNER_TEMP}/utah-registry/config.json`,
+  outside the image build context, and removes it in an always-run step.
+  The image push and signature upload then authenticate with the same token;
+  without it the push succeeds and `cosign sign` fails UNAUTHORIZED (#316).
+- the signed digest must be the one the registry stored. After a push,
+  `podman image inspect ... RepoDigests` reports the *local* manifest
+  digest, which differs from the registry's, so the job signs the digest
+  `podman push --digestfile` reports instead. The cache-hit path needs no
+  such care: there the inspect runs after `podman pull`, which records the
+  registry digest.
+
+`cosign verify` pins the issuer and the identity to this exact workflow in
+this repo, then accepts any `refs/heads/*` or `refs/pull/N/merge` ref. A
+manual `workflow_dispatch` signs with `refs/heads/<branch>` -- and the
+Actions UI defaults to the default branch -- so a regexp naming only
+`testing` made a dispatched run sign the image and then fail its own
+verify. Everyone who can dispatch this workflow can already sign from an
+arbitrary branch via a same-repo pull request, so accepting branch heads
+widens nothing (#316).
+
+The consumer (`build-ghcr`) also fails closed: CI downloads cosign v2.6.1
+with the platform SHA-256 pinned by `sigstore/cosign-installer@7e8b541e…`,
+outside the context under `${RUNNER_TEMP}/utah-tools`, and invokes its absolute
+path because the reusable builder uses `sudo` with `secure_path`. Local kernel
+builds require cosign on PATH. The tag is resolved once through `skopeo`, the
+same issuer/ref regexp verifies the resulting immutable digest, and only that
+digest reaches `BASE_IMAGE`. Registry credentials use a private temporary
+Docker keychain outside the checkout and are removed at recipe exit.
 
 ## The build matrix calls reusable-build.yml twice
 
@@ -332,14 +378,18 @@ the pin is stale, write nothing), and the default (rewrite), plus `--digest` to
 take a digest resolved by another job. The suite is offline by default; the one
 test that talks to the registry runs only with `UTAH_NETWORK_TESTS=1`.
 
-The schedule is `.github/workflows/bump-factory-pin.yml`: Mondays 07:00 UTC and
-on demand, a read-only resolve job followed by a one-line pull request against
-`testing` opened with `peter-evans/create-pull-request` -- the same mechanism
-the ISO documentation PR already uses, under the same never-merge rule. Both
-jobs check out `testing` once and run the script from that checkout, so a
-`workflow_dispatch` fired before `scripts/bump-factory-pin.py` has reached
-`testing` fails on the missing file: wait for the sync, or dispatch from a ref
-that already carries the script.
+The schedule is `.github/workflows/bump-factory-pin.yml`: daily at 07:00 UTC
+(after the factory's 03:17 rebuild publishes) and on demand, a read-only
+resolve job followed by a one-line pull request against `main` opened with
+`peter-evans/create-pull-request` -- the same mechanism the ISO documentation
+PR already uses, under the same never-merge rule. It was weekly against
+`testing` at first, and both were wrong. Weekly: Hummingbird is rolling and the
+factory republishes daily, so a weekly rev left Utah up to a week behind
+packages already built. Against `testing`: `sync-main-to-testing` force-resets
+`testing` to `main` whenever `testing` is ahead (the reusable sync's
+`force-reset` strategy), so a bump merged there was wiped at the next 22:20
+sync unless a promotion landed first. On `main` it reaches `testing` through
+that same sync.
 
 That pull request arrives with no checks on it. `create-pull-request` authors
 it as `github-actions[bot]` using the default `GITHUB_TOKEN`, and GitHub does
@@ -347,7 +397,10 @@ not fire `on: pull_request` workflows for that token; this repository holds no
 App or PAT credential to author it with instead. The build matrix is therefore
 a manual step -- push an empty commit to `automation/factory-pin`, or close and
 reopen the pull request, and `build.yml` runs. An empty check list on one of
-these is not a passing build.
+these is not a passing build. Do not "fix" that by having the workflow
+dispatch `build.yml` on the proposal branch: the reusable build pushes, signs
+and writes the layer cache on every non-`pull_request` event, so a dispatch
+publishes images built from an unreviewed branch.
 
 Renovate is not the mechanism here because the pin is an `ARG` indirection, not
 a `FROM image@sha256:` -- the built-in dockerfile manager cannot see it, and

@@ -57,7 +57,7 @@ checks (`scripts/check-skill-frontmatter.sh`, `scripts/check-skill-index.sh`,
   through the `ARG` indirection — so it has its own rev path:
   `scripts/bump-factory-pin.py` rewrites it from the registry, and
   `.github/workflows/bump-factory-pin.yml` proposes that rev as a pull request
-  weekly (#336). `Containerfile` and
+  against `main` daily (#336). `Containerfile` and
   `Containerfile.kernel` must share the same `BASE_IMAGE` line; `just check`
   asserts it. A `PACKAGE_IMAGE_SHA` bump must also move the `# factory-pin:`
   stamp in `packages/utah-packages.repo` — the stamp is the transaction's

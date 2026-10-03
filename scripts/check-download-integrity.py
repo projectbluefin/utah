@@ -24,9 +24,12 @@ FILES = [
     Path("iso/scripts/build-iso.sh"),
 ]
 
-# Downloads that are configuration descriptors, not executed code, and are safe
-# to fetch without a digest. Flathub's repo descriptor only names a remote; the
-# packages installed from it are themselves verified by Flatpak/OSTree.
+# Downloads the checker does not flag by extension. They are configuration
+# descriptors rather than executables, so the `.run`/`.rpm`/`.service` rule
+# below never matches them. This is an exemption from the heuristic, not a
+# judgement that they are safe unverified: flathub.flatpakrepo carries the
+# Url= and GPGKey= every Flatpak on the image is verified against, and
+# scripts/configure-services.sh pins it by sha256 for exactly that reason.
 ALLOWED_UNPINNED = (
     "dl.flathub.org/repo/flathub.flatpakrepo",
     "dl.flathub.org/repo/appstream",

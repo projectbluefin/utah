@@ -453,7 +453,7 @@ STALE_PREFIX = "stale baseline: "
 
 
 def compare_to_baseline(parts: dict[str, list[str]], baseline: dict, ref: str,
-                        factory_ref: str) -> list[str]:
+                        factory_ref: str, baseurl: str) -> list[str]:
     """Diff each partition against the recorded baseline.
 
     A name migrating between partitions is celebrated as a rebuild
@@ -468,10 +468,10 @@ def compare_to_baseline(parts: dict[str, list[str]], baseline: dict, ref: str,
     intent, not a regression.
 
     The baseline records the `ref` and `factory_ref` it was captured
-    against (see `baseline_record`). Those are what make the partition
-    lists comparable: two audits only describe the same package set when
-    they were read against the same Bluefin ref and factory pin. A Bluefin
-    ref or factory-pin bump that leaves the partition lists unchanged would
+    against (see `baseline_record`), as well as `hummingbird_baseurl`. Those are
+    what make the partition lists comparable: two audits only describe the
+    same package set when they were read against the same Bluefin ref, factory
+    pin, and repo URL. A bump that leaves the partition lists unchanged would
     otherwise read as "no growth" and pass silently -- the baseline is
     stale, it is not confirming the debt. Surface that mismatch first, so
     the operator rewrites the baseline against the new ref instead of
@@ -479,13 +479,14 @@ def compare_to_baseline(parts: dict[str, list[str]], baseline: dict, ref: str,
     """
     msgs: list[str] = []
 
-    # A ref mismatch means the partition lists are not comparable to the
-    # baseline at all, regardless of whether they grew. Report it before
+    # A ref or baseurl mismatch means the partition lists are not comparable to
+    # the baseline at all, regardless of whether they grew. Report it before
     # the partition diff so the stale-baseline verdict is never masked by
     # (or buried under) a growth report.
     ref_changes = (
         ("ref", ref, baseline.get("ref")),
         ("factory_ref", factory_ref, baseline.get("factory_ref")),
+        ("hummingbird_baseurl", baseurl, baseline.get("hummingbird_baseurl")),
     )
     for key, current, recorded in ref_changes:
         if recorded is not None and recorded != current:
@@ -653,8 +654,8 @@ def cmd_check(args) -> int:
               file=sys.stderr)
         return 2
 
-    ref, parts, _, _, factory_ref, _ = fetch_partition(args)
-    msgs = compare_to_baseline(parts, baseline, ref, factory_ref)
+    ref, parts, _, _, factory_ref, baseurl = fetch_partition(args)
+    msgs = compare_to_baseline(parts, baseline, ref, factory_ref, baseurl)
     if msgs:
         for msg in msgs:
             print(f"ERROR: {msg}", file=sys.stderr)

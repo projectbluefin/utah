@@ -10,7 +10,7 @@ whatever the pin said until someone noticed by hand (#336).
 
 The fix is to make the rev a routine pull request instead of a discovery. A
 scheduled workflow (`.github/workflows/bump-factory-pin.yml`) runs this script
-against `testing`, and the resulting diff is reviewed and merged like any
+daily against `main`, and the resulting diff is reviewed and merged like any
 other change. Nothing here merges anything, and a stale pin is still only
 ever *reported* by the caller; writing the files is opt-in by way of the
 absence of `--check`.

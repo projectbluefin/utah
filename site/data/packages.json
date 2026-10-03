@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-02",
+  "generated_at": "2026-10-03",
   "generator": "scripts/generate-site-data.py",
   "groups": [
     {
@@ -112,8 +112,10 @@
         "attr",
         "bash-completion",
         "bind-utils",
+        "bluez-cups",
         "buildah",
         "bzip2",
+        "cracklib-dicts",
         "crypto-policies-scripts",
         "cups",
         "cups-client",
@@ -206,7 +208,7 @@
     }
   ],
   "totals": {
-    "installed": 149,
+    "installed": 151,
     "unavailable": 7
   },
   "unavailable": [

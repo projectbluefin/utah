@@ -98,9 +98,18 @@ jobs:
     # it is 45 minutes spent on an image nothing consumes.
     if: needs.contract.outputs.needs_kernel == 'true' && !inputs.contract_only
     runs-on: ubuntu-26.04
+    # cosign reads the Docker keychain (${DOCKER_CONFIG}/config.json); it never
+    # looks at podman's default authfile under ${XDG_RUNTIME_DIR}/containers.
+    # The two formats are identical, so pointing podman at the docker path
+    # gives both tools one credential store and lets cosign push the signature.
+    # Without this the image pushes and `cosign sign` fails UNAUTHORIZED.
     permissions:
       contents: read
       packages: write
+      # cosign sign --yes needs the GitHub OIDC token to mint the signing
+      # certificate; without id-token: write the cache image is pushed but
+      # never signed, so the verification below can never pass.
+      id-token: write
     outputs:
       # Whether the flavored builds can pull the cache image. False on a fork
       # pull request, where the kernel is compiled but cannot be published.
@@ -113,14 +122,23 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
                       /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
           df -h /
+      - name: Configure isolated registry credentials
+        run: |
+          {
+            echo "DOCKER_CONFIG=${RUNNER_TEMP}/utah-registry"
+            echo "REGISTRY_AUTH_FILE=${RUNNER_TEMP}/utah-registry/config.json"
+          } >> "$GITHUB_ENV"
       - name: Log in to GHCR
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          mkdir -p "${DOCKER_CONFIG}"
           # Anonymous pulls are enough to check whether the tag is published;
           # only the push needs credentials, and a fork PR has none to give.
           echo "$GITHUB_TOKEN" | podman login ghcr.io -u "${{ github.actor }}" --password-stdin \
             || echo "::warning title=ghcr login failed::continuing; a cache hit can still be read anonymously"
+      - name: Install cosign
+        uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
       - name: Build the kernel cache image if it is not published yet
         id: cache
         env:
@@ -132,12 +150,37 @@ jobs:
         run: |
           set -euo pipefail
           ref="ghcr.io/${REPO_ORGANIZATION,,}/utah-kernel-cache:$(./scripts/kernel-cache-tag.sh)"
+          # The identity regexp pins the signature to this exact workflow in
+          # this repo; the ref suffix must cover every trigger that can reach
+          # `cosign sign` below. Same-repo pull requests run as
+          # refs/pull/N/merge, pushes arrive only from testing, but a manual
+          # workflow_dispatch -- whose UI defaults to main -- runs as
+          # refs/heads/<branch>. Pinning the suffix to testing alone made such
+          # a run sign the image and then fail its own verify, so accept any
+          # branch head: everyone who can dispatch this workflow can already
+          # sign from an arbitrary branch via a same-repo pull request.
+          verify() {
+            cosign verify "ghcr.io/${REPO_ORGANIZATION,,}/utah-kernel-cache@${1}" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              --certificate-identity-regexp '^https://github\.com/projectbluefin/utah/\.github/workflows/build\.yml@refs/(heads/[^@]+|pull/[0-9]+/merge)$'
+          }
           if podman pull -q "$ref" >/dev/null 2>&1; then
-            echo "Cache hit: $ref is already published"
-            echo "available=true" >> "$GITHUB_OUTPUT"
-            exit 0
+            digest="$(podman image inspect --format '{{ index .RepoDigests 0 }}' "$ref" | cut -d@ -f2)"
+            if verify "$digest"; then
+              echo "Cache hit: $ref is published and signed"
+              echo "available=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            # An unsigned or wrongly-signed cache image is never adopted as a
+            # base: discard it and rebuild from this checkout, so the tag ends
+            # up carrying bytes this workflow produced and signed. This is also
+            # how the tags that predate signing are retired -- without it the
+            # first run after that change can never go green.
+            echo "::warning title=unsigned kernel cache::$ref@$digest is not signed by this workflow; rebuilding and re-signing it"
+            podman rmi -f "$ref" >/dev/null 2>&1 || true
+          else
+            echo "Cache miss: building $ref"
           fi
-          echo "Cache miss: building $ref"
           podman build --tag "$ref" --file Containerfile.kernel .
           # A pull request from a fork gets a read-only GITHUB_TOKEN, so the
           # push fails no matter how well the kernel built:
@@ -154,8 +197,18 @@ jobs:
             echo "available=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          podman push "$ref"
+          # --digestfile reports the digest the registry accepted. `podman image
+          # inspect ... RepoDigests` after a push reports the local manifest
+          # digest instead, which differs, so the signature landed on a digest
+          # that 404s on ghcr.io and the verify below could never pass.
+          podman push --digestfile "${RUNNER_TEMP}/kernel-cache.digest" "$ref"
+          digest="$(cat "${RUNNER_TEMP}/kernel-cache.digest")"
+          cosign sign --yes "ghcr.io/${REPO_ORGANIZATION,,}/utah-kernel-cache@${digest}"
+          verify "$digest"
           echo "available=true" >> "$GITHUB_OUTPUT"
+      - name: Remove registry credentials
+        if: always()
+        run: rm -rf "${DOCKER_CONFIG}"
 
   # main starts the moment the contract check passes. It never pulls the kernel
   # cache, so there is no reason for it to wait on that job; before this split

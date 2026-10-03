@@ -141,6 +141,18 @@ QEMU-for-Docker and exposes the noVNC console at the printed URL (comment
 above `boot-iso` in `Justfile`), with TPM, UEFI, and `-snapshot` so nothing
 persists.
 
+### Units that must stand down on live media
+
+The live root is a dmsquash-live overlay: no `/sysroot`, no
+`/run/ostree-booted`. Units written for installed bootc systems must check one
+of those, not the filesystem type of `/sysroot`. bootupd's
+`bootloader-update.service` checked only for an erofs/squashfs `/sysroot`
+and failed in every live session; `bootloader-update.service.d/
+10-utah-ostree-only.conf` adds `ConditionPathExists=/run/ostree-booted`.
+`configure-live.sh` masks the units that must not run there at all
+(`bootc-unified-storage.service`). On a booted live ISO, `systemctl --failed`
+should be empty.
+
 ### Supported and unsupported boot paths
 
 - **UEFI x86_64 (Supported)**: The live ISO is built strictly for UEFI boot
@@ -328,6 +340,67 @@ never by rebuilding or changing the published image. `UTAH_E2E_RAM` and
 When integrating this harness with newer image-build fixes, retain the
 currently verified package-image digest and available-package contract.
 The older ISO branch's package pin and exclusions must not replace them.
+
+### Bootc upgrade and rollback lifecycle harness
+
+`just lifecycle-test <candidate-target-image> [disk-or-iso] [baseline-image]` runs
+`iso/scripts/lifecycle-e2e.sh` and `scripts/bootc_lifecycle.py` to validate
+atomic lifecycle transitions between two immutable Utah digests in QEMU:
+baseline deployment verification, staging with atomic staging invariants
+preserved, reboot into the candidate deployment with graphical desktop
+verification, rollback execution, and reboot verification returning to the
+baseline digest.
+Phase-keyed diagnostics (`evidence/lifecycle-*.json`, `lifecycle-summary.json`)
+and screendumps identify the active deployment and digest at every phase.
+
+The baseline image (default `ghcr.io/projectbluefin/utah:testing`, the target
+ref `just iso testing` builds with) is the ref a live ISO installs its offline
+payload under, and phase 1 fails unless the booted deployment tracks it. The
+candidate is what gets staged, so it has no default: with the `bootc` policy it
+must be a different ref from the baseline, since `bootc switch` to the ref
+already booted stages nothing. The staged slot is checked against that
+candidate, not against itself: it must come from the candidate's repository,
+and a digest-pinned candidate must stage exactly that digest.
+
+The default `bootc` policy stages the candidate with `bootc switch`, so the
+candidate may come from any repository. `UTAH_LIFECYCLE_POLICY=uupd` instead
+runs the shipped `uupd.service` in the guest, which is the unit the production
+timer triggers. uupd follows the image reference the booted deployment already
+tracks, so that policy requires a candidate in the same repository as the
+booted deployment and fails closed rather than falling back to `bootc switch`.
+Passing a live ISO instead of an installed disk runs the LUKS install harness
+first; `UTAH_E2E_WORK` overrides where that install phase writes its disk.
+The harness drives the guest over SSH as the `utahtest` password account the
+installer provisions, so it defaults to the debug ISO (`just iso testing 1`).
+The disk from `just generate-bootable-image` has no such account and cannot be
+used directly. An installed disk may be passed instead when it carries that
+account; its image format is detected before the overlay is created, so raw
+and qcow2 disks both work.
+
+All privileged guest steps feed the test password to `sudo -S` over SSH;
+membership in `wheel` alone does not allow passwordless, non-tty sudo. Clean
+reboots use `systemctl reboot --no-block`. A non-transport sudo/reboot failure
+fails immediately; SSH exit 255 is accepted only with fresh serial shutdown
+evidence and an observed disconnected SSH session. A successful request also
+requires SSH to go down before the next boot gates run. Unlock, graphical
+login and digest checks then prove the new deployment actually booted; never
+hard-reset a staged deployment. QEMU runs without `-no-reboot` and uses its
+normal guest-reboot reset action, retaining the same disk and firmware state.
+Every desktop milestone also requires `/etc/os-release` to identify
+`ID=hummingbird`, `NAME=Utah`, and `PRETTY_NAME=Utah (Version: ...)`, matching
+the desktop contract. A readable os-release file is not identity proof.
+
+After each baseline, upgraded and rollback boot, the harness enters the
+test account through GDM with QEMU monitor key events, using the same
+single-account greeter/password flow as `luks-e2e.sh`, and waits for that
+user's GNOME Shell before taking desktop evidence. An SSH connection or
+active GDM service alone does not establish a graphical user session.
+The disposable disk must offer the test account selected at the greeter;
+this does not enable autologin or alter the published image's login policy.
+
+```bash
+just lifecycle-test ghcr.io/projectbluefin/utah@sha256:<candidate-digest>
+```
 
 ```bash
 just check

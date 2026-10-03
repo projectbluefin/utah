@@ -4,18 +4,27 @@ name: Bump package factory pin
 # image build is reviewable against the exact package set it consumed. Nothing
 # revved that pin, so the factory published GNOME 51 finals under a new digest
 # and this repository kept building against the old one until someone noticed by
-# hand (#336). This makes the rev a routine pull request against `testing`
-# instead of a discovery, on the same weekly beat the RFC proposes for stable
-# promotions.
+# hand (#336). This makes the rev a routine pull request against `main`
+# instead of a discovery.
 #
-# It opens a pull request; it never merges one. The digest diff is the review,
-# and the full build matrix runs on the pull request before a human decides.
+# Daily, against main. Hummingbird is a rolling distribution and the factory
+# republishes daily (rebuild-rpms.yml, 03:17 UTC), so a weekly rev left Utah up
+# to a week behind packages that were already built. The proposal targets main
+# because sync-main-to-testing force-resets testing whenever it is ahead of
+# main: a bump merged into testing was wiped at the next 22:20 sync unless a
+# promotion happened to land first.
+#
+# It opens a pull request; it never merges one. The digest diff is the review.
+# A pull request opened with the default GITHUB_TOKEN fires no pull_request
+# workflows, and dispatching build.yml on the branch instead would publish and
+# sign its images (the reusable build pushes on every non-PR event), so CI on
+# the proposal stays a manual nudge -- see docs/skills/ci-workflows.md.
 
 on:
   schedule:
-    # Mondays 07:00 UTC. Weekly, not daily: the factory publishes on its own
-    # cadence, and a daily ping mostly re-reports the digest already pinned.
-    - cron: '0 7 * * 1'
+    # 07:00 UTC daily, after the factory's 03:17 rebuild has published. A day
+    # with no new digest costs one registry request and opens nothing.
+    - cron: '0 7 * * *'
   workflow_dispatch:
 
 permissions:
@@ -31,8 +40,6 @@ jobs:
       pinned: ${{ steps.resolve.outputs.pinned }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          ref: testing
       - id: resolve
         run: |
           set -euo pipefail
@@ -58,8 +65,6 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          ref: testing
       - name: Rewrite the pin
         run: python3 scripts/bump-factory-pin.py --digest "${{ needs.resolve.outputs.digest }}"
       - name: Propose the digest bump
@@ -75,12 +80,15 @@ jobs:
             - pinned: `${{ needs.resolve.outputs.pinned }}`
             - latest: `${{ needs.resolve.outputs.digest }}`
 
-            Proposed weekly by `bump-factory-pin.yml` (#336). The pin is a
+            Proposed daily by `bump-factory-pin.yml` (#336). The pin is a
             reviewable digest, not a floating tag, so this diff is the whole
             change: the ARG plus the `# factory-pin:` stamp that keys the
             transaction's layer cache (#371).
 
-            Opened against `testing`; `main` receives it through the promotion.
+            Opened against `main`; `testing` receives it through the sync.
+            A default-token pull request fires no `pull_request` checks: push
+            an empty commit to `automation/factory-pin` (or close and reopen)
+            to run the build matrix before merging.
           add-paths: |
             Containerfile
             packages/utah-packages.repo

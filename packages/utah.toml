@@ -163,11 +163,20 @@ packages = [
     "crypto-policies-scripts",
     "python3-pip",
     "systemd-container",
+    # pam_pwquality's dictionary. Fedora's Silverblue base pulls it in;
+    # Hummingbird's cracklib does not require it. Without it libpwquality
+    # fails every candidate with "error loading dictionary", so passwd (via
+    # pam_pwquality in system-auth) refused every new password, GNOME Settings'
+    # password change with it, and Initial Setup rated every password a
+    # failure. Verified on a booted testing-20261001-41873b5.
+    "cracklib-dicts",
     # Printing (driverless IPP Everywhere; ghostscript and cups-filters first
     # published in the factory image of 2026-09-26), fingerprint login, PDF tools.
     "cups",
     "cups-client",
     "cups-ipptool",
+    # Bluetooth printer backend, published by the pinned factory (#390).
+    "bluez-cups",
     "fprintd",
     "fprintd-pam",
     "poppler-utils",

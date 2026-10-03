@@ -14,6 +14,8 @@ files = [
   "/usr/share/glib-2.0/schemas/zz0-bluefin-modifications.gschema.override",
   "/usr/share/ublue-os/fastfetch-user-count",
   "/usr/share/ublue-os/bazaar-install-count",
+  "/usr/bin/chairlift-helper",
+  "/usr/share/polkit-1/actions/io.projectbluefin.chairlift.ublue.policy",
 ]
 
 [branding.os_release]
@@ -103,11 +105,9 @@ apps = [
   "com.mattjakeman.ExtensionManager",
   "com.ranfdev.DistroShelf",
   "io.github.flattool.Ignition",
-  "io.github.flattool.Warehouse",
   "io.github.kolunmi.Bazaar",
   "io.gitlab.adhami3310.Impression",
   "io.missioncenter.MissionCenter",
-  "it.mijorus.smile",
   "org.gnome.Calculator",
   "org.gnome.Calendar",
   "org.gnome.Characters",
