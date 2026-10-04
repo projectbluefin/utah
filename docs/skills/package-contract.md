@@ -259,6 +259,14 @@ single review PR on `automation/bluefin-parity` carrying the new
 auto-merges. Editing the reference by hand is only needed when synchronizing
 `packages/bluefin.toml` outside that workflow.
 
+The bump PR does not refresh `baselines/audit-baseline.json`: the audit is
+local-only (it resolves names against the pinned factory repository), so the
+workflow cannot run it. After merging a bump, run
+`just audit-bluefin-parity --write` locally and commit the refreshed baseline;
+until then `just check-audit-parity` reports a stale baseline because the
+recorded `ref` no longer matches `packages/.bluefin-parity-ref`. The bump PR
+body repeats this reminder.
+
 **Do not commit overlay fixes to `automation/bluefin-parity`.** That branch is
 disposable: `create-pull-request` rebuilds it from `main` plus the generated
 working-tree changes on every run and force-resets it whenever the result
