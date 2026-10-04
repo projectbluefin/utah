@@ -121,6 +121,29 @@ class GeneratedDataTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
 
 
+    def test_pinned_date_regenerates_identical_output(self):
+        # The nightly parity workflow pins the date so an unchanged upstream
+        # ref does not churn the open bump branch.
+        with tempfile.TemporaryDirectory() as tmp:
+            outputs = []
+            for name in ("a.json", "b.json"):
+                out = Path(tmp) / name
+                result = subprocess.run(
+                    [sys.executable, str(GENERATOR), "--generated-at", "2001-02-03",
+                     "--output", str(out)],
+                    capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                outputs.append(out.read_text())
+            self.assertEqual(outputs[0], outputs[1])
+            self.assertEqual(json.loads(outputs[0])["generated_at"], "2001-02-03")
+
+    def test_malformed_pinned_date_is_rejected(self):
+        result = subprocess.run(
+            [sys.executable, str(GENERATOR), "--generated-at", "today", "--check"],
+            capture_output=True, text=True)
+        self.assertEqual(result.returncode, 2)
+
+
 class PageTests(unittest.TestCase):
     def setUp(self):
         self.html = (SITE / "index.html").read_text()

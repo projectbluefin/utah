@@ -32,9 +32,11 @@ jobs:
         run: |
           set -euo pipefail
           current_ref=$(tr -d '[:space:]' < packages/.bluefin-parity-ref)
-          upstream_ref=$(gh api repos/projectbluefin/bluefin/commits/main --jq .sha)
+          read -r upstream_ref upstream_date < <(gh api repos/projectbluefin/bluefin/commits/main \
+            --jq '.sha + " " + .commit.committer.date[0:10]')
           [[ "$current_ref" =~ ^[0-9a-f]{40}$ ]]
           [[ "$upstream_ref" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$upstream_date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]
           # create-pull-request reads body-path even when there is no diff.
           # Keep it runnable so an upstream reversion closes the stale bump PR.
           printf 'The Bluefin package contract matches main.\n' > "$RUNNER_TEMP/bluefin-parity-pr.md"
@@ -50,12 +52,17 @@ jobs:
           # A new contract changes the package totals. Regenerate the status
           # page data and the hand-written counts so `just check` passes on
           # the bump PR instead of failing check-doc-counts.
-          python3 scripts/generate-site-data.py
+          # Stamp the upstream commit date, not today: the same upstream ref
+          # must regenerate byte-identical files, or every nightly run would
+          # force-reset the open bump branch and re-dispatch its checks for a
+          # date-only change.
+          python3 scripts/generate-site-data.py --generated-at "$upstream_date"
           python3 scripts/check-doc-counts.py --write
           {
             printf "Updates the Bluefin package contract from \`%s\` to \`%s\`.\n\n" \
               "$current_ref" "$upstream_ref"
             printf 'This PR intentionally does not auto-merge; review any required Utah overlay changes before adopting the upstream package set.\n\n'
+            printf 'After merging, run `just audit-bluefin-parity --write` locally and commit the refreshed `baselines/audit-baseline.json`; until then `just check-audit-parity` reports a stale baseline.\n\n'
             printf '## Upstream diff\n\n'
             diff_body="$(git diff --no-ext-diff --unified=3 -- packages/bluefin.toml)"
             # Fence must be longer than the longest backtick run the upstream

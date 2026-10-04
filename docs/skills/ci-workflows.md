@@ -48,7 +48,10 @@ post-build verification workflows, not the complete workflow inventory:
   proposing, it reruns `scripts/generate-site-data.py` and
   `scripts/check-doc-counts.py --write`, so the bump carries the new
   `site/data/packages.json` and the README / `package-contract.md` counts
-  that `just check` compares against the manifests.
+  that `just check` compares against the manifests. The generator is passed
+  `--generated-at` with the upstream commit date rather than defaulting to
+  today, so an unchanged upstream ref regenerates byte-identical files and
+  `create-pull-request` leaves the open bump branch alone.
   The proposal action runs even when upstream equals `main`: it must see the
   empty diff to close a previously opened bump after an upstream reversion.
   Its body file is created on both paths, while explicit CI dispatch remains
