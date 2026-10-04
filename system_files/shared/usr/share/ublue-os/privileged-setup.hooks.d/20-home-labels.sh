@@ -2,7 +2,7 @@
 # Relabel /var/home once on systems installed before the image fixed its
 # home-root label (scripts/fix-home-labels.sh, #261), and repair a second
 # failure mode where the *active* file_contexts.homedirs disagrees with the
-# image's own default after a switch (#474).
+# image's own default after a switch (#474) or an update (#575).
 #
 # file_contexts.subs_dist aliases /var/home -> /home: every selabel_lookup
 # for /var/home/<user> is rewritten to /home/<user> before it is matched.
@@ -37,7 +37,12 @@ fi
 # Bumped from 1 to 2: machines that ran the version-1 hook before #474 was
 # understood recorded success even when restorecon was a no-op against a
 # mis-keyed homedirs database, so they must retry once under this contract.
-version-script-check home-labels privileged 2 || exit 0
+# Bumped from 2 to 3: until the image shipped HOME=/home in
+# /etc/default/useradd, the policy rebuild ostree runs in every new
+# deployment re-keyed the active homedirs on /var/home after the version-2
+# repair (#575). Images that ship HOME=/home no longer do; run the repair
+# once more for machines an earlier update broke again.
+version-script-check home-labels privileged 3 || exit 0
 
 set -xeuo pipefail
 
@@ -70,4 +75,4 @@ if [[ "$home_root_context" != *:home_root_t:* ]]; then
     exit 1
 fi
 
-version-script-commit home-labels privileged 2
+version-script-commit home-labels privileged 3

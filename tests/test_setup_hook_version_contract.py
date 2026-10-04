@@ -31,30 +31,33 @@ class HomeLabelsHookContractTests(unittest.TestCase):
 
     def test_does_not_use_the_legacy_burn_before_body_gate(self):
         self.assertNotIn(
-            "version-script home-labels privileged 2",
+            "version-script home-labels privileged 3",
             self.lines,
             "the legacy helper stamps completion before the body runs",
         )
 
     def test_checks_before_it_acts(self):
-        check = "version-script-check home-labels privileged 2 || exit 0"
+        check = "version-script-check home-labels privileged 3 || exit 0"
         self.assertIn(check, self.lines)
         self.assertLess(
             self.lines.index(check), self.lines.index("restorecon -RF /var/home")
         )
 
-    def test_version_was_bumped_past_the_silent_no_op_bug(self):
+    def test_version_was_bumped_past_the_silent_no_op_bugs(self):
         # #474: machines that ran the version-1 hook before this fix recorded
         # success even when restorecon was a no-op against a mis-keyed
-        # file_contexts.homedirs. Bumping the version forces them to retry
-        # once under the repaired contract.
-        self.assertNotIn("home-labels privileged 1", HOOK.read_text())
+        # file_contexts.homedirs. #575: the policy rebuild ostree runs on
+        # every update re-keyed it after the version-2 repair. Each bump
+        # forces affected machines to retry once under the repaired contract.
+        body = HOOK.read_text()
+        self.assertNotIn("home-labels privileged 1", body)
+        self.assertNotIn("home-labels privileged 2", body)
 
     def test_commits_after_the_body(self):
-        self.assertIn("version-script-commit home-labels privileged 2", self.lines)
+        self.assertIn("version-script-commit home-labels privileged 3", self.lines)
         self.assertLess(
             self.lines.index("restorecon -RF /var/home"),
-            self.lines.index("version-script-commit home-labels privileged 2"),
+            self.lines.index("version-script-commit home-labels privileged 3"),
         )
 
     def test_body_failure_aborts_before_the_commit(self):
@@ -95,7 +98,7 @@ class HomeLabelsHookContractTests(unittest.TestCase):
         self.assertIn("stat -c '%C' /var/home", body)
         self.assertLess(
             body.index("stat -c '%C' /var/home"),
-            body.index("version-script-commit home-labels privileged 2"),
+            body.index("version-script-commit home-labels privileged 3"),
         )
         self.assertIn("home_root_t", body)
 
