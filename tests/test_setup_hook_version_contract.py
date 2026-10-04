@@ -7,6 +7,9 @@ was the last Utah hook still written against the legacy contract, so it gets
 its own assertions rather than a tree-wide rule -- the remaining hooks are
 covered by #259.
 """
+import os
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -101,6 +104,74 @@ class HomeLabelsHookContractTests(unittest.TestCase):
             body.index("version-script-commit home-labels privileged 3"),
         )
         self.assertIn("home_root_t", body)
+
+
+class HomeLabelsUseraddDriftTests(unittest.TestCase):
+    """Drive the real hook against stubs to check the #575 useradd repair.
+
+    A locally edited /etc/default/useradd survives the 3-way /etc merge, so
+    the image's HOME=/home never lands and the next deployment's policy
+    rebuild re-keys homedirs on /var/home after the hook has committed.
+    """
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.fake = Path(tmp.name)
+        self.useradd = self.fake / "useradd"
+        self.committed = self.fake / "committed"
+        libsetup = self.fake / "libsetup.sh"
+        libsetup.write_text(
+            "version-script-check() { return 0; }\n"
+            f'version-script-commit() {{ touch "{self.committed}"; }}\n'
+        )
+        bin_dir = self.fake / "bin"
+        bin_dir.mkdir()
+        for name, body in (
+            ("restorecon", "exit 0"),
+            ("stat", "echo system_u:object_r:home_root_t:s0"),
+        ):
+            stub = bin_dir / name
+            stub.write_text(f"#!/usr/bin/env bash\n{body}\n")
+            stub.chmod(0o755)
+        self.env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}")
+        self.hook = self.fake / "hook.sh"
+        self.hook.write_text(
+            HOOK.read_text()
+            .replace("/usr/lib/ublue/setup-services/libsetup.sh", str(libsetup))
+            .replace("/etc/default/useradd", str(self.useradd))
+            .replace("/usr/etc/selinux/", f"{self.fake}/missing-pristine/")
+            .replace("/etc/selinux/", f"{self.fake}/missing-active/")
+        )
+
+    def run_hook(self, useradd):
+        self.useradd.write_text(useradd)
+        return subprocess.run(
+            ["bash", str(self.hook)], capture_output=True, text=True, env=self.env
+        )
+
+    def test_stale_var_home_default_is_rewritten(self):
+        r = self.run_hook("GROUP=100\nHOME=/var/home\nSHELL=/bin/zsh\n")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(
+            self.useradd.read_text(), "GROUP=100\nHOME=/home\nSHELL=/bin/zsh\n"
+        )
+        self.assertIn("setting HOME=/home", r.stderr)
+        self.assertTrue(self.committed.exists())
+
+    def test_other_home_value_is_kept_and_reported(self):
+        r = self.run_hook("HOME=/srv/home\n")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.useradd.read_text(), "HOME=/srv/home\n")
+        self.assertIn("WARNING:", r.stderr)
+        self.assertTrue(self.committed.exists())
+
+    def test_image_default_is_left_untouched(self):
+        r = self.run_hook("HOME=/home\n")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.useradd.read_text(), "HOME=/home\n")
+        self.assertNotIn("setting HOME=/home", r.stderr)
+        self.assertNotIn("WARNING:", r.stderr)
 
 
 if __name__ == "__main__":

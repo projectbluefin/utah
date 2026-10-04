@@ -48,6 +48,23 @@ set -xeuo pipefail
 
 active_homedirs=/etc/selinux/targeted/contexts/files/file_contexts.homedirs
 pristine_homedirs=/usr/etc/selinux/targeted/contexts/files/file_contexts.homedirs
+useradd_defaults=/etc/default/useradd
+
+# The image fix for #575 reaches /etc/default/useradd only through the 3-way
+# /etc merge. A machine that ever edited that file keeps its whole local copy,
+# including Hummingbird's HOME=/var/home, and every later deployment's policy
+# rebuild re-keys the active homedirs on /var/home again after this hook has
+# committed. Exactly HOME=/var/home is that stale default, not a choice (/home
+# is a symlink to /var/home), so rewrite just that line; leave any other value
+# alone but say why the labels will break again.
+if [[ -f "$useradd_defaults" ]] && ! grep -qx 'HOME=/home' "$useradd_defaults"; then
+    if grep -qx 'HOME=/var/home' "$useradd_defaults"; then
+        echo "home-labels: ${useradd_defaults} kept HOME=/var/home across the /etc merge; setting HOME=/home (#575)" >&2
+        sed -i 's|^HOME=/var/home$|HOME=/home|' "$useradd_defaults"
+    else
+        echo "WARNING: ${useradd_defaults} does not set HOME=/home; the next deployment's SELinux policy rebuild may re-key home labels on another root (#575)" >&2
+    fi
+fi
 
 # If the active homedirs file is keyed on /var/home while the image's own
 # default is keyed on /home, the active copy is unreachable through the

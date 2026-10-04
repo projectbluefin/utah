@@ -118,7 +118,10 @@ Bluefin do (`scripts/fix-home-labels.sh`). ostree rebuilds the SELinux policy
 (`semodule -N --refresh`) in every new deployment after merging `/etc`, and
 `genhomedircon` keys the home rules on that `HOME` value; Hummingbird's
 `HOME=/var/home` produced rules the `/var/home → /home` alias never reaches
-(#575). `utah-fix-home-labels --check` at the image's last step repeats that
+(#575). A locally edited `/etc/default/useradd` keeps its own copy through
+the `/etc` merge, so `20-home-labels.sh` rewrites a lingering exact
+`HOME=/var/home` to `HOME=/home` and warns about any other non-`/home`
+value. `utah-fix-home-labels --check` at the image's last step repeats that
 rebuild and fails the build if `file_contexts.homedirs` changes. Build-time
 `useradd -m` must name `/var/home/<user>` explicitly: `/var/home` does not
 exist in a container, so the `/home` symlink dangles (#281).
