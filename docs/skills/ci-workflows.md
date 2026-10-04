@@ -1,7 +1,7 @@
 ---
 name: ci-workflows
 version: "1.1"
-last_updated: "2026-09-30"
+last_updated: "2026-10-02"
 id: ci-workflows
 one_line_purpose: Navigate Utah's build, promote, and sync workflow topology.
 entry_point: docs/skills/ci-workflows.md
@@ -29,8 +29,8 @@ post-build verification workflows, not the complete workflow inventory:
   manual dispatch. Top-level `permissions: {}`; each job
   grants its own. Cancels in-progress runs per workflow and ref. A dispatch
   with `contract_only=true` runs only the `contract` job and skips
-  `kernel_cache`, `build_main` and `build_kernel`, so nothing is built,
-  pushed or signed.
+  `kernel_cache`, `build_main`, `build_kernel` and `dispatch-iso`, so nothing
+  is built, pushed, signed or sent to Post-Testing E2E, even on `testing`.
 - `.github/workflows/promote-testing-to-main.yml` -- pushes to `testing`, a
   nightly cron, and manual dispatch.
 - `.github/workflows/sync-main-to-testing.yml` -- source pushes to `main`,
@@ -49,6 +49,10 @@ post-build verification workflows, not the complete workflow inventory:
   `scripts/check-doc-counts.py --write`, so the bump carries the new
   `site/data/packages.json` and the README / `package-contract.md` counts
   that `just check` compares against the manifests.
+  The proposal action runs even when upstream equals `main`: it must see the
+  empty diff to close a previously opened bump after an upstream reversion.
+  Its body file is created on both paths, while explicit CI dispatch remains
+  restricted to `created`/`updated` proposals.
 
   The bump PR would otherwise arrive with **no checks**: GitHub does not
   start `on: pull_request` workflows for pull requests created with the

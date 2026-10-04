@@ -23,6 +23,7 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: main
+          persist-credentials: false
 
       - name: Compare with Bluefin main
         id: parity
@@ -34,6 +35,9 @@ jobs:
           upstream_ref=$(gh api repos/projectbluefin/bluefin/commits/main --jq .sha)
           [[ "$current_ref" =~ ^[0-9a-f]{40}$ ]]
           [[ "$upstream_ref" =~ ^[0-9a-f]{40}$ ]]
+          # create-pull-request reads body-path even when there is no diff.
+          # Keep it runnable so an upstream reversion closes the stale bump PR.
+          printf 'The Bluefin package contract matches main.\n' > "$RUNNER_TEMP/bluefin-parity-pr.md"
           curl -fsSL -o "$RUNNER_TEMP/base.toml" \
             "https://raw.githubusercontent.com/projectbluefin/bluefin/${upstream_ref}/build_files/packages/base.toml"
           if cmp -s "$RUNNER_TEMP/base.toml" packages/bluefin.toml; then
@@ -70,7 +74,6 @@ jobs:
 
       - name: Propose Bluefin parity update
         id: propose
-        if: steps.parity.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
         with:
           branch: automation/bluefin-parity

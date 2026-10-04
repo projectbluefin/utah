@@ -16,7 +16,7 @@
       ],
       "description": "build.yml contract gate, kernel-cache job, main/kernel matrix split, promote-testing-to-main, sync-main-to-testing and update-bluefin-parity, actions@v1 delegation, Renovate factory pin. Use when changing .github/workflows/ or debugging a red run.",
       "version": "1.1",
-      "last_updated": "2026-09-30",
+      "last_updated": "2026-10-02",
       "doc_type": "reference"
     },
     {
