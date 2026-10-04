@@ -1145,6 +1145,26 @@ class SupplyChainTests(unittest.TestCase):
         self.assertTrue((output_dir / "package-origins.json").exists())
         self.assertTrue((output_dir / "package-origins.txt").exists())
 
+    def test_generate_provenance_report_is_identical_across_build_days(self) -> None:
+        """VERSION carries the build date; the retained report must not (#346)."""
+        installed = {
+            "gnome-shell": {"name": "gnome-shell", "epoch": "0", "version": "51.2",
+                            "release": "1.bfin.x86_64", "arch": "x86_64",
+                            "nevra": "gnome-shell-51.2-1.bfin.x86_64", "origin": "factory"},
+        }
+        outputs = []
+        for version in ("testing-20260929-abc1234", "testing-20260930-abc1234"):
+            output_dir = Path(tempfile.mkdtemp())
+            env = {"SOURCE_DATE_EPOCH": "1700000000", "VERSION": version,
+                   "SHA_HEAD_SHORT": "abc1234"}
+            with patch.dict(os.environ, env):
+                report = self.module.generate_provenance_report(
+                    installed, "main", set(), {}, output_dir=output_dir)
+            self.assertEqual(report["build_provenance"]["commit"], "abc1234")
+            outputs.append(tuple((output_dir / f).read_bytes()
+                                 for f in ("package-origins.json", "package-origins.txt")))
+        self.assertEqual(outputs[0], outputs[1])
+
     def test_generate_provenance_report_records_the_factory_pin_and_base_image(self) -> None:
         """The report says which factory and which base the NEVRAs came from."""
         output_dir = Path(tempfile.mkdtemp())

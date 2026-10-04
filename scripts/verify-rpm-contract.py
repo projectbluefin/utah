@@ -671,7 +671,11 @@ def generate_provenance_report(
     report: dict[str, Any] = {
         "build_provenance": {
             "flavor": flavor, "image": os.environ.get("IMAGE_NAME", "utah"),
-            "version": os.environ.get("VERSION", "testing"),
+            # The source commit, not VERSION: VERSION embeds the build date
+            # (<stream>-YYYYMMDD-<sha>), so retaining it made the report, and
+            # the layer carrying it, differ between otherwise identical
+            # rebuilds on different days (#346).
+            "commit": os.environ.get("SHA_HEAD_SHORT") or None,
             "timestamp": timestamp, "timestamp_source": timestamp_source,
             "factory_pin": factory_pin,
             "base_image": base_image, "base_image_digest": base_image_digest,
