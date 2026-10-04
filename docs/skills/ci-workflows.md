@@ -1,7 +1,7 @@
 ---
 name: ci-workflows
 version: "1.1"
-last_updated: "2026-10-02"
+last_updated: "2026-10-04"
 id: ci-workflows
 one_line_purpose: Navigate Utah's build, promote, and sync workflow topology.
 entry_point: docs/skills/ci-workflows.md
@@ -261,6 +261,20 @@ Source pushes to `main` and the nightly schedule call
 `reusable-sync-branches.yml@v1`, then explicitly dispatch `build.yml` on
 `testing` with `actions: write`. README/verification-only pushes are excluded
 to avoid evidence-update build loops. Nightly runs still sync those changes.
+
+`sync-main-to-testing.yml` captures the commit `reusable-sync-branches` just
+fast-forwarded or force-reset testing to (via `git/ref/heads/testing`) and
+passes it to `build.yml` as the `target_sha` dispatch input. The dispatch
+API still resolves `--ref testing` to whatever testing points at when the
+dispatch is accepted, and that is what `github.sha` becomes for every job
+in the run. The build's `contract` job asserts `inputs.target_sha ==
+github.sha` and fails the run if they disagree — the only failure mode is
+"testing moved between the dispatcher's capture and the dispatch API's
+resolution", and the assertion surfaces it loudly instead of building
+against a tree the dispatcher did not intend (#371). The checkouts
+themselves keep their default `github.sha` behavior, so every job in the
+run agrees on the same tree (push and pull_request events skip the
+assertion because `target_sha` is empty for them).
 
 ## ISO LUKS gate and screenshots
 
