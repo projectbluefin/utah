@@ -206,7 +206,7 @@ jobs:
   build_main:
     needs: contract
     if: needs.contract.outputs.main_flavors != '[]'
-    uses: projectbluefin/actions/.github/workflows/reusable-build.yml@59df69d574d2cb811eb27a73eeaafe87c1beb64a # v1
+    uses: projectbluefin/actions/.github/workflows/reusable-build.yml@e1e7f38c35e681f309fee7893f6f6780c23e3bb4 # v1
     permissions:
       contents: read
       packages: write
@@ -256,7 +256,7 @@ jobs:
   build_kernel:
     needs: [contract, kernel_cache]
     if: ${{ !cancelled() && needs.contract.result == 'success' && needs.kernel_cache.result == 'success' && needs.kernel_cache.outputs.available == 'true' && needs.contract.outputs.kernel_flavors != '[]' }}
-    uses: projectbluefin/actions/.github/workflows/reusable-build.yml@59df69d574d2cb811eb27a73eeaafe87c1beb64a # v1
+    uses: projectbluefin/actions/.github/workflows/reusable-build.yml@e1e7f38c35e681f309fee7893f6f6780c23e3bb4 # v1
     permissions:
       contents: read
       packages: write
