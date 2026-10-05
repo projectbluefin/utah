@@ -370,7 +370,8 @@ The cadence is RFC'd in #336. What runs today:
   is not how a `main` commit reaches the image tags: the sync pushes `testing`
   with the workflow's own `GITHUB_TOKEN`, and a `GITHUB_TOKEN` push starts no
   workflow. `sync-main-to-testing.yml`'s `build` job therefore dispatches the
-  build explicitly (`gh workflow run build.yml --ref testing`) once the sync
+  build explicitly (`gh workflow run build.yml --ref testing -f
+  target_sha=<sha>`) once the sync
   job returns, which is the path that actually produces the images.
 - `:testing` advances per green build, not on a clock: the tags move in
   `post-testing-e2e.yml`, after the LUKS ISO matrix and the production-ISO
