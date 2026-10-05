@@ -186,6 +186,16 @@ RUN --mount=type=bind,from=v4l2loopback,source=/out,target=/tmp/utah-v4l2loopbac
 ARG HUMMINGBIRD_REPO_DAY=unset
 RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages,ro \
     echo "Hummingbird repository day: ${HUMMINGBIRD_REPO_DAY}" && \
+    # dracut's crypt generator exits 2 on crypttab-less boots: with no
+    # /etc/crypttab it takes a bare top-level 'return 0', which bash
+    # rejects outside a function (exit 2, logged as a failed generator).
+    # An empty crypttab parses to zero entries and exits 0; the installer
+    # overwrites it on LUKS installs. Seeded first in the transaction so
+    # any dracut run (kernel install here, initramfs regeneration later)
+    # picks it up into the initramfs (#590). NOTE: HUMMINGBIRD_REPO_DAY
+    # must stay directly above this RUN, so the rationale lives here, not
+    # above it (tests/test_hummingbird_repo_day.py).
+    : > /etc/crypttab && \
     /usr/local/libexec/utah-install-packages \
       /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
     IMAGE_FLAVOR=main /usr/local/libexec/utah-verify-rpm-contract \
