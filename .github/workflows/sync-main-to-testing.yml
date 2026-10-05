@@ -37,10 +37,11 @@ jobs:
           # testing at acceptance time, so the build's contract job asserts
           # the two SHAs agree; a mismatch means testing moved between this
           # capture and the dispatch, and the run fails loudly instead of
-          # silently building a different tree (#371). gh workflow run does
-          # not expose a --jq flag and only prints the dispatch URL on
-          # stdout, so the in-process read-back attempted in 685d67c cannot
-          # work; the build.yml assertion is the single source of truth.
+          # silently building a different tree (#371). `gh workflow run`
+          # does not expose a JSON output mode (only the dispatch URL on
+          # stdout), so the dispatched run cannot be queried in-process to
+          # confirm the SHA it accepted; the build.yml assertion is the
+          # single source of truth.
           TARGET_SHA="$(gh api \
               -H 'Accept: application/vnd.github+json' \
               "/repos/$REPOSITORY/git/ref/heads/testing" \
