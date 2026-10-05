@@ -649,3 +649,54 @@ class BuildToolingRemovalTests(unittest.TestCase):
     def test_removal_cleans_the_dependency_closure(self):
         self.assertNotIn("--no-autoremove", self.remove_line(),
                          "removal must let dnf clean the orphaned build closure")
+
+
+class IsoBakeParserTests(unittest.TestCase):
+    """The ISO bake must ship the Flatpak parser it calls.
+
+    Post-Testing E2E run 37346082548 failed five cells with exit 127: both
+    ISO Containerfiles call
+    /usr/local/libexec/utah-verify-desktop-contract, but the stages are FROM
+    the shipped image, which strips build-time scripts (clean-stage), and the
+    iso/live/ build context cannot reach repo-root scripts/. So the build
+    scripts stage the parser into the context (removed by trap) and the
+    Containerfiles ship it persistently in the overlay -- which is also what
+    puts it on the live guest luks-e2e shells into (absolute path; the
+    overlay is not on the default PATH).
+    """
+
+    PARSER = "src/utah-verify-desktop-contract.py"
+    INSTALLED = "/usr/local/libexec/utah-verify-desktop-contract"
+    STAGED = "iso/live/src/utah-verify-desktop-contract.py"
+
+    def test_both_containerfiles_ship_the_parser(self):
+        for name in ("iso/live/Containerfile", "iso/live/Containerfile.tacklebox"):
+            with self.subTest(containerfile=name):
+                text = (ROOT / name).read_text()
+                self.assertIn(
+                    f"COPY --chmod=0755 {self.PARSER} {self.INSTALLED}", text,
+                    f"{name} must ship the parser the bake RUN calls")
+
+    def test_both_build_scripts_stage_and_clean_the_parser(self):
+        staged = "cp scripts/verify-desktop-contract.py " + self.STAGED
+        for name in ("iso/scripts/build-iso.sh",
+                     "iso/scripts/build-iso-tacklebox.sh"):
+            with self.subTest(script=name):
+                text = (ROOT / name).read_text()
+                self.assertIn(staged, text,
+                              f"{name} must stage the parser into the build context")
+                self.assertIn(self.STAGED, text.split("trap", 1)[1],
+                              f"{name} must remove the staged parser on exit")
+
+    def test_staged_copy_is_not_committed(self):
+        # The staged file must never exist in the tree: it is build litter
+        # the traps remove. The COPY source of truth stays scripts/.
+        self.assertFalse((ROOT / self.STAGED).exists(),
+                         "staged parser left behind by a build run")
+
+    def test_luks_calls_the_installed_absolute_path(self):
+        text = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
+        self.assertIn(f'"{self.INSTALLED} --flatpaks', text,
+                      "luks-e2e must call the installed parser by absolute path")
+        self.assertNotIn('"utah-verify-desktop-contract --flatpaks', text,
+                         "bare parser name is not on the guest PATH")

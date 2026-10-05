@@ -830,7 +830,7 @@ if [[ -n "${UTAH_E2E_FLATPAKS-x}" ]]; then
     if [[ -n "${UTAH_E2E_FLATPAKS-}" ]]; then
         expected_flatpaks="${UTAH_E2E_FLATPAKS}"
     else
-        expected_flatpaks="$(ssh_target "utah-verify-desktop-contract --flatpaks /usr/share/ublue-os/homebrew/system-flatpaks.Brewfile" 2>/dev/null || true)"
+        expected_flatpaks="$(ssh_target "/usr/local/libexec/utah-verify-desktop-contract --flatpaks /usr/share/ublue-os/homebrew/system-flatpaks.Brewfile" 2>/dev/null || true)"
         [[ -n "${expected_flatpaks}" ]] || fail "could not read the default Flatpak Brewfile on the installed system"
     fi
     missing_flatpaks=()
