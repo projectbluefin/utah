@@ -207,6 +207,16 @@ Production live boot entries configure:
   pipelines, but currently module signing is not implemented in-tree and Secure
   Boot must remain disabled.
 
+The Flatpak list both ISO bakes install comes from
+`scripts/verify-desktop-contract.py --flatpaks` (the single Brewfile parser;
+the desktop contract owns it). The ISO stages are FROM the shipped image,
+which strips build-time scripts, and the `iso/live/` build context cannot
+reach repo-root `scripts/` -- so both build scripts stage the parser into
+`iso/live/src/` (removed by trap afterwards) and both Containerfiles ship it
+persistently at `/usr/local/libexec/utah-verify-desktop-contract`, which is
+also what puts it on the live guest. Never reference the parser by bare name
+on the guest: the overlay is not on the default PATH.
+
 `iso/live/src/install-flatpaks.sh` pins the bootc-installer Flatpak bundle to
 a specific `tuna-os/bootc-installer` release rather than resolving
 `/releases/latest/download/` the way dakota-iso does: the bundle installs
