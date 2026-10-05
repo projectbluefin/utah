@@ -37,15 +37,14 @@ jobs:
           # testing at acceptance time, so the build's contract job asserts
           # the two SHAs agree; a mismatch means testing moved between this
           # capture and the dispatch, and the run fails loudly instead of
-          # silently building a different tree (#371).
+          # silently building a different tree (#371). gh workflow run does
+          # not expose a --jq flag and only prints the dispatch URL on
+          # stdout, so the in-process read-back attempted in 685d67c cannot
+          # work; the build.yml assertion is the single source of truth.
           TARGET_SHA="$(gh api \
               -H 'Accept: application/vnd.github+json' \
               "/repos/$REPOSITORY/git/ref/heads/testing" \
               --jq '.object.sha')"
           echo "Dispatching build.yml against testing@$TARGET_SHA"
-          DISPATCH_SHA="$(gh workflow run build.yml --repo "$REPOSITORY" --ref testing \
-              -f "target_sha=$TARGET_SHA" \
-              --json 'workflow_runs[0].head_sha' --jq '.workflow_runs[0].head_sha' 2>/dev/null || echo "")"
-          if [ -n "$DISPATCH_SHA" ] && [ "$DISPATCH_SHA" != "$TARGET_SHA" ]; then
-            echo "::error title=dispatch resolved a different SHA::captured $TARGET_SHA, dispatch resolved $DISPATCH_SHA. Another commit landed on testing between the two reads; the build's contract job will fail this run."
-          fi
+          gh workflow run build.yml --repo "$REPOSITORY" --ref testing \
+              -f "target_sha=$TARGET_SHA"
