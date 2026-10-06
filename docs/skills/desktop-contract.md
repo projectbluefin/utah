@@ -1,7 +1,7 @@
 ---
 name: desktop-contract
 version: "1.0"
-last_updated: "2026-09-30"
+last_updated: "2026-10-06"
 id: desktop-contract
 one_line_purpose: Maintain Utah identity, Bluefin desktop defaults, and first-boot Flatpak policy.
 entry_point: docs/skills/desktop-contract.md
@@ -70,8 +70,9 @@ The TOML's sections are the contract's table of contents:
   `avahi-daemon.service`, `avahi-daemon.socket`, `switcheroo-control.service`,
   `bluetooth.service`, `ublue-system-setup.service`, `flatpak-preinstall.service`,
   `flatpak-nuke-fedora.service`, `brew-setup.service`, `dconf-update.service`,
-  `bootc-unified-storage.service`, `uupd.timer`, `bluefin-stats-refresh.timer`.
-  Update policy delegates
+  `bootc-unified-storage.service`, `input-remapper.service`,
+  `ModemManager.service`, `cups.socket`, `systemd-boot-update.service`,
+  `uupd.timer`, `bluefin-stats-refresh.timer`. Update policy delegates
   background updates to `uupd.timer`; `bootc-fetch-apply-updates.timer` and
   `bootc-fetch-apply-updates.service` are masked in `/etc` and `/usr/lib` (and
   disabled in `85-utah-desktop.preset`) so cross-vendor `/etc` 3-way merges
@@ -147,8 +148,9 @@ Do not wrap `bootc` in `sh -c` to sequence it: the bare binary's
 
 `ujust report` attaches the current boot's error-priority journal, and on a
 fresh Utah it was nearly all noise, which buried the stack traces in #444.
-Each source was fixed at its root, verified on a booted VM, and is pinned by
-`tests/test_boot_noise.py`:
+Each source was fixed at its root and is pinned by `tests/test_boot_noise.py`.
+All but the `systemd-remount-fs` entry were verified on a booted VM; that
+one is pending a composefs boot check (see below):
 
 - `Failed to resolve group 'plugdev'` / `'nintendo_switch'`, about 100 lines:
   udev rules from libfido2 and common name groups nothing creates.
@@ -161,6 +163,30 @@ Each source was fixed at its root, verified on a booted VM, and is pinned by
 - `error loading config '.../50-bluefin-bt-switch.conf': Invalid argument`:
   common's file is comments only, which PipeWire 1.6 rejects. Utah's copy
   adds a no-op `pulse.cmd = [ ]`; drop it once common's copy parses.
+- `systemd-remount-fs.service: mount: /: fsconfig() failed: overlay: No
+  changes allowed in reconfigure` (#585): systemd-remount-fs unconditionally
+  remounts / read-write. On the composefs image `/` is mounted `ro`
+  (`findmnt /` reports `composefs overlay ro,...`), so the remount fails and
+  the unit exits 1, leaving `SystemState=degraded` even when nothing else
+  is wrong. `systemd-remount-fs.service.d/10-utah-composefs-skip.conf` adds
+  `ConditionPathIsReadWrite=/`; composefs's `ST_RDONLY` flag makes the
+  condition fail, systemd skips the unit instead of failing it. The live
+  ISO path (`iso/scripts/build-iso.sh`, overlay root) is mounted writable,
+  so the condition succeeds and the remount still runs there. A blanket
+  mask would silence both paths; a condition keyed on the mount state
+  keeps the writable ISO alive. Limitation: the condition is false on any
+  boot where `/` is read-only, including non-composefs ones (`ro` /
+  `rootflags=ro` kargs, an fsck fallback, an incomplete ostree
+  deployment), so the unit is skipped there too. The skip covers the
+  whole unit, not just `/`: other fstab entries systemd-remount-fs would
+  remount (`/usr`, API VFS such as a `/tmp` tmpfs or `/proc` `hidepid=`)
+  are also left alone. Utah ships no such entries, so only
+  operator-added fstab lines are affected; removing the drop-in restores
+  the unit. The verifier in `tests/test_boot_noise.py` keeps the
+  drop-in in sync with the contract.
+  Not yet boot-verified: on a composefs VM, confirm
+  `systemctl show -p ActiveState,ConditionResult systemd-remount-fs` reports
+  `inactive`/`no` and `systemctl is-system-running` reports `running`.
 
 When something new appears in `journalctl -b -p err` on a fresh VM, treat it
 the same way rather than filtering it out of the report.

@@ -1,7 +1,7 @@
 ---
 name: ci-workflows
-version: "1.0"
-last_updated: "2026-09-29"
+version: "1.1"
+last_updated: "2026-10-02"
 id: ci-workflows
 one_line_purpose: Navigate Utah's build, promote, and sync workflow topology.
 entry_point: docs/skills/ci-workflows.md
@@ -13,26 +13,65 @@ dependencies: []
 tags: [ci, workflows, actions, promotion]
 description: >-
   build.yml contract gate, kernel-cache job, main/kernel matrix split,
-  promote-testing-to-main and sync-main-to-testing, actions@v1 delegation,
-  Renovate-managed factory pin. Use when changing .github/workflows/ or
-  debugging a red run.
+  promote-testing-to-main, sync-main-to-testing and update-bluefin-parity,
+  actions@v1 delegation, Renovate factory pin. Use when changing
+  .github/workflows/ or debugging a red run.
 metadata:
   type: reference
 ---
 
 # CI Workflows
 
-Three workflows, all thin callers into `projectbluefin/actions@v1` reusables,
-each pinned to a SHA tagged `v1`:
+This overview covers the build, promotion, branch-sync, parity-sync, and
+post-build verification workflows, not the complete workflow inventory:
 
 - `.github/workflows/build.yml` -- pull requests, pushes to `testing`, a
   manual dispatch. Top-level `permissions: {}`; each job
-  grants its own. Cancels in-progress runs per workflow and ref.
+  grants its own. Cancels in-progress runs per workflow and ref. A dispatch
+  with `contract_only=true` runs only the `contract` job and skips
+  `kernel_cache`, `build_main`, `build_kernel` and `dispatch-iso`, so nothing
+  is built, pushed, signed or sent to Post-Testing E2E, even on `testing`.
 - `.github/workflows/promote-testing-to-main.yml` -- pushes to `testing`, a
   nightly cron, and manual dispatch.
 - `.github/workflows/sync-main-to-testing.yml` -- source pushes to `main`,
   nightly cron, and manual dispatch; explicitly dispatches the testing build
   after syncing. Token-authenticated branch pushes alone do not start CI.
+- `.github/workflows/update-bluefin-parity.yml` -- nightly and manual
+  dispatch. It resolves Bluefin `main` and uses one fixed branch,
+  `automation/bluefin-parity`, so `create-pull-request` updates the existing
+  review rather than opening duplicates. It does not auto-merge. That branch is
+  disposable: `create-pull-request` rebuilds it from `main` plus the generated
+  changes each run and force-resets it when the result differs, so a commit
+  pushed onto the open bump PR is discarded at the next run. Overlay fixes the
+  bump needs go in their own pull request against `main`, not onto the bump
+  branch; see `package-contract.md`. Before
+  proposing, it reruns `scripts/generate-site-data.py` and
+  `scripts/check-doc-counts.py --write`, so the bump carries the new
+  `site/data/packages.json` and the README / `package-contract.md` counts
+  that `just check` compares against the manifests. The generator is passed
+  `--generated-at` with the upstream commit date rather than defaulting to
+  today, so an unchanged upstream ref regenerates byte-identical files and
+  `create-pull-request` leaves the open bump branch alone.
+  The proposal action runs even when upstream equals `main`: it must see the
+  empty diff to close a previously opened bump after an upstream reversion.
+  Its body file is created on both paths, while explicit CI dispatch remains
+  restricted to `created`/`updated` proposals.
+
+  The bump PR would otherwise arrive with **no checks**: GitHub does not
+  start `on: pull_request` workflows for pull requests created with the
+  default `GITHUB_TOKEN`. The workflow's last step dispatches
+  `gh workflow run build.yml --ref automation/bluefin-parity -f
+  contract_only=true` right after `create-pull-request` runs, so the run
+  attaches to the branch head, which is the PR head, and
+  `check`/`check-parity`/`check-repos` report on the bump PR itself. It is
+  contract-only on purpose: a dispatch is not a `pull_request` event, so a
+  full build would push and sign `testing` images from an upstream package
+  set no maintainer has reviewed yet. The images are built when the merged
+  change reaches `testing`. Needs `actions: write`, which the job holds.
+  Gated on `create-pull-request`'s own `pull-request-operation` output being
+  `created` or `updated` (not on the parity diff alone), so a nightly run
+  against an unmerged, unchanged bump branch does not re-dispatch for
+  nothing.
 - `.github/workflows/post-testing-e2e.yml` -- successful non-PR testing builds
   explicitly dispatch this, or manually supply a successful testing build run ID.
 
@@ -57,9 +96,16 @@ opaque `exit status 71` from the image build (comment,
   (`scripts/check-script-syntax.py`), host-side unit tests (`just test`),
   and the ban on flavor literals in workflows.
 - `just check-parity` -- `packages/bluefin.toml` against Bluefin's upstream
-  pinned at `packages/.bluefin-parity-ref`.
+  pinned at `packages/.bluefin-parity-ref`; the nightly parity workflow opens
+  a dedicated review when Bluefin `main` changes it.
 - `just check-repos` -- the complete installation transaction against the
   digest-pinned base and package repository, including extension build tools.
+
+Host-side unit tests in this gate must be wall-clock independent: a loaded
+runner can take over a second between setup and assertion, so any test that
+renders relative times freezes the clock in the harness (the `ago()` site
+test pins `Date.now`) rather than trusting setup-to-assert to stay within
+one unit.
 
 ### CI guard scripts and test coverage
 

@@ -118,9 +118,24 @@ def validate_contract(contract: dict[str, Any]) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--check", action="store_true", help="validate contract syntax only")
-    parser.add_argument("contract", type=Path)
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--check", action="store_true", help="validate contract syntax only")
+    modes.add_argument("--flatpaks", type=Path, metavar="BREWFILE", help="print declared Flatpak IDs")
+    parser.add_argument("contract", type=Path, nargs="?")
     args = parser.parse_args()
+    if args.flatpaks is not None:
+        if args.contract is not None:
+            parser.error("--flatpaks does not take a contract argument")
+        try:
+            apps = parse_brewfile(args.flatpaks)
+        except OSError as exc:
+            fail(str(exc))
+            return 1
+        for app in apps:
+            print(app)
+        return 0
+    if args.contract is None:
+        parser.error("contract is required unless --flatpaks is given")
 
     contract = tomllib.loads(args.contract.read_text())
     errors = validate_contract(contract)

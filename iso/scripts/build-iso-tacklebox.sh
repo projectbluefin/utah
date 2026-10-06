@@ -136,6 +136,10 @@ if [[ -z "$REAL_USER" || "$REAL_USER" == "root" ]]; then
     exit 1
 fi
 BAKE_REF="localhost/utah-tacklebox-${FLAVOR}:${STREAM}"
+# Same context limitation as build-iso.sh: stage the parser into iso/live/src/
+# (removed by trap) so the Containerfile can ship it in the overlay.
+cp scripts/verify-desktop-contract.py iso/live/src/utah-verify-desktop-contract.py
+trap 'rm -f iso/live/src/utah-verify-desktop-contract.py' EXIT
 echo "==> Baking live Flatpaks as ${REAL_USER}: ${BAKE_REF}"
 sudo -u "$REAL_USER" podman build \
     --build-arg "SOURCE_IMAGE=${IMAGE_REF}" \

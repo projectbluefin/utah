@@ -80,6 +80,7 @@ def write_overlay(
     gnome_versions: dict[str, str] | None = None,
     repositories: list[str] | None = None,
     baseurls: dict[str, str] | None = None,
+    security: dict[str, list[str]] | None = None,
     factory: list[str] | None = None,
 ) -> Path:
     """Write a utah.toml overlay that already carries the supply-chain sections.
@@ -115,6 +116,11 @@ def write_overlay(
     sections.append("[repositories.baseurls]\n")
     for repo_id, url in url_map.items():
         sections.append(f'{repo_id} = ["{url}"]\n')
+    if security:
+        sections.append("[repositories.security]\n")
+        for repo_id, options in security.items():
+            rendered = ", ".join(f'"{opt}"' for opt in options)
+            sections.append(f'{repo_id} = [{rendered}]\n')
     if factory:
         sections.append(toml_section("factory", factory))
     path = directory / "utah.toml"
@@ -373,6 +379,79 @@ class CheckModeTests(unittest.TestCase):
                     redirect_stdout(io.StringIO()):
                 self.assertEqual(module.main(), 0)
         is_installed.assert_not_called()
+
+    def test_check_rejects_unapproved_gpgcheck_zero(self) -> None:
+        """A pinned-origin repo that also drops gpgcheck must be approved explicitly."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            write_repo_file(
+                directory, "utah-packages",
+                baseurl="file:///etc/utah-packages", enabled="1",
+                gpgcheck="0", repo_gpgcheck="0")
+            overlay = write_overlay(
+                directory, repositories=["utah-packages"],
+                baseurls={"utah-packages": "file:///etc/utah-packages"})
+            result = self.run_check(manifest, overlay)
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertIn("gpgcheck", result.stderr)
+
+    def test_check_approves_documented_gpgcheck_zero(self) -> None:
+        """The utah-packages exception is documented in [repositories.security]."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            write_repo_file(
+                directory, "utah-packages",
+                baseurl="file:///etc/utah-packages", enabled="1",
+                gpgcheck="0", repo_gpgcheck="0")
+            overlay = write_overlay(
+                directory, repositories=["utah-packages"],
+                baseurls={"utah-packages": "file:///etc/utah-packages"},
+                security={"utah-packages": ["gpgcheck", "repo_gpgcheck"]})
+            result = self.run_check(manifest, overlay)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_check_rejects_security_entry_for_non_allowed_repo(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(
+                directory, repositories=["public-hummingbird-x86_64-rpms"],
+                security={"ghost-repo": ["gpgcheck"]})
+            result = self.run_check(manifest, overlay)
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertIn("ghost-repo", result.stderr)
+
+    def test_check_rejects_unknown_security_option(self) -> None:
+        """A typo or non-approvable option in [repositories.security] fails loudly."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(
+                directory, repositories=["public-hummingbird-x86_64-rpms"],
+                security={"public-hummingbird-x86_64-rpms": ["gpg_check", "sslverify"]})
+            result = self.run_check(manifest, overlay)
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertIn("ERROR", result.stderr)
+        self.assertIn("'gpg_check'", result.stderr)
+        self.assertIn("'sslverify'", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_check_rejects_non_string_security_option(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(
+                directory, repositories=["public-hummingbird-x86_64-rpms"])
+            with overlay.open("a") as handle:
+                handle.write(
+                    "[repositories.security]\n"
+                    "public-hummingbird-x86_64-rpms = [1, { a = 1 }]\n")
+            result = self.run_check(manifest, overlay)
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertIn("ERROR", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
 
 
 class VerifyModeTests(unittest.TestCase):
@@ -1007,6 +1086,77 @@ class SupplyChainTests(unittest.TestCase):
         parser = self._parser({"baseurl": "https://a.example.com/$basearch"})
         self.assertEqual(self.module.repo_security_option_errors("repo", parser, "fedora.repo"), [])
 
+    def test_repo_security_option_errors_flags_gpgcheck_zero(self) -> None:
+        parser = self._parser({"baseurl": "https://a.example.com/$basearch", "gpgcheck": "0"})
+        errors = self.module.repo_security_option_errors("repo", parser, "fedora.repo")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("gpgcheck", errors[0])
+
+    def test_repo_security_option_errors_flags_repo_gpgcheck_zero(self) -> None:
+        parser = self._parser(
+            {"baseurl": "https://a.example.com/$basearch", "repo_gpgcheck": "0"})
+        errors = self.module.repo_security_option_errors("repo", parser, "fedora.repo")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("repo_gpgcheck", errors[0])
+
+    def test_repo_security_option_errors_passes_for_approved_gpgcheck(self) -> None:
+        parser = self._parser({"baseurl": "https://a.example.com/$basearch", "gpgcheck": "0"})
+        approved = {"repo": {"gpgcheck"}}
+        self.assertEqual(
+            self.module.repo_security_option_errors("repo", parser, "fedora.repo", approved),
+            [],
+        )
+
+    def test_repo_security_option_errors_approved_is_per_option(self) -> None:
+        """Approving gpgcheck does not also approve repo_gpgcheck."""
+        parser = self._parser(
+            {"baseurl": "https://a.example.com/$basearch", "gpgcheck": "0", "repo_gpgcheck": "0"})
+        approved = {"repo": {"gpgcheck"}}
+        errors = self.module.repo_security_option_errors("repo", parser, "fedora.repo", approved)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("repo_gpgcheck", errors[0])
+
+    def test_repo_security_option_errors_passes_when_gpgcheck_enabled(self) -> None:
+        parser = self._parser(
+            {"baseurl": "https://a.example.com/$basearch", "gpgcheck": "1",
+             "repo_gpgcheck": "1"})
+        self.assertEqual(
+            self.module.repo_security_option_errors("repo", parser, "fedora.repo"), [])
+
+    def test_repo_security_option_errors_flags_pkg_gpgcheck_zero(self) -> None:
+        """pkg_gpgcheck is libdnf5's canonical name for gpgcheck."""
+        parser = self._parser(
+            {"baseurl": "https://a.example.com/$basearch", "pkg_gpgcheck": "0"})
+        errors = self.module.repo_security_option_errors("repo", parser, "fedora.repo")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("pkg_gpgcheck=0", errors[0])
+
+    def test_repo_security_option_errors_flags_pkg_gpgcheck_overriding_gpgcheck(self) -> None:
+        """gpgcheck=1 does not mask a pkg_gpgcheck=0 in the same section."""
+        parser = self._parser(
+            {"baseurl": "https://a.example.com/$basearch", "gpgcheck": "1",
+             "pkg_gpgcheck": "0"})
+        errors = self.module.repo_security_option_errors("repo", parser, "fedora.repo")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("pkg_gpgcheck=0", errors[0])
+
+    def test_repo_security_option_errors_gpgcheck_approval_covers_pkg_gpgcheck(self) -> None:
+        parser = self._parser(
+            {"baseurl": "https://a.example.com/$basearch", "pkg_gpgcheck": "0"})
+        approved = {"repo": {"gpgcheck"}}
+        self.assertEqual(
+            self.module.repo_security_option_errors("repo", parser, "fedora.repo", approved),
+            [],
+        )
+
+    def test_repo_security_option_errors_repo_gpgcheck_approval_not_pkg_gpgcheck(self) -> None:
+        parser = self._parser(
+            {"baseurl": "https://a.example.com/$basearch", "pkg_gpgcheck": "0"})
+        approved = {"repo": {"repo_gpgcheck"}}
+        errors = self.module.repo_security_option_errors("repo", parser, "fedora.repo", approved)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("pkg_gpgcheck", errors[0])
+
     def test_check_repo_sections_flags_unapproved_repo(self) -> None:
         parser = self._parser({"baseurl": "https://a.example.com/$basearch", "enabled": "1"})
         errors = self.module.check_repo_sections(
@@ -1096,6 +1246,28 @@ class SupplyChainTests(unittest.TestCase):
             directory, set(), check_mode=True, expected_baseurls=None)
         self.assertEqual(errors, [])
 
+    def test_verify_repository_policy_flags_unapproved_gpgcheck_zero(self) -> None:
+        """gpgcheck=0 on an allowlisted repo is a gap unless the manifest approves it."""
+        directory = Path(tempfile.mkdtemp())
+        self._write_repo(
+            directory, "utah-packages",
+            baseurl="file:///etc/utah-packages", enabled="1", gpgcheck="0", repo_gpgcheck="0")
+        errors = self.module.verify_repository_policy(
+            directory, {"utah-packages"}, check_mode=True,
+            expected_baseurls={"utah-packages": ("file:///etc/utah-packages",)})
+        self.assertTrue(any("gpgcheck" in e for e in errors), errors)
+
+    def test_verify_repository_policy_passes_for_approved_gpgcheck_zero(self) -> None:
+        directory = Path(tempfile.mkdtemp())
+        self._write_repo(
+            directory, "utah-packages",
+            baseurl="file:///etc/utah-packages", enabled="1", gpgcheck="0", repo_gpgcheck="0")
+        errors = self.module.verify_repository_policy(
+            directory, {"utah-packages"}, check_mode=True,
+            expected_baseurls={"utah-packages": ("file:///etc/utah-packages",)},
+            approved_security={"utah-packages": {"gpgcheck", "repo_gpgcheck"}})
+        self.assertEqual(errors, [])
+
     def test_resolve_build_timestamp_reads_source_date_epoch(self) -> None:
         ts, source = self.module.resolve_build_timestamp({"SOURCE_DATE_EPOCH": "1700000000"})
         self.assertEqual(source, "SOURCE_DATE_EPOCH")
@@ -1144,6 +1316,26 @@ class SupplyChainTests(unittest.TestCase):
         self.assertEqual(report["packages"]["gnome-shell"]["section"], "gnome")
         self.assertTrue((output_dir / "package-origins.json").exists())
         self.assertTrue((output_dir / "package-origins.txt").exists())
+
+    def test_generate_provenance_report_is_identical_across_build_days(self) -> None:
+        """VERSION carries the build date; the retained report must not (#346)."""
+        installed = {
+            "gnome-shell": {"name": "gnome-shell", "epoch": "0", "version": "51.2",
+                            "release": "1.bfin.x86_64", "arch": "x86_64",
+                            "nevra": "gnome-shell-51.2-1.bfin.x86_64", "origin": "factory"},
+        }
+        outputs = []
+        for version in ("testing-20260929-abc1234", "testing-20260930-abc1234"):
+            output_dir = Path(tempfile.mkdtemp())
+            env = {"SOURCE_DATE_EPOCH": "1700000000", "VERSION": version,
+                   "SHA_HEAD_SHORT": "abc1234"}
+            with patch.dict(os.environ, env):
+                report = self.module.generate_provenance_report(
+                    installed, "main", set(), {}, output_dir=output_dir)
+            self.assertEqual(report["build_provenance"]["commit"], "abc1234")
+            outputs.append(tuple((output_dir / f).read_bytes()
+                                 for f in ("package-origins.json", "package-origins.txt")))
+        self.assertEqual(outputs[0], outputs[1])
 
     def test_generate_provenance_report_records_the_factory_pin_and_base_image(self) -> None:
         """The report says which factory and which base the NEVRAs came from."""
@@ -1411,6 +1603,167 @@ class Dnf5ConfigTests(unittest.TestCase):
                     patch.object(self.module, "DNF_MAIN_CONF", main_conf):
                 paths = self.module.runtime_reposdir_paths()
         self.assertEqual(paths, list(self.module.DEFAULT_REPOS_DIRS))
+
+
+class MainSectionSecurityTests(unittest.TestCase):
+    """The resolved [main] block is inspected for proxy= and sslverify=0 (utah#352).
+
+    `check_repo_sections` only inspects `.repo` sections, so a proxy= or
+    sslverify=0 set globally in the [main] block of dnf.conf or a libdnf5
+    drop-in is never inspected. `main_section_security_errors` resolves those
+    options the way libdnf5 does (later file wins) and reports the effective
+    values; an unreadable or unparseable config fails closed.
+    """
+
+    def setUp(self) -> None:
+        self.module = load_module()
+
+    def _write_conf(self, directory: Path, name: str, body: str) -> Path:
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / name
+        path.write_text(body, encoding="utf-8")
+        return path
+
+    def test_no_main_section_is_clean(self) -> None:
+        """A config without a [main] block has no global security options to report."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            path = self._write_conf(directory, "10-base.conf", "[main]\n")
+            self.assertEqual(
+                self.module.main_section_security_errors([path], "dnf5 [main] config"),
+                [],
+            )
+
+    def test_proxy_in_main_is_reported(self) -> None:
+        """A proxy= in [main] is reported regardless of whether it is empty."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            path = self._write_conf(
+                directory, "10-base.conf", "[main]\nproxy=http://localhost:3128\n")
+            errors = self.module.main_section_security_errors([path], "dnf5 [main] config")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("proxy=http://localhost:3128", errors[0])
+
+    def test_sslverify_zero_in_main_is_reported(self) -> None:
+        """An sslverify=0 in [main] is reported."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            path = self._write_conf(directory, "10-base.conf", "[main]\nsslverify=0\n")
+            errors = self.module.main_section_security_errors([path], "dnf5 [main] config")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("sslverify=0", errors[0])
+
+    def test_sslverify_false_in_main_is_reported(self) -> None:
+        """An sslverify=false in [main] is reported (a falsy value disables verification)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            path = self._write_conf(directory, "10-base.conf", "[main]\nsslverify=false\n")
+            errors = self.module.main_section_security_errors([path], "dnf5 [main] config")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("sslverify=false", errors[0])
+
+    def test_proxy_and_sslverify_in_main_are_both_reported(self) -> None:
+        """A [main] that sets both proxy and sslverify reports both problems."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            path = self._write_conf(
+                directory, "10-base.conf",
+                "[main]\nproxy=http://localhost:3128\nsslverify=0\n",
+            )
+            errors = self.module.main_section_security_errors([path], "dnf5 [main] config")
+        self.assertEqual(len(errors), 2)
+
+    def test_later_file_wins_for_effective_sslverify(self) -> None:
+        """A later drop-in overrides an earlier sslverify=0, so only the effective value counts."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            early = self._write_conf(directory, "00-base.conf", "[main]\nsslverify=0\n")
+            late = self._write_conf(directory, "99-late.conf", "[main]\nsslverify=1\n")
+            errors = self.module.main_section_security_errors([early, late], "dnf5 [main] config")
+        self.assertEqual(errors, [])
+
+    def test_later_empty_proxy_clears_earlier_proxy(self) -> None:
+        """A later empty proxy= resets an earlier proxy, as libdnf5's last-wins does."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            early = self._write_conf(
+                directory, "00-base.conf", "[main]\nproxy=http://localhost:3128\n"
+            )
+            late = self._write_conf(directory, "99-late.conf", "[main]\nproxy=\n")
+            errors = self.module.main_section_security_errors([early, late], "dnf5 [main] config")
+        self.assertEqual(errors, [])
+
+    def test_malformed_config_fails_closed(self) -> None:
+        """A config that cannot be parsed raises Dnf5ConfigError, like parse_reposdir_from_config."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            path = self._write_conf(directory, "10-base.conf", "proxy=http://localhost:3128\n")
+            with self.assertRaises(self.module.Dnf5ConfigError):
+                self.module.main_section_security_errors([path], "dnf5 [main] config")
+
+    def test_sslverify_one_is_not_reported(self) -> None:
+        """An sslverify=1 in [main] keeps TLS verification on, so it is not reported."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            path = self._write_conf(directory, "10-base.conf", "[main]\nsslverify=1\n")
+            self.assertEqual(
+                self.module.main_section_security_errors([path], "dnf5 [main] config"),
+                [],
+            )
+
+    def test_uppercase_option_key_is_not_honoured(self) -> None:
+        """dnf5 parses option keys case-sensitively, so Proxy= does not set the effective proxy."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            path = self._write_conf(directory, "10-base.conf", "[main]\nProxy=http://localhost:3128\n")
+            self.assertEqual(
+                self.module.main_section_security_errors([path], "dnf5 [main] config"),
+                [],
+            )
+
+    def test_signature_checks_disabled_in_main_are_reported(self) -> None:
+        """gpgcheck/pkg_gpgcheck/repo_gpgcheck=0 in [main] weaken every repository."""
+        for key in ("gpgcheck", "pkg_gpgcheck", "repo_gpgcheck"):
+            with self.subTest(key=key), tempfile.TemporaryDirectory() as tmp:
+                path = self._write_conf(Path(tmp), "10-base.conf", f"[main]\n{key}=0\n")
+                errors = self.module.main_section_security_errors([path], "dnf5 [main] config")
+                self.assertEqual(len(errors), 1)
+                self.assertIn(f"{key}=0", errors[0])
+
+    def test_signature_checks_enabled_in_main_are_clean(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._write_conf(
+                Path(tmp), "10-base.conf",
+                "[main]\ngpgcheck=1\npkg_gpgcheck=1\nrepo_gpgcheck=1\n")
+            self.assertEqual(
+                self.module.main_section_security_errors([path], "dnf5 [main] config"), [])
+
+    def test_pkg_gpgcheck_zero_in_main_not_masked_by_gpgcheck_one(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._write_conf(
+                Path(tmp), "10-base.conf", "[main]\ngpgcheck=1\npkg_gpgcheck=0\n")
+            errors = self.module.main_section_security_errors([path], "dnf5 [main] config")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("pkg_gpgcheck=0", errors[0])
+
+    def test_later_file_alias_wins_for_effective_gpgcheck(self) -> None:
+        """A later pkg_gpgcheck=1 re-enables an earlier gpgcheck=0 (aliases share one option)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            early = self._write_conf(directory, "00-base.conf", "[main]\ngpgcheck=0\n")
+            late = self._write_conf(directory, "99-late.conf", "[main]\npkg_gpgcheck=1\n")
+            errors = self.module.main_section_security_errors([early, late], "dnf5 [main] config")
+        self.assertEqual(errors, [])
+
+    def test_missing_file_is_clean(self) -> None:
+        """A config file that does not exist contributes no options."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            missing = directory / "does-not-exist.conf"
+            self.assertEqual(
+                self.module.main_section_security_errors([missing], "dnf5 [main] config"),
+                [],
+            )
 
 
 class OnImageRepoAllowlistTests(unittest.TestCase):
@@ -1743,6 +2096,100 @@ class OnImageRepoAllowlistTests(unittest.TestCase):
             )
         self.assertEqual(code, 1)
         self.assertIn("ERROR: could not parse dnf5 config /etc/dnf/dnf.conf", err)
+
+    def test_a_global_proxy_in_main_fails_the_gate(self) -> None:
+        """A proxy= in the resolved [main] fails the gate even for a clean runtime repo set."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(
+                directory,
+                gnome=["gnome-shell"],
+                repositories=[
+                    "public-hummingbird-x86_64-rpms",
+                    "utah-packages",
+                    "nvidia-container-toolkit",
+                ],
+                baseurls={
+                    "public-hummingbird-x86_64-rpms":
+                        "https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
+                    "utah-packages": "file:///etc/utah-packages",
+                    "nvidia-container-toolkit":
+                        "https://nvidia.github.io/libnvidia-container/stable/rpm/$basearch",
+                },
+            )
+            runtime_repos = directory / "runtime-yum-repos"
+            write_repo_file(
+                runtime_repos, "public-hummingbird-x86_64-rpms",
+                baseurl="https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
+            )
+            write_repo_file(
+                runtime_repos, "utah-packages",
+                baseurl="file:///etc/utah-packages",
+            )
+            write_repo_file(
+                runtime_repos, "nvidia-container-toolkit",
+                baseurl="https://nvidia.github.io/libnvidia-container/stable/rpm/$basearch",
+                enabled="0",
+            )
+            dnf_main = directory / "dnf.conf"
+            dnf_main.write_text("[main]\nproxy=http://localhost:3128\n")
+            with patch.object(self.module, "dnf5_config_files",
+                              return_value=[dnf_main]), \
+                 patch.object(self.module, "is_installed",
+                              side_effect=lambda p: p in {"bash", "gnome-shell"}):
+                code, _, stderr = self.run_main(
+                    manifest, overlay, {"bash", "gnome-shell"}, runtime_repos,
+                )
+        self.assertEqual(code, 1)
+        self.assertIn("[main] in dnf5 [main] config sets proxy=http://localhost:3128", stderr)
+
+    def test_a_global_sslverify_zero_in_main_fails_the_gate(self) -> None:
+        """An sslverify=0 in the resolved [main] fails the gate even for a clean runtime repo set."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(
+                directory,
+                gnome=["gnome-shell"],
+                repositories=[
+                    "public-hummingbird-x86_64-rpms",
+                    "utah-packages",
+                    "nvidia-container-toolkit",
+                ],
+                baseurls={
+                    "public-hummingbird-x86_64-rpms":
+                        "https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
+                    "utah-packages": "file:///etc/utah-packages",
+                    "nvidia-container-toolkit":
+                        "https://nvidia.github.io/libnvidia-container/stable/rpm/$basearch",
+                },
+            )
+            runtime_repos = directory / "runtime-yum-repos"
+            write_repo_file(
+                runtime_repos, "public-hummingbird-x86_64-rpms",
+                baseurl="https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
+            )
+            write_repo_file(
+                runtime_repos, "utah-packages",
+                baseurl="file:///etc/utah-packages",
+            )
+            write_repo_file(
+                runtime_repos, "nvidia-container-toolkit",
+                baseurl="https://nvidia.github.io/libnvidia-container/stable/rpm/$basearch",
+                enabled="0",
+            )
+            dnf_main = directory / "dnf.conf"
+            dnf_main.write_text("[main]\nsslverify=0\n")
+            with patch.object(self.module, "dnf5_config_files",
+                              return_value=[dnf_main]), \
+                 patch.object(self.module, "is_installed",
+                              side_effect=lambda p: p in {"bash", "gnome-shell"}):
+                code, _, stderr = self.run_main(
+                    manifest, overlay, {"bash", "gnome-shell"}, runtime_repos,
+                )
+        self.assertEqual(code, 1)
+        self.assertIn("[main] in dnf5 [main] config sets sslverify=0", stderr)
 
 
 class UsageTests(unittest.TestCase):

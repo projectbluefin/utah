@@ -409,5 +409,42 @@ class FailClosedTests(VerifyModeTests):
                 self.assertEqual(desktop.main(), 1)
 
 
+class FlatpaksModeTests(unittest.TestCase):
+    """`--flatpaks BREWFILE` prints refs to stdout, one per line.
+
+    Containerfile (iso/live/Containerfile, Containerfile.tacklebox) and
+    luks-e2e.sh consume this to share the parser with the build-time
+    contract check instead of carrying their own awk; without a contract
+    in hand the mode is parser-only and exits 0.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.brewfile = Path(self.tmp.name) / "system-flatpaks.Brewfile"
+        self.brewfile.write_text(
+            'flatpak "org.gnome.Calculator"\n'
+            'tap "homebrew/cask"\n'
+            'flatpak "org.mozilla.firefox"\n'
+        )
+
+    def test_prints_refs_one_per_line(self):
+        with patch.object(desktop.sys, "argv", ["verify", "--flatpaks", str(self.brewfile)]):
+            with patch("sys.stdout") as out, patch.object(desktop.sys, "stderr"):
+                code = desktop.main()
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            "".join(call.args[0] for call in out.write.call_args_list if call.args),
+            "org.gnome.Calculator\norg.mozilla.firefox\n",
+        )
+
+    def test_missing_brewfile_exits_nonzero(self):
+        missing = Path(self.tmp.name) / "absent.Brewfile"
+        with patch.object(desktop.sys, "argv", ["verify", "--flatpaks", str(missing)]):
+            with patch("sys.stdout"), patch.object(desktop.sys, "stderr") as err:
+                code = desktop.main()
+        self.assertEqual(code, 1)
+
+
 if __name__ == "__main__":
     unittest.main()

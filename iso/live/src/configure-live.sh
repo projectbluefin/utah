@@ -11,7 +11,10 @@ TARGET_IMAGE="${TARGET_IMAGE:-ghcr.io/projectbluefin/utah:testing}"
 # installed image. The payload embedded in the squashfs is the install source.
 systemctl mask bootc-unified-storage.service || true
 
-useradd --create-home --uid 1000 --user-group --comment 'Live User' liveuser || true
+# The image's useradd default is HOME=/home (scripts/fix-home-labels.sh), and
+# /home is a symlink to var/home, which does not exist yet at build time, so
+# `useradd -m` under /home fails (#281). Name the real path.
+useradd --create-home --home-dir /var/home/liveuser --uid 1000 --user-group --comment 'Live User' liveuser || true
 passwd --delete liveuser
 printf 'liveuser ALL=(ALL) NOPASSWD: ALL\n' >/etc/sudoers.d/liveuser
 chmod 0440 /etc/sudoers.d/liveuser

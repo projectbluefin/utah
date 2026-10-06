@@ -68,6 +68,12 @@ files = [
   # falls back to /usr/share/pixmaps/fedora-gdm-logo.png from fedora-logos,
   # and the login screen shows the Fedora wordmark instead of Bluefin (#378).
   "/etc/dconf/db/gdm.d/01-bluefin-gdm-logo",
+  # systemd-remount-fs.service.d/10-utah-composefs-skip.conf. On the composefs
+  # image / is mounted read-only and the upstream unit unconditionally tries
+  # to remount it read-write, fails with "overlay: No changes allowed in
+  # reconfigure", and degrades the boot. The drop-in adds ConditionPathIsReadWrite=/
+  # so the unit is skipped, not failed. #585.
+  "/usr/lib/systemd/system/systemd-remount-fs.service.d/10-utah-composefs-skip.conf",
 ]
 
 [configuration.file_contains]
@@ -89,6 +95,13 @@ files = [
 "/etc/dconf/db/gdm.d/01-bluefin-gdm-logo" = [
   "[org/gnome/login-screen]",
   "logo='/usr/share/pixmaps/bluefin-gdm-logo.png'",
+]
+# Composefs mounts / read-only, so systemd-remount-fs.service must be
+# conditional on / being writable; otherwise it fails on every boot and
+# degrades the system. The drop-in ships the condition -- assert the line so
+# a refactor that drops it fails the build rather than the boot (#585).
+"/usr/lib/systemd/system/systemd-remount-fs.service.d/10-utah-composefs-skip.conf" = [
+  "ConditionPathIsReadWrite=/",
 ]
 
 [flatpak]
