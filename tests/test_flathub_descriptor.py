@@ -30,6 +30,15 @@ class FlathubDescriptorIntegrityTests(unittest.TestCase):
         (uupd / "uupd").write_text("#!/bin/sh\nexit 0\n")
         (uupd / "uupd.service").write_text("[Service]\nExecStart=/usr/bin/uupd\n")
         (uupd / "uupd.timer").write_text("[Timer]\nOnBootSec=1h\n")
+        # configure-services.sh generates brewfile.preinstall from the
+        # Brewfile through the installed desktop-contract parser.
+        brewfile = self.root / "usr/share/ublue-os/homebrew/system-flatpaks.Brewfile"
+        brewfile.parent.mkdir(parents=True)
+        brewfile.write_text('flatpak "org.mozilla.firefox"\n')
+        parser = self.root / "usr/local/libexec/utah-verify-desktop-contract"
+        parser.parent.mkdir(parents=True)
+        parser.write_bytes((ROOT / "scripts/verify-desktop-contract.py").read_bytes())
+        parser.chmod(0o755)
 
     def run_script(self):
         source = (ROOT / "scripts/configure-services.sh").read_text()

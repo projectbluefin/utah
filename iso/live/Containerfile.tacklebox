@@ -28,14 +28,12 @@ RUN dnf5 install -y --setopt=install_weak_deps=False \
         dbus-daemon && \
     dnf5 clean all && rm -rf /var/cache/dnf /var/cache/libdnf5
 
-# Bake the installer plus precisely the Flatpaks declared by the Bluefin
-# Brewfile. /tmp/flatpaks-list already holds bare application ids: the list
-# below converts the Brewfile the same way iso/live/Containerfile does, so
-# the contract stays the single source of truth.
+# Bake the installer plus the Flatpaks declared in preinstall.d — the list
+# generated from the Bluefin Brewfile, plus the hand-authored Bazaar and
+# Ghostty entries — into the squashfs. The image declares them in
+# /usr/share/flatpak/preinstall.d, and the install script runs `flatpak
+# preinstall`, the same way iso/live/Containerfile does, so the contract stays
+# the single source of truth.
 COPY src/install-flatpaks.sh /usr/local/libexec/utah-install-live-flatpaks
-# Same shipped-parser reasoning as iso/live/Containerfile: the stage is FROM
-# the shipped image, which strips build-time scripts.
-COPY --chmod=0755 src/utah-verify-desktop-contract.py /usr/local/libexec/utah-verify-desktop-contract
-RUN /usr/local/libexec/utah-verify-desktop-contract --flatpaks /usr/share/ublue-os/homebrew/system-flatpaks.Brewfile > /tmp/flatpaks-list && \
-    chmod 0755 /usr/local/libexec/utah-install-live-flatpaks && \
+RUN chmod 0755 /usr/local/libexec/utah-install-live-flatpaks && \
     /usr/local/libexec/utah-install-live-flatpaks

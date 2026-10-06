@@ -90,12 +90,16 @@ enable_unit ModemManager.service
 enable_unit cups.socket
 enable_unit cups.path
 
-# Bluefin's Brewfile and Bazaar preinstall hook need the Flathub remote before
-# first boot. Keep this as a .flatpakrepo descriptor so the remote is available
-# to both flatpak-preinstall and brew-setup without baking mutable /var state.
+# Bluefin's Brewfile, the Bazaar preinstall hook, and Utah's Ghostty need their
+# remotes before first boot. Keep these as .flatpakrepo descriptors so each
+# remote is available to both flatpak-preinstall and brew-setup without baking
+# mutable /var state. TunaOS's descriptor, which Ghostty resolves from, is
+# vendored in system_files/shared/etc/flatpak/remotes.d rather than fetched
+# here. That pins the remote URL, not a signing key: TunaOS uses OCI over TLS
+# and its descriptor contains no GPGKey.
 #
-# The descriptor is pinned like every other download in this build: it carries
-# Url= and GPGKey=, so it is the trust root every Flatpak on the image is
+# The Flathub descriptor is pinned like every other download in this build: it
+# carries Url= and GPGKey=, so it is the trust root every Flatpak on the image is
 # verified against, not merely a pointer to one. OSTree's signature check is
 # only as good as the key this file names. Flathub's key has not changed since
 # the repository opened, so a hash bump here means Flathub itself moved and the
@@ -119,6 +123,34 @@ grep -q '^DeployCollectionID=' /etc/flatpak/remotes.d/flathub.flatpakrepo ||
     sed -i '/^\[Flatpak Repo\]$/a DeployCollectionID=org.flathub.Stable' \
         /etc/flatpak/remotes.d/flathub.flatpakrepo
 grep -qx 'DeployCollectionID=org.flathub.Stable' /etc/flatpak/remotes.d/flathub.flatpakrepo
+
+# Declare the Bluefin parity Brewfile's Flatpaks in preinstall.d, in the image,
+# so the live ISO bake and flatpak-preinstall.service (enabled by the preset,
+# run in the background on first boot of non-ISO installs) install the same
+# set. The entries are generated from the Brewfile through the desktop
+# contract's parser rather than re-listed, so the two can never drift. Bazaar is
+# left to bazaar.preinstall, so exactly one entry declares it. No CollectionID:
+# an entry without one resolves from any configured remote.
+brewfile=/usr/share/ublue-os/homebrew/system-flatpaks.Brewfile
+brew_preinstall=/usr/share/flatpak/preinstall.d/brewfile.preinstall
+install -d -m0755 /usr/share/flatpak/preinstall.d
+: > "${brew_preinstall}"
+while IFS= read -r id; do
+    [ -n "${id}" ] || continue
+    # bazaar.preinstall (system_files) already declares Bazaar.
+    [ "${id}" = "io.github.kolunmi.Bazaar" ] && continue
+    # The org.gtk.Gtk3theme.* entries are runtimes on the 3.22 branch, not
+    # applications on stable; everything else in the Brewfile is an app.
+    if [[ "${id}" == org.gtk.Gtk3theme.* ]]; then
+        printf '[Flatpak Preinstall %s]\nBranch=3.22\nIsRuntime=true\n\n' "${id}"
+    else
+        printf '[Flatpak Preinstall %s]\nBranch=stable\nIsRuntime=false\n\n' "${id}"
+    fi
+done < <(/usr/local/libexec/utah-verify-desktop-contract --flatpaks "${brewfile}") >> "${brew_preinstall}"
+if ! grep -q '^\[Flatpak Preinstall ' "${brew_preinstall}"; then
+    echo "No Flatpaks generated from ${brewfile}; the Brewfile conversion is broken" >&2
+    exit 1
+fi
 
 disable_unit flatpak-add-fedora-repos.service
 

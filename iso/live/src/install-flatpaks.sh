@@ -2,6 +2,14 @@
 # Bake Utah's default Flatpaks and the bootc-installer bundle into the live
 # squashfs. Adapted from dakota-iso: the cache is build-only; the resulting
 # Flatpak repository is part of the ISO and is available offline to fisherman.
+#
+# Utah's default Flatpaks are declared in flatpak's standard preinstall.d, and
+# those declarations ship in the Utah image itself: configure-services.sh
+# generates brewfile.preinstall from the Bluefin parity Brewfile, and
+# bazaar.preinstall and ghostty.preinstall are in system_files. This script only
+# runs `flatpak preinstall`, so the ISO bakes exactly the declared set, and
+# flatpak-preinstall.service, which reads the same entries on first boot of a
+# non-ISO install, installs the same set.
 set -euo pipefail
 
 # Flathub pulls are the largest network operation in the whole ISO build --
@@ -15,14 +23,17 @@ set -euo pipefail
 #
 # after 3m44s, with nothing wrong in the image. The curl above already retries
 # for the same reason. flatpak resumes a partial pull from the local repository,
-# so a retry re-fetches only what is still missing, and every install below
-# passes --or-update, which makes a retry a no-op for refs already complete.
+# so a retry re-fetches only what is still missing. The installer install
+# carries --or-update (idempotent); the default-flatpaks path uses
+# `flatpak preinstall`, whose preinstalled marks make a retry a no-op too --
+# but preinstall exits 0 on a flaked ref, so that path is retried on its own
+# verification result rather than through retry_flatpak (see the loop below).
 # 3 attempts stopped being enough: post-testing-e2e run 36230660725 lost
 # utah to dl.flathub.org [28] timeouts on all 3 attempts spread over
 # ~20 minutes (thunderbird, then org.gnome.Platform), with nothing wrong
 # in the image. 5 attempts at ~6 minutes each plus backoff covers a
-# ~35-minute outage window; flatpak resumes partial pulls, and --or-update
-# below keeps every retry a no-op for refs already complete.
+# ~35-minute outage window; flatpak resumes partial pulls, and both the
+# --or-update installer and the preinstall marks keep every retry a no-op.
 retry_flatpak() {
     local attempt max_attempts=5
     for (( attempt = 1; attempt <= max_attempts; attempt++ )); do
@@ -39,6 +50,8 @@ retry_flatpak() {
 }
 
 FLATPAK_CACHE=/var/cache/flatpak-dl
+# Utah's default Flatpaks, as the image declares them (see the header).
+PREINSTALL_DIR=/usr/share/flatpak/preinstall.d
 INSTALLER_APP_ID=org.bootcinstaller.Installer
 INSTALLER_REPO=tuna-os/bootc-installer
 BUNDLE=org.bootcinstaller.Installer.flatpak
@@ -85,6 +98,14 @@ if [[ -d "${FLATPAK_CACHE}/repo/refs" ]]; then
     # cannot be installed into the live layer. -n keeps the seed
     # non-destructive, which is all --ignore-existing was doing.
     cp -a -n "${FLATPAK_CACHE}/repo/." /var/lib/flatpak/repo/ || true
+    # The cache is a copy of the last build's whole repo, config included, and
+    # that config records every ref the last build preinstalled. Seeded as-is,
+    # `flatpak preinstall` below treats the declared set as already handled and
+    # installs nothing, so check_missing fails every attempt. Only the objects
+    # are meant to carry over.
+    if [[ -f /var/lib/flatpak/repo/config ]]; then
+        ostree config --repo=/var/lib/flatpak/repo unset core.xa.preinstalled
+    fi
 fi
 
 # remote-add fetches the .flatpakrepo over the network, so it flakes like the
@@ -93,6 +114,12 @@ fi
 # after every E2E flavor had passed. --if-not-exists keeps a retry a no-op once
 # one attempt succeeds.
 retry_flatpak remote-add --system --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+# Ghostty resolves from the TunaOS remote. The image vendors that remote's
+# descriptor at /etc/flatpak/remotes.d/tuna-os.flatpakrepo; register it from
+# the vendored file so the bake never fetches its remote configuration.
+# --if-not-exists keeps this a no-op if flatpak already imported remotes.d.
+retry_flatpak remote-add --system --if-not-exists tuna-os \
+    /etc/flatpak/remotes.d/tuna-os.flatpakrepo
 
 # A bundle import needs a temporary local remote in an OCI build: direct
 # --bundle installs omit the deploy/active ref without flatpak-system-helper.
@@ -111,10 +138,9 @@ ostree init --repo="${local_repo}" --mode=archive-z2
 flatpak build-import-bundle "${local_repo}" /tmp/bootc-installer.flatpak
 rm -f /tmp/bootc-installer.flatpak
 flatpak remote-add --system --no-gpg-verify installer-local "file://${local_repo}"
-# --or-update for the same reason the Flathub installs below carry it: a retry
-# must be a no-op for a ref that already completed. Without it, an attempt
-# that installed the app but still exited nonzero would make attempts 2 and 3
-# fail with "already installed", turning a flaky success into a hard failure.
+# --or-update makes a retry harmless for an installer ref already deployed.
+# Without it, an install that deployed the app but exited nonzero would make
+# every later attempt fail with "already installed".
 retry_flatpak install --system --noninteractive --or-update installer-local \
     "${INSTALLER_APP_ID}"
 flatpak remote-delete --system --force installer-local || true
@@ -130,45 +156,64 @@ for branch in /var/lib/flatpak/app/${INSTALLER_APP_ID}/x86_64/*; do
 done
 flatpak override --system --filesystem=/etc:ro "${INSTALLER_APP_ID}"
 
-# /tmp/flatpaks-list already holds bare application ids: the Containerfile
-# converts the Brewfile before copying it in, so the contract stays the single
-# source of truth. Parsing it as Brewfile syntax a second time matched nothing
-# and left the array empty, and an empty array makes flatpak read the remote
-# name as the thing to install:
-#   error: No remote refs found for 'flathub'
-mapfile -t apps < <(grep -v '^[[:space:]]*#' /tmp/flatpaks-list | grep -v '^[[:space:]]*$')
-if (( ${#apps[@]} == 0 )); then
-    echo "No flatpaks listed in /tmp/flatpaks-list; the Brewfile conversion is broken" >&2
+# Install everything the image declares in preinstall.d, the same entries
+# flatpak-preinstall.service reads on a non-ISO install's first boot.
+# --no-related keeps locale extensions out of the squashfs, as the former
+# hand-maintained install did. flatpak marks a ref preinstalled only once it
+# deploys, so a retry after a timed-out pull resumes with what is still missing.
+mapfile -t declared < <(sed -n 's/^\[Flatpak Preinstall \(.*\)\]$/\1/p' \
+    "${PREINSTALL_DIR}"/*.preinstall | sort -u)
+if (( ${#declared[@]} == 0 )); then
+    echo "No Flatpaks declared in ${PREINSTALL_DIR}; the image's preinstall.d is broken" >&2
     exit 1
 fi
-retry_flatpak install --system --noninteractive --no-related --or-update flathub "${apps[@]}"
+#
+# `flatpak preinstall` skips a ref no remote resolves -- a wrong Branch, a
+# CollectionID no configured remote carries, a remote whose summary or OCI
+# index fetch timed out -- and still exits 0 (a g_warning, then on to the next
+# entry). That is how bazaar.preinstall's CollectionID=org.flathub.Stable went
+# unnoticed. A missing default Flatpak is a build failure, never a silent skip
+# -- but it is also the flake class retry_flatpak exists for, so a zero exit
+# from preinstall is not the thing worth retrying: the verification below is.
+# Install and verification therefore loop together. Retrying preinstall alone
+# would have turned a flaked remote-metadata fetch into one unretried failure,
+# which is exactly how the Ghostty pull from tuna-os used to be covered.
+missing=()
+check_missing() {
+    local id
+    missing=()
+    for id in "${declared[@]}"; do
+        flatpak info --system "${id}" >/dev/null 2>&1 || missing+=("${id}")
+    done
+}
+max_attempts=5
+for (( attempt = 1; attempt <= max_attempts; attempt++ )); do
+    flatpak preinstall --system --noninteractive -y --no-related \
+        || echo "flatpak preinstall attempt ${attempt} of ${max_attempts} failed" >&2
+    check_missing
+    (( ${#missing[@]} == 0 )) && break
+    echo "declared but not installed after attempt ${attempt} of ${max_attempts}: ${missing[*]}" >&2
+    if (( attempt < max_attempts )); then
+        sleep $(( attempt * 30 ))
+    fi
+done
+if (( ${#missing[@]} > 0 )); then
+    echo "ERROR: declared in ${PREINSTALL_DIR} but not installed after" \
+        "${max_attempts} attempts: ${missing[*]}" >&2
+    exit 1
+fi
 
-# Ghostty, from the TunaOS OCI remote.
-#
-# Utah ships no terminal emulator at all otherwise. Bluefin's own image test
-# asserts ptyxis, but ptyxis is not in Bluefin's package contract because
-# Fedora's base image carries it -- and Hummingbird's does not, nor does it
-# package ptyxis, vte291 or gnome-console, so there is nothing to install.
-# Until this factory builds a terminal, the flatpak is the terminal.
-#
-# Kept out of the Brewfile-derived list on purpose: that list is the parity
-# contract with Bluefin and verify-desktop-contract compares it byte for byte.
-# This is Utah's own addition and does not belong in it.
-retry_flatpak remote-add --system --if-not-exists tuna-os \
-    https://tunaos.org/flatpak/tuna-os.flatpakrepo
-retry_flatpak install --system --noninteractive --no-related --or-update \
-    tuna-os com.mitchellh.ghostty
 # `uninstall --unused` removes every runtime that no installed app depends on,
 # and the Brewfile lists two of exactly that kind: the adw-gtk3 GTK3 themes.
 # Nothing requires them, so they were stripped from the ISO and the offline
 # install check failed on every flavor (post-testing-e2e run 36047291319):
 #   FAIL: default Flatpak(s) missing on the installed, network-isolated
 #   system: org.gtk.Gtk3theme.adw-gtk3 org.gtk.Gtk3theme.adw-gtk3-dark
-# Pin each listed runtime first; --unused never removes a pinned ref. The pin
+# Pin each declared runtime first; --unused never removes a pinned ref. The pin
 # is part of /var/lib/flatpak, so it also reaches the installed system and
 # keeps later `--unused` cleanups there from removing the themes too.
 declare -A wanted=()
-for app in "${apps[@]}"; do wanted["${app}"]=1; done
+for id in "${declared[@]}"; do wanted["${id}"]=1; done
 while read -r ref; do
     id="${ref#runtime/}"; id="${id%%/*}"
     if [[ -n "${wanted[${id}]:-}" ]]; then

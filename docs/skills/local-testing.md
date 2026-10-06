@@ -207,16 +207,6 @@ Production live boot entries configure:
   pipelines, but currently module signing is not implemented in-tree and Secure
   Boot must remain disabled.
 
-The Flatpak list both ISO bakes install comes from
-`scripts/verify-desktop-contract.py --flatpaks` (the single Brewfile parser;
-the desktop contract owns it). The ISO stages are FROM the shipped image,
-which strips build-time scripts, and the `iso/live/` build context cannot
-reach repo-root `scripts/` -- so both build scripts stage the parser into
-`iso/live/src/` (removed by trap afterwards) and both Containerfiles ship it
-persistently at `/usr/local/libexec/utah-verify-desktop-contract`, which is
-also what puts it on the live guest. Never reference the parser by bare name
-on the guest: the overlay is not on the default PATH.
-
 `iso/live/src/install-flatpaks.sh` pins the bootc-installer Flatpak bundle to
 a specific `tuna-os/bootc-installer` release rather than resolving
 `/releases/latest/download/` the way dakota-iso does: the bundle installs
@@ -228,6 +218,49 @@ so there is no tag-name continuity to lean on when bumping it.
 take the digest from that release's `org.bootcinstaller.Installer.flatpak`
 asset (`digest` field of `gh api repos/tuna-os/bootc-installer/releases/tags/<tag>`,
 or download and `sha256sum` it) rather than guessing or reusing an old value.
+
+The default Flatpaks are declared in the image's
+`/usr/share/flatpak/preinstall.d`, not in the ISO bake: `bazaar.preinstall`
+and `ghostty.preinstall` ship from `system_files`, and
+`scripts/configure-services.sh` generates `brewfile.preinstall` from the
+Bluefin Brewfile. `install-flatpaks.sh` only runs `flatpak preinstall`, so the
+ISO bakes exactly the declared set, and so does anything else that runs
+`flatpak preinstall` against the image -- including
+`flatpak-preinstall.service`, which the preset enables and which runs in the
+background on first boot of a non-ISO install (#544). On an ISO install the
+bake already installed and marked every declared ref, so that run has nothing
+to do. Bazaar is declared once, in `bazaar.preinstall`; the generated
+`brewfile.preinstall` skips it.
+
+preinstall.d has no key that names a remote: an entry resolves from every
+configured remote, or only those whose collection ID equals its
+`CollectionID`, and an entry nothing resolves is skipped with exit 0 (the bake
+checks every declared ref landed). The generated entries carry no
+`CollectionID`, and Ghostty is on TunaOS's `master` branch only.
+The TunaOS remote descriptor is vendored at
+`system_files/shared/etc/flatpak/remotes.d/tuna-os.flatpakrepo`, never fetched.
+
+`flatpak preinstall` marks every ref it installs as preinstalled in
+`/var/lib/flatpak`, and fisherman copies that state onto disk, so the marks
+survive into installed systems. Upstream then treats preinstall.d as the
+authoritative set: a marked ref that a later image no longer declares is
+uninstalled on the next `flatpak-preinstall.service` run. Dropping an app from
+the Brewfile (or from a `*.preinstall` file) therefore removes it from any
+system where that service runs, including copies users kept deliberately. That
+is intended flatpak semantics, and it is live wherever that service runs:
+Brewfile removals are user-visible uninstalls, not build-only changes.
+
+Flatpak 1.19.0's [preinstall manual](https://github.com/flatpak/flatpak/blob/ec707cb43a0b332e4eea581d49bf9bb11f0dbd73/doc/flatpak-preinstall.xml)
+and [sync implementation](https://github.com/flatpak/flatpak/blob/ec707cb43a0b332e4eea581d49bf9bb11f0dbd73/common/flatpak-transaction.c)
+are the pinned references for this policy. A user who removes an already
+marked default is not forced to reinstall it while the declaration remains;
+`--reinstall` explicitly overrides that opt-out. A zero preinstall exit alone
+is not bake evidence: missing remote metadata can be warned about and skipped.
+The bake retries preinstall and the declared-set check together, and fails
+after five incomplete attempts. Validate the real path with a rootless live
+image build and then `just luks-test` on its debug ISO; PR image-only CI does
+not exercise the ISO bake. The vendored TunaOS descriptor pins an OCI remote
+URL, not a GPG trust anchor; content trust still depends on TLS to that remote.
 
 ## Tacklebox ISOs (unpublished variants)
 
@@ -284,9 +317,10 @@ disposable LUKS2 disk from the embedded payload, boots without the ISO,
 unlocks the disk, confirms `bootc status` reports the offline embedded
 payload (not a network pull) on a guest with no route out, and checks
 graphical login and extension states. A trailing check, after login,
-confirms every default Flatpak in the Brewfile contract is also present
-offline -- deferred past login because it deploys asynchronously on first
-boot. Both gates have escape hatches for unblocking a promotion when the
+confirms every default Flatpak the image declares in
+`/usr/share/flatpak/preinstall.d` -- the Brewfile parity set plus Utah's own
+additions, Ghostty among them -- is also present offline, deferred past login
+because it deploys asynchronously on first boot. Both gates have escape hatches for unblocking a promotion when the
 gate itself, rather than the image, is at fault: `UTAH_E2E_FLATPAKS` sets the
 expected Flatpak set directly (empty skips the check), and
 `UTAH_E2E_PAYLOAD_CHECK=""` skips the booted-image assertion. The booted-image
