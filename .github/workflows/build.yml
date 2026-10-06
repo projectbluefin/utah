@@ -67,11 +67,14 @@ jobs:
         # and that is what github.sha is for every job in the run. If the two
         # disagree, another commit landed on testing between capture and
         # dispatch; fail loudly instead of building the wrong tree. A
-        # stale-read false positive is possible if the api/ref read above
-        # is served from a stale cache while the dispatch resolves the new
-        # head; the error text names the captured SHA and the resolved
-        # SHA so the operator can confirm the build was correct on
-        # inspection and re-dispatch.
+        # stale-read false positive is possible if the `git/ref/heads/testing`
+        # read in sync-main-to-testing.yml is served from a stale cache while
+        # the dispatch resolves the new head; the error text names the
+        # captured SHA and the resolved SHA so the operator can confirm the
+        # build was correct on inspection and re-dispatch. The reverse skew
+        # (the api/ref read AND the dispatch resolution both serving the
+        # pre-sync SHA from a stale cache) is not catchable here and lands
+        # as the next nightly catching up.
         if: ${{ inputs.target_sha != '' }}
         env:
           TARGET_SHA: ${{ inputs.target_sha }}

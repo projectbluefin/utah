@@ -46,7 +46,11 @@ jobs:
           # does not expose a JSON output mode (only the dispatch URL on
           # stdout), so the dispatched run cannot be queried in-process to
           # confirm the SHA it accepted; the build.yml assertion is the
-          # single source of truth.
+          # single source of truth. The reverse skew (stale `git/ref/heads/testing`
+          # read AND stale dispatch resolution both serving the pre-sync SHA)
+          # is not catchable from inside this repo; it lands as the next nightly
+          # catching up. See ci-workflows.md for the full operator-facing
+          # description of the false-positive and false-negative directions.
           TARGET_SHA="$(gh api \
               -H 'Accept: application/vnd.github+json' \
               "/repos/$REPOSITORY/git/ref/heads/testing" \

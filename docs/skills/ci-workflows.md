@@ -268,18 +268,34 @@ passes it to `build.yml` as the `target_sha` dispatch input. The dispatch
 API still resolves `--ref testing` to whatever testing points at when the
 dispatch is accepted, and that is what `github.sha` becomes for every job
 in the run. The build's `contract` job asserts `inputs.target_sha ==
-github.sha` and fails the run if they disagree. There are two ways the
-assertion can fail: (1) `testing` actually moved between the dispatcher's
-`git/ref/heads/testing` capture and the dispatch API's `--ref testing`
-resolution — a real dispatch-skew that the assertion exists to catch
-(#371); (2) the `git/ref/heads/testing` read was served from a stale cache
-while the dispatch resolved the new head — a false positive where the
-build was correct and the next nightly schedule (or a manual re-dispatch)
-clears the red run. The assertion's error text names both SHAs so the
-operator can distinguish them. The checkouts themselves keep their default
-`github.sha` behavior, so every job in the run agrees on the same tree
-(push and pull_request events skip the assertion because `target_sha` is
-empty for them).
+github.sha` and fails the run if they disagree. There are three directions
+the capture and resolution can disagree:
+
+1. `testing` actually moved between the dispatcher's `git/ref/heads/testing`
+   capture and the dispatch API's `--ref testing` resolution — a real
+   dispatch-skew that the assertion exists to catch (#371).
+2. The `git/ref/heads/testing` read was served from a stale cache while
+   the dispatch resolved the new head — a false positive: the captured
+   SHA lags the resolved SHA, the assertion fires, the build was correct,
+   and the next nightly schedule (or a manual re-dispatch) clears the
+   red run.
+3. (False negative, not catchable from inside the repo.) Both the
+   `git/ref/heads/testing` read AND the dispatch's `--ref testing`
+   resolution are served from a stale cache that returns the *pre-sync*
+   SHA. Captured SHA equals resolved SHA, the assertion passes, and the
+   run builds the pre-sync tree with a green contract job — exactly the
+   #371 symptom. There is no in-repo signal for this case; recovery is
+   the next nightly schedule (which re-syncs and re-dispatches from the
+   fresh head) catching up.
+
+The assertion's error text names both SHAs so the operator can distinguish
+direction (1)/(2). Direction (3) shows up only as a stale testing build
+that the nightly corrects; if a stale testing build is observed, the
+recovery is to wait for the next nightly (no manual re-dispatch needed,
+since the dispatched build was the stale one). The checkouts themselves
+keep their default `github.sha` behavior, so every job in the run agrees
+on the same tree (push and pull_request events skip the assertion because
+`target_sha` is empty for them).
 
 ## ISO LUKS gate and screenshots
 
