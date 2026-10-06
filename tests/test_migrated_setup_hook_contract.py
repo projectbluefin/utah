@@ -242,6 +242,49 @@ class MigratedSetupHookContractTests(unittest.TestCase):
                     env.assert_stamped(self)
                     env.assert_effect(self)
 
+    def test_tailscale_missing_binary_defers_and_recovers(self):
+        env = HookEnvironment(self, "tailscale")
+        (env.bin / "tailscale").unlink()
+        deferred = env.run()
+        self.assertEqual(deferred.returncode, 0, deferred.stderr)
+        self.assertFalse(env.stamp.exists())
+        env.install("tailscale", TOOLS["tailscale"])
+        recovered = env.run()
+        self.assertEqual(recovered.returncode, 0, recovered.stderr)
+        env.assert_stamped(self)
+        env.assert_effect(self)
+
+    def test_tailscale_root_or_invalid_caller_never_gets_operator(self):
+        for uid in (None, "", "0", "00", "root"):
+            with self.subTest(uid=uid):
+                env = HookEnvironment(self, "tailscale")
+                if uid is None:
+                    del env.env["PKEXEC_UID"]
+                else:
+                    env.env["PKEXEC_UID"] = uid
+                result = env.run()
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertFalse(env.stamp.exists())
+                self.assertFalse(env.actions.exists())
+
+    def test_flatpaks_missing_firefox_config_skips_cleanly(self):
+        env = HookEnvironment(self, "flatpaks")
+        (env.firefox / "bluefin.js").unlink()
+        result = env.run()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        env.assert_stamped(self)
+        self.assertEqual(list(env.preferences.iterdir()), [])
+
+
+class FirstBootEnablementTests(unittest.TestCase):
+    def test_contract_and_preset_enable_stats_refresh_timer(self):
+        contract = (ROOT / "contracts/bluefin-desktop.toml").read_text()
+        preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset").read_text()
+        services = (ROOT / "scripts/configure-services.sh").read_text()
+        self.assertIn('"bluefin-stats-refresh.timer"', contract)
+        self.assertIn("enable bluefin-stats-refresh.timer", preset)
+        self.assertIn("enable_unit bluefin-stats-refresh.timer", services)
+
 
 if __name__ == "__main__":
     unittest.main()

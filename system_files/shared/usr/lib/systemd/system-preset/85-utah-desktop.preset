@@ -25,6 +25,7 @@ enable dconf-update.service
 # ISO booted with no app store at all.
 enable flatpak-preinstall.service
 enable flatpak-nuke-fedora.service
+enable bluefin-stats-refresh.timer
 enable input-remapper.service
 enable ModemManager.service
 # Printing on demand, as Fedora's preset enables it for Bluefin.
