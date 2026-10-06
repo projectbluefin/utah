@@ -2,6 +2,10 @@
 # Keep these in /usr/lib so bootc's first-boot preset application sees them.
 enable gdm.service
 enable bluetooth.service
+# Match Bluefin discovery and hybrid-GPU defaults.
+enable avahi-daemon.service
+enable avahi-daemon.socket
+enable switcheroo-control.service
 enable firewalld.service
 enable fwupd.service
 enable fwupd-refresh.timer
@@ -15,6 +19,12 @@ enable systemd-resolved.service
 enable systemd-boot-update.service
 enable bootc-unified-storage.service
 enable dconf-update.service
+# First-boot Flatpaks (Bazaar, from common's preinstall.d). configure-services.sh
+# enabled these at build time, but with no line here bootc's first-boot preset
+# application turned them back off, and an image installed by anything but the
+# ISO booted with no app store at all.
+enable flatpak-preinstall.service
+enable flatpak-nuke-fedora.service
 enable input-remapper.service
 enable ModemManager.service
 # Printing on demand, as Fedora's preset enables it for Bluefin.

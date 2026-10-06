@@ -1,7 +1,7 @@
 ---
 name: setup-hooks
 version: "1.0"
-last_updated: "2026-09-30"
+last_updated: "2026-10-03"
 id: setup-hooks
 one_line_purpose: Change a first-boot setup hook without breaking the once-only contract.
 entry_point: docs/skills/setup-hooks.md
@@ -42,11 +42,11 @@ set -xeuo pipefail
 version-script-commit <name> <scope> 1            # record success
 ```
 
-`projectbluefin/common#1196` split the old `version-script` helper in two. The
-legacy helper recorded the version *before* the body ran, so a hook that failed
-on first boot — a transient missing binary, an unreadable DMI node — was
-skipped forever after. The new pair leaves the gate read-only and lets the hook
-record success itself, so a failure retries on the next boot.
+`projectbluefin/common#1196` adds a read-only check and a separate commit while
+retaining `version-script` as the legacy check-and-record helper. The legacy
+gate records the version *before* the body runs, so a failed body is skipped
+forever after. The new pair records only successful completion and therefore
+allows failed bodies to retry on the next boot.
 
 Two consequences to keep in mind when writing the body:
 
@@ -56,12 +56,16 @@ Two consequences to keep in mind when writing the body:
    (wrong vendor, karg already applied) commits before `exit 0` so the hook
    stops re-running every boot. A transient skip (DMI unreadable, dependency
    missing) exits *without* committing so it retries.
+3. **Evaluate transient guards before `version-script-check`.** Under the compat
+   shim the check *is* the legacy stamp, so a transient skip placed after it is
+   recorded as done and never retries. Deliberate skips stay after the check,
+   since they need the gate to have run before committing.
 
 ## Compat shim
 
-The pinned common image has no `version-script-check`/`version-script-commit`
-until projectbluefin/common#1196 lands. Each hook therefore defines a shim so it
-works in either merge order:
+Each migrated hook defines a shim when its sourced libsetup lacks the pair,
+so a common image bump is not a merge-order prerequisite. The fallback keeps
+legacy stamp-on-check behavior; it cannot provide retry-after-body-failure.
 
 ```bash
 if ! declare -F version-script-check >/dev/null; then
@@ -70,11 +74,12 @@ if ! declare -F version-script-check >/dev/null; then
 fi
 ```
 
-As of this writing `20-home-labels.sh`, `05-bootupctl-adopt.sh` and
-`user-setup.hooks.d/30-ghostty.sh` carry the shim. The other Utah hooks
-(`10-tailscale.sh`, `11-framework-ucsi-workaround.sh`, `99-flatpaks.sh`,
-`user-setup.hooks.d/20-framework.sh`) still call the legacy `version-script`
-helper, pending #259.
+Utah's migrated privileged and user hooks carry this shim alongside their
+check/commit calls. Deliberate Framework skips (wrong vendor/product, karg
+already present) commit; unavailable DMI, missing rpm-ostree/brew and an
+unwritable Homebrew prefix remain transient. The prefix warning can recur for
+a non-admin account; that is intentional so a later permission or dependency
+change gets a retry.
 
 `30-ghostty.sh` is the case that shows why the legacy gate is not good enough
 for a body that moves files: it migrates the user's only real Ghostty config
@@ -91,10 +96,10 @@ use.
 | Hook | Purpose |
 |------|---------|
 | `05-bootupctl-adopt.sh` | Run `bootupctl adopt-and-update` on first boot so a switched-into-Utah system sees its on-disk shim and GRUB as managed by `bootupd`. Skips live sessions (`/sysroot` on `erofs`/`squashfs`) and image variants without `bootupctl` installed, both without committing so a later switch retries. Tracked by #363. |
-| `10-tailscale.sh` | Set the local user as the Tailscale operator. |
-| `11-framework-ucsi-workaround.sh` | Append the `usbcore.autosuspend=-1` karg on Intel-Core-Ultra Frameworks. |
-| `20-home-labels.sh` | Relabel `/var/home` once on systems installed before #261, repairing a mis-keyed active `file_contexts.homedirs` first (#474). |
-| `99-flatpaks.sh` | Drop the Firefox system-config defaults at first boot. |
+| `10-tailscale.sh` | Set a non-root pkexec caller as the Tailscale operator. Missing Tailscale or an invalid/root caller defers without stamping; a failed grant retries with the read-only API. |
+| `11-framework-ucsi-workaround.sh` | Append the `usbcore.autosuspend=-1` karg on Intel-Core-Ultra Frameworks. Wrong hardware or an already-applied karg commits a deliberate skip; missing DMI or rpm-ostree retries. |
+| `20-home-labels.sh` | Relabel `/var/home` once on systems installed before #261, repairing a mis-keyed active `file_contexts.homedirs` first (#474). Version 3 reruns machines whose homedirs an update re-keyed on `/var/home` after the version-2 repair (#575). |
+| `99-flatpaks.sh` | Remove stale Bluefin Firefox preferences and copy optional defaults. Version 2 reruns machines that stamped version 1 while the quoted removal glob was a no-op (#489). Successful copies and deliberate absence/architecture skips commit; body failures retry with the read-only API. Common's `system_files/bluefin/` profile supplies `/usr/share/ublue-os/firefox-config/01-bluefin-global.js`; the image desktop contract requires the actual payload, not merely a Containerfile COPY line. Pinned by `contracts/bluefin-desktop.toml` (`[flatpak].files`). |
 
 `05-bootupctl-adopt.sh` is the canonical example of a transient-skip body:
 each guard (`command -v bootupctl`, the live-session check) exits without
@@ -108,6 +113,19 @@ nothing. The hook detects that condition by comparing the active
 reinstalls the pristine copy when they disagree on the home root, and only
 then trusts a post-`restorecon` `stat` of `/var/home`.
 
+The image itself ships `HOME=/home` in `/etc/default/useradd`, as Fedora and
+Bluefin do (`scripts/fix-home-labels.sh`). ostree rebuilds the SELinux policy
+(`semodule -N --refresh`) in every new deployment after merging `/etc`, and
+`genhomedircon` keys the home rules on that `HOME` value; Hummingbird's
+`HOME=/var/home` produced rules the `/var/home → /home` alias never reaches
+(#575). A locally edited `/etc/default/useradd` keeps its own copy through
+the `/etc` merge, so `20-home-labels.sh` rewrites a lingering exact
+`HOME=/var/home` to `HOME=/home` and warns about any other non-`/home`
+value. `utah-fix-home-labels --check` at the image's last step repeats that
+rebuild and fails the build if `file_contexts.homedirs` changes. Build-time
+`useradd -m` must name `/var/home/<user>` explicitly: `/var/home` does not
+exist in a container, so the `/home` symlink dangles (#281).
+
 ## Tests
 
 `tests/test_setup_hook_version_contract.py` asserts the contract on
@@ -120,7 +138,16 @@ transitions (fresh install, re-run after commit, live session, missing
 fresh, migrate, already-symlinked and reverse-symlink (`~/.config/ghostty`
 pointing into the per-app dir) transitions, plus the two user-managed layouts
 the hook must not disturb: the per-app path symlinked at a dotfiles directory,
-and both paths symlinked at one. Run the suite with `just test`.
+and both paths symlinked at one. `tests/test_flatpaks_hook.py` executes real
+preference cleanup and copying in scratch roots; the migrated-hook suite also
+starts from a version-1 stamp and proves stale defaults are removed, user
+preferences survive, and version 2 commits. Run the suite with `just test`.
 `just check` syntax-checks every hook (`bash -n`) through
 `scripts/check-script-syntax.py`; there is no shellcheck gate in the Justfile
 or CI.
+
+`tests/test_migrated_setup_hook_contract.py` executes all four migrated hooks
+against both library contracts using scratch filesystem roots. It proves
+successful bodies run once, body failures retry with the new pair, Framework
+deliberate skips stamp and transient skips recover. It uses real Firefox copy
+operations against scratch destinations, never host `/var/lib/flatpak`.

@@ -2,5 +2,27 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "local>projectbluefin/renovate-config"
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^Containerfile$/", "/^packages/utah-packages\\.repo$/"],
+      "matchStrings": [
+        "(?:^|\\r?\\n)(?:ARG PACKAGE_IMAGE_SHA=|# factory-pin: )(?<currentDigest>sha256:[a-f0-9]{64})(?:\\r?\\n|$)"
+      ],
+      "depNameTemplate": "ghcr.io/projectbluefin/utah-packages",
+      "currentValueTemplate": "latest",
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
+    }
+  ],
+  "packageRules": [
+    {
+      "matchManagers": ["custom.regex"],
+      "matchDepNames": ["ghcr.io/projectbluefin/utah-packages"],
+      "matchUpdateTypes": ["digest"],
+      "groupName": "utah package factory",
+      "automerge": false
+    }
   ]
 }

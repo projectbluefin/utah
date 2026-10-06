@@ -14,6 +14,8 @@ files = [
   "/usr/share/pixmaps/system-logo-white.png",
   "/usr/share/icons/hicolor/scalable/actions/ublue-logo-symbolic.svg",
   "/usr/share/icons/hicolor/icon-theme.cache",
+  # The os-release LOGO icon; common ships Bluefin's raptor under this name.
+  "/usr/share/pixmaps/fedora-logo-icon.png",
   "/usr/share/ublue-os/bluefin-logos/chicken.png",
   "/usr/share/ublue-os/bluefin-logos/symbols/bluefin",
   "/usr/share/backgrounds/bluefin/01-bluefin.xml",
@@ -21,6 +23,8 @@ files = [
   "/usr/share/glib-2.0/schemas/zz0-bluefin-modifications.gschema.override",
   "/usr/share/ublue-os/fastfetch-user-count",
   "/usr/share/ublue-os/bazaar-install-count",
+  "/usr/bin/chairlift-helper",
+  "/usr/share/polkit-1/actions/io.projectbluefin.chairlift.ublue.policy",
 ]
 
 [branding.os_release]
@@ -34,6 +38,7 @@ BUG_REPORT_URL = "https://github.com/projectbluefin/utah/issues/"
 DEFAULT_HOSTNAME = "utah"
 VERSION_CODENAME = "Utahraptor"
 IMAGE_ID = "utah"
+LOGO = "fedora-logo-icon"
 
 [branding.os_release_patterns]
 PRETTY_NAME = '^Utah \(Version: .+\)$'
@@ -70,6 +75,12 @@ files = [
   # falls back to /usr/share/pixmaps/fedora-gdm-logo.png from fedora-logos,
   # and the login screen shows the Fedora wordmark instead of Bluefin (#378).
   "/etc/dconf/db/gdm.d/01-bluefin-gdm-logo",
+  # systemd-remount-fs.service.d/10-utah-composefs-skip.conf. On the composefs
+  # image / is mounted read-only and the upstream unit unconditionally tries
+  # to remount it read-write, fails with "overlay: No changes allowed in
+  # reconfigure", and degrades the boot. The drop-in adds ConditionPathIsReadWrite=/
+  # so the unit is skipped, not failed. #585.
+  "/usr/lib/systemd/system/systemd-remount-fs.service.d/10-utah-composefs-skip.conf",
 ]
 
 [configuration.file_contains]
@@ -93,6 +104,13 @@ files = [
   "[org/gnome/login-screen]",
   "logo='/usr/share/pixmaps/bluefin-gdm-logo.png'",
 ]
+# Composefs mounts / read-only, so systemd-remount-fs.service must be
+# conditional on / being writable; otherwise it fails on every boot and
+# degrades the system. The drop-in ships the condition -- assert the line so
+# a refactor that drops it fails the build rather than the boot (#585).
+"/usr/lib/systemd/system/systemd-remount-fs.service.d/10-utah-composefs-skip.conf" = [
+  "ConditionPathIsReadWrite=/",
+]
 
 [flatpak]
 files = [
@@ -100,6 +118,11 @@ files = [
   "/usr/share/flatpak/preinstall.d/bazaar.preinstall",
   "/usr/share/ublue-os/privileged-setup.hooks.d/99-flatpaks.sh",
   "/usr/share/ublue-os/homebrew/system-flatpaks.Brewfile",
+  # Common's `system_files/bluefin/` profile supplies the Firefox preference
+  # file the `99-flatpaks.sh` hook copies at first boot; assert the actual
+  # payload rather than the COPY line so a missing Common payload fails
+  # image verification. See issue #488.
+  "/usr/share/ublue-os/firefox-config/01-bluefin-global.js",
 ]
 brewfile = "/usr/share/ublue-os/homebrew/system-flatpaks.Brewfile"
 remote = "/etc/flatpak/remotes.d/flathub.flatpakrepo"
@@ -111,11 +134,9 @@ apps = [
   "com.mattjakeman.ExtensionManager",
   "com.ranfdev.DistroShelf",
   "io.github.flattool.Ignition",
-  "io.github.flattool.Warehouse",
   "io.github.kolunmi.Bazaar",
   "io.gitlab.adhami3310.Impression",
   "io.missioncenter.MissionCenter",
-  "it.mijorus.smile",
   "org.gnome.Calculator",
   "org.gnome.Calendar",
   "org.gnome.Characters",
@@ -155,6 +176,8 @@ apps = [
 
 [services]
 enabled = [
+  "avahi-daemon.service",
+  "avahi-daemon.socket",
   "bluetooth.service",
   "bootc-unified-storage.service",
   "brew-setup.service",
@@ -165,6 +188,7 @@ enabled = [
   "gdm.service",
   "input-remapper.service",
   "ModemManager.service",
+  "switcheroo-control.service",
   "ublue-system-setup.service",
   "uupd.timer",
   "systemd-boot-update.service",

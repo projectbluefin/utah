@@ -28,7 +28,7 @@ RUN dnf5 install -y --setopt=install_weak_deps=False \
 # is committed into the live image and copied to the installed target offline.
 COPY src/install-flatpaks.sh /usr/local/libexec/utah-install-live-flatpaks
 RUN --mount=type=cache,target=/var/cache/flatpak-dl,id=utah-flatpak \
-    awk -F '"' '/^flatpak / {print $2}' /usr/share/ublue-os/homebrew/system-flatpaks.Brewfile > /tmp/flatpaks-list && \
+    /usr/local/libexec/utah-verify-desktop-contract --flatpaks /usr/share/ublue-os/homebrew/system-flatpaks.Brewfile > /tmp/flatpaks-list && \
     chmod 0755 /usr/local/libexec/utah-install-live-flatpaks && \
     /usr/local/libexec/utah-install-live-flatpaks
 

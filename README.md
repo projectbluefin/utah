@@ -3,7 +3,7 @@
 <!-- BEGIN E2E VERIFICATION -->
 [![Verified ISO desktop](docs/verification/screenshots/installed-fastfetch.png)](docs/verification/README.md)
 
-*LUKS ISO test passed for commit `edb4a8b6cad1`. [CI run](https://github.com/projectbluefin/utah/actions/runs/37040829496); [screenshots and provenance](docs/verification/README.md).*
+*LUKS ISO test passed for commit `ce484fa932fe`. [CI run](https://github.com/projectbluefin/utah/actions/runs/37242628701); [screenshots and provenance](docs/verification/README.md).*
 <!-- END E2E VERIFICATION -->
 
 †Utahraptor ostrommaysi
@@ -27,11 +27,13 @@ issues](https://github.com/projectbluefin/utah/issues) is the whole point.
 
 ## What it is
 
-[Bluefin](https://projectbluefin.io) built on [Fedora
-Hummingbird](https://packages.redhat.com), which supplies a hardened, fast-moving
-bootable base and no desktop at all. Utah adds the desktop: Bluefin's package
-contract on top, and the GNOME 51 stack built from source because neither
-Hummingbird nor a Fedora release ships it.
+[Bluefin](https://projectbluefin.io) built on
+[Fedora Hummingbird](https://packages.redhat.com)
+([announcement](https://fedoramagazine.org/fedora-hummingbird-linux-taking-the-hummingbird-model-to-the-full-os/)),
+which supplies a hardened, fast-moving bootable base and no desktop at all.
+Utah adds the desktop: Bluefin's package contract on top, and the GNOME 51
+stack built from source because neither Hummingbird nor a Fedora release
+ships it.
 
 <img src="https://github.com/user-attachments/assets/962af585-6e2a-4038-ac14-8e54a3189420" alt="alt" width="40%">
 
@@ -41,6 +43,35 @@ Two repositories, the way `common` and `brew` already work:
 |---|---|
 | [`projectbluefin/utah`](https://github.com/projectbluefin/utah) | This one. Composes the image. |
 | [`projectbluefin/utah-packages`](https://github.com/projectbluefin/utah-packages) | Builds GNOME 51 and the rest of the desktop stack from verified upstream sources, and publishes them as an OCI image. |
+
+## Download
+
+**No downloadable Utah artifact is offered yet.** No ISO has been released,
+and no installer is published. The `:testing` consumer tag **is** published
+on `ghcr.io/projectbluefin/utah`, but only after the post-`testing`-e2e
+workflow validates a digest and runs
+`skopeo copy … "${ref%@*}:testing"`
+(`.github/workflows/post-testing-e2e.yml:309`). `stream_name: testing` in
+`.github/workflows/build.yml` is built with `publish_stream_tag: "false"`,
+which only defers the floating `:testing` tag — it does not block it. The
+pipeline also pushes dated `testing-<date>-<sha>` snapshots to
+`ghcr.io/projectbluefin/utah` for the `dispatch-iso` job (`build.yml:227`)
+to pick up; those are intermediate artifacts, not a release. Nothing here is
+ready to run on a machine you care about, and no download URL is
+intentionally offered — see [Known gaps](#known-gaps) for what is and is not
+built. Track the publication gate in the
+[`enhancement` label on the issue tracker](https://github.com/projectbluefin/utah/issues?q=is%3Aissue+label%3Aenhancement+sort%3Aupdated-desc);
+the first published artifact will be linked from here and from the [Utah
+docs page](https://docs.projectbluefin.io/utah) at the same time.
+
+## Documentation
+
+The user-facing Utah docs page at
+[docs.projectbluefin.io/utah](https://docs.projectbluefin.io/utah) is the
+canonical home for the live `DriverVersionsCatalog` (kernel, Mesa, NVIDIA,
+GNOME versions, provenance and update date, image switch commands, reboot
+guidance). Edit [`README.md`](README.md) — not the docs wrapper — and the
+catalog stays honest because it is generated, not hand-maintained.
 
 ## Image streams
 
@@ -54,8 +85,11 @@ Four flavors per stream — `utah`, `utah-nvidia`, `utah-gaming`,
 source for that set, for the promote and release matrices, and for whether the
 kernel cache image gets built at all.
 
-**None of these are published yet.** The tags above describe what the pipeline
-is built to produce, not something you can pull today.
+**`:testing` is published** on `ghcr.io/projectbluefin/utah:testing` after the
+post-`testing`-e2e workflow promotes a validated digest
+(`.github/workflows/post-testing-e2e.yml:286-309`). `:stable` is not yet
+published — `:stable` is what the pipeline is built to produce from a future
+promotion off `:testing`, not something you can pull today.
 
 ## Package parity with Bluefin
 
@@ -67,16 +101,25 @@ than being noticed later.
 | | count |
 | --- | --- |
 | Bluefin contract installed | **61** |
-| Utah additions (GNOME 51, base-image parity, device firmware, desktop services) | 88 |
-| Genuinely unavailable | **7** |
+| Utah additions (GNOME 51, base-image parity, device firmware, desktop services) | 105 |
+| Genuinely unavailable | **8** |
 
 The install writes its resolved list to `/usr/share/utah/contract.txt` and the
 verify step asserts *that file*, so the two cannot disagree. The unavailable
 row is not limited to the copied contract: it also holds image-level parity
 gaps — names Bluefin's published image ships from a build file outside
 `base.toml`, recorded in `baselines/bluefin/rpms.tsv` and triaged in
-`baselines/triage.toml` (`nvtop` is the current example). These counts are
-generated from `packages/bluefin.toml` and `packages/utah.toml`
+`baselines/triage.toml` (`nvtop` is the current example). The runtime
+repository allowlist is asserted both by `--check` against the `.repo` files
+in `packages/` before composition and by the on-image verifier against the
+composed image's runtime repositories: every `reposdir` dnf5 resolves at
+runtime from the base image's `[main]` config (defaulting to
+`/etc/yum.repos.d`, `/etc/distro.repos.d`, `/usr/share/dnf5/repos.d` when no
+`reposdir=` is set), so a `.repo` file the base image ships in any of those
+directories is held to the same allowlist. The
+verify step retains the resolved origin/NEVRA set with build provenance as
+`/usr/share/utah/package-origins.json` and `package-origins.txt`. These counts
+are generated from `packages/bluefin.toml` and `packages/utah.toml`
 (`scripts/generate-site-data.py`, `site/data/packages.json`); `just check`
 fails if this table drifts from that output (`scripts/check-doc-counts.py`).
 
@@ -86,11 +129,14 @@ fails if this table drifts from that output (`scripts/check-doc-counts.py`).
 
 This is the honest list, and it is why the label above says pre-alpha.
 
-- **Nothing is published.** No image has been pushed to a registry and no ISO
-  artifact has been released. The live ISO and its bootc-installer payload
-  are implemented and pass an offline, LUKS2-encrypted install end to end in
-  local QEMU validation (`just iso`, `just luks-test`; record and screenshots
-  in [docs/verification](docs/verification/README.md)) — what is missing is
+- **Nothing is released yet.** No ISO artifact has been published and no
+  installer is offered. The `:testing` consumer tag is published on GHCR
+  after validation (see [Download](#download)); what is missing is a release
+  artifact and a published installer, not the installer payload itself.
+  The live ISO and its bootc-installer payload are implemented and pass an
+  offline, LUKS2-encrypted install end to end in local QEMU validation
+  (`just iso`, `just luks-test`; record and screenshots in
+  [docs/verification](docs/verification/README.md)) — what is missing is
   publication, not the installer.
 - **Live media boot paths and Secure Boot.** Live media requires UEFI boot;
   legacy BIOS and file-backed/Ventoy booting are explicitly unsupported (flash

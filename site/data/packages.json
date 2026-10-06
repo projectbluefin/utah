@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-02",
+  "generated_at": "2026-10-03",
   "generator": "scripts/generate-site-data.py",
   "groups": [
     {
@@ -112,8 +112,10 @@
         "attr",
         "bash-completion",
         "bind-utils",
+        "bluez-cups",
         "buildah",
         "bzip2",
+        "cracklib-dicts",
         "crypto-policies-scripts",
         "cups",
         "cups-client",
@@ -123,15 +125,19 @@
         "default-fonts-core-mono",
         "default-fonts-core-sans",
         "default-fonts-core-serif",
+        "desktop-file-utils",
         "file",
         "fprintd",
         "fprintd-pam",
+        "fuse-libs",
         "glycin-thumbnailer",
         "google-noto-sans-math-fonts",
         "google-noto-sans-mono-vf-fonts",
         "google-noto-sans-symbols-2-fonts",
         "google-noto-serif-vf-fonts",
+        "gvfs-smb",
         "hostname",
+        "ibus-gtk4",
         "iptables-nft",
         "iw",
         "keyutils",
@@ -140,9 +146,13 @@
         "langpacks-fonts-en",
         "less",
         "libimobiledevice-utils",
+        "libnma",
+        "libpcap",
+        "linux-atm-libs",
         "lm_sensors",
         "man-db",
         "pciutils",
+        "pipewire-config-raop",
         "pipewire-utils",
         "poppler-utils",
         "pulseaudio-utils",
@@ -150,6 +160,8 @@
         "samba",
         "samba-client",
         "samba-common-tools",
+        "setools-console",
+        "stix-fonts",
         "systemd-container",
         "unzip",
         "vim-enhanced",
@@ -166,11 +178,15 @@
       "blurb": "Device firmware the bootable base leaves out, so a driver that needs a blob can find one.",
       "id": "hardware",
       "packages": [
+        "alsa-sof-firmware",
+        "intel-vsc-firmware",
         "iwlegacy-firmware",
         "iwlwifi-dvm-firmware",
         "iwlwifi-mld-firmware",
         "iwlwifi-mvm-firmware",
-        "linux-firmware"
+        "libertas-firmware",
+        "linux-firmware",
+        "microcode_ctl"
       ],
       "title": "Firmware",
       "transient": false
@@ -179,6 +195,7 @@
       "blurb": "Units Bluefin adds on top of the server base; the preset cannot enable what was never installed.",
       "id": "services",
       "packages": [
+        "avahi",
         "cryptsetup",
         "flatpak",
         "fwupd",
@@ -206,8 +223,8 @@
     }
   ],
   "totals": {
-    "installed": 149,
-    "unavailable": 7
+    "installed": 166,
+    "unavailable": 8
   },
   "unavailable": [
     {
@@ -237,6 +254,12 @@
         253
       ],
       "name": "grub2-efi-x64-cdboot"
+    },
+    {
+      "issues": [
+        499
+      ],
+      "name": "nss-mdns"
     },
     {
       "issues": [

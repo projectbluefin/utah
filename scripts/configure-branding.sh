@@ -70,6 +70,12 @@ set_os_release OSTREE_VERSION "${VERSION}"
 set_os_release IMAGE_ID "${IMAGE_ID}"
 set_os_release IMAGE_VERSION "${VERSION}"
 set_os_release BUILD_ID "${SHA_HEAD_SHORT}"
+# The OS logo GNOME Initial Setup and Settings > About look up by
+# icon name. Fedora sets LOGO=fedora-logo-icon and Bluefin keeps it, with
+# common overlaying its raptor at /usr/share/pixmaps/fedora-logo-icon.png.
+# Hummingbird's os-release has no LOGO at all, so Utah fell back to the
+# generic GNOME foot even though the raptor was on disk.
+set_os_release LOGO "fedora-logo-icon"
 
 # Fedora's bootloader helper still keys its vendor directory off EFIDIR after
 # the distribution ID changes.

@@ -592,19 +592,15 @@ class DesktopUnitEnablementTests(unittest.TestCase):
     # in place for the opt-in debug build rather than shipping it enabled,
     # which is the one case where the two files may legitimately disagree.
     #
-    # The other three predate this test and are NOT asserted to be correct.
-    # They come from ublue packages that may ship their own vendor presets, in
-    # which case Utah's preset has nothing to add -- but that was not verified
-    # here, because it needs the built image rather than the source tree. They
-    # are listed so the guard below can be exact about what it does not yet
-    # cover, instead of being weakened into passing for everything. If one of
-    # them turns out to have no preset behind it either, it is the same bug as
-    # #98 and belongs in the preset.
+    # brew-setup.service carries its own vendor preset, 01-homebrew.preset from
+    # the brew image, verified on a booted image (`systemctl is-enabled` reports
+    # enabled after first-boot preset application). flatpak-preinstall and
+    # flatpak-nuke-fedora were allowlisted here unverified; the same check found
+    # them disabled -- no preset behind them, the #98 bug -- so they moved into
+    # the preset and out of this list.
     WITHOUT_PRESET = {
         "sshd.service",
         "brew-setup.service",
-        "flatpak-nuke-fedora.service",
-        "flatpak-preinstall.service",
     }
 
     def test_no_new_unit_is_enabled_without_a_preset_entry(self):
@@ -670,6 +666,76 @@ class DesktopUnitEnablementTests(unittest.TestCase):
             overlay.get("services", {}).get("packages", []),
         )
 
+
+
+class FlathubCollectionIdTests(unittest.TestCase):
+    """The baked Flathub remote must carry the collection ID preinstall pins.
+
+    common's preinstall.d entries (bazaar.preinstall) set
+    CollectionID=org.flathub.Stable, and flatpak preinstall skips any remote
+    whose collection ID differs without a word: it prints "Nothing to do." and
+    a booted Utah had no Bazaar. Flathub's own descriptor has no
+    DeployCollectionID, and a remotes.d remote is applied to the repo once, so
+    configure-services.sh adds it at build time.
+    """
+
+    SERVICES = ROOT / "scripts/configure-services.sh"
+    FLATHUB = (
+        "[Flatpak Repo]\nTitle=Flathub\nUrl=https://dl.flathub.org/repo/\n"
+        "Homepage=https://flathub.org/\nGPGKey=abc\n"
+    )
+
+    def snippet(self):
+        text = self.SERVICES.read_text()
+        start = text.index("grep -q '^DeployCollectionID='")
+        end = text.index("\n", text.index("grep -qx 'DeployCollectionID=org.flathub.Stable'"))
+        return text[start:end].replace(
+            "/etc/flatpak/remotes.d/flathub.flatpakrepo", '"$1"')
+
+    def run_snippet(self, content):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "flathub.flatpakrepo"
+            repo.write_text(content)
+            proc = subprocess.run(
+                ["bash", "-euo", "pipefail", "-c", self.snippet(), "_", str(repo)],
+                capture_output=True, text=True)
+            return proc, repo.read_text()
+
+    def test_adds_the_collection_id_under_the_group_header(self):
+        proc, text = self.run_snippet(self.FLATHUB)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        lines = text.splitlines()
+        self.assertEqual(lines[0], "[Flatpak Repo]")
+        self.assertEqual(lines[1], "DeployCollectionID=org.flathub.Stable")
+        self.assertIn("GPGKey=abc", lines)
+
+    def test_is_idempotent(self):
+        once = self.run_snippet(self.FLATHUB)[1]
+        proc, twice = self.run_snippet(once)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(twice.count("DeployCollectionID="), 1)
+
+    def test_fails_on_a_descriptor_it_cannot_amend(self):
+        proc, _ = self.run_snippet("Url=https://dl.flathub.org/repo/\n")
+        self.assertNotEqual(proc.returncode, 0)
+
+    def test_preinstall_does_not_hold_up_boot(self):
+        # As a oneshot wanted by multi-user.target with default dependencies,
+        # graphical.target waited 60s for the Flathub download on first boot.
+        import configparser
+        dropin = ROOT / ("system_files/shared/usr/lib/systemd/system/"
+                         "flatpak-preinstall.service.d/10-utah-background.conf")
+        parser = configparser.ConfigParser(strict=False, interpolation=None)
+        parser.optionxform = str
+        parser.read_string(dropin.read_text())
+        self.assertEqual(parser["Unit"]["DefaultDependencies"], "no")
+        self.assertIn("basic.target", parser["Unit"]["After"].split())
+        self.assertIn("shutdown.target", parser["Unit"]["Conflicts"].split())
+
+    def test_preinstall_service_is_in_the_preset(self):
+        preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/"
+                  "85-utah-desktop.preset").read_text()
+        self.assertIn("enable flatpak-preinstall.service", preset.splitlines())
 
 if __name__ == "__main__":
     unittest.main()

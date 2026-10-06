@@ -4,11 +4,25 @@
 # so that future upgrades use the unified pull path: zstd:chunked deduplication,
 # shared layer storage between bootc and podman, and efficient partial chunk pulls.
 #
-# Operates entirely on local ostree data — no network access required.
-# Requires a reflink-capable filesystem (btrfs or XFS); degrades gracefully on ext4.
+# This is a network operation. `bootc image set-unified` pulls the booted image
+# from its registry into bootc storage -- the whole image, about 2.3 GB of
+# layers for Utah -- before re-importing it. On a booted
+# testing-20261001-41873b5 that took 77 seconds on a datacenter link.
 #
-# Runs once: ExecStartPost creates the sentinel; ConditionPathExists skips on subsequent boots.
-# On failure, Restart=on-failure retries on the next boot until it succeeds.
+# It must not hold up boot. A target adds an implicit After= on every unit it
+# Wants unless that unit sets DefaultDependencies=no, so as a plain oneshot
+# wanted by multi-user.target this held multi-user.target and graphical.target
+# for the whole pull (graphical.target at 1min 32s, 82s of it this unit). With
+# DefaultDependencies=no the explicit ordering below is all there is.
+#
+# ExecStart must stay the bare bootc binary. Its install_exec_t label is the
+# entrypoint into bootc's SELinux domain; wrapped in `sh -c` it ran as
+# initrc_t, and its relabelling chcon calls were denied mac_admin.
+#
+# Runs once: ExecStartPost writes the sentinel, and for a oneshot that only
+# happens after ExecStart succeeded. On failure (offline, registry unreachable)
+# it retries every 15 minutes in the background; a 60 second retry re-attempted
+# a multi-GB pull every minute.
 #
 # Feature status in bootc upstream: experimental
 # Tracking: https://github.com/bootc-dev/bootc/issues/20
@@ -17,7 +31,12 @@ Description=Enable bootc unified storage (experimental)
 Documentation=https://containers.github.io/bootc/experimental-unified-storage.html
 ConditionPathExists=/run/ostree-booted
 ConditionPathExists=!/var/lib/.bootc-unified-storage
-After=local-fs.target
+DefaultDependencies=no
+Requires=sysinit.target
+After=sysinit.target basic.target local-fs.target network-online.target
+Wants=network-online.target
+Conflicts=shutdown.target
+Before=shutdown.target
 
 [Service]
 Type=oneshot
@@ -25,7 +44,9 @@ ExecStart=bootc image set-unified
 ExecStartPost=touch /var/lib/.bootc-unified-storage
 RemainAfterExit=yes
 Restart=on-failure
-RestartSec=60
+RestartSec=15min
+Nice=19
+IOSchedulingClass=idle
 
 [Install]
 WantedBy=multi-user.target

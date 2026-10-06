@@ -52,12 +52,10 @@ checks (`scripts/check-skill-frontmatter.sh`, `scripts/check-skill-index.sh`,
   `retired` with the reason.
 - **Containerfile ARG digests are pinned** (`BASE_IMAGE`, `PACKAGE_IMAGE_SHA`,
   `COMMON_IMAGE_SHA`, `BREW_IMAGE_SHA`). Do not bump them by hand unless the
-  task is exactly that. `BASE_IMAGE`, `COMMON_IMAGE_SHA` and `BREW_IMAGE_SHA`
-  are Renovate-managed. `PACKAGE_IMAGE_SHA` is not — Renovate cannot see it
-  through the `ARG` indirection — so it has its own rev path:
-  `scripts/bump-factory-pin.py` rewrites it from the registry, and
-  `.github/workflows/bump-factory-pin.yml` proposes that rev as a pull request
-  weekly (#336). `Containerfile` and
+  task is exactly that. All four pins are Renovate-managed. Utah's regex
+  manager discovers `PACKAGE_IMAGE_SHA` and the repository's `# factory-pin:`
+  stamp as one grouped Docker digest update, preserving the package ARG
+  indirection and local image override. `Containerfile` and
   `Containerfile.kernel` must share the same `BASE_IMAGE` line; `just check`
   asserts it. A `PACKAGE_IMAGE_SHA` bump must also move the `# factory-pin:`
   stamp in `packages/utah-packages.repo` — the stamp is the transaction's
