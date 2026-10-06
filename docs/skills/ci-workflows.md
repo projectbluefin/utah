@@ -279,14 +279,20 @@ the capture and resolution can disagree:
    SHA lags the resolved SHA, the assertion fires, the build was correct,
    and the next nightly schedule (or a manual re-dispatch) clears the
    red run.
-3. (False negative, not catchable from inside the repo.) Both the
+3. (False negative, caught by the compare step.) Both the
    `git/ref/heads/testing` read AND the dispatch's `--ref testing`
    resolution are served from a stale cache that returns the *pre-sync*
-   SHA. Captured SHA equals resolved SHA, the assertion passes, and the
-   run builds the pre-sync tree with a green contract job — exactly the
-   #371 symptom. There is no in-repo signal for this case; recovery is
-   the next nightly schedule (which re-syncs and re-dispatches from the
-   fresh head) catching up.
+   SHA. Captured SHA equals resolved SHA, the direct assertion passes,
+   and the run would build the pre-sync tree with a green contract job —
+   exactly the #371 symptom. The contract step now follows the equality
+   check with `gh api .../compare/${{ github.sha }}...$TARGET_SHA
+   --jq .status`; the in-repo invariant
+   (`reusable-sync-branches.yml:91-93,107-108`) is that the sync lands
+   `testing` on `origin/main`, so `$TARGET_SHA` must be `ahead`/`identical`
+   of `${{ github.sha }}`. A `behind`/`diverged` status means the
+   captured SHA predates main and the ref read served a stale cache; the
+   run fails with `::error title=captured SHA predates main::`. Any other
+   status (`null`, error) also fails the build.
 
 The assertion's error text names both SHAs so the operator can distinguish
 direction (1)/(2). Direction (3) shows up only as a stale testing build

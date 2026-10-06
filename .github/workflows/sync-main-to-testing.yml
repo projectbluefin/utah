@@ -47,10 +47,13 @@ jobs:
           # stdout), so the dispatched run cannot be queried in-process to
           # confirm the SHA it accepted; the build.yml assertion is the
           # single source of truth. The reverse skew (stale `git/ref/heads/testing`
-          # read AND stale dispatch resolution both serving the pre-sync SHA)
-          # is not catchable from inside this repo; it lands as the next nightly
-          # catching up. See ci-workflows.md for the full operator-facing
-          # description of the false-positive and false-negative directions.
+          # read AND stale dispatch resolution both serving the pre-sync SHA
+          # from cache) is caught by the build.yml compare step -- the
+          # in-repo invariant `reusable-sync-branches.yml:91-93,107-108` is
+          # that the sync lands `testing` on `origin/main`, so `$TARGET_SHA`
+          # must be `ahead`/`identical` of `${{ github.sha }}`; `behind`/`diverged`
+          # fails the run. See ci-workflows.md for the full operator-facing
+          # description.
           TARGET_SHA="$(gh api \
               -H 'Accept: application/vnd.github+json' \
               "/repos/$REPOSITORY/git/ref/heads/testing" \
