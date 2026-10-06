@@ -25,6 +25,11 @@ jobs:
     runs-on: ubuntu-26.04
     permissions:
       actions: write
+      # The target_sha capture runs `gh api git/ref/heads/testing`. Today the
+      # endpoint allows public read without authentication, but a future
+      # visibility change would surface as a 404 here. Grant read explicitly
+      # so the capture is robust regardless of repo visibility (#562).
+      contents: read
     steps:
       - name: Start the testing build explicitly after token-authenticated sync
         env:

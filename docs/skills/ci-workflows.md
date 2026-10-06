@@ -268,13 +268,18 @@ passes it to `build.yml` as the `target_sha` dispatch input. The dispatch
 API still resolves `--ref testing` to whatever testing points at when the
 dispatch is accepted, and that is what `github.sha` becomes for every job
 in the run. The build's `contract` job asserts `inputs.target_sha ==
-github.sha` and fails the run if they disagree — the only failure mode is
-"testing moved between the dispatcher's capture and the dispatch API's
-resolution", and the assertion surfaces it loudly instead of building
-against a tree the dispatcher did not intend (#371). The checkouts
-themselves keep their default `github.sha` behavior, so every job in the
-run agrees on the same tree (push and pull_request events skip the
-assertion because `target_sha` is empty for them).
+github.sha` and fails the run if they disagree. There are two ways the
+assertion can fail: (1) `testing` actually moved between the dispatcher's
+`git/ref/heads/testing` capture and the dispatch API's `--ref testing`
+resolution — a real dispatch-skew that the assertion exists to catch
+(#371); (2) the `git/ref/heads/testing` read was served from a stale cache
+while the dispatch resolved the new head — a false positive where the
+build was correct and the next nightly schedule (or a manual re-dispatch)
+clears the red run. The assertion's error text names both SHAs so the
+operator can distinguish them. The checkouts themselves keep their default
+`github.sha` behavior, so every job in the run agrees on the same tree
+(push and pull_request events skip the assertion because `target_sha` is
+empty for them).
 
 ## ISO LUKS gate and screenshots
 
