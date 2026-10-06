@@ -235,8 +235,12 @@ to do. Bazaar is declared once, in `bazaar.preinstall`; the generated
 preinstall.d has no key that names a remote: an entry resolves from every
 configured remote, or only those whose collection ID equals its
 `CollectionID`, and an entry nothing resolves is skipped with exit 0 (the bake
-checks every declared ref landed). The generated entries carry no
-`CollectionID`, and Ghostty is on TunaOS's `master` branch only.
+checks every declared ref landed). Because the image also configures the
+TunaOS OCI remote, which has no `GPGKey`, every Flathub entry
+(`bazaar.preinstall` and the generated `brewfile.preinstall`) pins
+`CollectionID=org.flathub.Stable` so it resolves only from Flathub; the bake
+sets that collection ID on its `flathub` remote with `flatpak remote-modify`.
+Ghostty alone is collection-less, on TunaOS's `master` branch only.
 The TunaOS remote descriptor is vendored at
 `system_files/shared/etc/flatpak/remotes.d/tuna-os.flatpakrepo`, never fetched.
 

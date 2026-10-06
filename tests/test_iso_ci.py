@@ -588,6 +588,31 @@ flatpak() {
         self.assertEqual(present, {"io.github.kolunmi.Bazaar", "com.mitchellh.ghostty"})
         self.assertNotIn("declared but not installed", result.stderr)
 
+    def test_bake_flathub_remote_carries_the_preinstall_collection_id(self):
+        # Flathub entries pin CollectionID=org.flathub.Stable; flatpak
+        # preinstall silently skips them unless the remote carries that ID.
+        lines = self.SCRIPT.read_text().splitlines()
+        add = next(i for i, line in enumerate(lines)
+                   if line.startswith("retry_flatpak remote-add") and " flathub " in line)
+        modify = lines.index(
+            "flatpak remote-modify --system --collection-id=org.flathub.Stable flathub")
+        preinstall = next(i for i, line in enumerate(lines)
+                          if line.lstrip().startswith("flatpak preinstall"))
+        self.assertLess(add, modify)
+        self.assertLess(modify, preinstall)
+
+    def test_only_ghostty_preinstall_is_collection_less(self):
+        # tuna-os is a GPG-less OCI remote; any collection-less entry resolves
+        # from it as well as from Flathub.
+        directory = ROOT / "system_files/shared/usr/share/flatpak/preinstall.d"
+        for path in sorted(directory.glob("*.preinstall")):
+            with self.subTest(path=path.name):
+                text = path.read_text()
+                if path.name == "ghostty.preinstall":
+                    self.assertNotIn("\nCollectionID=", text)
+                else:
+                    self.assertIn("\nCollectionID=org.flathub.Stable\n", text)
+
     def test_every_network_install_goes_through_the_retry(self):
         # The Brewfile/Ghostty path now goes through flatpak preinstall, which
         # retries via preinstalled marks rather than retry_flatpak. This guard

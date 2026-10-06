@@ -14,15 +14,13 @@
 # remote (or only those whose collection ID matches CollectionID). Only TunaOS
 # carries this app, and only on its master branch.
 #
-# That resolution is remote-wide, not per-entry: with tuna-os now permanently
-# configured on installed systems, any collection-less entry here or in
-# brewfile.preinstall is resolvable from it, and only flathub coming first in
-# the remote list keeps a Flathub app id resolving to Flathub. CollectionID
-# would narrow it: configure-services.sh gives the Flathub remote
-# org.flathub.Stable, but the entries carry none (an entry naming a collection
-# no remote carries is silently skipped, so the bake must not depend on it),
-# and an OCI remote has none to name either. Nothing TunaOS publishes shadows
-# the Brewfile set today.
+# That resolution is remote-wide, not per-entry, and tuna-os (OCI, no GPGKey)
+# is permanently configured on installed systems. So every Flathub entry --
+# bazaar.preinstall and the generated brewfile.preinstall -- pins
+# CollectionID=org.flathub.Stable, which only the Flathub remote carries
+# (configure-services.sh sets it on the descriptor; the ISO bake sets it on its
+# remote). This entry alone stays collection-less: an OCI remote has no
+# collection ID to name.
 [Flatpak Preinstall com.mitchellh.ghostty]
 Branch=master
 IsRuntime=false

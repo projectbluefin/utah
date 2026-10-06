@@ -83,6 +83,18 @@ curl() {
         self.assertEqual(self.destination.stat().st_mode & 0o777, 0o644)
         self.assertFalse((self.root / "tmp/flathub.flatpakrepo").exists())
 
+    def test_generated_flathub_entries_pin_the_flathub_collection(self):
+        # tuna-os is a GPG-less OCI remote configured beside Flathub; an entry
+        # without CollectionID would resolve from it too.
+        result = self.run_script()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        generated = (self.root / "usr/share/flatpak/preinstall.d/brewfile.preinstall").read_text()
+        self.assertEqual(
+            generated,
+            "[Flatpak Preinstall org.mozilla.firefox]\nBranch=stable\n"
+            "IsRuntime=false\nCollectionID=org.flathub.Stable\n\n",
+        )
+
     def test_changed_descriptor_is_rejected_without_replacing_existing_remote(self):
         self.input.write_bytes(self.input.read_bytes() + b"Url=https://example.invalid/attacker\n")
         result = self.run_script()

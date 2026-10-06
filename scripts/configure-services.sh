@@ -112,8 +112,9 @@ curl --fail --retry 3 --silent --show-error \
 echo "${FLATHUB_REPO_SHA256}  /tmp/flathub.flatpakrepo" | sha256sum --check --strict
 install -m0644 /tmp/flathub.flatpakrepo /etc/flatpak/remotes.d/flathub.flatpakrepo
 rm -f /tmp/flathub.flatpakrepo
-# The pinned descriptor carries no collection ID, but common's preinstall.d
-# entries pin CollectionID=org.flathub.Stable, and flatpak preinstall skips a
+# The pinned descriptor carries no collection ID, but the Flathub preinstall.d
+# entries (bazaar.preinstall and the generated brewfile.preinstall below) pin
+# CollectionID=org.flathub.Stable, and flatpak preinstall skips a
 # remote whose collection ID differs -- silently: "Nothing to do." and no
 # Bazaar. A remotes.d remote is applied to the repo once, at creation, so the
 # ID has to be in the descriptor before first boot. It is added after the
@@ -129,8 +130,11 @@ grep -qx 'DeployCollectionID=org.flathub.Stable' /etc/flatpak/remotes.d/flathub.
 # run in the background on first boot of non-ISO installs) install the same
 # set. The entries are generated from the Brewfile through the desktop
 # contract's parser rather than re-listed, so the two can never drift. Bazaar is
-# left to bazaar.preinstall, so exactly one entry declares it. No CollectionID:
-# an entry without one resolves from any configured remote.
+# left to bazaar.preinstall, so exactly one entry declares it. Every entry pins
+# CollectionID=org.flathub.Stable: an entry without one resolves from any
+# configured remote, and the image also configures the TunaOS OCI remote,
+# which has no GPGKey. Pinning the collection keeps a Flathub app id resolvable
+# only from Flathub, whatever the remote order.
 brewfile=/usr/share/ublue-os/homebrew/system-flatpaks.Brewfile
 brew_preinstall=/usr/share/flatpak/preinstall.d/brewfile.preinstall
 install -d -m0755 /usr/share/flatpak/preinstall.d
@@ -142,9 +146,9 @@ while IFS= read -r id; do
     # The org.gtk.Gtk3theme.* entries are runtimes on the 3.22 branch, not
     # applications on stable; everything else in the Brewfile is an app.
     if [[ "${id}" == org.gtk.Gtk3theme.* ]]; then
-        printf '[Flatpak Preinstall %s]\nBranch=3.22\nIsRuntime=true\n\n' "${id}"
+        printf '[Flatpak Preinstall %s]\nBranch=3.22\nIsRuntime=true\nCollectionID=org.flathub.Stable\n\n' "${id}"
     else
-        printf '[Flatpak Preinstall %s]\nBranch=stable\nIsRuntime=false\n\n' "${id}"
+        printf '[Flatpak Preinstall %s]\nBranch=stable\nIsRuntime=false\nCollectionID=org.flathub.Stable\n\n' "${id}"
     fi
 done < <(/usr/local/libexec/utah-verify-desktop-contract --flatpaks "${brewfile}") >> "${brew_preinstall}"
 if ! grep -q '^\[Flatpak Preinstall ' "${brew_preinstall}"; then

@@ -114,6 +114,13 @@ fi
 # after every E2E flavor had passed. --if-not-exists keeps a retry a no-op once
 # one attempt succeeds.
 retry_flatpak remote-add --system --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+# The Flathub preinstall.d entries pin CollectionID=org.flathub.Stable, so the
+# remote they resolve from must carry that ID; Flathub's descriptor has none.
+# Set it explicitly rather than trusting how the remote came to exist (remotes.d
+# import, the add above, or a config seeded from the warm cache): a remote
+# without it makes `flatpak preinstall` skip every Flathub entry. The fisherman
+# copy of /var/lib/flatpak carries the ID onto installed systems too.
+flatpak remote-modify --system --collection-id=org.flathub.Stable flathub
 # Ghostty resolves from the TunaOS remote. The image vendors that remote's
 # descriptor at /etc/flatpak/remotes.d/tuna-os.flatpakrepo; register it from
 # the vendored file so the bake never fetches its remote configuration.
@@ -172,7 +179,7 @@ fi
 # CollectionID no configured remote carries, a remote whose summary or OCI
 # index fetch timed out -- and still exits 0 (a g_warning, then on to the next
 # entry). That is how bazaar.preinstall's CollectionID=org.flathub.Stable went
-# unnoticed. A missing default Flatpak is a build failure, never a silent skip
+# unnoticed while the bake's flathub remote lacked the ID. A missing default Flatpak is a build failure, never a silent skip
 # -- but it is also the flake class retry_flatpak exists for, so a zero exit
 # from preinstall is not the thing worth retrying: the verification below is.
 # Install and verification therefore loop together. Retrying preinstall alone

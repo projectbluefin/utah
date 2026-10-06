@@ -94,7 +94,7 @@ The TOML's sections are the contract's table of contents:
 
   The Flathub remote is a `/etc/flatpak/remotes.d` descriptor, applied to the
   repo once, when `/var/lib/flatpak/repo` is created. Flathub's descriptor has
-  no collection ID, while common's preinstall entries pin
+  no collection ID, while the Flathub preinstall entries pin
   `CollectionID=org.flathub.Stable`, and `flatpak preinstall` silently skips a
   remote whose ID differs ("Nothing to do."). `configure-services.sh` adds
   `DeployCollectionID=org.flathub.Stable` to the descriptor at build time.
