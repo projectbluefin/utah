@@ -555,11 +555,30 @@ allowed = ["public-hummingbird-x86_64-rpms", "utah-packages", "nvidia-container-
 # fails a build that enables an allowlisted repository with a different baseurl,
 # a metalink/mirrorlist (which DNF merges with any baseurl the section declares),
 # or no baseurl at all -- and rejects proxy= or sslverify=0 on an allowlisted
-# repository, which reroute or weaken the fetch.
+# repository, which reroute or weaken the fetch, or gpgcheck=0 / repo_gpgcheck=0
+# on one that is not approved to drop signature verification in
+# [repositories.security] (#345).
 [repositories.baseurls]
 public-hummingbird-x86_64-rpms = ["https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/"]
 utah-packages = ["file:///etc/utah-packages"]
 nvidia-container-toolkit = ["https://nvidia.github.io/libnvidia-container/stable/rpm/$basearch"]
+
+# Which signature/TLS weakening each allowlisted repository is approved to carry.
+# verify-rpm-contract.py rejects proxy=, sslverify=0, gpgcheck=0, and
+# repo_gpgcheck=0 on any allowlisted repository; a repository named here with an
+# option is the documented, intentional exception for that option ("gpgcheck"
+# also covers its libdnf5 alias pkg_gpgcheck). No allowlisted repository not
+# named here may explicitly disable signature verification (#345). The value
+# names the option approved to be disabled, not its value, so the approval
+# cannot drift to a weaker spelling.
+[repositories.security]
+# utah-packages RPMs are authenticated by the pinned package image and its OCI
+# provenance, not by an RPM GPG key, so both package and metadata signature
+# checks are disabled here; the pin is the signature.
+utah-packages = ["gpgcheck", "repo_gpgcheck"]
+# NVIDIA signs its repomd.xml (repo_gpgcheck=1) but not the package payloads,
+# so only package signature verification (gpgcheck) is disabled here.
+nvidia-container-toolkit = ["gpgcheck"]
 
 # GNOME desktop components the utah-packages factory rebuilds with the .bfin
 # release tag, so a Bluefin image is never built against Hummingbird's server

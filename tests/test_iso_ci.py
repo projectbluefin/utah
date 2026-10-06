@@ -694,9 +694,20 @@ class IsoBakeParserTests(unittest.TestCase):
         self.assertFalse((ROOT / self.STAGED).exists(),
                          "staged parser left behind by a build run")
 
-    def test_luks_calls_the_installed_absolute_path(self):
+    def test_luks_copies_the_parser_to_the_target(self):
+        # /usr/local is the admin's domain, not image content: a bootc
+        # deployment never carries /usr/local/libexec, so the verifier the
+        # live guest has is absent (exit 127) on the installed system.
+        # luks-e2e must copy the repo parser over scp and run it with the
+        # target's python3 -- never call the live-only absolute path.
         text = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
-        self.assertIn(f'"{self.INSTALLED} --flatpaks', text,
-                      "luks-e2e must call the installed parser by absolute path")
+        self.assertIn("scp_target", text,
+                      "luks-e2e must define an scp helper for the installed target")
+        self.assertIn("scripts/verify-desktop-contract.py", text,
+                      "luks-e2e must copy the repo parser to the installed system")
+        self.assertIn("python3 /tmp/utah-e2e-verify-desktop-contract.py --flatpaks", text,
+                      "luks-e2e must run the copied parser with the target python3")
+        self.assertNotIn(f'"{self.INSTALLED} --flatpaks', text,
+                         "the live-only installed path does not exist on bootc deployments")
         self.assertNotIn('"utah-verify-desktop-contract --flatpaks', text,
                          "bare parser name is not on the guest PATH")

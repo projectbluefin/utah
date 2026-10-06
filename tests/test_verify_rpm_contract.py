@@ -80,6 +80,7 @@ def write_overlay(
     gnome_versions: dict[str, str] | None = None,
     repositories: list[str] | None = None,
     baseurls: dict[str, str] | None = None,
+    security: dict[str, list[str]] | None = None,
     factory: list[str] | None = None,
 ) -> Path:
     """Write a utah.toml overlay that already carries the supply-chain sections.
@@ -115,6 +116,11 @@ def write_overlay(
     sections.append("[repositories.baseurls]\n")
     for repo_id, url in url_map.items():
         sections.append(f'{repo_id} = ["{url}"]\n')
+    if security:
+        sections.append("[repositories.security]\n")
+        for repo_id, options in security.items():
+            rendered = ", ".join(f'"{opt}"' for opt in options)
+            sections.append(f'{repo_id} = [{rendered}]\n')
     if factory:
         sections.append(toml_section("factory", factory))
     path = directory / "utah.toml"
@@ -373,6 +379,79 @@ class CheckModeTests(unittest.TestCase):
                     redirect_stdout(io.StringIO()):
                 self.assertEqual(module.main(), 0)
         is_installed.assert_not_called()
+
+    def test_check_rejects_unapproved_gpgcheck_zero(self) -> None:
+        """A pinned-origin repo that also drops gpgcheck must be approved explicitly."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            write_repo_file(
+                directory, "utah-packages",
+                baseurl="file:///etc/utah-packages", enabled="1",
+                gpgcheck="0", repo_gpgcheck="0")
+            overlay = write_overlay(
+                directory, repositories=["utah-packages"],
+                baseurls={"utah-packages": "file:///etc/utah-packages"})
+            result = self.run_check(manifest, overlay)
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertIn("gpgcheck", result.stderr)
+
+    def test_check_approves_documented_gpgcheck_zero(self) -> None:
+        """The utah-packages exception is documented in [repositories.security]."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            write_repo_file(
+                directory, "utah-packages",
+                baseurl="file:///etc/utah-packages", enabled="1",
+                gpgcheck="0", repo_gpgcheck="0")
+            overlay = write_overlay(
+                directory, repositories=["utah-packages"],
+                baseurls={"utah-packages": "file:///etc/utah-packages"},
+                security={"utah-packages": ["gpgcheck", "repo_gpgcheck"]})
+            result = self.run_check(manifest, overlay)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_check_rejects_security_entry_for_non_allowed_repo(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(
+                directory, repositories=["public-hummingbird-x86_64-rpms"],
+                security={"ghost-repo": ["gpgcheck"]})
+            result = self.run_check(manifest, overlay)
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertIn("ghost-repo", result.stderr)
+
+    def test_check_rejects_unknown_security_option(self) -> None:
+        """A typo or non-approvable option in [repositories.security] fails loudly."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(
+                directory, repositories=["public-hummingbird-x86_64-rpms"],
+                security={"public-hummingbird-x86_64-rpms": ["gpg_check", "sslverify"]})
+            result = self.run_check(manifest, overlay)
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertIn("ERROR", result.stderr)
+        self.assertIn("'gpg_check'", result.stderr)
+        self.assertIn("'sslverify'", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_check_rejects_non_string_security_option(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(
+                directory, repositories=["public-hummingbird-x86_64-rpms"])
+            with overlay.open("a") as handle:
+                handle.write(
+                    "[repositories.security]\n"
+                    "public-hummingbird-x86_64-rpms = [1, { a = 1 }]\n")
+            result = self.run_check(manifest, overlay)
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertIn("ERROR", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
 
 
 class VerifyModeTests(unittest.TestCase):
@@ -1007,6 +1086,77 @@ class SupplyChainTests(unittest.TestCase):
         parser = self._parser({"baseurl": "https://a.example.com/$basearch"})
         self.assertEqual(self.module.repo_security_option_errors("repo", parser, "fedora.repo"), [])
 
+    def test_repo_security_option_errors_flags_gpgcheck_zero(self) -> None:
+        parser = self._parser({"baseurl": "https://a.example.com/$basearch", "gpgcheck": "0"})
+        errors = self.module.repo_security_option_errors("repo", parser, "fedora.repo")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("gpgcheck", errors[0])
+
+    def test_repo_security_option_errors_flags_repo_gpgcheck_zero(self) -> None:
+        parser = self._parser(
+            {"baseurl": "https://a.example.com/$basearch", "repo_gpgcheck": "0"})
+        errors = self.module.repo_security_option_errors("repo", parser, "fedora.repo")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("repo_gpgcheck", errors[0])
+
+    def test_repo_security_option_errors_passes_for_approved_gpgcheck(self) -> None:
+        parser = self._parser({"baseurl": "https://a.example.com/$basearch", "gpgcheck": "0"})
+        approved = {"repo": {"gpgcheck"}}
+        self.assertEqual(
+            self.module.repo_security_option_errors("repo", parser, "fedora.repo", approved),
+            [],
+        )
+
+    def test_repo_security_option_errors_approved_is_per_option(self) -> None:
+        """Approving gpgcheck does not also approve repo_gpgcheck."""
+        parser = self._parser(
+            {"baseurl": "https://a.example.com/$basearch", "gpgcheck": "0", "repo_gpgcheck": "0"})
+        approved = {"repo": {"gpgcheck"}}
+        errors = self.module.repo_security_option_errors("repo", parser, "fedora.repo", approved)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("repo_gpgcheck", errors[0])
+
+    def test_repo_security_option_errors_passes_when_gpgcheck_enabled(self) -> None:
+        parser = self._parser(
+            {"baseurl": "https://a.example.com/$basearch", "gpgcheck": "1",
+             "repo_gpgcheck": "1"})
+        self.assertEqual(
+            self.module.repo_security_option_errors("repo", parser, "fedora.repo"), [])
+
+    def test_repo_security_option_errors_flags_pkg_gpgcheck_zero(self) -> None:
+        """pkg_gpgcheck is libdnf5's canonical name for gpgcheck."""
+        parser = self._parser(
+            {"baseurl": "https://a.example.com/$basearch", "pkg_gpgcheck": "0"})
+        errors = self.module.repo_security_option_errors("repo", parser, "fedora.repo")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("pkg_gpgcheck=0", errors[0])
+
+    def test_repo_security_option_errors_flags_pkg_gpgcheck_overriding_gpgcheck(self) -> None:
+        """gpgcheck=1 does not mask a pkg_gpgcheck=0 in the same section."""
+        parser = self._parser(
+            {"baseurl": "https://a.example.com/$basearch", "gpgcheck": "1",
+             "pkg_gpgcheck": "0"})
+        errors = self.module.repo_security_option_errors("repo", parser, "fedora.repo")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("pkg_gpgcheck=0", errors[0])
+
+    def test_repo_security_option_errors_gpgcheck_approval_covers_pkg_gpgcheck(self) -> None:
+        parser = self._parser(
+            {"baseurl": "https://a.example.com/$basearch", "pkg_gpgcheck": "0"})
+        approved = {"repo": {"gpgcheck"}}
+        self.assertEqual(
+            self.module.repo_security_option_errors("repo", parser, "fedora.repo", approved),
+            [],
+        )
+
+    def test_repo_security_option_errors_repo_gpgcheck_approval_not_pkg_gpgcheck(self) -> None:
+        parser = self._parser(
+            {"baseurl": "https://a.example.com/$basearch", "pkg_gpgcheck": "0"})
+        approved = {"repo": {"repo_gpgcheck"}}
+        errors = self.module.repo_security_option_errors("repo", parser, "fedora.repo", approved)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("pkg_gpgcheck", errors[0])
+
     def test_check_repo_sections_flags_unapproved_repo(self) -> None:
         parser = self._parser({"baseurl": "https://a.example.com/$basearch", "enabled": "1"})
         errors = self.module.check_repo_sections(
@@ -1094,6 +1244,28 @@ class SupplyChainTests(unittest.TestCase):
         self._write_repo(directory, "disabled-repo", baseurl="http://x/$basearch", enabled="0")
         errors = self.module.verify_repository_policy(
             directory, set(), check_mode=True, expected_baseurls=None)
+        self.assertEqual(errors, [])
+
+    def test_verify_repository_policy_flags_unapproved_gpgcheck_zero(self) -> None:
+        """gpgcheck=0 on an allowlisted repo is a gap unless the manifest approves it."""
+        directory = Path(tempfile.mkdtemp())
+        self._write_repo(
+            directory, "utah-packages",
+            baseurl="file:///etc/utah-packages", enabled="1", gpgcheck="0", repo_gpgcheck="0")
+        errors = self.module.verify_repository_policy(
+            directory, {"utah-packages"}, check_mode=True,
+            expected_baseurls={"utah-packages": ("file:///etc/utah-packages",)})
+        self.assertTrue(any("gpgcheck" in e for e in errors), errors)
+
+    def test_verify_repository_policy_passes_for_approved_gpgcheck_zero(self) -> None:
+        directory = Path(tempfile.mkdtemp())
+        self._write_repo(
+            directory, "utah-packages",
+            baseurl="file:///etc/utah-packages", enabled="1", gpgcheck="0", repo_gpgcheck="0")
+        errors = self.module.verify_repository_policy(
+            directory, {"utah-packages"}, check_mode=True,
+            expected_baseurls={"utah-packages": ("file:///etc/utah-packages",)},
+            approved_security={"utah-packages": {"gpgcheck", "repo_gpgcheck"}})
         self.assertEqual(errors, [])
 
     def test_resolve_build_timestamp_reads_source_date_epoch(self) -> None:
@@ -1548,6 +1720,40 @@ class MainSectionSecurityTests(unittest.TestCase):
                 self.module.main_section_security_errors([path], "dnf5 [main] config"),
                 [],
             )
+
+    def test_signature_checks_disabled_in_main_are_reported(self) -> None:
+        """gpgcheck/pkg_gpgcheck/repo_gpgcheck=0 in [main] weaken every repository."""
+        for key in ("gpgcheck", "pkg_gpgcheck", "repo_gpgcheck"):
+            with self.subTest(key=key), tempfile.TemporaryDirectory() as tmp:
+                path = self._write_conf(Path(tmp), "10-base.conf", f"[main]\n{key}=0\n")
+                errors = self.module.main_section_security_errors([path], "dnf5 [main] config")
+                self.assertEqual(len(errors), 1)
+                self.assertIn(f"{key}=0", errors[0])
+
+    def test_signature_checks_enabled_in_main_are_clean(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._write_conf(
+                Path(tmp), "10-base.conf",
+                "[main]\ngpgcheck=1\npkg_gpgcheck=1\nrepo_gpgcheck=1\n")
+            self.assertEqual(
+                self.module.main_section_security_errors([path], "dnf5 [main] config"), [])
+
+    def test_pkg_gpgcheck_zero_in_main_not_masked_by_gpgcheck_one(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._write_conf(
+                Path(tmp), "10-base.conf", "[main]\ngpgcheck=1\npkg_gpgcheck=0\n")
+            errors = self.module.main_section_security_errors([path], "dnf5 [main] config")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("pkg_gpgcheck=0", errors[0])
+
+    def test_later_file_alias_wins_for_effective_gpgcheck(self) -> None:
+        """A later pkg_gpgcheck=1 re-enables an earlier gpgcheck=0 (aliases share one option)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            early = self._write_conf(directory, "00-base.conf", "[main]\ngpgcheck=0\n")
+            late = self._write_conf(directory, "99-late.conf", "[main]\npkg_gpgcheck=1\n")
+            errors = self.module.main_section_security_errors([early, late], "dnf5 [main] config")
+        self.assertEqual(errors, [])
 
     def test_missing_file_is_clean(self) -> None:
         """A config file that does not exist contributes no options."""

@@ -108,6 +108,30 @@ comment, `Containerfile` ~L168; repo files copied at `Containerfile` L59).
 `Containerfile.kernel`'s builder stage may use the pinned Fedora 44 repository
 (`packages/fedora-44.repo`) strictly as a builder-only toolchain.
 
+Every allowlisted repository is attested on two axes. Its **origin** is pinned
+in `[repositories.baseurls]`: `verify-rpm-contract.py` fails a build that
+enables an allowlisted repository with a different `baseurl`, a `metalink`/
+`mirrorlist` (which DNF merges with any `baseurl` the section declares), or no
+`baseurl` at all. Its **fetch integrity** is attested too: the same check
+rejects `proxy=`, `sslverify=0`, `gpgcheck=0` (or its libdnf5 alias
+`pkg_gpgcheck=0`), and `repo_gpgcheck=0` on an allowlisted repository (#345).
+`proxy` and `sslverify=0` reroute or blind the fetch and are never approved;
+`gpgcheck`/`repo_gpgcheck` disable RPM signature verification and are rejected
+unless the repository is named in `[repositories.security]` with the option it
+is approved to leave disabled (`gpgcheck` covers both `gpgcheck` and
+`pkg_gpgcheck`). A repository not named there may not explicitly disable
+signature verification (an omitted option falls back to the dnf5 default and
+is not rejected). The same options set to a disabled value in the resolved dnf5
+`[main]` configuration are always rejected, since they apply to every
+repository and no per-repository approval covers them. A
+`[repositories.security]` entry for a repository not in `[repositories.allowed]`
+is rejected as approving nothing, as is any listed option other than
+`gpgcheck` or `repo_gpgcheck`. The two documented exceptions are
+`utah-packages` (RPMs are authenticated by the pinned package image and its OCI
+provenance, not an RPM GPG key, so both signature checks are disabled) and
+`nvidia-container-toolkit` (NVIDIA signs only its repomd.xml, so only package
+signature verification is disabled).
+
 The install-source identity is single-sourced in `packages/*.repo`. Each repository
 participating in the package install transaction carries a `# utah-install: true`
 annotation (either directly preceding or within the `[section]` header in
