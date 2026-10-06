@@ -568,6 +568,26 @@ utah-packages = ["gpgcheck", "repo_gpgcheck"]
 # so only package signature verification (gpgcheck) is disabled here.
 nvidia-container-toolkit = ["gpgcheck"]
 
+# The RPM GPG key URLs an allowlisted repository may fetch. verify-rpm-contract.py
+# rejects `gpgkey=` on an allowlisted repository that is not pinned here -- the
+# gate has no other way to know which key the repository should be presenting,
+# so an unpinned key is a key an override drop-in could silently swap for one
+# the attacker signed (#617). `utah-packages` deliberately has no entry: the
+# bind-mounted OCI repository carries no RPM GPG key of its own, so the section
+# does not name one. A repo id absent from [repositories.allowed] but listed here
+# is rejected as approving nothing, the same as [repositories.security].
+[repositories.gpgkeys]
+# Hummingbird's release key. The key file itself ships as
+# packages/RPM-GPG-KEY-redhat-release-2 and the Containerfile installs it
+# under /etc/pki/rpm-gpg/ for runtime use, so both spellings are pinned.
+public-hummingbird-x86_64-rpms = [
+    "file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2",
+    "https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/RPM-GPG-KEY-redhat-release-2",
+]
+# NVIDIA's own Open Source Projects key, the one NVIDIA Corporation publishes
+# at the root of the libnvidia-container repo tree.
+nvidia-container-toolkit = ["https://nvidia.github.io/libnvidia-container/gpgkey"]
+
 # GNOME desktop components the utah-packages factory rebuilds with the .bfin
 # release tag, so a Bluefin image is never built against Hummingbird's server
 # packages. Only GNOME desktop components are listed: their factory build is the

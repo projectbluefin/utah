@@ -82,6 +82,7 @@ def write_overlay(
     baseurls: dict[str, str] | None = None,
     security: dict[str, list[str]] | None = None,
     factory: list[str] | None = None,
+    gpgkeys: dict[str, list[str]] | None = None,
 ) -> Path:
     """Write a utah.toml overlay that already carries the supply-chain sections.
 
@@ -120,6 +121,11 @@ def write_overlay(
         sections.append("[repositories.security]\n")
         for repo_id, options in security.items():
             rendered = ", ".join(f'"{opt}"' for opt in options)
+            sections.append(f'{repo_id} = [{rendered}]\n')
+    if gpgkeys:
+        sections.append("[repositories.gpgkeys]\n")
+        for repo_id, keys in gpgkeys.items():
+            rendered = ", ".join(f'"{key}"' for key in keys)
             sections.append(f'{repo_id} = [{rendered}]\n')
     if factory:
         sections.append(toml_section("factory", factory))
@@ -422,6 +428,105 @@ class CheckModeTests(unittest.TestCase):
             result = self.run_check(manifest, overlay)
         self.assertNotEqual(result.returncode, 0, result.stderr)
         self.assertIn("ghost-repo", result.stderr)
+
+    def test_check_rejects_unpinned_gpgkey_on_allowlisted_repo(self) -> None:
+        """An override-style gpgkey= on an allowlisted id fails --check (#617)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            write_repo_file(
+                directory, "public-hummingbird-x86_64-rpms",
+                baseurl="https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
+                gpgkey="https://attacker.example.com/evil")
+            overlay = write_overlay(
+                directory, gnome=["gnome-shell"],
+                baseurls={
+                    "public-hummingbird-x86_64-rpms":
+                        "https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
+                },
+                gpgkeys={
+                    "public-hummingbird-x86_64-rpms":
+                        ["file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2"],
+                })
+            result = self.run_check(manifest, overlay)
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertIn("unpinned gpgkey", result.stderr)
+        self.assertIn("attacker.example.com", result.stderr)
+
+    def test_check_rejects_unpinned_gpgkey_when_manifest_has_no_pin(self) -> None:
+        """A gpgkey= on an allowlisted id with no manifest entry at all fails (#617)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            write_repo_file(
+                directory, "public-hummingbird-x86_64-rpms",
+                baseurl="https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
+                gpgkey="https://attacker.example.com/evil")
+            overlay = write_overlay(
+                directory, gnome=["gnome-shell"],
+                baseurls={
+                    "public-hummingbird-x86_64-rpms":
+                        "https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
+                })
+            result = self.run_check(manifest, overlay)
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertIn("no pinned key", result.stderr)
+
+    def test_check_passes_for_pinned_gpgkey(self) -> None:
+        """The shipped Hummingbird gpgkey= matches the manifest pin."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            write_repo_file(
+                directory, "public-hummingbird-x86_64-rpms",
+                baseurl="https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
+                gpgkey="file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2")
+            overlay = write_overlay(
+                directory, gnome=["gnome-shell"],
+                baseurls={
+                    "public-hummingbird-x86_64-rpms":
+                        "https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
+                },
+                gpgkeys={
+                    "public-hummingbird-x86_64-rpms":
+                        ["file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2"],
+                })
+            result = self.run_check(manifest, overlay)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_check_rejects_gpgkeys_entry_for_non_allowed_repo(self) -> None:
+        """A pin in [repositories.gpgkeys] for a repo not in [repositories.allowed] fails."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(
+                directory, gnome=["gnome-shell"],
+                gpgkeys={"ghost-repo": ["file:///etc/pki/rpm-gpg/RPM-GPG-KEY-x"]})
+            result = self.run_check(manifest, overlay)
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertIn("ghost-repo", result.stderr)
+
+    def test_check_rejects_non_list_gpg_keys(self) -> None:
+        """A non-list value for [repositories.gpgkeys].<repo> fails loudly."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            # write_overlay renders only list values; a non-list must be written
+            # as raw TOML to exercise the manifest-side validator.
+            overlay = directory / "utah.toml"
+            overlay.write_text(
+                "[gnome]\npackages = [\"bash\"]\n"
+                "[gnome.versions]\nbash = \"1\"\n"
+                "[repositories]\n"
+                'allowed = ["public-hummingbird-x86_64-rpms"]\n'
+                "[repositories.baseurls]\n"
+                'public-hummingbird-x86_64-rpms = ["https://x.example.com"]\n'
+                "[repositories.gpgkeys]\n"
+                'public-hummingbird-x86_64-rpms = "https://x.example.com/k"\n'
+            )
+            result = self.run_check(manifest, overlay)
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertIn("non-list", result.stderr)
 
     def test_check_rejects_unknown_security_option(self) -> None:
         """A typo or non-approvable option in [repositories.security] fails loudly."""
@@ -1028,6 +1133,51 @@ class SupplyChainTests(unittest.TestCase):
         for pkg in ("nautilus", "gnome-initial-setup"):
             self.assertEqual(versions.get(pkg), "51", f"{pkg} is not version-asserted")
 
+    def test_shipped_overlay_pins_gpgkeys_for_allowlisted_repos_with_gpgkey(self) -> None:
+        """Every shipped allowlisted id with `gpgkey=` must be pinned (#617)."""
+        overlay = ROOT / "packages" / "utah.toml"
+        data = tomllib.loads(overlay.read_text())
+        allowed = set(data["repositories"]["allowed"])
+        gpgkeys = data["repositories"].get("gpgkeys", {})
+        # Hummingbird and NVIDIA ship a `gpgkey=`; utah-packages does not (it
+        # carries no RPM GPG key, since the bind-mounted OCI repo authenticates
+        # RPMs by the package image's OCI provenance). The shipped .repo files
+        # in packages/ decide which repos need a pin entry.
+        with_gpgkey = {
+            "public-hummingbird-x86_64-rpms",
+            "nvidia-container-toolkit",
+        }
+        unkeyed = with_gpgkey - gpgkeys.keys()
+        self.assertEqual(unkeyed, set(),
+                         f"repos with gpgkey= but no [repositories.gpgkeys] entry: "
+                         f"{sorted(unkeyed)}")
+        stray = set(gpgkeys) - allowed
+        self.assertEqual(stray, set(),
+                         f"gpgkey pins for repos not in [repositories.allowed]: "
+                         f"{sorted(stray)}")
+
+    def test_shipped_overlay_pinned_gpgkey_matches_repo_files(self) -> None:
+        """Every shipped .repo file's `gpgkey=` matches its manifest pin (#617)."""
+        data = tomllib.loads((ROOT / "packages" / "utah.toml").read_text())
+        pins = data.get("repositories", {}).get("gpgkeys", {})
+        for repo_file in sorted((ROOT / "packages").glob("*.repo")):
+            text = repo_file.read_text()
+            if "# builder-only: true" in text:
+                continue
+            parser = configparser.ConfigParser(interpolation=None)
+            parser.read_string(text)
+            for section in parser.sections():
+                gpgkey = parser.get(section, "gpgkey", fallback="").strip()
+                if not gpgkey:
+                    continue
+                normalized = self.module.normalize_gpgkey(gpgkey)
+                declared = pins.get(section, ())
+                pinned = {self.module.normalize_gpgkey(url) for url in declared}
+                self.assertIn(normalized, pinned,
+                                              f"{repo_file.name}:{section} declares "
+                                              f"gpgkey={gpgkey} but the manifest does "
+                                              "not pin it")
+
     def test_normalize_baseurl_strips_trailing_slash_and_lowercases_scheme_and_host(self) -> None:
         self.assertEqual(
             self.module.normalize_baseurl("HTTPS://Packages.Redhat.com/A/"),
@@ -1040,6 +1190,122 @@ class SupplyChainTests(unittest.TestCase):
             self.module.normalize_baseurl("https://x/Y/${basearch}/Repo"),
             "https://x/Y/$basearch/Repo",
         )
+    def test_normalize_gpgkey_lowercases_scheme_and_host(self) -> None:
+        """Case differences in scheme/host are folded; the path is not."""
+        self.assertEqual(
+            self.module.normalize_gpgkey("HTTPS://Packages.Redhat.com/A/B"),
+            "https://packages.redhat.com/A/B",
+        )
+
+    def test_normalize_gpgkey_strips_trailing_slash(self) -> None:
+        self.assertEqual(
+            self.module.normalize_gpgkey("https://x.example.com/A/"),
+            "https://x.example.com/A",
+        )
+
+    def test_normalize_gpgkey_keeps_file_scheme_lowercase(self) -> None:
+        self.assertEqual(
+            self.module.normalize_gpgkey("FILE:///etc/pki/RPM-GPG-KEY-x"),
+            "file:///etc/pki/RPM-GPG-KEY-x",
+        )
+
+    def test_normalize_gpgkey_empty_is_empty(self) -> None:
+        self.assertEqual(self.module.normalize_gpgkey(""), "")
+
+    def test_repo_gpgkey_pin_errors_flags_unpinned_gpgkey(self) -> None:
+        """A gpgkey= on an allowlisted id must match a pin (#617)."""
+        parser = self._parser({"baseurl": "https://a.example.com/$basearch",
+                               "gpgkey": "https://attacker.example.com/evil"})
+        errors = self.module.repo_gpgkey_pin_errors(
+            "repo", parser, "fedora.repo",
+            {"repo": ("file:///etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-44-primary",)}
+        )
+        self.assertEqual(len(errors), 1)
+        self.assertIn("unpinned gpgkey", errors[0])
+        self.assertIn("attacker.example.com", errors[0])
+
+    def test_repo_gpgkey_pin_errors_flags_unpinned_gpgkey_when_no_pin_at_all(self) -> None:
+        """A gpgkey= with no manifest entry at all fails (#617)."""
+        parser = self._parser({"baseurl": "https://a.example.com/$basearch",
+                               "gpgkey": "https://attacker.example.com/evil"})
+        errors = self.module.repo_gpgkey_pin_errors("repo", parser, "fedora.repo", {})
+        self.assertEqual(len(errors), 1)
+        self.assertIn("no pinned key", errors[0])
+
+    def test_repo_gpgkey_pin_errors_passes_for_pinned_gpgkey(self) -> None:
+        parser = self._parser({"baseurl": "https://a.example.com/$basearch",
+                               "gpgkey": "file:///etc/pki/rpm-gpg/RPM-GPG-KEY-x"})
+        errors = self.module.repo_gpgkey_pin_errors(
+            "repo", parser, "fedora.repo",
+            {"repo": ("file:///etc/pki/rpm-gpg/RPM-GPG-KEY-x",)}
+        )
+        self.assertEqual(errors, [])
+
+    def test_repo_gpgkey_pin_errors_passes_when_no_gpgkey_is_set(self) -> None:
+        """A repo with no gpgkey= (like the OCI-pinned utah-packages) is unchecked."""
+        parser = self._parser({"baseurl": "https://a.example.com/$basearch"})
+        errors = self.module.repo_gpgkey_pin_errors(
+            "repo", parser, "fedora.repo",
+            {"repo": ("file:///etc/pki/rpm-gpg/RPM-GPG-KEY-x",)}
+        )
+        self.assertEqual(errors, [])
+
+    def test_repo_gpgkey_pin_errors_passes_when_no_gpgkey_set_and_no_pin(self) -> None:
+        """A repo with neither gpgkey= nor a pin passes vacuously."""
+        parser = self._parser({"baseurl": "https://a.example.com/$basearch"})
+        errors = self.module.repo_gpgkey_pin_errors("repo", parser, "fedora.repo", {})
+        self.assertEqual(errors, [])
+
+    def test_repo_gpgkey_pin_errors_normalizes_case_and_trailing_slash(self) -> None:
+        """The same key in a different spelling still passes the pin."""
+        parser = self._parser({"baseurl": "https://a.example.com/$basearch",
+                               "gpgkey": "HTTPS://Packages.Redhat.com/A/B/"})
+        errors = self.module.repo_gpgkey_pin_errors(
+            "repo", parser, "fedora.repo",
+            {"repo": ("https://packages.redhat.com/A/B",)}
+        )
+        self.assertEqual(errors, [])
+
+    def test_repo_gpgkey_pin_errors_flags_unpinned_when_one_of_multiple_is_pinned(self) -> None:
+        """A single unpinned key in a multi-key `gpgkey=` is still rejected.
+
+        dnf5 would import every key in the list, so an attacker who can append
+        a key gets it trusted as soon as one entry is unpinned.
+        """
+        parser = self._parser({"baseurl": "https://a.example.com/$basearch",
+                               "gpgkey": "https://other.example.com/k1 "
+                                         "file:///etc/pki/rpm-gpg/RPM-GPG-KEY-x"})
+        errors = self.module.repo_gpgkey_pin_errors(
+            "repo", parser, "fedora.repo",
+            {"repo": ("file:///etc/pki/rpm-gpg/RPM-GPG-KEY-x",)}
+        )
+        self.assertEqual(len(errors), 1)
+        self.assertIn("other.example.com", errors[0])
+        self.assertIn("unpinned", errors[0])
+
+    def test_repo_gpgkey_pin_errors_passes_when_every_sever_keys_is_pinned(self) -> None:
+        """A multi-key `gpgkey=` whose every entry matches a pin passes."""
+        parser = self._parser({"baseurl": "https://a.example.com/$basearch",
+                               "gpgkey": "file:///etc/pki/rpm-gpg/RPM-GPG-KEY-x "
+                                         "file:///etc/pki/rpm-gpg/RPM-GPG-KEY-y"})
+        errors = self.module.repo_gpgkey_pin_errors(
+            "repo", parser, "fedora.repo",
+            {"repo": ("file:///etc/pki/rpm-gpg/RPM-GPG-KEY-x",
+                      "file:///etc/pki/rpm-gpg/RPM-GPG-KEY-y")}
+        )
+        self.assertEqual(errors, [])
+
+    def test_repo_gpgkey_pin_errors_flags_unpinned_among_several(self) -> None:
+        parser = self._parser({"baseurl": "https://a.example.com/$basearch",
+                               "gpgkey": "file:///etc/pki/rpm-gpg/RPM-GPG-KEY-x "
+                                         "https://attacker.example.com/evil"})
+        errors = self.module.repo_gpgkey_pin_errors(
+            "repo", parser, "fedora.repo",
+            {"repo": ("file:///etc/pki/rpm-gpg/RPM-GPG-KEY-x",)}
+        )
+        self.assertEqual(len(errors), 1)
+        self.assertIn("attacker.example.com", errors[0])
+        self.assertIn("unpinned", errors[0])
     def test_repo_pin_errors_flags_unpinned_baseurl(self) -> None:
         parser = self._parser({"baseurl": "https://a.example.com/$basearch"})
         errors = self.module.repo_pin_errors(
@@ -1267,6 +1533,67 @@ class SupplyChainTests(unittest.TestCase):
             expected_baseurls={"utah-packages": ("file:///etc/utah-packages",)},
             approved_security={"utah-packages": {"gpgcheck", "repo_gpgcheck"}})
         self.assertEqual(errors, [])
+
+    def test_verify_repository_policy_flags_unpinned_gpgkey(self) -> None:
+        """A gpgkey= on an allowlisted id not pinned in [repositories.gpgkeys] fails (#617)."""
+        directory = Path(tempfile.mkdtemp())
+        self._write_repo(
+            directory, "public-hummingbird-x86_64-rpms",
+            baseurl="https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
+            gpgkey="https://attacker.example.com/evil")
+        errors = self.module.verify_repository_policy(
+            directory, {"public-hummingbird-x86_64-rpms"}, check_mode=True,
+            expected_baseurls={
+                "public-hummingbird-x86_64-rpms":
+                    ("https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",),
+            },
+            expected_gpgkeys={
+                "public-hummingbird-x86_64-rpms":
+                    ("file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2",),
+            })
+        self.assertTrue(any("unpinned gpgkey" in e for e in errors), errors)
+
+    def test_verify_repository_policy_passes_for_pinned_gpgkey(self) -> None:
+        directory = Path(tempfile.mkdtemp())
+        self._write_repo(
+            directory, "public-hummingbird-x86_64-rpms",
+            baseurl="https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
+            gpgkey="file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2")
+        errors = self.module.verify_repository_policy(
+            directory, {"public-hummingbird-x86_64-rpms"}, check_mode=True,
+            expected_baseurls={
+                "public-hummingbird-x86_64-rpms":
+                    ("https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",),
+            },
+            expected_gpgkeys={
+                "public-hummingbird-x86_64-rpms":
+                    ("file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2",),
+            })
+        self.assertEqual(errors, [])
+
+    def test_verify_repository_policy_gpgkey_pin_fires_on_disabled_allowlisted_repo(self) -> None:
+        """A disabled (enabled=0) allowlisted repo's gpgkey= is still checked.
+
+        An override drop-in that flips `enabled=0` to `enabled=1` is the same
+        attack as the original one; the gate checks the section's options
+        regardless, so a stale pinned value cannot linger past a disable.
+        """
+        directory = Path(tempfile.mkdtemp())
+        self._write_repo(
+            directory, "public-hummingbird-x86_64-rpms",
+            baseurl="https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
+            gpgkey="https://attacker.example.com/evil", enabled="0")
+        errors = self.module.verify_repository_policy(
+            directory, {"public-hummingbird-x86_64-rpms"}, check_mode=True,
+            expected_baseurls={
+                "public-hummingbird-x86_64-rpms":
+                    ("https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",),
+            },
+            expected_gpgkeys={
+                "public-hummingbird-x86_64-rpms":
+                    ("file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2",),
+            })
+        self.assertTrue(any("unpinned gpgkey" in e for e in errors), errors)
 
     def test_resolve_build_timestamp_reads_source_date_epoch(self) -> None:
         ts, source = self.module.resolve_build_timestamp({"SOURCE_DATE_EPOCH": "1700000000"})
@@ -1921,6 +2248,49 @@ class OnImageRepoAllowlistTests(unittest.TestCase):
             )
         self.assertEqual(code, 1)
         self.assertIn("unpinned baseurl", err)
+
+    def test_an_unpinned_gpgkey_in_an_allowlisted_runtime_repo_fails(self) -> None:
+        """A Hummingbird repo with a different gpgkey= fails the on-image pin check (#617)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(
+                directory, gnome=["gnome-shell"],
+                gpgkeys={
+                    "public-hummingbird-x86_64-rpms":
+                        ["file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2"],
+                })
+            runtime_repos = directory / "runtime-yum-repos"
+            write_repo_file(
+                runtime_repos, "public-hummingbird-x86_64-rpms",
+                baseurl="https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
+                gpgkey="https://attacker.example.com/evil")
+            code, _, err = self.run_main(
+                manifest, overlay, {"bash", "gnome-shell"}, runtime_repos
+            )
+        self.assertEqual(code, 1)
+        self.assertIn("unpinned gpgkey", err)
+        self.assertIn("attacker.example.com", err)
+
+    def test_a_pinned_gpgkey_in_an_allowlisted_runtime_repo_passes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(
+                directory, gnome=["gnome-shell"],
+                gpgkeys={
+                    "public-hummingbird-x86_64-rpms":
+                        ["file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2"],
+                })
+            runtime_repos = directory / "runtime-yum-repos"
+            write_repo_file(
+                runtime_repos, "public-hummingbird-x86_64-rpms",
+                baseurl="https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
+                gpgkey="file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2")
+            code, _, err = self.run_main(
+                manifest, overlay, {"bash", "gnome-shell"}, runtime_repos
+            )
+        self.assertEqual(code, 0, err)
 
     def test_a_fedora_repo_in_another_reposdir_fails(self) -> None:
         """A Fedora repo the base ships outside /etc/yum.repos.d is still gated (#513).

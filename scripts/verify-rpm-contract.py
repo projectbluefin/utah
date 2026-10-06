@@ -94,6 +94,30 @@ SIGNATURE_OPTION_KEYS: dict[str, tuple[str, ...]] = {
 }
 
 
+def normalize_gpgkey(url: str) -> str:
+    """Normalize a gpgkey URL so two spellings of the same key compare equal.
+
+    A `gpgkey=` value is either a URL (`https://`, `file://`) or a bare path
+    (which libdnf5 also accepts). Path values are not URL-encoded in the repo
+    files we ship, so equality is whitespace-trimmed, trailing-whitespace
+    sensitive only where libdnf5 would be: the gate compares trimmed values
+    against the manifest pins the way a configparser read would produce them,
+    so a dropped trailing space cannot smuggle a different key past the pin.
+    Schemes and hosts are lowercased to match DNF's URL resolution; the path
+    is case-sensitive (a `/PEM` and `/pem` are different files), but a
+    trailing slash is folded the way `normalize_baseurl` does so a manifest
+    pin and a repo file value written without one still compare equal.
+    """
+    value = url.strip().rstrip("/")
+    if not value:
+        return ""
+    scheme, sep, rest = value.partition("://")
+    if not sep:
+        return value
+    host, slash, path = rest.partition("/")
+    return f"{scheme.lower()}://{host.lower()}{slash}{path}"
+
+
 def section(overlay: Path, name: str, key: str = "packages") -> list[str]:
     """A named package list from an overlay manifest, in the order written.
 
@@ -504,6 +528,57 @@ def split_baseurls(raw: str) -> list[str]:
     return [entry for entry in re.split(r"[\s,]+", raw.strip()) if entry]
 
 
+def split_gpgkeys(raw: str) -> list[str]:
+    """Split a gpgkey option into the keys dnf5 would import.
+
+    dnf5 accepts whitespace-separated entries inside `gpgkey=`; the gate scans
+    every one, so a pin to one of several pinned URLs still passes.
+    """
+    return [entry for entry in re.split(r"[\s,]+", raw.strip()) if entry]
+
+
+def repo_gpgkey_pin_errors(
+    section_name: str,
+    parser: configparser.ConfigParser,
+    source: str,
+    expected_gpgkeys: dict[str, tuple[str, ...]],
+) -> list[str]:
+    """Check that an allowlisted repository's `gpgkey=` matches its manifest pin.
+
+    `gpgkey=` names where dnf5 fetches the RPM GPG key the repo claims, and
+    an attacker who can write `gpgkey=` on an allowlisted id can swap in
+    their own key and have packages they signed treated as authentic
+    (https://, issue #617). The pin mirrors `[repositories.baseurls]`:
+    `[repositories.gpgkeys]` declares the keys the manifest approves, and
+    every `gpgkey=` value in an allowlisted section must match. A section
+    that declares no `gpgkey=` is unchecked (some allowlisted repos -- the
+    OCI-pinned `utah-packages` -- legitimately ship without an RPM GPG key).
+    """
+    gpgkey = parser.get(section_name, "gpgkey", fallback="").strip()
+    if not gpgkey:
+        return []
+    declared = expected_gpgkeys.get(section_name)
+    if not declared:
+        return [
+            f"Allowlisted repository '{section_name}' is enabled in {source} with "
+            f"gpgkey={gpgkey}; the manifest declares no pinned key for it in "
+            "[repositories.gpgkeys]; an id on the allowlist is not approval of an "
+            "unknown key"
+        ]
+    pinned = {normalize_gpgkey(url) for url in declared}
+    unpinned = [
+        key for key in split_gpgkeys(gpgkey)
+        if normalize_gpgkey(key) not in pinned
+    ]
+    if unpinned:
+        listed = ", ".join(f"'{key}'" for key in unpinned)
+        return [
+            f"Repository '{section_name}' is enabled in {source} with unpinned gpgkey "
+            f"{listed}; expected one of: {', '.join(sorted(declared))}"
+        ]
+    return []
+
+
 def repo_pin_errors(
     section_name: str,
     parser: configparser.ConfigParser,
@@ -605,6 +680,7 @@ def check_repo_sections(
     *,
     expected_baseurls: dict[str, tuple[str, ...]] | None,
     approved_security: dict[str, set[str]] | None = None,
+    expected_gpgkeys: dict[str, tuple[str, ...]] | None = None,
 ) -> list[str]:
     """Apply the allowlist to every section of an already-parsed config."""
     errors: list[str] = []
@@ -617,6 +693,8 @@ def check_repo_sections(
                 )
                 if expected_baseurls is not None:
                     errors.extend(repo_pin_errors(section_name, parser, source, expected_baseurls))
+                if expected_gpgkeys is not None:
+                    errors.extend(repo_gpgkey_pin_errors(section_name, parser, source, expected_gpgkeys))
             continue
         if section_name in allowed_repos:
             errors.extend(
@@ -636,6 +714,8 @@ def check_repo_sections(
             )
         elif expected_baseurls is not None:
             errors.extend(repo_pin_errors(section_name, parser, source, expected_baseurls))
+        if expected_gpgkeys is not None:
+            errors.extend(repo_gpgkey_pin_errors(section_name, parser, source, expected_gpgkeys))
     return errors
 
 
@@ -676,6 +756,7 @@ def verify_repository_policy(
     expected_baseurls: dict[str, tuple[str, ...]] | None,
     approved_security: dict[str, set[str]] | None = None,
     check_mode: bool = False,
+    expected_gpgkeys: dict[str, tuple[str, ...]] | None = None,
 ) -> list[str]:
     """Prove the system exposes only explicitly allowed runtime RPM repositories.
 
@@ -708,6 +789,7 @@ def verify_repository_policy(
                 parser, str(repo_file), allowed_repos,
                 expected_baseurls=expected_baseurls,
                 approved_security=approved_security,
+                expected_gpgkeys=expected_gpgkeys,
             )
         )
     return errors
@@ -927,6 +1009,39 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    # Pinned RPM GPG keys, from [repositories.gpgkeys]. A repo with `gpgkey=` set
+    # in its `.repo` file must match one of the URLs/paths listed here; a key
+    # the manifest does not pin cannot be approved by silence, since a key the
+    # gate never saw is a key it never vetted (issue #617, mirrors #345 for
+    # `gpgcheck`/`repo_gpgcheck`). The section is optional -- allowlisted repos
+    # with no `gpgkey=` declared need no entry -- but a key not in the allowlist
+    # approves nothing, so reject it like an unpinned baseurl.
+    repo_gpgkeys_raw = overlay_data["repositories"].get("gpgkeys", {})
+    if not isinstance(repo_gpgkeys_raw, dict):
+        print(
+            f"ERROR: Overlay manifest '{overlay}' has a non-table [repositories.gpgkeys] "
+            "section",
+            file=sys.stderr,
+        )
+        return 1
+    repo_gpgkeys: dict[str, tuple[str, ...]] = {}
+    for repo_id, urls in repo_gpgkeys_raw.items():
+        if not isinstance(urls, list):
+            print(
+                f"ERROR: Overlay manifest '{overlay}' lists [repositories.gpgkeys].{repo_id} "
+                "as a non-list; name the keys approved for that repository",
+                file=sys.stderr,
+            )
+            return 1
+        repo_gpgkeys[repo_id] = tuple(urls)
+    unkeyed = sorted(set(repo_gpgkeys) - allowed_repos)
+    if unkeyed:
+        print(
+            f"ERROR: Overlay manifest '{overlay}' pins RPM GPG keys for repositories "
+            f"not in [repositories.allowed]: {', '.join(unkeyed)}",
+            file=sys.stderr,
+        )
+        return 1
     # Approved per-repository signature/TLS drift, from [repositories.security].
     # A repository named here may leave the listed option (gpgcheck/repo_gpgcheck)
     # disabled; no allowlisted repository not named here may explicitly disable
@@ -1023,6 +1138,7 @@ def main() -> int:
             expected_baseurls=repo_baseurls,
             approved_security=approved_security,
             check_mode=True,
+            expected_gpgkeys=repo_gpgkeys,
         )
         if repo_errors:
             for err in repo_errors:
@@ -1094,6 +1210,7 @@ def main() -> int:
                 repos_dir, allowed_repos,
                 expected_baseurls=repo_baseurls,
                 approved_security=approved_security, check_mode=False,
+                expected_gpgkeys=repo_gpgkeys,
             )
         )
     # A proxy= or sslverify=0 in the resolved [main] section of dnf.conf/libdnf5.conf
