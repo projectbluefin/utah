@@ -19,3 +19,9 @@ NVIDIA module vermagic against the running kernel. A QEMU installation proves
 these files and kernel boot paths; it cannot prove physical NVIDIA
 initialization, suspend, or Secure Boot enrollment. Report those limitations
 separately. A passing image build alone does not prove an ISO installation.
+
+The optional installed probe also requires unprivileged user namespaces in the
+installed account, plus a loadable TUN device on gaming kernels. Keep terminal
+launch stderr in failed fastfetch diagnostics: a user-namespace or sandbox
+failure otherwise appears only as blank OCR. An OGC kernel that boots the
+desktop but cannot run its declared Flatpaks has failed ISO acceptance.

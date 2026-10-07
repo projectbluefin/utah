@@ -39,7 +39,8 @@ class FlavorProbeTests(unittest.TestCase):
 
     def test_matching_gaming_kernel_passes(self):
         self.configure("gaming", "7.1.8-ogc1")
-        result = probe.verify_flavor("gaming", self.root, "7.1.8-ogc1")
+        with patch.object(probe, "require", return_value=""):
+            result = probe.verify_flavor("gaming", self.root, "7.1.8-ogc1")
         self.assertEqual(result["kernel"], "7.1.8-ogc1")
 
     def test_nvidia_module_built_for_another_kernel_fails(self):

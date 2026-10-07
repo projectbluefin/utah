@@ -29,6 +29,10 @@ def verify_flavor(flavor, root=Path("/"), kernel=None):
     elif ogc.exists():
         assert ogc.read_text().strip() != kernel, "non-gaming flavor booted OGC"
     result = {"flavor": flavor, "kernel": kernel}
+    if "gaming" in flavor.split("-"):
+        require("modprobe", "tun")
+        require("test", "-c", "/dev/net/tun")
+        result["tun_device"] = "present"
     if "nvidia" in flavor.split("-"):
         vermagic = require("modinfo", "-k", kernel, "-F", "vermagic", "nvidia")
         assert vermagic.split()[0] == kernel, "NVIDIA module does not match booted kernel"
