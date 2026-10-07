@@ -165,8 +165,10 @@ as is any `[repositories.security]` option other than `gpgcheck` or
 `utah-packages` (RPMs are authenticated by the pinned package image and its
 OCI provenance, so both signature checks are disabled) and
 `nvidia-container-toolkit` (NVIDIA signs only its repomd.xml, so only package
-signature verification is disabled). Only `nvidia-container-toolkit` has a
-`[repositories.gpgkeys]` pin (the key URL NVIDIA publishes); `utah-packages`
+signature verification is disabled). `[repositories.gpgkeys]` pins
+`public-hummingbird-x86_64-rpms` (the local
+`file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2` path) and
+`nvidia-container-toolkit` (the key URL NVIDIA publishes); `utah-packages`
 declares no `gpgkey=` and has no entry.
 
 The install-source identity is single-sourced in `packages/*.repo`. Each repository

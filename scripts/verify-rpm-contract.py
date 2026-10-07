@@ -103,11 +103,13 @@ def normalize_gpgkey(url: str) -> str:
     match DNF's URL resolution; the path stays case-sensitive (`/PEM` and
     `/pem` are different files). A trailing slash is folded the way
     `normalize_baseurl` does, so a manifest pin and a repo file value written
-    without one still compare equal.
+    without one still compare equal, and `${var}` is folded to `$var` the same
+    way, so `${basearch}` and `$basearch` spellings match.
     """
     value = url.strip().rstrip("/")
     if not value:
         return ""
+    value = re.sub(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}", r"$\1", value)
     scheme, sep, rest = value.partition("://")
     if not sep:
         return value

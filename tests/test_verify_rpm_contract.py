@@ -1209,6 +1209,12 @@ class SupplyChainTests(unittest.TestCase):
             "file:///etc/pki/RPM-GPG-KEY-x",
         )
 
+    def test_normalize_gpgkey_folds_braced_variables(self) -> None:
+        self.assertEqual(
+            self.module.normalize_gpgkey("https://x.example.com/${basearch}/key"),
+            self.module.normalize_gpgkey("https://x.example.com/$basearch/key"),
+        )
+
     def test_normalize_gpgkey_empty_is_empty(self) -> None:
         self.assertEqual(self.module.normalize_gpgkey(""), "")
 
