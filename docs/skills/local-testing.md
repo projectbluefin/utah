@@ -487,3 +487,8 @@ mask a whole file in this implementation.
 Installed-guest file copies require the installed SSH port and test-user
 password, using SCP's uppercase `-P`. Exercise that helper after merging
 harness changes; a missing function can otherwise fail only after installation.
+
+Installed Flatpak `--columns=ref` output omits the app/runtime namespace. Query
+apps and runtimes separately and restore each prefix before comparing canonical
+preinstall refs; an ID-only check cannot verify branch, architecture, or kind.
+Exercise the actual formatter with the displayed three-component output.

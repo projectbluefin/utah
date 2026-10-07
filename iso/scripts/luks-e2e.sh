@@ -120,6 +120,14 @@ ssh_target() {
         -p "${SSH_PORT_INSTALLED}" "${TEST_USER}@127.0.0.1" "$@"
 }
 
+# Flatpak's ref column omits the app/runtime namespace. Query both kinds
+# explicitly before comparing with canonical preinstall refs.
+installed_flatpak_refs() {
+    ssh_target 'set -o pipefail
+flatpak list --system --app --columns=ref | sed -E "s#^(app/)?#app/#"
+flatpak list --system --runtime --columns=ref | sed -E "s#^(runtime/)?#runtime/#"'
+}
+
 scp_target() {
     sshpass -p "${TEST_PASSWORD}" scp "${SSH_OPTS[@]}" \
         -P "${SSH_PORT_INSTALLED}" "$@"
@@ -851,7 +859,7 @@ if [[ -n "${UTAH_E2E_FLATPAKS-x}" ]]; then
         # No --app: the default set includes two runtimes, the
         # adw-gtk3 GTK3 themes, and --app hides runtimes, so they read as
         # missing even when present (post-testing-e2e run 36068751481).
-        installed_flatpaks="$(ssh_target 'flatpak list --system --columns=ref' 2>/dev/null || true)"
+        installed_flatpaks="$(installed_flatpak_refs 2>/dev/null || true)"
         [[ -n "${installed_flatpaks}" ]] || { sleep 10; continue; }
         missing_flatpaks=()
         while IFS= read -r app; do
