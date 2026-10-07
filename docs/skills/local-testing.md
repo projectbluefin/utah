@@ -493,7 +493,5 @@ retaining omitted keys. Honor `Install=false`, branch and runtime type, and
 verify complete refs in the bake and installed guest. Same filenames do not
 mask a whole file in this implementation.
 
-The review VM must check statistics timer enablement after installation, then
-create Common's countme opt-out marker and require the service condition to
-skip execution. Remove that marker and restart the timer in a `finally` block
-so the probe leaves the enabled-by-default installation intact.
+See [installed guest probes](local-testing/references/installed-guest-probes.md)
+for statistics timer opt-out checks and installed-guest file copying.

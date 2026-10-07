@@ -821,3 +821,21 @@ class BuildToolingRemovalTests(unittest.TestCase):
     def test_removal_cleans_the_dependency_closure(self):
         self.assertNotIn("--no-autoremove", self.remove_line(),
                          "removal must let dnf clean the orphaned build closure")
+
+
+class InstalledGuestCopyTests(unittest.TestCase):
+    def test_copy_uses_the_installed_guest_password_and_scp_port(self):
+        text = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
+        function = re.search(r"scp_target\(\) \{.*?\n\}", text, re.S)
+        self.assertIsNotNone(function, "installed preinstall parser needs the copy helper")
+        script = r"""
+TEST_PASSWORD=fixture-password
+SSH_PORT_INSTALLED=2223
+SSH_OPTS=(-o ConnectTimeout=5)
+sshpass() { printf '%s\n' "$@"; }
+""" + function[0] + '\nscp_target /source utahtest@127.0.0.1:/tmp/destination\n'
+        result = subprocess.run(["bash", "-eu", "-c", script], check=True,
+                                text=True, capture_output=True)
+        self.assertEqual(result.stdout.splitlines(), [
+            "-p", "fixture-password", "scp", "-o", "ConnectTimeout=5", "-P", "2223",
+            "/source", "utahtest@127.0.0.1:/tmp/destination"])
