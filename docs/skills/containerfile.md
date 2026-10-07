@@ -371,3 +371,10 @@ Capture the first differing overlay layer's path metadata, xattrs, and content
 hashes in the disposable runner before it exits; retain that diagnostic with
 the two image manifests. A successful image build alone proves neither native
 layer nor rechunked publication reproducibility.
+
+The real two-build probe found COPY destination-parent directory mtimes in the
+first differing native layer. Stage COPY inputs in a scratch origin and bind
+that origin into the first runtime RUN; normalize generated mtimes before
+each runtime layer commits, preserving mtimes that match RPM's payload index.
+Skip bind mounts so normalization cannot alter read-only package repositories
+or build inputs. Final cleanup alone cannot repair earlier committed layers.
