@@ -255,6 +255,53 @@ class CheckModeTests(unittest.TestCase):
         unit.assert_not_called()
 
 
+class FlatpaksModeTests(unittest.TestCase):
+    """`--flatpaks BREWFILE` is the single entry point for the Brewfile flatpak
+    set (see #510/#511). Print the ordered app IDs and exit 0; reject a
+    contract argument in --flatpaks mode and require a contract when neither
+    mode is selected.
+    """
+
+    def run_flatpaks(self, brewfile_text):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "Brewfile"
+            path.write_text(brewfile_text)
+            with patch.object(
+                desktop.sys, "argv", ["verify", "--flatpaks", str(path)]
+            ), patch("sys.stdout", new_callable=__import__("io").StringIO) as out:
+                rc = desktop.main()
+                return rc, out.getvalue()
+
+    def test_prints_ordered_app_ids(self):
+        rc, out = self.run_flatpaks(
+            '# comment\nbrew "gh"\nflatpak "org.gnome.Calculator"\n'
+            'flatpak "org.mozilla.firefox"\n'
+        )
+        self.assertEqual(rc, 0)
+        self.assertEqual(
+            out.splitlines(), ["org.gnome.Calculator", "org.mozilla.firefox"]
+        )
+
+    def test_rejects_a_contract_argument(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            brewfile = Path(tmp) / "Brewfile"
+            brewfile.write_text('flatpak "org.gnome.Calculator"\n')
+            with patch.object(
+                desktop.sys,
+                "argv",
+                ["verify", "--flatpaks", str(brewfile), str(ROOT / "contracts/bluefin-desktop.toml")],
+            ):
+                with self.assertRaises(SystemExit) as cm:
+                    desktop.main()
+                self.assertEqual(cm.exception.code, 2)
+
+    def test_requires_a_contract_when_neither_mode_is_given(self):
+        with patch.object(desktop.sys, "argv", ["verify"]):
+            with self.assertRaises(SystemExit) as cm:
+                desktop.main()
+            self.assertEqual(cm.exception.code, 2)
+
+
 class GnomeExtensionTests(unittest.TestCase):
     def shipped_tree(self, tmp, versions="51", uuids=None):
         base = Path(tmp) / "usr/share/gnome-shell/extensions"
@@ -369,6 +416,26 @@ class ServiceMaskParityTests(unittest.TestCase):
         masked = contract.get("services", {}).get("masked", [])
         self.assertIn("bootc-fetch-apply-updates.timer", masked)
         self.assertIn("bootc-fetch-apply-updates.service", masked)
+
+    def test_desktop_contract_services_listed_in_skill_doc(self):
+        # The [services] section of the skill doc enumerates the units the
+        # contract asserts; if a new unit is added to contracts/bluefin-desktop.toml
+        # without the doc following, the verifier still passes and the drift only
+        # shows up in review (#597). Assert each enabled unit is named in the doc.
+        import tomllib
+
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        enabled = contract.get("services", {}).get("enabled", [])
+        self.assertGreater(len(enabled), 0, "contract must list at least one enabled service")
+
+        skill_doc = (ROOT / "docs/skills/desktop-contract.md").read_text()
+        services_heading = skill_doc.split("`[services]`", 1)[1].split("\n\n", 1)[0]
+        missing = [unit for unit in enabled if unit not in services_heading]
+        self.assertEqual(
+            missing, [],
+            "every enabled unit must be named in docs/skills/desktop-contract.md "
+            f"under the [services] bullet; missing: {missing}",
+        )
 
     def test_grub_boot_success_timer_not_enabled(self):
         # /boot is read-only at runtime, so the boot-success mark can never be

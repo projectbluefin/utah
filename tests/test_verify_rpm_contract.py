@@ -80,6 +80,7 @@ def write_overlay(
     gnome_versions: dict[str, str] | None = None,
     repositories: list[str] | None = None,
     baseurls: dict[str, str] | None = None,
+    security: dict[str, list[str]] | None = None,
     factory: list[str] | None = None,
 ) -> Path:
     """Write a utah.toml overlay that already carries the supply-chain sections.
@@ -115,6 +116,11 @@ def write_overlay(
     sections.append("[repositories.baseurls]\n")
     for repo_id, url in url_map.items():
         sections.append(f'{repo_id} = ["{url}"]\n')
+    if security:
+        sections.append("[repositories.security]\n")
+        for repo_id, options in security.items():
+            rendered = ", ".join(f'"{opt}"' for opt in options)
+            sections.append(f'{repo_id} = [{rendered}]\n')
     if factory:
         sections.append(toml_section("factory", factory))
     path = directory / "utah.toml"
@@ -129,6 +135,7 @@ def run_main(module, manifest: Path, overlay: Path, installed: set[str],
              extra_argv: list[str] | None = None,
              report_dir: Path | None = None,
              runtime_repos_dirs: "Path | list[Path] | None" = None,
+             override_repos_dirs: "Path | list[Path] | None" = None,
              stderr_buffer: io.StringIO | None = None,
              reposdir_error: Exception | None = None) -> tuple[int, str, str]:
     """Invoke scripts/verify-rpm-contract.py's main() with stubbed packages.
@@ -184,12 +191,20 @@ def run_main(module, manifest: Path, overlay: Path, installed: set[str],
             raise reposdir_error
         return list(runtime_repos)
 
+    if override_repos_dirs is None:
+        override_repos: list[Path] = []
+    elif isinstance(override_repos_dirs, Path):
+        override_repos = [override_repos_dirs]
+    else:
+        override_repos = list(override_repos_dirs)
+
     stderr_text = ""
     base_patches = [
         patch.object(module, "is_installed",
                      side_effect=lambda p: p in installed),
         patch.object(module, "query_packages", side_effect=fake_query),
         patch.object(module, "runtime_reposdir_paths", runtime_reposdir_paths),
+        patch.object(module, "OVERRIDE_REPOS_DIRS", tuple(override_repos)),
         patch.object(sys, "argv", argv),
         patch.dict(os.environ, {"IMAGE_FLAVOR": flavor, "UTAH_REPORT_DIR": str(report_dir)}),
         redirect_stdout(stdout),
@@ -374,6 +389,79 @@ class CheckModeTests(unittest.TestCase):
                 self.assertEqual(module.main(), 0)
         is_installed.assert_not_called()
 
+    def test_check_rejects_unapproved_gpgcheck_zero(self) -> None:
+        """A pinned-origin repo that also drops gpgcheck must be approved explicitly."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            write_repo_file(
+                directory, "utah-packages",
+                baseurl="file:///etc/utah-packages", enabled="1",
+                gpgcheck="0", repo_gpgcheck="0")
+            overlay = write_overlay(
+                directory, repositories=["utah-packages"],
+                baseurls={"utah-packages": "file:///etc/utah-packages"})
+            result = self.run_check(manifest, overlay)
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertIn("gpgcheck", result.stderr)
+
+    def test_check_approves_documented_gpgcheck_zero(self) -> None:
+        """The utah-packages exception is documented in [repositories.security]."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            write_repo_file(
+                directory, "utah-packages",
+                baseurl="file:///etc/utah-packages", enabled="1",
+                gpgcheck="0", repo_gpgcheck="0")
+            overlay = write_overlay(
+                directory, repositories=["utah-packages"],
+                baseurls={"utah-packages": "file:///etc/utah-packages"},
+                security={"utah-packages": ["gpgcheck", "repo_gpgcheck"]})
+            result = self.run_check(manifest, overlay)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_check_rejects_security_entry_for_non_allowed_repo(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(
+                directory, repositories=["public-hummingbird-x86_64-rpms"],
+                security={"ghost-repo": ["gpgcheck"]})
+            result = self.run_check(manifest, overlay)
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertIn("ghost-repo", result.stderr)
+
+    def test_check_rejects_unknown_security_option(self) -> None:
+        """A typo or non-approvable option in [repositories.security] fails loudly."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(
+                directory, repositories=["public-hummingbird-x86_64-rpms"],
+                security={"public-hummingbird-x86_64-rpms": ["gpg_check", "sslverify"]})
+            result = self.run_check(manifest, overlay)
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertIn("ERROR", result.stderr)
+        self.assertIn("'gpg_check'", result.stderr)
+        self.assertIn("'sslverify'", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_check_rejects_non_string_security_option(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(
+                directory, repositories=["public-hummingbird-x86_64-rpms"])
+            with overlay.open("a") as handle:
+                handle.write(
+                    "[repositories.security]\n"
+                    "public-hummingbird-x86_64-rpms = [1, { a = 1 }]\n")
+            result = self.run_check(manifest, overlay)
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertIn("ERROR", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
 
 class VerifyModeTests(unittest.TestCase):
     """Without --check the verifier asserts the packages are really installed."""
@@ -541,13 +629,14 @@ class ResolvedContractTests(unittest.TestCase):
                 return result, []
 
             report_dir = Path(tempfile.mkdtemp())
-            # /etc/yum.repos.d is real on Fedora hosts. The resolved contract
-            # tests don't care about it, so redirect it to a guaranteed-empty
-            # temp directory (#454 on-image scan).
+            # /etc/yum.repos.d and /etc/dnf/repos.override.d are real on Fedora
+            # hosts. The resolved contract tests don't care about them, so
+            # redirect them away (#454, #524 on-image scan).
             runtime_repos = [Path(tempfile.mkdtemp())]
             with patch.object(self.module, "Path", redirected), \
                     patch.object(self.module, "runtime_reposdir_paths",
                                  lambda: list(runtime_repos)), \
+                    patch.object(self.module, "OVERRIDE_REPOS_DIRS", ()), \
                     patch.object(self.module, "is_installed",
                                  side_effect=lambda p: p in installed), \
                     patch.object(self.module, "query_packages", side_effect=fake_query), \
@@ -1007,6 +1096,77 @@ class SupplyChainTests(unittest.TestCase):
         parser = self._parser({"baseurl": "https://a.example.com/$basearch"})
         self.assertEqual(self.module.repo_security_option_errors("repo", parser, "fedora.repo"), [])
 
+    def test_repo_security_option_errors_flags_gpgcheck_zero(self) -> None:
+        parser = self._parser({"baseurl": "https://a.example.com/$basearch", "gpgcheck": "0"})
+        errors = self.module.repo_security_option_errors("repo", parser, "fedora.repo")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("gpgcheck", errors[0])
+
+    def test_repo_security_option_errors_flags_repo_gpgcheck_zero(self) -> None:
+        parser = self._parser(
+            {"baseurl": "https://a.example.com/$basearch", "repo_gpgcheck": "0"})
+        errors = self.module.repo_security_option_errors("repo", parser, "fedora.repo")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("repo_gpgcheck", errors[0])
+
+    def test_repo_security_option_errors_passes_for_approved_gpgcheck(self) -> None:
+        parser = self._parser({"baseurl": "https://a.example.com/$basearch", "gpgcheck": "0"})
+        approved = {"repo": {"gpgcheck"}}
+        self.assertEqual(
+            self.module.repo_security_option_errors("repo", parser, "fedora.repo", approved),
+            [],
+        )
+
+    def test_repo_security_option_errors_approved_is_per_option(self) -> None:
+        """Approving gpgcheck does not also approve repo_gpgcheck."""
+        parser = self._parser(
+            {"baseurl": "https://a.example.com/$basearch", "gpgcheck": "0", "repo_gpgcheck": "0"})
+        approved = {"repo": {"gpgcheck"}}
+        errors = self.module.repo_security_option_errors("repo", parser, "fedora.repo", approved)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("repo_gpgcheck", errors[0])
+
+    def test_repo_security_option_errors_passes_when_gpgcheck_enabled(self) -> None:
+        parser = self._parser(
+            {"baseurl": "https://a.example.com/$basearch", "gpgcheck": "1",
+             "repo_gpgcheck": "1"})
+        self.assertEqual(
+            self.module.repo_security_option_errors("repo", parser, "fedora.repo"), [])
+
+    def test_repo_security_option_errors_flags_pkg_gpgcheck_zero(self) -> None:
+        """pkg_gpgcheck is libdnf5's canonical name for gpgcheck."""
+        parser = self._parser(
+            {"baseurl": "https://a.example.com/$basearch", "pkg_gpgcheck": "0"})
+        errors = self.module.repo_security_option_errors("repo", parser, "fedora.repo")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("pkg_gpgcheck=0", errors[0])
+
+    def test_repo_security_option_errors_flags_pkg_gpgcheck_overriding_gpgcheck(self) -> None:
+        """gpgcheck=1 does not mask a pkg_gpgcheck=0 in the same section."""
+        parser = self._parser(
+            {"baseurl": "https://a.example.com/$basearch", "gpgcheck": "1",
+             "pkg_gpgcheck": "0"})
+        errors = self.module.repo_security_option_errors("repo", parser, "fedora.repo")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("pkg_gpgcheck=0", errors[0])
+
+    def test_repo_security_option_errors_gpgcheck_approval_covers_pkg_gpgcheck(self) -> None:
+        parser = self._parser(
+            {"baseurl": "https://a.example.com/$basearch", "pkg_gpgcheck": "0"})
+        approved = {"repo": {"gpgcheck"}}
+        self.assertEqual(
+            self.module.repo_security_option_errors("repo", parser, "fedora.repo", approved),
+            [],
+        )
+
+    def test_repo_security_option_errors_repo_gpgcheck_approval_not_pkg_gpgcheck(self) -> None:
+        parser = self._parser(
+            {"baseurl": "https://a.example.com/$basearch", "pkg_gpgcheck": "0"})
+        approved = {"repo": {"repo_gpgcheck"}}
+        errors = self.module.repo_security_option_errors("repo", parser, "fedora.repo", approved)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("pkg_gpgcheck", errors[0])
+
     def test_check_repo_sections_flags_unapproved_repo(self) -> None:
         parser = self._parser({"baseurl": "https://a.example.com/$basearch", "enabled": "1"})
         errors = self.module.check_repo_sections(
@@ -1096,6 +1256,47 @@ class SupplyChainTests(unittest.TestCase):
             directory, set(), check_mode=True, expected_baseurls=None)
         self.assertEqual(errors, [])
 
+    def test_verify_repository_policy_flags_unapproved_gpgcheck_zero(self) -> None:
+        """gpgcheck=0 on an allowlisted repo is a gap unless the manifest approves it."""
+        directory = Path(tempfile.mkdtemp())
+        self._write_repo(
+            directory, "utah-packages",
+            baseurl="file:///etc/utah-packages", enabled="1", gpgcheck="0", repo_gpgcheck="0")
+        errors = self.module.verify_repository_policy(
+            directory, {"utah-packages"}, check_mode=True,
+            expected_baseurls={"utah-packages": ("file:///etc/utah-packages",)})
+        self.assertTrue(any("gpgcheck" in e for e in errors), errors)
+
+    def test_verify_repository_policy_passes_for_approved_gpgcheck_zero(self) -> None:
+        directory = Path(tempfile.mkdtemp())
+        self._write_repo(
+            directory, "utah-packages",
+            baseurl="file:///etc/utah-packages", enabled="1", gpgcheck="0", repo_gpgcheck="0")
+        errors = self.module.verify_repository_policy(
+            directory, {"utah-packages"}, check_mode=True,
+            expected_baseurls={"utah-packages": ("file:///etc/utah-packages",)},
+            approved_security={"utah-packages": {"gpgcheck", "repo_gpgcheck"}})
+        self.assertEqual(errors, [])
+
+    def test_partial_overrides_preserve_named_signature_exceptions_only(self) -> None:
+        cases = [
+            ("utah-packages", "gpgcheck=0", {"gpgcheck"}, True),
+            ("utah-packages", "pkg_gpgcheck=0", {"gpgcheck"}, True),
+            ("utah-packages", "repo_gpgcheck=0", {"repo_gpgcheck"}, True),
+            ("utah-packages", "pkg_gpgcheck=0", set(), False),
+            ("*", "pkg_gpgcheck=0", {"gpgcheck"}, False),
+            ("utah-packages", "sslverify=0", {"gpgcheck"}, False),
+        ]
+        for section, option, approvals, passes in cases:
+            with self.subTest(section=section, option=option, approvals=approvals):
+                with tempfile.TemporaryDirectory() as tmp:
+                    directory = Path(tmp)
+                    (directory / "override.repo").write_text(f"[{section}]\n{option}\n")
+                    errors = self.module.verify_repository_policy(
+                        directory, {"utah-packages"}, expected_baseurls={},
+                        approved_security={section: approvals}, is_override=True)
+                    self.assertEqual(not errors, passes, errors)
+
     def test_resolve_build_timestamp_reads_source_date_epoch(self) -> None:
         ts, source = self.module.resolve_build_timestamp({"SOURCE_DATE_EPOCH": "1700000000"})
         self.assertEqual(source, "SOURCE_DATE_EPOCH")
@@ -1144,6 +1345,26 @@ class SupplyChainTests(unittest.TestCase):
         self.assertEqual(report["packages"]["gnome-shell"]["section"], "gnome")
         self.assertTrue((output_dir / "package-origins.json").exists())
         self.assertTrue((output_dir / "package-origins.txt").exists())
+
+    def test_generate_provenance_report_is_identical_across_build_days(self) -> None:
+        """VERSION carries the build date; the retained report must not (#346)."""
+        installed = {
+            "gnome-shell": {"name": "gnome-shell", "epoch": "0", "version": "51.2",
+                            "release": "1.bfin.x86_64", "arch": "x86_64",
+                            "nevra": "gnome-shell-51.2-1.bfin.x86_64", "origin": "factory"},
+        }
+        outputs = []
+        for version in ("testing-20260929-abc1234", "testing-20260930-abc1234"):
+            output_dir = Path(tempfile.mkdtemp())
+            env = {"SOURCE_DATE_EPOCH": "1700000000", "VERSION": version,
+                   "SHA_HEAD_SHORT": "abc1234"}
+            with patch.dict(os.environ, env):
+                report = self.module.generate_provenance_report(
+                    installed, "main", set(), {}, output_dir=output_dir)
+            self.assertEqual(report["build_provenance"]["commit"], "abc1234")
+            outputs.append(tuple((output_dir / f).read_bytes()
+                                 for f in ("package-origins.json", "package-origins.txt")))
+        self.assertEqual(outputs[0], outputs[1])
 
     def test_generate_provenance_report_records_the_factory_pin_and_base_image(self) -> None:
         """The report says which factory and which base the NEVRAs came from."""
@@ -1413,8 +1634,169 @@ class Dnf5ConfigTests(unittest.TestCase):
         self.assertEqual(paths, list(self.module.DEFAULT_REPOS_DIRS))
 
 
+class MainSectionSecurityTests(unittest.TestCase):
+    """The resolved [main] block is inspected for proxy= and sslverify=0 (utah#352).
+
+    `check_repo_sections` only inspects `.repo` sections, so a proxy= or
+    sslverify=0 set globally in the [main] block of dnf.conf or a libdnf5
+    drop-in is never inspected. `main_section_security_errors` resolves those
+    options the way libdnf5 does (later file wins) and reports the effective
+    values; an unreadable or unparseable config fails closed.
+    """
+
+    def setUp(self) -> None:
+        self.module = load_module()
+
+    def _write_conf(self, directory: Path, name: str, body: str) -> Path:
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / name
+        path.write_text(body, encoding="utf-8")
+        return path
+
+    def test_no_main_section_is_clean(self) -> None:
+        """A config without a [main] block has no global security options to report."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            path = self._write_conf(directory, "10-base.conf", "[main]\n")
+            self.assertEqual(
+                self.module.main_section_security_errors([path], "dnf5 [main] config"),
+                [],
+            )
+
+    def test_proxy_in_main_is_reported(self) -> None:
+        """A proxy= in [main] is reported regardless of whether it is empty."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            path = self._write_conf(
+                directory, "10-base.conf", "[main]\nproxy=http://localhost:3128\n")
+            errors = self.module.main_section_security_errors([path], "dnf5 [main] config")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("proxy=http://localhost:3128", errors[0])
+
+    def test_sslverify_zero_in_main_is_reported(self) -> None:
+        """An sslverify=0 in [main] is reported."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            path = self._write_conf(directory, "10-base.conf", "[main]\nsslverify=0\n")
+            errors = self.module.main_section_security_errors([path], "dnf5 [main] config")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("sslverify=0", errors[0])
+
+    def test_sslverify_false_in_main_is_reported(self) -> None:
+        """An sslverify=false in [main] is reported (a falsy value disables verification)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            path = self._write_conf(directory, "10-base.conf", "[main]\nsslverify=false\n")
+            errors = self.module.main_section_security_errors([path], "dnf5 [main] config")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("sslverify=false", errors[0])
+
+    def test_proxy_and_sslverify_in_main_are_both_reported(self) -> None:
+        """A [main] that sets both proxy and sslverify reports both problems."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            path = self._write_conf(
+                directory, "10-base.conf",
+                "[main]\nproxy=http://localhost:3128\nsslverify=0\n",
+            )
+            errors = self.module.main_section_security_errors([path], "dnf5 [main] config")
+        self.assertEqual(len(errors), 2)
+
+    def test_later_file_wins_for_effective_sslverify(self) -> None:
+        """A later drop-in overrides an earlier sslverify=0, so only the effective value counts."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            early = self._write_conf(directory, "00-base.conf", "[main]\nsslverify=0\n")
+            late = self._write_conf(directory, "99-late.conf", "[main]\nsslverify=1\n")
+            errors = self.module.main_section_security_errors([early, late], "dnf5 [main] config")
+        self.assertEqual(errors, [])
+
+    def test_later_empty_proxy_clears_earlier_proxy(self) -> None:
+        """A later empty proxy= resets an earlier proxy, as libdnf5's last-wins does."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            early = self._write_conf(
+                directory, "00-base.conf", "[main]\nproxy=http://localhost:3128\n"
+            )
+            late = self._write_conf(directory, "99-late.conf", "[main]\nproxy=\n")
+            errors = self.module.main_section_security_errors([early, late], "dnf5 [main] config")
+        self.assertEqual(errors, [])
+
+    def test_malformed_config_fails_closed(self) -> None:
+        """A config that cannot be parsed raises Dnf5ConfigError, like parse_reposdir_from_config."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            path = self._write_conf(directory, "10-base.conf", "proxy=http://localhost:3128\n")
+            with self.assertRaises(self.module.Dnf5ConfigError):
+                self.module.main_section_security_errors([path], "dnf5 [main] config")
+
+    def test_sslverify_one_is_not_reported(self) -> None:
+        """An sslverify=1 in [main] keeps TLS verification on, so it is not reported."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            path = self._write_conf(directory, "10-base.conf", "[main]\nsslverify=1\n")
+            self.assertEqual(
+                self.module.main_section_security_errors([path], "dnf5 [main] config"),
+                [],
+            )
+
+    def test_uppercase_option_key_is_not_honoured(self) -> None:
+        """dnf5 parses option keys case-sensitively, so Proxy= does not set the effective proxy."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            path = self._write_conf(directory, "10-base.conf", "[main]\nProxy=http://localhost:3128\n")
+            self.assertEqual(
+                self.module.main_section_security_errors([path], "dnf5 [main] config"),
+                [],
+            )
+
+    def test_signature_checks_disabled_in_main_are_reported(self) -> None:
+        """gpgcheck/pkg_gpgcheck/repo_gpgcheck=0 in [main] weaken every repository."""
+        for key in ("gpgcheck", "pkg_gpgcheck", "repo_gpgcheck"):
+            with self.subTest(key=key), tempfile.TemporaryDirectory() as tmp:
+                path = self._write_conf(Path(tmp), "10-base.conf", f"[main]\n{key}=0\n")
+                errors = self.module.main_section_security_errors([path], "dnf5 [main] config")
+                self.assertEqual(len(errors), 1)
+                self.assertIn(f"{key}=0", errors[0])
+
+    def test_signature_checks_enabled_in_main_are_clean(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._write_conf(
+                Path(tmp), "10-base.conf",
+                "[main]\ngpgcheck=1\npkg_gpgcheck=1\nrepo_gpgcheck=1\n")
+            self.assertEqual(
+                self.module.main_section_security_errors([path], "dnf5 [main] config"), [])
+
+    def test_pkg_gpgcheck_zero_in_main_not_masked_by_gpgcheck_one(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._write_conf(
+                Path(tmp), "10-base.conf", "[main]\ngpgcheck=1\npkg_gpgcheck=0\n")
+            errors = self.module.main_section_security_errors([path], "dnf5 [main] config")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("pkg_gpgcheck=0", errors[0])
+
+    def test_later_file_alias_wins_for_effective_gpgcheck(self) -> None:
+        """A later pkg_gpgcheck=1 re-enables an earlier gpgcheck=0 (aliases share one option)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            early = self._write_conf(directory, "00-base.conf", "[main]\ngpgcheck=0\n")
+            late = self._write_conf(directory, "99-late.conf", "[main]\npkg_gpgcheck=1\n")
+            errors = self.module.main_section_security_errors([early, late], "dnf5 [main] config")
+        self.assertEqual(errors, [])
+
+    def test_missing_file_is_clean(self) -> None:
+        """A config file that does not exist contributes no options."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            missing = directory / "does-not-exist.conf"
+            self.assertEqual(
+                self.module.main_section_security_errors([missing], "dnf5 [main] config"),
+                [],
+            )
+
+
 class OnImageRepoAllowlistTests(unittest.TestCase):
-    """The on-image run scans dnf5's default reposdir paths (#454, #513).
+    """The on-image run scans dnf5's default reposdir paths and override dirs (#454, #513, #524).
 
     `--check` already enforces the repository allowlist against the source
     repo files in `packages/`. The Hummingbird base image ships its own repo
@@ -1423,7 +1805,13 @@ class OnImageRepoAllowlistTests(unittest.TestCase):
     runtime repo set passes, an enabled Fedora or unapproved repo fails, a
     disabled repo is skipped, and a repo the base ships in a default reposdir
     other than /etc/yum.repos.d (that is, /etc/distro.repos.d or
-    /usr/share/dnf5/repos.d) is gated just the same (#513).
+    /usr/share/dnf5/repos.d) is gated just the same (#513). The two dnf5
+    repo-override drop-in dirs (/etc/dnf/repos.override.d and
+    /usr/share/dnf5/repos.override.d) are scanned unconditionally, so a repo the
+    base enables there -- including one it left disabled in a reposdir -- is
+    gated too (#524). A drop-in is partial by design, so an allowlisted repo
+    overridden with enabled=0 and no baseurl= passes, while one that sets a
+    baseurl is still pinned.
     """
 
     def setUp(self) -> None:
@@ -1431,10 +1819,12 @@ class OnImageRepoAllowlistTests(unittest.TestCase):
 
     def run_main(self, manifest: Path, overlay: Path, installed: set[str],
                  runtime_repos_dirs: "Path | list[Path]",
+                 override_repos_dirs: "Path | list[Path] | None" = None,
                  flavor: str = "main") -> tuple[int, str, str]:
         return run_main(
             self.module, manifest, overlay, installed,
             flavor=flavor, runtime_repos_dirs=runtime_repos_dirs,
+            override_repos_dirs=override_repos_dirs,
             stderr_buffer=io.StringIO(),
         )
 
@@ -1743,6 +2133,407 @@ class OnImageRepoAllowlistTests(unittest.TestCase):
             )
         self.assertEqual(code, 1)
         self.assertIn("ERROR: could not parse dnf5 config /etc/dnf/dnf.conf", err)
+
+    def test_a_global_proxy_in_main_fails_the_gate(self) -> None:
+        """A proxy= in the resolved [main] fails the gate even for a clean runtime repo set."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(
+                directory,
+                gnome=["gnome-shell"],
+                repositories=[
+                    "public-hummingbird-x86_64-rpms",
+                    "utah-packages",
+                    "nvidia-container-toolkit",
+                ],
+                baseurls={
+                    "public-hummingbird-x86_64-rpms":
+                        "https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
+                    "utah-packages": "file:///etc/utah-packages",
+                    "nvidia-container-toolkit":
+                        "https://nvidia.github.io/libnvidia-container/stable/rpm/$basearch",
+                },
+            )
+            runtime_repos = directory / "runtime-yum-repos"
+            write_repo_file(
+                runtime_repos, "public-hummingbird-x86_64-rpms",
+                baseurl="https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
+            )
+            write_repo_file(
+                runtime_repos, "utah-packages",
+                baseurl="file:///etc/utah-packages",
+            )
+            write_repo_file(
+                runtime_repos, "nvidia-container-toolkit",
+                baseurl="https://nvidia.github.io/libnvidia-container/stable/rpm/$basearch",
+                enabled="0",
+            )
+            dnf_main = directory / "dnf.conf"
+            dnf_main.write_text("[main]\nproxy=http://localhost:3128\n")
+            with patch.object(self.module, "dnf5_config_files",
+                              return_value=[dnf_main]), \
+                 patch.object(self.module, "is_installed",
+                              side_effect=lambda p: p in {"bash", "gnome-shell"}):
+                code, _, stderr = self.run_main(
+                    manifest, overlay, {"bash", "gnome-shell"}, runtime_repos,
+                )
+        self.assertEqual(code, 1)
+        self.assertIn("[main] in dnf5 [main] config sets proxy=http://localhost:3128", stderr)
+
+    def test_a_global_sslverify_zero_in_main_fails_the_gate(self) -> None:
+        """An sslverify=0 in the resolved [main] fails the gate even for a clean runtime repo set."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(
+                directory,
+                gnome=["gnome-shell"],
+                repositories=[
+                    "public-hummingbird-x86_64-rpms",
+                    "utah-packages",
+                    "nvidia-container-toolkit",
+                ],
+                baseurls={
+                    "public-hummingbird-x86_64-rpms":
+                        "https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
+                    "utah-packages": "file:///etc/utah-packages",
+                    "nvidia-container-toolkit":
+                        "https://nvidia.github.io/libnvidia-container/stable/rpm/$basearch",
+                },
+            )
+            runtime_repos = directory / "runtime-yum-repos"
+            write_repo_file(
+                runtime_repos, "public-hummingbird-x86_64-rpms",
+                baseurl="https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
+            )
+            write_repo_file(
+                runtime_repos, "utah-packages",
+                baseurl="file:///etc/utah-packages",
+            )
+            write_repo_file(
+                runtime_repos, "nvidia-container-toolkit",
+                baseurl="https://nvidia.github.io/libnvidia-container/stable/rpm/$basearch",
+                enabled="0",
+            )
+            dnf_main = directory / "dnf.conf"
+            dnf_main.write_text("[main]\nsslverify=0\n")
+            with patch.object(self.module, "dnf5_config_files",
+                              return_value=[dnf_main]), \
+                 patch.object(self.module, "is_installed",
+                              side_effect=lambda p: p in {"bash", "gnome-shell"}):
+                code, _, stderr = self.run_main(
+                    manifest, overlay, {"bash", "gnome-shell"}, runtime_repos,
+                )
+        self.assertEqual(code, 1)
+        self.assertIn("[main] in dnf5 [main] config sets sslverify=0", stderr)
+
+
+    def test_a_partial_override_with_no_baseurl_passes(self) -> None:
+        """A repo-override drop-in that only sets enabled=0 on an allowlisted id passes.
+
+        This is the case hanthor asked for: the base ships `utah-packages` and
+        disables it with a partial [utah-packages] override (no baseurl=). A
+        partial override is not a fresh pin, so the gate must not reject it for a
+        missing baseurl (#524).
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(
+                directory,
+                gnome=["gnome-shell"],
+                repositories=["public-hummingbird-x86_64-rpms", "utah-packages"],
+                baseurls={
+                    "public-hummingbird-x86_64-rpms":
+                        "https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
+                    "utah-packages":
+                        "https://packages.redhat.com/api/pulp-content/utah-packages/x86_64/",
+                },
+            )
+            runtime_repos = directory / "runtime-yum-repos"
+            write_repo_file(
+                runtime_repos, "public-hummingbird-x86_64-rpms",
+                baseurl="https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
+            )
+            write_repo_file(
+                runtime_repos, "utah-packages",
+                baseurl="https://packages.redhat.com/api/pulp-content/utah-packages/x86_64/",
+                enabled="0",
+            )
+            override_dir = directory / "dnf-repos-override.d"
+            write_repo_file(override_dir, "utah-packages", enabled="0")
+            code, _, err = self.run_main(
+                manifest, overlay, {"bash", "gnome-shell"},
+                runtime_repos, override_repos_dirs=override_dir,
+            )
+        self.assertEqual(code, 0, err)
+
+    def test_an_unapproved_repo_in_the_override_dir_fails(self) -> None:
+        """An unapproved repo id enabled by an override drop-in fails the allowlist."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(directory, gnome=["gnome-shell"])
+            runtime_repos = directory / "runtime-yum-repos"
+            write_repo_file(
+                runtime_repos, "public-hummingbird-x86_64-rpms",
+                baseurl="https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
+            )
+            override_dir = directory / "dnf-repos-override.d"
+            write_repo_file(
+                override_dir, "third-party",
+                baseurl="https://third-party.example.com/$basearch",
+            )
+            code, _, err = self.run_main(
+                manifest, overlay, {"bash", "gnome-shell"},
+                runtime_repos, override_repos_dirs=override_dir,
+            )
+        self.assertEqual(code, 1)
+        self.assertIn("Unapproved repository 'third-party' is enabled", err)
+
+    def test_a_fedora_repo_in_the_override_dir_fails(self) -> None:
+        """A Fedora repo id enabled by an override drop-in fails the gate."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(directory, gnome=["gnome-shell"])
+            runtime_repos = directory / "runtime-yum-repos"
+            write_repo_file(
+                runtime_repos, "public-hummingbird-x86_64-rpms",
+                baseurl="https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
+            )
+            override_dir = directory / "dnf-repos-override.d"
+            write_repo_file(
+                override_dir, "fedora",
+                baseurl="https://mirror.example.com/fedora/$basearch/",
+            )
+            code, _, err = self.run_main(
+                manifest, overlay, {"bash", "gnome-shell"},
+                runtime_repos, override_repos_dirs=override_dir,
+            )
+        self.assertEqual(code, 1)
+        self.assertIn("Fedora repository 'fedora' is enabled", err)
+
+    def test_an_override_that_reenables_a_disabled_repo_fails(self) -> None:
+        """The core #524 gap: an override re-enabling a repo the reposdir scan saw disabled is gated."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(
+                directory,
+                gnome=["gnome-shell"],
+                repositories=["public-hummingbird-x86_64-rpms", "utah-packages"],
+                baseurls={
+                    "public-hummingbird-x86_64-rpms":
+                        "https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
+                    "utah-packages":
+                        "https://packages.redhat.com/api/pulp-content/utah-packages/x86_64/",
+                },
+            )
+            runtime_repos = directory / "runtime-yum-repos"
+            write_repo_file(
+                runtime_repos, "public-hummingbird-x86_64-rpms",
+                baseurl="https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
+            )
+            # The base ships utah-packages but leaves it disabled in a reposdir.
+            write_repo_file(
+                runtime_repos, "utah-packages",
+                baseurl="https://packages.redhat.com/api/pulp-content/utah-packages/x86_64/",
+                enabled="0",
+            )
+            # A drop-in re-enables it with a different (unpinned) baseurl. The
+            # reposdir scan skips the disabled repo; only the override scan sees
+            # it enabled, and because it sets a baseurl it is pinned like any
+            # other enabled repo (#524).
+            override_dir = directory / "dnf-repos-override.d"
+            write_repo_file(
+                override_dir, "utah-packages",
+                baseurl="https://mirror.example.com/utah-packages/$basearch/",
+                enabled="1",
+            )
+            code, _, err = self.run_main(
+                manifest, overlay, {"bash", "gnome-shell"},
+                runtime_repos, override_repos_dirs=override_dir,
+            )
+        self.assertEqual(code, 1)
+        self.assertIn("utah-packages", err)
+
+    def test_a_partial_override_that_sets_a_baseurl_is_pinned(self) -> None:
+        """A drop-in that sets a baseurl is still pinned, even though it is an override."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(
+                directory,
+                gnome=["gnome-shell"],
+                repositories=["public-hummingbird-x86_64-rpms", "utah-packages"],
+                baseurls={
+                    "public-hummingbird-x86_64-rpms":
+                        "https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
+                    "utah-packages":
+                        "https://packages.redhat.com/api/pulp-content/utah-packages/x86_64/",
+                },
+            )
+            runtime_repos = directory / "runtime-yum-repos"
+            write_repo_file(
+                runtime_repos, "public-hummingbird-x86_64-rpms",
+                baseurl="https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
+            )
+            write_repo_file(
+                runtime_repos, "utah-packages",
+                baseurl="https://packages.redhat.com/api/pulp-content/utah-packages/x86_64/",
+            )
+            # The override sets a baseurl, so it is a pin, not a partial drop-in:
+            # an unpinned baseurl fails even though is_override=True.
+            override_dir = directory / "dnf-repos-override.d"
+            write_repo_file(
+                override_dir, "utah-packages",
+                baseurl="https://mirror.example.com/utah-packages/$basearch/",
+            )
+            code, _, err = self.run_main(
+                manifest, overlay, {"bash", "gnome-shell"},
+                runtime_repos, override_repos_dirs=override_dir,
+            )
+        self.assertEqual(code, 1)
+        self.assertIn("utah-packages", err)
+
+    def test_override_scan_runs_when_reposdir_is_empty(self) -> None:
+        """The override scan is unconditional: a reposdir= list that omits it still catches an override repo (#536)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(directory, gnome=["gnome-shell"])
+            # Simulate an image that set reposdir= to a path that does not exist
+            # here, so the runtime scan has nothing to scan.
+            runtime_repos = directory / "no-such-reposdir"
+            override_dir = directory / "dnf-repos-override.d"
+            write_repo_file(
+                override_dir, "third-party",
+                baseurl="https://third-party.example.com/$basearch",
+            )
+            code, _, err = self.run_main(
+                manifest, overlay, {"bash", "gnome-shell"},
+                runtime_repos, override_repos_dirs=override_dir,
+            )
+        self.assertEqual(code, 1)
+        self.assertIn("Unapproved repository 'third-party' is enabled", err)
+
+    def run_override(self, override_text: str) -> tuple[int, str]:
+        """Run the gate with a pinned allowlisted utah-packages and one override drop-in."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(
+                directory,
+                gnome=["gnome-shell"],
+                repositories=["public-hummingbird-x86_64-rpms", "utah-packages"],
+                baseurls={
+                    "public-hummingbird-x86_64-rpms":
+                        "https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
+                    "utah-packages":
+                        "https://packages.redhat.com/api/pulp-content/utah-packages/x86_64/",
+                },
+            )
+            runtime_repos = directory / "runtime-yum-repos"
+            write_repo_file(
+                runtime_repos, "public-hummingbird-x86_64-rpms",
+                baseurl="https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
+            )
+            write_repo_file(
+                runtime_repos, "utah-packages",
+                baseurl="https://packages.redhat.com/api/pulp-content/utah-packages/x86_64/",
+            )
+            override_dir = directory / "dnf-repos-override.d"
+            override_dir.mkdir()
+            (override_dir / "override.repo").write_text(override_text)
+            code, _, err = self.run_main(
+                manifest, overlay, {"bash", "gnome-shell"},
+                runtime_repos, override_repos_dirs=override_dir,
+            )
+        return code, err
+
+    def test_a_metalink_only_override_of_an_allowlisted_repo_fails(self) -> None:
+        """A drop-in adding metalink= with no baseurl= is a redirect, not a partial override (#524)."""
+        code, err = self.run_override(
+            "[utah-packages]\nmetalink=https://attacker.example.com/metalink\n"
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("resolves via metalink", err)
+
+    def test_a_mirrorlist_only_override_of_an_allowlisted_repo_fails(self) -> None:
+        """A drop-in adding mirrorlist= with no baseurl= is pinned and fails (#524)."""
+        code, err = self.run_override(
+            "[utah-packages]\nmirrorlist=https://attacker.example.com/mirrors\n"
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("resolves via mirrorlist", err)
+
+    def test_a_priority_only_override_of_an_unapproved_repo_passes(self) -> None:
+        """A priority-only drop-in never enables a repo, so its id is not gated (#524)."""
+        code, err = self.run_override("[rhel-9-baseos]\npriority=10\n")
+        self.assertEqual(code, 0, err)
+
+    def test_a_priority_only_override_that_sets_a_proxy_fails(self) -> None:
+        """A partial override without enabled= still cannot weaken a repo with proxy=."""
+        code, err = self.run_override(
+            "[utah-packages]\npriority=10\nproxy=http://attacker.example.com:3128\n"
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("proxy=", err)
+
+    def test_a_priority_only_override_of_an_unapproved_repo_names_it_as_an_override(self) -> None:
+        """A non-allowlisted partial override is not reported as an enabled allowlisted repo."""
+        code, err = self.run_override("[third-party]\npriority=10\nsslverify=0\n")
+        self.assertEqual(code, 1)
+        self.assertIn("Repository override 'third-party'", err)
+        self.assertIn("sslverify=0", err)
+        self.assertNotIn("Allowlisted repository 'third-party'", err)
+
+    def test_an_enable_only_override_of_an_unapproved_repo_fails(self) -> None:
+        """The core #524 gap: enabled=1 with no origin key re-enables an unapproved id."""
+        code, err = self.run_override("[third-party]\nenabled=1\n")
+        self.assertEqual(code, 1)
+        self.assertIn("Unapproved repository 'third-party' is enabled", err)
+
+    def test_an_enable_only_override_of_an_allowlisted_repo_passes(self) -> None:
+        """enabled=1 with no origin key on an allowlisted id is a partial override, not a pin."""
+        code, err = self.run_override("[utah-packages]\nenabled=1\n")
+        self.assertEqual(code, 0, err)
+
+    def test_a_wildcard_priority_override_passes(self) -> None:
+        """libdnf5 matches override section names as globs; [*] priority=99 is legitimate (#524)."""
+        code, err = self.run_override("[*]\npriority=99\n")
+        self.assertEqual(code, 0, err)
+
+    def test_a_wildcard_disable_override_passes(self) -> None:
+        """A glob override that only disables repos cannot widen the allowlist."""
+        code, err = self.run_override("[fedora*]\nenabled=0\n")
+        self.assertEqual(code, 0, err)
+
+    def test_a_wildcard_override_that_enables_repos_fails(self) -> None:
+        """A glob override setting enabled=1 could turn on unapproved disabled repos."""
+        code, err = self.run_override("[*]\nenabled=1\n")
+        self.assertEqual(code, 1)
+        self.assertIn("Wildcard repository override '*'", err)
+        self.assertIn("enabled=1", err)
+
+    def test_a_wildcard_override_that_sets_an_origin_fails(self) -> None:
+        """A glob override setting baseurl=/metalink= would reroute every matching repo."""
+        for key in ("baseurl", "metalink", "mirrorlist"):
+            with self.subTest(key=key):
+                code, err = self.run_override(
+                    f"[utah-*]\n{key}=https://attacker.example.com/x\n"
+                )
+                self.assertEqual(code, 1)
+                self.assertIn("Wildcard repository override 'utah-*'", err)
+
+    def test_a_wildcard_override_that_sets_a_proxy_fails(self) -> None:
+        """A glob override cannot weaken matching allowlisted repos with proxy=."""
+        code, err = self.run_override("[*]\nproxy=http://attacker.example.com:3128\n")
+        self.assertEqual(code, 1)
+        self.assertIn("Wildcard repository override '*'", err)
+        self.assertIn("proxy=", err)
 
 
 class UsageTests(unittest.TestCase):

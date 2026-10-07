@@ -1,7 +1,7 @@
 ---
 name: local-testing
 version: "1.0"
-last_updated: "2026-09-23"
+last_updated: "2026-10-04"
 id: local-testing
 one_line_purpose: Build, install, and boot Utah locally in a VM or live ISO.
 entry_point: docs/skills/local-testing.md
@@ -207,6 +207,23 @@ Production live boot entries configure:
   pipelines, but currently module signing is not implemented in-tree and Secure
   Boot must remain disabled.
 
+The Flatpak list both ISO bakes install comes from
+`scripts/verify-desktop-contract.py --flatpaks` (the single Brewfile parser;
+the desktop contract owns it). The ISO stages are FROM the shipped image,
+which strips build-time scripts, and the `iso/live/` build context cannot
+reach repo-root `scripts/` -- so both build scripts stage the parser into
+`iso/live/src/` (removed by trap afterwards) and both Containerfiles ship it
+persistently at `/usr/local/libexec/utah-verify-desktop-contract`, which is
+also what puts it on the live guest. Never reference the parser by bare name
+on the guest: the overlay is not on the default PATH.
+
+That installed path is live-only. `/usr/local` is the admin's domain, not
+image content, so a bootc deployment never carries `/usr/local/libexec` --
+calling the verifier there on an installed system fails with exit 127.
+`luks-e2e.sh` copies `scripts/verify-desktop-contract.py` to the target over
+`scp_target` and runs it with the target's `python3` instead (stdlib-only,
+so no target dependencies).
+
 `iso/live/src/install-flatpaks.sh` pins the bootc-installer Flatpak bundle to
 a specific `tuna-os/bootc-installer` release rather than resolving
 `/releases/latest/download/` the way dakota-iso does: the bundle installs
@@ -353,6 +370,52 @@ baseline digest.
 Phase-keyed diagnostics (`evidence/lifecycle-*.json`, `lifecycle-summary.json`)
 and screendumps identify the active deployment and digest at every phase.
 
+After each lifecycle phase the harness also captures the BLS Type #1
+entries under the Fedora/bootc layout's BLS root `/boot/loader/entries/`
+(ostree writes them here per the sysroot deploy) and any
+`/boot/efi/loader/entries/` if present, then runs `validate-bootmgr`
+against them.
+This is the surface that an `ostree-finalize-staged` regression could
+silently leave behind: `bootc status` would still report the new
+deployment as queued, but the boot manager would have no entry to chain
+to it and the next reboot would boot the old kernel set. The validator
+parses the `ostree=/ostree/boot.N/<stateroot>/<bootcsum>/<serial>` path
+from each BLS entry's `options` line, groups both the expected
+deployments and the captured entries by their `(stateroot,
+deploy_serial)` tuple, and requires the count of entries in each group
+to be at least the count of deployments. A purely-by-serial match would
+let one BLS entry satisfy two deployments (ostree allocates
+`deployserial` per `(osname, commit)`, so two commits with no prior
+deployment at that commit both receive serial 0) and silently miss a
+missing-entry regression; the count check forces a failure in that
+case. The `<bootcsum>` segment in the path is the kernel+initramfs
+layout hash (ostree's `ostree_deployment_get_bootcsum`), NOT the
+commit checksum the deployment exposes as `ostree.checksum`, and is
+intentionally not used as a match key -- bootc's `BootEntryOstree`
+JSON does not expose it. Phase 3 (post-upgrade) and phase 4
+(post-rollback) both check the `booted` and `rollback` slots so a
+missing entry for the non-booted slot is caught even though the guest
+necessarily booted from the `booted` entry that already exists. The
+validator then confirms each matched entry carries a `linux` line and
+at least one of `initrd` or `options`. Evidence is written to
+`evidence/loader-entries-<phase>.txt` (the raw BLS listing) and
+`evidence/bootmgr-<phase>.json` (which slot matched which entry,
+which slots had no entry, and any entries whose `ostree=` karg did not
+parse).
+
+Each phase also runs `iso/scripts/verify-boot-files.sh` as root in the guest
+and saves `evidence/boot-files-<phase>.txt`. For every published OSTree BLS
+Type #1 entry, `linux` and every repeated `initrd` directive must reference a
+nonempty regular file on the **same ESP/XBOOTLDR filesystem as the entry**.
+A BLS `/ostree/...` path is partition-relative, not relative to the guest's
+`/` or the harness host; do not satisfy it from a different mounted partition.
+Missing directives, missing files, and an empty entry set fail the phase.
+The staged phase checks only already published entries: the pending deployment's
+entry/files are published during shutdown finalization and checked after reboot.
+This file gate complements deployment-to-entry matching (issue #361 / PR #571);
+it does not itself prove which deployment an entry represents. Fixture tests
+run the same guest checker via `python3 -m unittest discover -s tests -p test_boot_files.py`.
+
 The baseline image (default `ghcr.io/projectbluefin/utah:testing`, the target
 ref `just iso testing` builds with) is the ref a live ISO installs its offline
 payload under, and phase 1 fails unless the booted deployment tracks it. The
@@ -415,3 +478,6 @@ just boot-vm     # success: GDM appears and GNOME Shell renders in noVNC
 just iso testing
 just boot-iso    # success: live session renders; serial shows UTAH_LIVE_READY
 ```
+
+See [gaming kernel selection](local-testing/references/gaming-kernel-selection.md)
+for the shared bootc, live-initramfs and ISO kernel layout.

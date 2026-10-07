@@ -80,23 +80,48 @@ contract (recorded in `baselines/bluefin/rpms.tsv` and triaged in
 a dumping ground for packages that are merely inconvenient (header comment,
 `packages/utah.toml`).
 
-## multimedia_overrides are not missing packages
+## Media packages and codec parity
 
-Bluefin's `[multimedia_overrides]` (twelve names: mesa-libGL,
-mesa-vulkan-drivers, libva, intel-mediasdk, libheif and friends) are **not**
-extra packages. They are the same names Fedora already ships, which Bluefin
-*replaces* with negativo17 builds by enabling `fedora-multimedia`. Utah does
-not enable that repository, so it installs Fedora's builds instead. Nothing
-is absent from the image; what differs is which build it carries, and the
-practical consequence is hardware-accelerated codec support.
+Bluefin's `[multimedia_overrides]` selects replacement builds from negativo17;
+Utah does not enable that repository or consume that section wholesale.
+Do not infer that Hummingbird installs a name just because it appears there.
+The Intel VA-API driver (`libva-intel-media-driver`, providing
+`iHD_drv_video.so`) and `intel-gmmlib` must be requested in Utah's `[parity]`.
+It also requests `intel-mediasdk` and `intel-vpl-gpu-rt` for the two Intel
+runtime generations (#383). Those four are the only `[multimedia_overrides]`
+names Utah requests; the other eight (`libheif`, `libva`, and the six `mesa-*`
+names) are not requested by name. Their origin is whatever the transaction
+resolves: the factory publishes `libva`, and `libva-intel-media-driver` may
+pull it in, so read the resolved origin from the build's
+`/usr/share/utah/package-origins.txt` rather than assuming Fedora's build.
+Utah also requests `libvpl`, which is not an overrides name but a dependency
+of `intel-vpl-gpu-rt`, so the media request is five packages in total.
 
-That is why they are absent from the contract rather than listed under
-`[unavailable]`: recording them as missing would be wrong (a source does
-provide the name), and recording them as satisfied would hide a real
-functional difference. The factory already builds several of them in
-projectbluefin/hummingbird-github; when that overlay is published and enabled
-here, these can move into the contract as a version assertion rather than a
-name one (header comment, `packages/utah.toml`).
+`gstreamer1-plugins-bad-free` and `totem-pl-parser` are published package
+names but are omitted from the install request because their dependency
+closures are unsatisfied in the pinned factory inputs: bad-free needs
+`libSoundTouch.so.2`, `libfaad.so.2`, `libopenal.so.1`, and `libsrtp2.so.1`,
+and Totem needs `libuchardet.so.0`. Factory builds of `soundtouch`, `faad2`,
+`openal-soft`, `libsrtp`, and `uchardet` are prerequisites, tracked by #383.
+These are not absent package names or flaky repository failures; do not add
+them to `[unavailable]` or count them as installed. The pin stays unchanged.
+After closure publication, require `just check-repos` against the reviewed
+pinned inputs before restoring either request.
+
+Package installation does not prove codec functionality. On Intel hardware,
+run `vainfo` against the render device and confirm the iHD driver loads and
+advertises the expected decode profiles. Inspect `avdec_h264`, `openh264dec`,
+and `vah264dec` with `gst-inspect-1.0`, then test a known H.264 sample.
+The audit pin published `gstreamer1-plugin-openh264` but only `noopenh264`;
+resolving that library dependency is not proof of a working decoder.
+
+Remaining #383 gaps at the audit: `gstreamer1-plugin-libav`,
+`gstreamer1-plugins-ugly-free`, `gstreamer1-plugin-dav1d`,
+`papers-thumbnailer`, `gnome-epub-thumbnailer`, `ffmpegthumbnailer`, and
+`gst-thumbnailers`. Consume them only after factory builds and dependency
+closures resolve against Utah's pinned inputs. `totem-pl-parser` is not a
+replacement for those thumbnailers. Full FFmpeg versus `ffmpeg-free` remains
+a maintainer policy decision; keep #383 open for hardware and codec proof.
 
 ## Repository policy
 
@@ -107,6 +132,30 @@ buildroot, not a source of installed packages (Containerfile package-RUN
 comment, `Containerfile` ~L168; repo files copied at `Containerfile` L59).
 `Containerfile.kernel`'s builder stage may use the pinned Fedora 44 repository
 (`packages/fedora-44.repo`) strictly as a builder-only toolchain.
+
+Every allowlisted repository is attested on two axes. Its **origin** is pinned
+in `[repositories.baseurls]`: `verify-rpm-contract.py` fails a build that
+enables an allowlisted repository with a different `baseurl`, a `metalink`/
+`mirrorlist` (which DNF merges with any `baseurl` the section declares), or no
+`baseurl` at all. Its **fetch integrity** is attested too: the same check
+rejects `proxy=`, `sslverify=0`, `gpgcheck=0` (or its libdnf5 alias
+`pkg_gpgcheck=0`), and `repo_gpgcheck=0` on an allowlisted repository (#345).
+`proxy` and `sslverify=0` reroute or blind the fetch and are never approved;
+`gpgcheck`/`repo_gpgcheck` disable RPM signature verification and are rejected
+unless the repository is named in `[repositories.security]` with the option it
+is approved to leave disabled (`gpgcheck` covers both `gpgcheck` and
+`pkg_gpgcheck`). A repository not named there may not explicitly disable
+signature verification (an omitted option falls back to the dnf5 default and
+is not rejected). The same options set to a disabled value in the resolved dnf5
+`[main]` configuration are always rejected, since they apply to every
+repository and no per-repository approval covers them. A
+`[repositories.security]` entry for a repository not in `[repositories.allowed]`
+is rejected as approving nothing, as is any listed option other than
+`gpgcheck` or `repo_gpgcheck`. The two documented exceptions are
+`utah-packages` (RPMs are authenticated by the pinned package image and its OCI
+provenance, not an RPM GPG key, so both signature checks are disabled) and
+`nvidia-container-toolkit` (NVIDIA signs only its repomd.xml, so only package
+signature verification is disabled).
 
 The install-source identity is single-sourced in `packages/*.repo`. Each repository
 participating in the package install transaction carries a `# utah-install: true`
@@ -130,9 +179,9 @@ than from the repository contents living in the image.
 The allowlist also runs **on-image**, against the composed image's runtime RPM
 repositories, not just the source files in `packages/`. `verify-rpm-contract.py`
 scans every `reposdir` dnf5 resolves at runtime, not a hardcoded list of
-defaults (#454, #513, #536). Repository override directories
-(`/etc/dnf/repos.override.d`) are not covered here; they are tracked
-separately (#527).
+defaults (#454, #513, #536). It also scans dnf5's repository override
+directories, `/etc/dnf/repos.override.d` and
+`/usr/share/dnf5/repos.override.d` (#524).
 
 - The `reposdir=` option in `/usr/share/dnf5/libdnf.conf.d/*.conf`,
   `/etc/dnf/libdnf5.conf.d/*.conf`, or `/etc/dnf/dnf.conf` replaces the
@@ -148,6 +197,36 @@ separately (#527).
   base ships in `/etc/distro.repos.d` or `/usr/share/dnf5/repos.d` is enabled
   at runtime exactly as one in `/etc/yum.repos.d`, so scanning only the
   first would leave it invisible to the gate (#513).
+- A `proxy=` or `sslverify=0` in the resolved `[main]` section of the same dnf5
+  configs applies to every allowlisted repository, so the gate resolves
+  `[main]` the same way (later file wins, an empty `proxy=` clears an earlier
+  one) and fails if the effective value sets a proxy or disables TLS
+  verification (#352).
+- The override drop-in dirs are scanned **unconditionally**, as a separate loop
+  never folded into the `reposdir=`-derived list (#524). dnf5 reads them as
+  fixed constants -- a base image setting `reposdir=` does not add or remove
+  them (#536) -- so the gate scans them regardless of the runtime list; an
+  image that points `reposdir=` elsewhere still gets override coverage instead
+  of silently dropping it. A `.repo` override drop-in is partial by design: a
+  `[id]` section may set only `enabled=`/`priority=` with no `baseurl=` (that is
+  how the base disables a repo it ships), so the gate validates such a partial
+  override only for the keys it sets -- allowlist membership and the
+  `proxy=`/`sslverify=`/`gpgcheck=`/`pkg_gpgcheck=`/`repo_gpgcheck=` security
+  options -- but never rejects it for a missing `baseurl=`. A partial override
+  that leaves `enabled=` unset (for example `priority=` only) does not enable
+  the repo, so it passes for any id unless it sets a `proxy=` or disables
+  `sslverify=` or an unapproved signature check (`gpgcheck=`, `pkg_gpgcheck=`,
+  `repo_gpgcheck=`). A drop-in that sets any origin key (`baseurl=`, `metalink=` or
+  `mirrorlist=`) is pinned like any other enabled repo, so a `metalink=` or
+  `mirrorlist=` redirect fails the gate.
+- dnf5 matches override section names against repo ids as **globs**, so a
+  `[*]` or `[utah-*]` section applies to every matching repo. The gate cannot
+  enumerate those matches, so a wildcard override passes only when it cannot
+  widen the allowlist: it sets no origin key, does not set `enabled=` to a
+  true value, sets no `proxy=`, and disables neither `sslverify=` nor any
+  signature check (`gpgcheck=`, `pkg_gpgcheck=`, `repo_gpgcheck=`; no
+  `[repositories.security]` approval applies to a glob). A `[*]` drop-in
+  that sets only `priority=` or `enabled=0` passes.
 
 ## Printing and scanning gaps
 
@@ -246,10 +325,32 @@ releases or emit missing-module errors with empty kernel names.
 `packages/bluefin.toml` is synchronized with. The reference exists so Utah's
 parity gate tests against a known revision rather than moving with Bluefin's
 default branch, preventing unrelated upstream changes from breaking Utah's CI.
-Update it whenever synchronizing `packages/bluefin.toml` with upstream.
+
+`.github/workflows/update-bluefin-parity.yml` moves it: nightly it resolves
+Bluefin `main`, and when the upstream contract differs it opens or refreshes a
+single review PR on `automation/bluefin-parity` carrying the new
+`packages/bluefin.toml`, the new SHA here, and the regenerated counts. It never
+auto-merges. Editing the reference by hand is only needed when synchronizing
+`packages/bluefin.toml` outside that workflow.
+
+The bump PR does not refresh `baselines/audit-baseline.json`: the audit is
+local-only (it resolves names against the pinned factory repository), so the
+workflow cannot run it. After merging a bump, run
+`just audit-bluefin-parity --write` locally and commit the refreshed baseline;
+until then `just check-audit-parity` reports a stale baseline because the
+recorded `ref` no longer matches `packages/.bluefin-parity-ref`. The bump PR
+body repeats this reminder.
+
+**Do not commit overlay fixes to `automation/bluefin-parity`.** That branch is
+disposable: `create-pull-request` rebuilds it from `main` plus the generated
+working-tree changes on every run and force-resets it whenever the result
+differs, so a `packages/utah.toml` fix pushed onto the open bump PR is
+discarded at the next nightly run while upstream still differs from `main`.
+Raise the overlay change as its own pull request against `main`; the bump PR
+then picks the fix up on its next rebuild.
 
 Current counts, per the README "Package parity" section: 61 Bluefin contract
-packages installed, 108 Utah additions (GNOME 51, base-image parity, device
+packages installed, 113 Utah additions (GNOME 51, base-image parity, device
 firmware, desktop services), 8 genuinely unavailable. `scripts/check-doc-counts.py` (part of
 `just check`) recomputes these from the manifests and fails if either
 document drifts from `site/data/packages.json`.
@@ -381,48 +482,6 @@ python3 scripts/check-doc-counts.py
 
 ## Runtime ujust dependencies
 
-Common's `00-entry.just` imports `60-custom.just` after the shared recipes
-with duplicate recipes enabled, but earlier imports win at equal depth.
-The Containerfile preserves Common's entry point as `00-common.just` before
-installing Utah's local overlay. Utah's `00-entry.just` imports that file and
-`60-custom.just` at the same depth, so Utah's custom recipes are shallower
-than Common's defaults and take precedence. Common still supplies the default
-command and unrelated recipes. Keep these overrides small and test them through
-`just`, including import precedence, when changing Common's pin or runtime
-dependencies. The required Common import deliberately fails if composition
-forgets to preserve the original entry point.
-
-For #394, `device-info` prints a local report when `fpaste` is missing and
-only uploads after confirmation when it is available. Its temporary report is
-private and removed on exit. `changelogs` keeps Common's image/repository
-selection but prints Markdown directly when `glow` is absent; HTTP and parsing
-errors must remain failures. Enrollment reports the unsupported capability
-without running `sudo` or `mokutil`: Utah has no module-signing certificate,
-and shipping one without signing the modules would not fix Secure Boot.
-Signing and enrollment remain tracked by #395. Common's guarded
-`check-idle-power-draw` stays unchanged until the factory supplies `powerstat`.
-These fallbacks do not add packages or enable Fedora runtime repositories.
-
-For #446, `report` overrides Common's `bonedigger-report` recipe so bug
-reports route to `projectbluefin/utah` instead of falling through Common's
-`ublue-image-repo` grammar. The override sets
-`UBLUE_IMAGE_REPO_BIN=/usr/local/libexec/utah-image-repo`; that Utah-local
-shim short-circuits every `utah*` name to `projectbluefin/utah` and forwards
-every other name to Common's authoritative resolver (so non-Utah images
-inheriting from this image still resolve correctly). The shim itself is
-installed by `Containerfile` from `scripts/image-repo.sh` (alongside the
-other `utah-*` helpers, under the same `<name>.sh` -> `utah-<name>`
-rename) and listed in `just check`'s presence assertion. Its option
-loop mirrors Common's exactly — `--` and the first non-option both end
-option parsing — and the remaining positionals are forwarded verbatim,
-so an empty `IMAGE_NAME` keeps its slot instead of promoting
-`IMAGE_TAG` into it.
-
-Two deliberate differences from Common's `report` recipe: the override sets
-`BONEDIGGER_BRAND="🐦 Utah Bug Report"` so the prompt names Utah rather than
-Bluefin, and it does not forward Common's `BONEDIGGER_VERSION` because
-`bonedigger-report` never reads that variable and it is not in scope for a
-Utah-local recipe. The `--list` description is kept on a single comment line
-immediately above `[group('System')]`; `just` uses only that line, so the
-explanatory block above it must stay separated by a blank line or `ujust
---list` would print an implementation-comment fragment instead.
+See [the runtime ujust dependency reference](package-contract/references/ujust.md)
+for provider checks and the retained audit baseline. Keep detailed inventories
+in references so policy additions stay within the skill size budget.

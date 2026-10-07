@@ -58,6 +58,9 @@ class UtahImageRepoTests(unittest.TestCase):
         self.upstream.chmod(0o755)
         self.calls = self.root / "upstream-calls"
         self.env = dict(os.environ, CALLS=str(self.calls))
+        # The shim falls back to $IMAGE_NAME when no positional is given, so a
+        # host-exported IMAGE_NAME must not leak into the fall-through tests.
+        self.env.pop("IMAGE_NAME", None)
 
     def shim_text(self) -> str:
         return SHIM.read_text().replace(
@@ -67,12 +70,13 @@ class UtahImageRepoTests(unittest.TestCase):
     def upstream_calls_text(self) -> str:
         return self.calls.read_text() if self.calls.exists() else ""
 
-    def run_shim(self, *args):
+    def run_shim(self, *args, env=None):
         # Spawn bash with the in-memory shim so the swap back to the real
-        # path does not leak into the on-disk script.
+        # path does not leak into the on-disk script. `env` adds overrides
+        # on top of the hermetic base environment.
         return subprocess.run(
             ["bash", "-c", self.shim_text(), "_", *args],
-            capture_output=True, text=True, env=self.env,
+            capture_output=True, text=True, env=dict(self.env, **(env or {})),
         )
 
     def test_routes_utah_to_projectbluefin_utah(self):
@@ -164,6 +168,39 @@ class UtahImageRepoTests(unittest.TestCase):
         self.assertIn("argc 4", self.upstream_calls_text())
         self.assertIn("upstream --default projectbluefin/common  lts-20260101\n",
                       self.upstream_calls_text())
+
+    def test_image_name_env_fallback_short_circuits_utah(self):
+        # Mirror common's IMAGE_NAME="${1-${IMAGE_NAME-}}" binding so the
+        # short-circuit fires for callers that supply the name via the
+        # environment rather than as a positional (projectbluefin/utah#465).
+        # Without this, the shim forwards to common with no positionals,
+        # common's IMAGE_NAME env fallback still routes utah* to its `*` arm,
+        # and the call returns --default instead of projectbluefin/utah.
+        result = self.run_shim(env={"IMAGE_NAME": "utah"})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "projectbluefin/utah")
+        self.assertEqual(self.upstream_calls_text(), "")
+
+    def test_image_name_env_fallback_short_circuits_utah_flavored(self):
+        # Same env fallback path, but with a flavored name. The shim's
+        # `utah*` glob catches utah-gaming the same way it catches utah.
+        result = self.run_shim(env={"IMAGE_NAME": "utah-gaming"})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "projectbluefin/utah")
+        self.assertEqual(self.upstream_calls_text(), "")
+
+    def test_positional_wins_over_image_name_env(self):
+        # common's binding is positional-first with env fallback, so an
+        # explicit positional must beat the env even when the env disagrees.
+        # This guarantees an IMAGE_NAME set in the caller's environment
+        # cannot override a name passed as a positional.
+        result = self.run_shim("--default", "projectbluefin/common",
+                               "bluefin", "testing",
+                               env={"IMAGE_NAME": "utah"})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "projectbluefin/common")
+        self.assertIn("upstream --default projectbluefin/common bluefin testing",
+                      self.calls.read_text())
 
     def test_double_dash_positionals_are_forwarded(self):
         # common ends option parsing on `--` and reads the rest as

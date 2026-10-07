@@ -34,10 +34,14 @@ WORK="$(mktemp -d "${UTAH_ISO_WORKDIR:-/var/tmp}/utah-iso.XXXXXX")"
 # unremovable, so a plain rm here fails with Permission denied on every one of
 # them -- leaving a ~13G tree behind and, because the trap is the last thing to
 # run, failing the whole recipe after the ISO was written successfully.
-cleanup_work() { podman unshare rm -rf "${WORK}" 2>/dev/null || rm -rf "${WORK}" 2>/dev/null || true; }
+cleanup_work() { podman unshare rm -rf "${WORK}" 2>/dev/null || rm -rf "${WORK}" 2>/dev/null || true; rm -f "${ROOT}/iso/live/src/utah-verify-desktop-contract.py"; }
 trap cleanup_work EXIT
 
 cd "${ROOT}"
+# The ISO build context is iso/live/, which cannot reach repo-root scripts/.
+# Stage the Flatpak parser into the context; the Containerfile ships it in the
+# overlay (persistent, so the live guest has it too), and the trap removes it.
+cp scripts/verify-desktop-contract.py iso/live/src/utah-verify-desktop-contract.py
 echo "Building live environment from ${IMAGE}"
 # flatpak installs through bwrap, which needs to create a user namespace inside
 # the build container; rootless podman refuses that without sys_admin, and the
@@ -71,7 +75,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-KERNEL="$(find "${MOUNT}/usr/lib/modules" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -V | tail -1)"
+KERNEL="$(python3 iso/scripts/live-kernel.py "${MOUNT}" --select-bootc)"
 [[ -n "${KERNEL}" ]] || { echo 'No kernel found in live image' >&2; exit 1; }
 VMLINUZ="$(python3 iso/scripts/live-kernel.py "${MOUNT}" "${KERNEL}")"
 INITRD="${MOUNT}/usr/lib/modules/${KERNEL}/initramfs.img"

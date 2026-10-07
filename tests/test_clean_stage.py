@@ -39,6 +39,9 @@ def build_tree(root: Path) -> None:
         (root / directory).mkdir(parents=True)
     (root / "var/log/dnf5.log").write_text("install transaction\n")
     (root / "var/lib/systemd").mkdir()
+    # /var/home must not survive clean-stage even though the shipped image
+    # carries it: the Containerfile creates it after clean-stage runs (#602).
+    (root / "var/home").mkdir()
 
     # /var/cache survives, but only rpm-ostree survives inside it.
     (root / "var/cache/rpm-ostree").mkdir(parents=True)
