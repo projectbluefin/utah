@@ -278,13 +278,15 @@ class EvidenceTests(unittest.TestCase):
         start = script.index('if [[ -n "${UTAH_E2E_FLATPAKS-x}" ]]; then')
         end = script.index("\nfi\n", script.index("present offline", start)) + len("\nfi\n")
         block = script[start:end]
+        refs_function = re.search(r"installed_flatpak_refs\(\) \{.*?\n\}", script, re.S)[0]
 
         def run(installed, flatpaks_env):
             harness = (
                 "sleep() { :; }\n"
-                "ssh_target() { [[ \"$1\" == *'flatpak list'* ]] && printf '%s\\n' \"$INSTALLED\"; }\n"
+                "flatpak() { if [[ \"$*\" == *--app* ]]; then printf '%s\\n' \"$INSTALLED\"; fi; }\n"
+                "ssh_target() { eval \"$1\"; }\n"
                 "fail() { echo \"FAIL: $*\" >&2; exit 1; }\n"
-                + block
+                + refs_function + "\n" + block
             )
             env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"),
                    "INSTALLED": installed, "UTAH_E2E_FLATPAKS": flatpaks_env}
@@ -294,6 +296,9 @@ class EvidenceTests(unittest.TestCase):
         complete = run("app/org.a/x86_64/stable\napp/org.b/x86_64/stable\napp/org.c/x86_64/stable", "org.a\norg.b")
         self.assertEqual(complete.returncode, 0, complete.stderr)
         self.assertIn("org.a, org.b", complete.stdout)
+
+        displayed = run("org.a/x86_64/stable\norg.b/x86_64/stable", "app/org.a/x86_64/stable\napp/org.b/x86_64/stable")
+        self.assertEqual(displayed.returncode, 0, displayed.stderr)
 
         missing = run("app/org.a/x86_64/stable", "org.a\norg.b")
         self.assertNotEqual(missing.returncode, 0)
