@@ -165,8 +165,9 @@ as is any `[repositories.security]` option other than `gpgcheck` or
 `utah-packages` (RPMs are authenticated by the pinned package image and its
 OCI provenance, so both signature checks are disabled) and
 `nvidia-container-toolkit` (NVIDIA signs only its repomd.xml, so only package
-signature verification is disabled); the shipped `[repositories.gpgkeys]` pins
-the key URL each publishes.
+signature verification is disabled). Only `nvidia-container-toolkit` has a
+`[repositories.gpgkeys]` pin (the key URL NVIDIA publishes); `utah-packages`
+declares no `gpgkey=` and has no entry.
 
 The install-source identity is single-sourced in `packages/*.repo`. Each repository
 participating in the package install transaction carries a `# utah-install: true`

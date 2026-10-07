@@ -525,13 +525,8 @@ def split_baseurls(raw: str) -> list[str]:
     return [entry for entry in re.split(r"[\s,]+", raw.strip()) if entry]
 
 
-def split_gpgkeys(raw: str) -> list[str]:
-    """Split a gpgkey option into the keys dnf5 would import.
-
-    dnf5 accepts whitespace-separated entries inside `gpgkey=`; the gate scans
-    every one, so a pin to one of several pinned URLs still passes.
-    """
-    return [entry for entry in re.split(r"[\s,]+", raw.strip()) if entry]
+# dnf5 splits `gpgkey=` the same way as `baseurl=`; the gate scans every entry.
+split_gpgkeys = split_baseurls
 
 
 def repo_gpgkey_pin_errors(
