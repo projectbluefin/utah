@@ -56,8 +56,7 @@ class PackageResolutionTests(unittest.TestCase):
 
     def test_containerfile_installs_scripts_into_absent_destination(self):
         text = (ROOT / "Containerfile").read_text()
-        loop = re.search(r"^RUN (?:--mount=\S+ \\\n\s+)?(for pair in .*?\bdone) &&",
-                         text, re.S | re.M).group(1)
+        loop = re.search(r"(for pair in .*?\bdone) &&", text, re.S).group(1)
         pairs = re.findall(r"([\w.-]+):(utah-[\w.-]+)", loop)
         self.assertTrue(pairs)
         with tempfile.TemporaryDirectory() as tmp:
@@ -66,7 +65,7 @@ class PackageResolutionTests(unittest.TestCase):
             source.mkdir()
             for name, _ in pairs:
                 (source / name).write_bytes((ROOT / "scripts" / name).read_bytes())
-            script = loop.replace("/tmp/utah-scripts", str(source)).replace(
+            script = loop.replace("/tmp/utah-inputs/tmp/utah-scripts", str(source)).replace(
                 "/usr/local/libexec", str(destination))
             subprocess.run(["bash", "-eu", "-c", script], check=True)
             self.assertEqual({p.name for p in destination.iterdir()}, {p[1] for p in pairs})

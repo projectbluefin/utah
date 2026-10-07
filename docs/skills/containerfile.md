@@ -243,3 +243,23 @@ reach it)
 unless the change justifies a new layer against the timings table above.
 Removing the package repository COPY dropped it from 13 to 12; a later change
 must earn its layer.
+
+### Native layer reproducibility
+
+Final cleanup does not repair earlier native layers. Stage COPY origins in a
+scratch input stage and bind it into the existing overlay RUN; normalize
+generated metadata before each runtime layer commits. Preserve unchanged RPM
+payload mtimes, symlink targets, and read-only mounts. Clear transaction logs,
+SQLite state, machine-id and random seed in their producing layer.
+
+Deletion-marker headers are invisible in the merged filesystem. Canonical
+Just recipes use Podman >= 5.5 timestamp rewriting with an epoch derived from
+the latest commit to build input paths; documentation-only commits retain the
+cache key. Before export, reject an epoch older than any RPM payload so Python
+timestamp bytecode is never invalidated. Keep the final helper on a read-only
+mount outside /tmp, because cleanup removes installed helpers and clears /tmp.
+
+Run `just check-reproducible main` to compare two uncached builds with fixed
+arguments and every ordered native layer. The combined review candidate at
+e44e438 matched all 37 layers and image IDs in run 37576445666. Published
+chunkah ordering and non-main flavor acceptance need separate evidence.
