@@ -98,15 +98,12 @@ def normalize_gpgkey(url: str) -> str:
     """Normalize a gpgkey URL so two spellings of the same key compare equal.
 
     A `gpgkey=` value is either a URL (`https://`, `file://`) or a bare path
-    (which libdnf5 also accepts). Path values are not URL-encoded in the repo
-    files we ship, so equality is whitespace-trimmed, trailing-whitespace
-    sensitive only where libdnf5 would be: the gate compares trimmed values
-    against the manifest pins the way a configparser read would produce them,
-    so a dropped trailing space cannot smuggle a different key past the pin.
-    Schemes and hosts are lowercased to match DNF's URL resolution; the path
-    is case-sensitive (a `/PEM` and `/pem` are different files), but a
-    trailing slash is folded the way `normalize_baseurl` does so a manifest
-    pin and a repo file value written without one still compare equal.
+    (which libdnf5 also accepts). Surrounding whitespace is trimmed, matching
+    how configparser reads the value. Schemes and hosts are lowercased to
+    match DNF's URL resolution; the path stays case-sensitive (`/PEM` and
+    `/pem` are different files). A trailing slash is folded the way
+    `normalize_baseurl` does, so a manifest pin and a repo file value written
+    without one still compare equal.
     """
     value = url.strip().rstrip("/")
     if not value:
@@ -548,7 +545,7 @@ def repo_gpgkey_pin_errors(
     `gpgkey=` names where dnf5 fetches the RPM GPG key the repo claims, and
     an attacker who can write `gpgkey=` on an allowlisted id can swap in
     their own key and have packages they signed treated as authentic
-    (https://, issue #617). The pin mirrors `[repositories.baseurls]`:
+    (issue #617). The pin mirrors `[repositories.baseurls]`:
     `[repositories.gpgkeys]` declares the keys the manifest approves, and
     every `gpgkey=` value in an allowlisted section must match. A section
     that declares no `gpgkey=` is unchecked (some allowlisted repos -- the
@@ -714,7 +711,7 @@ def check_repo_sections(
             )
         elif expected_baseurls is not None:
             errors.extend(repo_pin_errors(section_name, parser, source, expected_baseurls))
-        if expected_gpgkeys is not None:
+        if expected_gpgkeys is not None and section_name in allowed_repos:
             errors.extend(repo_gpgkey_pin_errors(section_name, parser, source, expected_gpgkeys))
     return errors
 

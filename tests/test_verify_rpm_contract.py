@@ -1283,7 +1283,7 @@ class SupplyChainTests(unittest.TestCase):
         self.assertIn("other.example.com", errors[0])
         self.assertIn("unpinned", errors[0])
 
-    def test_repo_gpgkey_pin_errors_passes_when_every_sever_keys_is_pinned(self) -> None:
+    def test_repo_gpgkey_pin_errors_passes_when_every_key_is_pinned(self) -> None:
         """A multi-key `gpgkey=` whose every entry matches a pin passes."""
         parser = self._parser({"baseurl": "https://a.example.com/$basearch",
                                "gpgkey": "file:///etc/pki/rpm-gpg/RPM-GPG-KEY-x "
@@ -1427,6 +1427,16 @@ class SupplyChainTests(unittest.TestCase):
         parser = self._parser({"baseurl": "https://a.example.com/$basearch", "enabled": "1"})
         errors = self.module.check_repo_sections(
             parser, "fedora.repo", {"public-hummingbird-x86_64-rpms"}, expected_baseurls=None)
+        self.assertIn("Unapproved", errors[0])
+
+    def test_check_repo_sections_unapproved_repo_skips_gpgkey_pin(self) -> None:
+        """An unapproved section gets only the Unapproved error, not an allowlist gpgkey one."""
+        parser = self._parser({"baseurl": "https://a.example.com/$basearch", "enabled": "1",
+                               "gpgkey": "https://attacker.example.com/evil"})
+        errors = self.module.check_repo_sections(
+            parser, "fedora.repo", {"public-hummingbird-x86_64-rpms"},
+            expected_baseurls=None, expected_gpgkeys={})
+        self.assertEqual(len(errors), 1)
         self.assertIn("Unapproved", errors[0])
 
     def test_check_repo_sections_allows_approved_repo(self) -> None:
