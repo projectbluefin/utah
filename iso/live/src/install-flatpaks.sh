@@ -168,8 +168,8 @@ flatpak override --system --filesystem=/etc:ro "${INSTALLER_APP_ID}"
 # --no-related keeps locale extensions out of the squashfs, as the former
 # hand-maintained install did. flatpak marks a ref preinstalled only once it
 # deploys, so a retry after a timed-out pull resumes with what is still missing.
-mapfile -t declared < <(sed -n 's/^\[Flatpak Preinstall \(.*\)\]$/\1/p' \
-    "${PREINSTALL_DIR}"/*.preinstall | sort -u)
+declared_text=$(python3 /usr/local/libexec/utah-preinstall-refs.py --arch "$(flatpak --default-arch)" "${PREINSTALL_DIR}" /etc/flatpak/preinstall.d)
+mapfile -t declared < <(printf '%s\n' "$declared_text" | sed '/^$/d')
 if (( ${#declared[@]} == 0 )); then
     echo "No Flatpaks declared in ${PREINSTALL_DIR}; the image's preinstall.d is broken" >&2
     exit 1
@@ -220,10 +220,10 @@ fi
 # is part of /var/lib/flatpak, so it also reaches the installed system and
 # keeps later `--unused` cleanups there from removing the themes too.
 declare -A wanted=()
-for id in "${declared[@]}"; do wanted["${id}"]=1; done
+for ref in "${declared[@]}"; do wanted["${ref}"]=1; done
 while read -r ref; do
     id="${ref#runtime/}"; id="${id%%/*}"
-    if [[ -n "${wanted[${id}]:-}" ]]; then
+    if [[ -n "${wanted[${ref}]:-}" ]]; then
         flatpak pin --system "${ref}"
     fi
 done < <(flatpak list --system --runtime --columns=ref | sed 's|^|runtime/|')

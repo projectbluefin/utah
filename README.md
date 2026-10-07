@@ -3,7 +3,7 @@
 <!-- BEGIN E2E VERIFICATION -->
 [![Verified ISO desktop](docs/verification/screenshots/installed-fastfetch.png)](docs/verification/README.md)
 
-*LUKS ISO test passed for commit `250e9d27cc0a`. [CI run](https://github.com/projectbluefin/utah/actions/runs/37339886130); [screenshots and provenance](docs/verification/README.md).*
+*LUKS ISO test passed for commit `1b1ab2091d5d`. [CI run](https://github.com/projectbluefin/utah/actions/runs/37518075761); [screenshots and provenance](docs/verification/README.md).*
 <!-- END E2E VERIFICATION -->
 
 †Utahraptor ostrommaysi
@@ -101,7 +101,7 @@ than being noticed later.
 | | count |
 | --- | --- |
 | Bluefin contract installed | **61** |
-| Utah additions (GNOME 51, base-image parity, device firmware, desktop services) | 105 |
+| Utah additions (GNOME 51, base-image parity, device firmware, desktop services) | 110 |
 | Genuinely unavailable | **8** |
 
 The install writes its resolved list to `/usr/share/utah/contract.txt` and the
@@ -190,11 +190,19 @@ This is the honest list, and it is why the label above says pre-alpha.
   compiles for the base kernel. The module against the OGC kernel, the driver
   installer flags, and the flavored builds pulling the kernel cache image have
   not yet all passed in one run.
-- **Codec support differs.** Twelve `[multimedia_overrides]` names are packages
-  Fedora already ships and Bluefin *replaces* with negativo17 builds. Utah
-  installs Fedora's. Nothing is absent from the image; hardware-accelerated
-  codecs are what differ. `utah-packages` already builds several of them, so
-  this closes when Utah consumes that overlay.
+- **Codec support differs.** `[multimedia_overrides]` names are packages Fedora
+  already ships and Bluefin *replaces* with negativo17 builds. Utah now
+  requests four of those twelve names (`intel-gmmlib`,
+  `libva-intel-media-driver`, `intel-mediasdk`, `intel-vpl-gpu-rt`) from the
+  factory overlay, plus `libvpl`, which is not an overrides name but a
+  dependency of `intel-vpl-gpu-rt`. The remaining eight — `libheif`, `libva`
+  and the six `mesa-*` names — are not requested by name; whichever build the
+  transaction resolves (the factory publishes `libva`, which
+  `libva-intel-media-driver` may pull in) is recorded in the image's
+  `/usr/share/utah/package-origins.txt`. Nothing is absent from the image;
+  hardware-accelerated codecs are what differ, and no run has yet proven
+  decode on hardware. Tracked by
+  [#383](https://github.com/projectbluefin/utah/issues/383).
 - **The image is still pre-alpha.** The digest-pinned `utah-packages` OCI
   repository is consumed and the local QEMU image reaches GDM and GNOME Shell.
 - **CUDA is deliberately excluded** — 7.68 GB installed. Use the NVIDIA

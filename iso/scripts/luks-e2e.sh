@@ -834,20 +834,29 @@ if [[ -n "${UTAH_E2E_FLATPAKS-x}" ]]; then
     if [[ -n "${UTAH_E2E_FLATPAKS-}" ]]; then
         expected_flatpaks="${UTAH_E2E_FLATPAKS}"
     else
-        expected_flatpaks="$(ssh_target "sed -n 's/^\\[Flatpak Preinstall \\(.*\\)\\]\$/\\1/p' /usr/share/flatpak/preinstall.d/*.preinstall | sort -u" 2>/dev/null || true)"
-        [[ -n "${expected_flatpaks}" ]] || fail "could not read the default Flatpak preinstall.d on the installed system"
+        scp_target "${ROOT}/iso/live/src/preinstall-refs.py" \
+            "${TEST_USER}@127.0.0.1:/tmp/utah-e2e-preinstall-refs.py" >/dev/null \
+            || fail "could not copy the effective preinstall parser"
+        expected_flatpaks="$(ssh_target 'python3 /tmp/utah-e2e-preinstall-refs.py --arch "$(flatpak --default-arch)"' 2>/dev/null)" \
+            || fail "could not read effective default Flatpak declarations"
+        [[ -n "${expected_flatpaks}" ]] || fail "effective default Flatpak set is empty"
     fi
     missing_flatpaks=()
     for _ in $(seq 1 12); do
         # No --app: the default set includes two runtimes, the
         # adw-gtk3 GTK3 themes, and --app hides runtimes, so they read as
         # missing even when present (post-testing-e2e run 36068751481).
-        installed_flatpaks="$(ssh_target 'flatpak list --system --columns=application' 2>/dev/null || true)"
+        installed_flatpaks="$(ssh_target 'flatpak list --system --columns=ref' 2>/dev/null || true)"
         [[ -n "${installed_flatpaks}" ]] || { sleep 10; continue; }
         missing_flatpaks=()
         while IFS= read -r app; do
             [[ -n "${app}" ]] || continue
-            grep -qxF "${app}" <<< "${installed_flatpaks}" || missing_flatpaks+=("${app}")
+            if [[ "$app" == */* ]]; then
+                grep -qxF "${app}" <<< "${installed_flatpaks}" || missing_flatpaks+=("${app}")
+            else
+                # Preserve the explicit app-ID override for diagnostic runs.
+                grep -qF "/${app}/" <<< "${installed_flatpaks}" || missing_flatpaks+=("${app}")
+            fi
         done <<< "${expected_flatpaks}"
         (( ${#missing_flatpaks[@]} == 0 )) && break
         sleep 10

@@ -220,7 +220,7 @@ asset (`digest` field of `gh api repos/tuna-os/bootc-installer/releases/tags/<ta
 or download and `sha256sum` it) rather than guessing or reusing an old value.
 
 The default Flatpaks are declared in the image's
-`/usr/share/flatpak/preinstall.d`, not in the ISO bake: `bazaar.preinstall`
+`/usr/share/flatpak/preinstall.d` and `/etc/flatpak/preinstall.d`, not in the ISO bake: `bazaar.preinstall`
 and `ghostty.preinstall` ship from `system_files`, and
 `scripts/configure-services.sh` generates `brewfile.preinstall` from the
 Bluefin Brewfile. `install-flatpaks.sh` only runs `flatpak preinstall`, so the
@@ -264,7 +264,8 @@ The bake retries preinstall and the declared-set check together, and fails
 after five incomplete attempts. Validate the real path with a rootless live
 image build and then `just luks-test` on its debug ISO; PR image-only CI does
 not exercise the ISO bake. The vendored TunaOS descriptor pins an OCI remote
-URL, not a GPG trust anchor; content trust still depends on TLS to that remote.
+URL, not a GPG trust anchor; content trust still depends on TLS to the index and registry, plus OCI digest
+verification; the URL pin is not a GPG signing key.
 
 ## Tacklebox ISOs (unpublished variants)
 
@@ -476,3 +477,9 @@ just boot-vm     # success: GDM appears and GNOME Shell renders in noVNC
 just iso testing
 just boot-iso    # success: live session renders; serial shows UTAH_LIVE_READY
 ```
+
+The effective-ref parser follows the pinned Flatpak implementation: read sorted
+vendor files, then sorted administrator files; merge each group by app ID,
+retaining omitted keys. Honor `Install=false`, branch and runtime type, and
+verify complete refs in the bake and installed guest. Same filenames do not
+mask a whole file in this implementation.

@@ -121,6 +121,29 @@ class GeneratedDataTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
 
 
+    def test_pinned_date_regenerates_identical_output(self):
+        # The nightly parity workflow pins the date so an unchanged upstream
+        # ref does not churn the open bump branch.
+        with tempfile.TemporaryDirectory() as tmp:
+            outputs = []
+            for name in ("a.json", "b.json"):
+                out = Path(tmp) / name
+                result = subprocess.run(
+                    [sys.executable, str(GENERATOR), "--generated-at", "2001-02-03",
+                     "--output", str(out)],
+                    capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                outputs.append(out.read_text())
+            self.assertEqual(outputs[0], outputs[1])
+            self.assertEqual(json.loads(outputs[0])["generated_at"], "2001-02-03")
+
+    def test_malformed_pinned_date_is_rejected(self):
+        result = subprocess.run(
+            [sys.executable, str(GENERATOR), "--generated-at", "today", "--check"],
+            capture_output=True, text=True)
+        self.assertEqual(result.returncode, 2)
+
+
 class PageTests(unittest.TestCase):
     def setUp(self):
         self.html = (SITE / "index.html").read_text()
@@ -254,8 +277,12 @@ class ScriptBehaviourTests(unittest.TestCase):
     def test_relative_times_use_the_unit_they_were_converted_into(self):
         cases = {30: "30s ago", 300: "5m ago", 10800: "3h ago",
                  172800: "2d ago", 1814400: "3w ago"}
+        # Freeze the clock: the runner can take over a second between
+        # capturing `now` and evaluating, which turns "30s ago" into
+        # "31s ago" on a loaded machine (Build Utah run 37467782811).
         script = """
         const now = Date.now();
+        Date.now = () => now;
         const at = (s) => new Date(now - s * 1000).toISOString();
         console.log(JSON.stringify(%s.map((s) => ago(at(s)))));
         """ % list(cases)

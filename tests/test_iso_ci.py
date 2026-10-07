@@ -291,11 +291,11 @@ class EvidenceTests(unittest.TestCase):
             return subprocess.run(["bash", "-eu", "-c", harness],
                                    capture_output=True, text=True, env=env)
 
-        complete = run("org.a\norg.b\norg.c", "org.a\norg.b")
+        complete = run("app/org.a/x86_64/stable\napp/org.b/x86_64/stable\napp/org.c/x86_64/stable", "org.a\norg.b")
         self.assertEqual(complete.returncode, 0, complete.stderr)
         self.assertIn("org.a, org.b", complete.stdout)
 
-        missing = run("org.a", "org.a\norg.b")
+        missing = run("app/org.a/x86_64/stable", "org.a\norg.b")
         self.assertNotEqual(missing.returncode, 0)
         self.assertIn("org.b", missing.stderr)
         self.assertNotIn("org.a\n", missing.stderr.split("missing")[-1])
@@ -476,6 +476,7 @@ attempts=0
 sleep() { :; }
 flatpak() {
     case "$1" in
+        --default-arch) echo x86_64 ;;
         preinstall)
             attempts=$((attempts + 1))
             printf '%s\\n' "$attempts" > "$state/attempts"
@@ -484,11 +485,11 @@ flatpak() {
                 : > "$state/com.mitchellh.ghostty"
             fi
             return 0 ;;
-        info) [[ -f "$state/$3" ]] ;;
+        info) local id="${3#*/}"; id="${id%%/*}"; [[ -f "$state/$id" ]] ;;
         *) return 90 ;;
     esac
 }
-''' + block)
+''' + block.replace("/usr/local/libexec/utah-preinstall-refs.py", str(ROOT / "iso/live/src/preinstall-refs.py")))
             result = subprocess.run(
                 ["bash", str(harness), str(declarations), str(installed),
                  str(resolve_on_attempt)], capture_output=True, text=True,
@@ -569,16 +570,17 @@ ostree() {
 }
 flatpak() {
     case "$1" in
+        --default-arch) echo x86_64 ;;
         preinstall)
             local id
             for id in $(sed -n 's/^\\[Flatpak Preinstall \\(.*\\)\\]$/\\1/p' "$PREINSTALL_DIR"/*.preinstall); do
                 grep -q "^xa\\.preinstalled=.*app/$id/" "$repo/config" || : > "$state/$id"
             done ;;
-        info) [[ -f "$state/$3" ]] ;;
+        info) local id="${3#*/}"; id="${id%%/*}"; [[ -f "$state/$id" ]] ;;
         *) return 90 ;;
     esac
 }
-''' + seed.replace("/var/lib/flatpak", "$4") + install)
+''' + seed.replace("/var/lib/flatpak", "$4") + install.replace("/usr/local/libexec/utah-preinstall-refs.py", str(ROOT / "iso/live/src/preinstall-refs.py")))
             result = subprocess.run(
                 ["bash", str(harness), str(cache), str(declarations),
                  str(installed), str(flatpak_dir)], capture_output=True, text=True,

@@ -35,5 +35,6 @@ RUN dnf5 install -y --setopt=install_weak_deps=False \
 # preinstall`, the same way iso/live/Containerfile does, so the contract stays
 # the single source of truth.
 COPY src/install-flatpaks.sh /usr/local/libexec/utah-install-live-flatpaks
+COPY src/preinstall-refs.py /usr/local/libexec/utah-preinstall-refs.py
 RUN chmod 0755 /usr/local/libexec/utah-install-live-flatpaks && \
     /usr/local/libexec/utah-install-live-flatpaks

@@ -64,6 +64,31 @@ class CheckDocCountsTests(unittest.TestCase):
         module = load_module()
         self.assertEqual(module.main(), 0)
 
+    def test_write_repairs_stale_counts_in_both_documents(self):
+        # The nightly Bluefin parity job runs --write after a bump, so it must
+        # fix the README table and the line-wrapped package-contract sentence.
+        with tempfile.TemporaryDirectory() as tmp:
+            readme = Path(tmp) / "README.md"
+            skill = Path(tmp) / "package-contract.md"
+            readme.write_text(re.sub(
+                r"Genuinely unavailable \| \*\*\d+\*\*",
+                "Genuinely unavailable | **4**", (ROOT / "README.md").read_text()))
+            skill_text, count = re.subn(
+                r"\d+(\s+Bluefin\s+contract\s+packages\s+installed)", r"1\1",
+                (ROOT / "docs/skills/package-contract.md").read_text())
+            self.assertEqual(count, 1)
+            skill.write_text(skill_text)
+
+            module = load_module()
+            module.README = readme
+            module.PACKAGE_CONTRACT_SKILL = skill
+            self.assertEqual(module.main(), 1)
+            self.assertEqual(module.main(["--write"]), 0)
+            self.assertEqual(module.main(), 0)
+            self.assertEqual(readme.read_text(), (ROOT / "README.md").read_text())
+            self.assertEqual(
+                skill.read_text(), (ROOT / "docs/skills/package-contract.md").read_text())
+
 
 if __name__ == "__main__":
     unittest.main()

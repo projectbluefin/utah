@@ -230,7 +230,11 @@ echo "    output:  ${ISO_OUT}"
 # the tag would own the build host. Same trust story as the Containerfile's
 # Renovate-managed ARG digests and install-flatpaks.sh's installer SHA-256.
 # Override with TACKLEBOX_IMAGE when validating a newer tacklebox.
-TACKLEBOX_IMAGE="${TACKLEBOX_IMAGE:-ghcr.io/tuna-os/tacklebox:latest@sha256:7415c1c23f83918b0c22f14ceee199e46f47e8411f54582d8b8899837c2c3441}"
+TACKLEBOX_IMAGE="${TACKLEBOX_IMAGE:-$(< config/tacklebox-image)}"
+[[ "$TACKLEBOX_IMAGE" =~ ^[^[:space:]@]+@sha256:[a-f0-9]{64}$ ]] || {
+    echo "ERROR: TACKLEBOX_IMAGE must be digest-pinned." >&2
+    exit 2
+}
 TIMEOUT_SECONDS="${TACKLEBOX_TIMEOUT_SECONDS:-4800}"
 [[ "$TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]] || {
     echo "ERROR: TACKLEBOX_TIMEOUT_SECONDS must be a positive integer." >&2

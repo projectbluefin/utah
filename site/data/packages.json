@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-03",
+  "generated_at": "2026-10-06",
   "generator": "scripts/generate-site-data.py",
   "groups": [
     {
@@ -138,6 +138,9 @@
         "gvfs-smb",
         "hostname",
         "ibus-gtk4",
+        "intel-gmmlib",
+        "intel-mediasdk",
+        "intel-vpl-gpu-rt",
         "iptables-nft",
         "iw",
         "keyutils",
@@ -148,6 +151,8 @@
         "libimobiledevice-utils",
         "libnma",
         "libpcap",
+        "libva-intel-media-driver",
+        "libvpl",
         "linux-atm-libs",
         "lm_sensors",
         "man-db",
@@ -223,7 +228,7 @@
     }
   ],
   "totals": {
-    "installed": 166,
+    "installed": 171,
     "unavailable": 8
   },
   "unavailable": [

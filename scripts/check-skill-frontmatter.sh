@@ -32,14 +32,14 @@ for f in "${skill_files[@]}"; do
     fi
 
     for key in name version last_updated tags description; do
-        if ! printf '%s\n' "$fm" | grep -qE "^${key}:"; then
+        if ! grep -qE "^${key}:" <<< "$fm"; then
             echo "error: $f missing required key '$key'"
             rc=1
         fi
     done
 
-    if ! printf '%s\n' "$fm" | grep -qE "^metadata:" || \
-       ! printf '%s\n' "$fm" | grep -qE "^  type:"; then
+    if ! grep -qE "^metadata:" <<< "$fm" || \
+       ! grep -qE "^  type:" <<< "$fm"; then
         echo "error: $f missing metadata.type"
         rc=1
     fi
@@ -63,7 +63,7 @@ for f in "${skill_files[@]}"; do
 
     desc_clean=$(printf '%s' "$desc" | sed -E \
         -e 's/^description:[[:space:]]*//' \
-        -e 's/[[:space:]]*([|>][+-]?)[[:space:]]*$//' \
+        -e 's/^[|>][+-]?[[:space:]]*//' \
         -e 's/^["'\''"]|["'\''"]$//g' \
         -e 's/[[:space:]]+/ /g')
 
