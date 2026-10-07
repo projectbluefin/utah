@@ -179,9 +179,9 @@ than from the repository contents living in the image.
 The allowlist also runs **on-image**, against the composed image's runtime RPM
 repositories, not just the source files in `packages/`. `verify-rpm-contract.py`
 scans every `reposdir` dnf5 resolves at runtime, not a hardcoded list of
-defaults (#454, #513, #536). Repository override directories
-(`/etc/dnf/repos.override.d`) are not covered here; they are tracked
-separately (#527).
+defaults (#454, #513, #536). It also scans dnf5's repository override
+directories, `/etc/dnf/repos.override.d` and
+`/usr/share/dnf5/repos.override.d` (#524).
 
 - The `reposdir=` option in `/usr/share/dnf5/libdnf.conf.d/*.conf`,
   `/etc/dnf/libdnf5.conf.d/*.conf`, or `/etc/dnf/dnf.conf` replaces the
@@ -202,6 +202,31 @@ separately (#527).
   `[main]` the same way (later file wins, an empty `proxy=` clears an earlier
   one) and fails if the effective value sets a proxy or disables TLS
   verification (#352).
+- The override drop-in dirs are scanned **unconditionally**, as a separate loop
+  never folded into the `reposdir=`-derived list (#524). dnf5 reads them as
+  fixed constants -- a base image setting `reposdir=` does not add or remove
+  them (#536) -- so the gate scans them regardless of the runtime list; an
+  image that points `reposdir=` elsewhere still gets override coverage instead
+  of silently dropping it. A `.repo` override drop-in is partial by design: a
+  `[id]` section may set only `enabled=`/`priority=` with no `baseurl=` (that is
+  how the base disables a repo it ships), so the gate validates such a partial
+  override only for the keys it sets -- allowlist membership and the
+  `proxy=`/`sslverify=`/`gpgcheck=`/`pkg_gpgcheck=`/`repo_gpgcheck=` security
+  options -- but never rejects it for a missing `baseurl=`. A partial override
+  that leaves `enabled=` unset (for example `priority=` only) does not enable
+  the repo, so it passes for any id unless it sets a `proxy=` or disables
+  `sslverify=` or an unapproved signature check (`gpgcheck=`, `pkg_gpgcheck=`,
+  `repo_gpgcheck=`). A drop-in that sets any origin key (`baseurl=`, `metalink=` or
+  `mirrorlist=`) is pinned like any other enabled repo, so a `metalink=` or
+  `mirrorlist=` redirect fails the gate.
+- dnf5 matches override section names against repo ids as **globs**, so a
+  `[*]` or `[utah-*]` section applies to every matching repo. The gate cannot
+  enumerate those matches, so a wildcard override passes only when it cannot
+  widen the allowlist: it sets no origin key, does not set `enabled=` to a
+  true value, sets no `proxy=`, and disables neither `sslverify=` nor any
+  signature check (`gpgcheck=`, `pkg_gpgcheck=`, `repo_gpgcheck=`; no
+  `[repositories.security]` approval applies to a glob). A `[*]` drop-in
+  that sets only `priority=` or `enabled=0` passes.
 
 ## Printing and scanning gaps
 
@@ -457,7 +482,6 @@ python3 scripts/check-doc-counts.py
 
 ## Runtime ujust dependencies
 
-Read [the ujust reference](package-contract/references/ujust.md) when changing
-Common import precedence or Utah's runtime fallbacks for missing tools. Keep
-that mechanism detail in the reference so this policy page stays within the
-500-line skill budget as package and repository contracts grow.
+See [the runtime ujust dependency reference](package-contract/references/ujust.md)
+for provider checks and the retained audit baseline. Keep detailed inventories
+in references so policy additions stay within the skill size budget.

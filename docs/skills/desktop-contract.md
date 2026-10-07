@@ -72,13 +72,18 @@ The TOML's sections are the contract's table of contents:
   `flatpak-nuke-fedora.service`, `brew-setup.service`, `dconf-update.service`,
   `bootc-unified-storage.service`, `input-remapper.service`,
   `ModemManager.service`, `cups.socket`, `systemd-boot-update.service`,
-  `uupd.timer`, `bluefin-stats-refresh.timer`. Update policy delegates
+  `uupd.timer`, `bluefin-stats-refresh.timer`, `projectbluefin-countme.timer`. Update policy delegates
   background updates to `uupd.timer`; `bootc-fetch-apply-updates.timer` and
   `bootc-fetch-apply-updates.service` are masked in `/etc` and `/usr/lib` (and
   disabled in `85-utah-desktop.preset`) so cross-vendor `/etc` 3-way merges
   (e.g. switching from Bluefin) do not carry active `timers.target.wants`
   symlinks that bypass uupd staging or undo manual rollbacks. Switchers can
   also manually verify or mask them if a local `/etc` symlink was preserved.
+
+  Countme is enabled by default using Common's client and service conditions.
+  `/etc/projectbluefin/countme/disabled` opts out without replacing the client.
+  Verify timer enablement after installation: the review VM reached GDM but
+  found it disabled before this explicit script/preset/contract alignment.
 
   A unit being enabled in the built image is not the same as it being enabled
   on a booted one. bootc applies presets on first boot, and Hummingbird's
