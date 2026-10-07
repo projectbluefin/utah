@@ -142,8 +142,10 @@ every `gpgkey=` value in an allowlisted section must match one of the URLs or
 file paths listed there, and a `gpgkey=` with no manifest entry at all is
 rejected (#617). The gate has no other way to know which key the repository
 should be presenting, and an override drop-in could swap in a key the
-attacker signed; `utah-packages` is exempt because the bind-mounted RPM
-repository authenticates by OCI provenance rather than an RPM GPG key. Pins
+attacker signed. `utah-packages` has no entry because its section declares
+no `gpgkey=` (the bind-mounted RPM repository authenticates by OCI provenance
+rather than an RPM GPG key); it is not exempt, so a drop-in that adds a
+`gpgkey=` to it is rejected like any other unpinned key. Pins
 normalize scheme and host case and fold a trailing slash. Its **fetch
 integrity** is attested too: the same check rejects `proxy=`, `sslverify=0`,
 `gpgcheck=0` (or its libdnf5 alias `pkg_gpgcheck=0`), and `repo_gpgcheck=0`

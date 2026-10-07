@@ -577,13 +577,10 @@ nvidia-container-toolkit = ["gpgcheck"]
 # does not name one. A repo id absent from [repositories.allowed] but listed here
 # is rejected as approving nothing, the same as [repositories.security].
 [repositories.gpgkeys]
-# Hummingbird's release key. The key file itself ships as
+# Hummingbird's release key. The key file ships as
 # packages/RPM-GPG-KEY-redhat-release-2 and the Containerfile installs it
-# under /etc/pki/rpm-gpg/ for runtime use, so both spellings are pinned.
-public-hummingbird-x86_64-rpms = [
-    "file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2",
-    "https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/RPM-GPG-KEY-redhat-release-2",
-]
+# under /etc/pki/rpm-gpg/; packages/hummingbird.repo names only that local path.
+public-hummingbird-x86_64-rpms = ["file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2"]
 # NVIDIA's own Open Source Projects key, the one NVIDIA Corporation publishes
 # at the root of the libnvidia-container repo tree.
 nvidia-container-toolkit = ["https://nvidia.github.io/libnvidia-container/gpgkey"]
