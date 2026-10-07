@@ -42,42 +42,59 @@ def expected_counts() -> tuple[int, int, int]:
     return bluefin_count, installed - bluefin_count, unavailable
 
 
-def find(pattern: str, text: str, path: Path) -> int:
-    match = re.search(pattern, text)
-    if not match:
-        print(f"error: {path} is missing the expected package-count wording "
-              f"(pattern not found: {pattern!r})", file=sys.stderr)
-        raise SystemExit(1)
-    return int(match.group(1))
+def count_sites() -> list[tuple[Path, str, str, int]]:
+    """(file, label, pattern, index into expected_counts()); group 1 is the
+    number. Patterns use \\s+ between words because package-contract.md wraps
+    the sentence across lines. Built per call so tests can repoint the paths."""
+    return [
+        (README, "README.md Bluefin contract installed",
+         r"Bluefin contract installed \| \*\*(\d+)\*\*", 0),
+        (README, "README.md Utah additions", r"Utah additions \([^)]*\) \| (\d+)", 1),
+        (README, "README.md Genuinely unavailable",
+         r"Genuinely unavailable \| \*\*(\d+)\*\*", 2),
+        (PACKAGE_CONTRACT_SKILL, "package-contract.md Bluefin contract installed",
+         r"(\d+)\s+Bluefin\s+contract\s+packages\s+installed", 0),
+        (PACKAGE_CONTRACT_SKILL, "package-contract.md Utah additions",
+         r"(\d+)\s+Utah\s+additions\s+\([^)]*\)", 1),
+        (PACKAGE_CONTRACT_SKILL, "package-contract.md genuinely unavailable",
+         r"(\d+)\s+genuinely\s+unavailable", 2),
+    ]
 
 
-def main() -> int:
-    bluefin, additions, unavailable = expected_counts()
+def main(argv: list[str] | None = None) -> int:
+    argv = argv or []
+    write = argv == ["--write"]
+    if argv and not write:
+        print("usage: check-doc-counts.py [--write]", file=sys.stderr)
+        return 2
+    counts = expected_counts()
+    bluefin, additions, unavailable = counts
 
-    readme = README.read_text()
-    readme_bluefin = find(r"Bluefin contract installed \| \*\*(\d+)\*\*", readme, README)
-    readme_additions = find(r"Utah additions \([^)]*\) \| (\d+)", readme, README)
-    readme_unavailable = find(r"Genuinely unavailable \| \*\*(\d+)\*\*", readme, README)
+    sites = count_sites()
+    texts = {path: path.read_text() for path in {site[0] for site in sites}}
+    stale = {}
+    for path, label, pattern, index in sites:
+        text = texts[path]
+        match = re.search(pattern, text)
+        if not match:
+            print(f"error: {path} is missing the expected package-count wording "
+                  f"(pattern not found: {pattern!r})", file=sys.stderr)
+            return 1
+        actual, want = int(match.group(1)), counts[index]
+        if actual != want:
+            stale[label] = (actual, want)
+            start, end = match.span(1)
+            texts[path] = text[:start] + str(want) + text[end:]
 
-    skill = re.sub(r"\s+", " ", PACKAGE_CONTRACT_SKILL.read_text())
-    skill_bluefin = find(r"(\d+) Bluefin contract packages installed", skill,
-                          PACKAGE_CONTRACT_SKILL)
-    skill_additions = find(r"(\d+) Utah additions \([^)]*\)", skill, PACKAGE_CONTRACT_SKILL)
-    skill_unavailable = find(r"(\d+) genuinely unavailable", skill, PACKAGE_CONTRACT_SKILL)
-    found = {
-        "README.md Bluefin contract installed": (readme_bluefin, bluefin),
-        "README.md Utah additions": (readme_additions, additions),
-        "README.md Genuinely unavailable": (readme_unavailable, unavailable),
-        "package-contract.md Bluefin contract installed": (skill_bluefin, bluefin),
-        "package-contract.md Utah additions": (skill_additions, additions),
-        "package-contract.md genuinely unavailable": (skill_unavailable, unavailable),
-    }
-
-    stale = {label: (actual, want) for label, (actual, want) in found.items() if actual != want}
-    if stale:
+    if stale and write:
+        for path, text in texts.items():
+            path.write_text(text)
+        for label, (actual, want) in stale.items():
+            print(f"updated {label}: {actual} -> {want}")
+    elif stale:
         print("error: documented package counts are stale. Regenerate with "
-              "`python3 scripts/generate-site-data.py` and update the prose "
-              "to match:", file=sys.stderr)
+              "`python3 scripts/generate-site-data.py` and "
+              "`python3 scripts/check-doc-counts.py --write`:", file=sys.stderr)
         for label, (actual, want) in stale.items():
             print(f"  {label}: documented {actual}, manifests say {want}", file=sys.stderr)
         return 1
@@ -88,4 +105,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

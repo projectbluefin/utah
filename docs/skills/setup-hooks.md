@@ -98,7 +98,7 @@ use.
 | `05-bootupctl-adopt.sh` | Run `bootupctl adopt-and-update` on first boot so a switched-into-Utah system sees its on-disk shim and GRUB as managed by `bootupd`. Skips live sessions (`/sysroot` on `erofs`/`squashfs`) and image variants without `bootupctl` installed, both without committing so a later switch retries. Tracked by #363. |
 | `10-tailscale.sh` | Set a non-root pkexec caller as the Tailscale operator. Missing Tailscale or an invalid/root caller defers without stamping; a failed grant retries with the read-only API. |
 | `11-framework-ucsi-workaround.sh` | Append the `usbcore.autosuspend=-1` karg on Intel-Core-Ultra Frameworks. Wrong hardware or an already-applied karg commits a deliberate skip; missing DMI or rpm-ostree retries. |
-| `20-home-labels.sh` | Relabel `/var/home` once on systems installed before #261, repairing a mis-keyed active `file_contexts.homedirs` first (#474). |
+| `20-home-labels.sh` | Relabel `/var/home` once on systems installed before #261, repairing a mis-keyed active `file_contexts.homedirs` first (#474). Version 3 reruns machines whose homedirs an update re-keyed on `/var/home` after the version-2 repair (#575). |
 | `99-flatpaks.sh` | Remove stale Bluefin Firefox preferences and copy optional defaults. Version 2 reruns machines that stamped version 1 while the quoted removal glob was a no-op (#489). Successful copies and deliberate absence/architecture skips commit; body failures retry with the read-only API. Common's `system_files/bluefin/` profile supplies `/usr/share/ublue-os/firefox-config/01-bluefin-global.js`; the image desktop contract requires the actual payload, not merely a Containerfile COPY line. Pinned by `contracts/bluefin-desktop.toml` (`[flatpak].files`). |
 
 `05-bootupctl-adopt.sh` is the canonical example of a transient-skip body:
@@ -112,6 +112,19 @@ nothing. The hook detects that condition by comparing the active
 `file_contexts.homedirs` against the image's own `/usr/etc` default,
 reinstalls the pristine copy when they disagree on the home root, and only
 then trusts a post-`restorecon` `stat` of `/var/home`.
+
+The image itself ships `HOME=/home` in `/etc/default/useradd`, as Fedora and
+Bluefin do (`scripts/fix-home-labels.sh`). ostree rebuilds the SELinux policy
+(`semodule -N --refresh`) in every new deployment after merging `/etc`, and
+`genhomedircon` keys the home rules on that `HOME` value; Hummingbird's
+`HOME=/var/home` produced rules the `/var/home → /home` alias never reaches
+(#575). A locally edited `/etc/default/useradd` keeps its own copy through
+the `/etc` merge, so `20-home-labels.sh` rewrites a lingering exact
+`HOME=/var/home` to `HOME=/home` and warns about any other non-`/home`
+value. `utah-fix-home-labels --check` at the image's last step repeats that
+rebuild and fails the build if `file_contexts.homedirs` changes. Build-time
+`useradd -m` must name `/var/home/<user>` explicitly: `/var/home` does not
+exist in a container, so the `/home` symlink dangles (#281).
 
 ## Tests
 

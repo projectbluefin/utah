@@ -1,7 +1,7 @@
 ---
 name: skill-improvement
 version: "1.0"
-last_updated: "2026-09-19"
+last_updated: "2026-10-07"
 id: skill-improvement
 one_line_purpose: Capture durable agent learnings in maintained docs.
 entry_point: docs/skills/skill-improvement.md
@@ -50,6 +50,11 @@ The generated catalog (`docs/skills/index.json` and `docs/skills/index.md`) is
 a pure function of skill front matter and carries no timestamps, so two PRs
 modifying different skills produce disjoint diffs and can merge concurrently
 without colliding on a generated date.
+
+The skill checker enforces a 500-line hard limit per skill. Move detailed
+inventories into linked files under `docs/skills/<name>/references/`, preserving
+the content and its policy entry point. Checker comments should cite this
+existing policy rather than an obsolete authoring guide.
 
 Factory-wide learnings go to `projectbluefin/common` as an issue with the
 learning, affected component, and evidence.

@@ -202,7 +202,10 @@ dracut refuses a module whose binaries are missing instead of skipping it, so
 a dracut.conf.d file from Common that names a new module means a package in
 `utah.toml` too: `tpm2-tss` needs `tpm2` (tpm2-tools) and `pcsc` needs
 `pcscd` (pcsc-lite). Check with
-`dracut --no-hostonly -f /var/tmp/t.img <kver>` on a booted VM.
+`dracut --no-hostonly -f /var/tmp/t.img <kver>` on a booted VM. Resolve those helpers
+from a published package pin before marking the change ready. When consuming
+Renovate's update, retain both its package ARG and repository cache stamp;
+static manifest validation alone does not prove the initramfs builds or boots.
 
 ## Clean and lint share a layer
 
@@ -213,6 +216,17 @@ last package install, which is the NVIDIA and OGC step, not after the main
 transaction. The lint that checks the result runs in the same layer
 (`bootc container lint --fatal-warnings --skip nonempty-boot`): nothing can
 change between the two (comment, `Containerfile`).
+
+The one deliberate exception is `/var/home`, created after clean-stage but
+before lint in that same RUN. `/home` is a symlink to `var/home` and
+useradd ships `HOME=/home` (#576), so any `useradd --create-home` fails on
+a dangling symlink -- the installer chroot on a fresh install (no tmpfiles
+has run there yet), the tacklebox customize container, and the live ISO
+build all broke with `cannot create directory /home`, exit 12 (#602).
+clean-stage strips all of `/var` except cache, so the mkdir cannot go
+earlier; placing it before lint keeps lint proving the directory is covered
+by the `utah-home.conf` tmpfiles entry. A tmpfiles `d` line alone is not
+enough -- it only runs at boot, never in the installer chroot.
 
 ## `just` override and the 1.56 floor
 

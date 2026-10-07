@@ -2,7 +2,7 @@
 # Relabel /var/home once on systems installed before the image fixed its
 # home-root label (scripts/fix-home-labels.sh, #261), and repair a second
 # failure mode where the *active* file_contexts.homedirs disagrees with the
-# image's own default after a switch (#474).
+# image's own default after a switch (#474) or an update (#575).
 #
 # file_contexts.subs_dist aliases /var/home -> /home: every selabel_lookup
 # for /var/home/<user> is rewritten to /home/<user> before it is matched.
@@ -37,12 +37,34 @@ fi
 # Bumped from 1 to 2: machines that ran the version-1 hook before #474 was
 # understood recorded success even when restorecon was a no-op against a
 # mis-keyed homedirs database, so they must retry once under this contract.
-version-script-check home-labels privileged 2 || exit 0
+# Bumped from 2 to 3: until the image shipped HOME=/home in
+# /etc/default/useradd, the policy rebuild ostree runs in every new
+# deployment re-keyed the active homedirs on /var/home after the version-2
+# repair (#575). Images that ship HOME=/home no longer do; run the repair
+# once more for machines an earlier update broke again.
+version-script-check home-labels privileged 3 || exit 0
 
 set -xeuo pipefail
 
 active_homedirs=/etc/selinux/targeted/contexts/files/file_contexts.homedirs
 pristine_homedirs=/usr/etc/selinux/targeted/contexts/files/file_contexts.homedirs
+useradd_defaults=/etc/default/useradd
+
+# The image fix for #575 reaches /etc/default/useradd only through the 3-way
+# /etc merge. A machine that ever edited that file keeps its whole local copy,
+# including Hummingbird's HOME=/var/home, and every later deployment's policy
+# rebuild re-keys the active homedirs on /var/home again after this hook has
+# committed. Exactly HOME=/var/home is that stale default, not a choice (/home
+# is a symlink to /var/home), so rewrite just that line; leave any other value
+# alone but say why the labels will break again.
+if [[ -f "$useradd_defaults" ]] && ! grep -qx 'HOME=/home' "$useradd_defaults"; then
+    if grep -qx 'HOME=/var/home' "$useradd_defaults"; then
+        echo "home-labels: ${useradd_defaults} kept HOME=/var/home across the /etc merge; setting HOME=/home (#575)" >&2
+        sed -i 's|^HOME=/var/home$|HOME=/home|' "$useradd_defaults"
+    else
+        echo "WARNING: ${useradd_defaults} does not set HOME=/home; the next deployment's SELinux policy rebuild may re-key home labels on another root (#575)" >&2
+    fi
+fi
 
 # If the active homedirs file is keyed on /var/home while the image's own
 # default is keyed on /home, the active copy is unreachable through the
@@ -70,4 +92,4 @@ if [[ "$home_root_context" != *:home_root_t:* ]]; then
     exit 1
 fi
 
-version-script-commit home-labels privileged 2
+version-script-commit home-labels privileged 3

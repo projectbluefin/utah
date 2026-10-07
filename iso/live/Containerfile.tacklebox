@@ -33,6 +33,9 @@ RUN dnf5 install -y --setopt=install_weak_deps=False \
 # below converts the Brewfile the same way iso/live/Containerfile does, so
 # the contract stays the single source of truth.
 COPY src/install-flatpaks.sh /usr/local/libexec/utah-install-live-flatpaks
-RUN awk -F '"' '/^flatpak / {print $2}' /usr/share/ublue-os/homebrew/system-flatpaks.Brewfile > /tmp/flatpaks-list && \
+# Same shipped-parser reasoning as iso/live/Containerfile: the stage is FROM
+# the shipped image, which strips build-time scripts.
+COPY --chmod=0755 src/utah-verify-desktop-contract.py /usr/local/libexec/utah-verify-desktop-contract
+RUN /usr/local/libexec/utah-verify-desktop-contract --flatpaks /usr/share/ublue-os/homebrew/system-flatpaks.Brewfile > /tmp/flatpaks-list && \
     chmod 0755 /usr/local/libexec/utah-install-live-flatpaks && \
     /usr/local/libexec/utah-install-live-flatpaks

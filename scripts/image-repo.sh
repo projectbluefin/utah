@@ -11,9 +11,11 @@
 # Usage:
 #   utah-image-repo [--default REPO] [IMAGE_NAME] [IMAGE_TAG]
 #
-# Matches the argument grammar of /usr/libexec/ublue-image-repo so the
-# caller (bonedigger-report) does not need to know the shim exists; it
-# just sees the same single-source-of-truth resolver it always did.
+# Mirrors the option loop of /usr/libexec/ublue-image-repo (options end on
+# `--` or the first non-option; everything after is forwarded verbatim), and
+# honors the same IMAGE_NAME/IMAGE_TAG env fallback common uses, so the
+# short-circuit triggers whether the caller supplies the name as a positional
+# or via the environment (projectbluefin/utah#465).
 
 set -euo pipefail
 
@@ -53,7 +55,11 @@ while (($# > 0)); do
     esac
 done
 
-NAME="${1-}"
+# Mirror common's IMAGE_NAME binding exactly: positional first, env fallback.
+# Without this, a caller that supplies IMAGE_NAME only via the environment
+# (no positional) would fall through to common, whose resolver routes
+# `IMAGE_NAME=utah*` to its `*` arm and never returns projectbluefin/utah.
+NAME="${1-${IMAGE_NAME-}}"
 
 if [[ "$NAME" == utah* ]]; then
     printf '%s\n' "projectbluefin/utah"

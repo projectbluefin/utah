@@ -27,8 +27,13 @@ RUN dnf5 install -y --setopt=install_weak_deps=False \
 # Brewfile into the squashfs. The cache is only a build accelerator; /var/lib
 # is committed into the live image and copied to the installed target offline.
 COPY src/install-flatpaks.sh /usr/local/libexec/utah-install-live-flatpaks
+# The shipped image strips build-time scripts (clean-stage), and this stage is
+# FROM that image -- so ship the Flatpak parser in the overlay itself, staged
+# into the build context by build-iso.sh. Same single parser the desktop
+# contract and luks-e2e use; it also stays on the live system for the guest.
+COPY --chmod=0755 src/utah-verify-desktop-contract.py /usr/local/libexec/utah-verify-desktop-contract
 RUN --mount=type=cache,target=/var/cache/flatpak-dl,id=utah-flatpak \
-    awk -F '"' '/^flatpak / {print $2}' /usr/share/ublue-os/homebrew/system-flatpaks.Brewfile > /tmp/flatpaks-list && \
+    /usr/local/libexec/utah-verify-desktop-contract --flatpaks /usr/share/ublue-os/homebrew/system-flatpaks.Brewfile > /tmp/flatpaks-list && \
     chmod 0755 /usr/local/libexec/utah-install-live-flatpaks && \
     /usr/local/libexec/utah-install-live-flatpaks
 

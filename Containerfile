@@ -1,14 +1,14 @@
-ARG BASE_IMAGE=quay.io/hummingbird-community/bootc-os:latest@sha256:f7d105f3a84222deda796f0a7aee5d0d2edc04bcf2232ce92aa55fea0919dd79
+ARG BASE_IMAGE=quay.io/hummingbird-community/bootc-os:latest@sha256:d4f6387e07514e54d45ca0ac3cf8660c8b8a51b868a6d87bc08ab16aa4da95dd
 # The package factory publishes a complete, digest-addressable RPM repository.
 # Keep this pin in Utah so an image build is reproducible and can be reviewed
 # against the exact package set it consumes.
 ARG PACKAGE_IMAGE=ghcr.io/projectbluefin/utah-packages
-ARG PACKAGE_IMAGE_SHA=sha256:d257e97a0057e37da47995bb142c180e2352960ab13bd44594215616a395b717
+ARG PACKAGE_IMAGE_SHA=sha256:1564d34c91af2f1b4028bbd7b50e520c2cc0af4d38d6c2573774558708b1e486
 # CI keeps PACKAGE_IMAGE_SHA pinned. PACKAGE_IMAGE_REF supports a local image
 # in containers-storage, where no registry digest is available.
 ARG PACKAGE_IMAGE_REF=${PACKAGE_IMAGE}@${PACKAGE_IMAGE_SHA}
 ARG COMMON_IMAGE=ghcr.io/projectbluefin/common
-ARG COMMON_IMAGE_SHA=sha256:a8969625fcfa333a28c8b6f59f69fc286c9218fb2ec1cac9de82f710bd283772
+ARG COMMON_IMAGE_SHA=sha256:ceab3ed3f8f26f262ed9a602f9e509232f4759d54a2fcb6bc83670984e7f9bc7
 ARG BREW_IMAGE=ghcr.io/ublue-os/brew
 ARG BREW_IMAGE_SHA=sha256:2aaf87e3757466bc28d056505a651c7ca5c56fd28f6ff709b34f3f5dbc860e89
 
@@ -188,6 +188,16 @@ RUN --mount=type=bind,from=v4l2loopback,source=/out,target=/tmp/utah-v4l2loopbac
 ARG HUMMINGBIRD_REPO_DAY=unset
 RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages,ro \
     echo "Hummingbird repository day: ${HUMMINGBIRD_REPO_DAY}" && \
+    # dracut's crypt generator exits 2 on crypttab-less boots: with no
+    # /etc/crypttab it takes a bare top-level 'return 0', which bash
+    # rejects outside a function (exit 2, logged as a failed generator).
+    # An empty crypttab parses to zero entries and exits 0; the installer
+    # overwrites it on LUKS installs. Seeded first in the transaction so
+    # any dracut run (kernel install here, initramfs regeneration later)
+    # picks it up into the initramfs (#590). NOTE: HUMMINGBIRD_REPO_DAY
+    # must stay directly above this RUN, so the rationale lives here, not
+    # above it (tests/test_hummingbird_repo_day.py).
+    : > /etc/crypttab && \
     /usr/local/libexec/utah-install-packages \
       /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
     IMAGE_FLAVOR=main /usr/local/libexec/utah-verify-rpm-contract \
@@ -299,8 +309,17 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
 # is the NVIDIA and OGC step, not after the main transaction. The lint that
 # checks the result runs in the same layer: nothing can change between the two.
 # The home-label check runs first: clean-stage removes the utah-* helpers.
+#
+# /var/home is created after clean-stage (which strips all of /var except
+# cache) but before lint, so lint still proves the directory is covered by a
+# tmpfiles.d entry (utah-home.conf). The directory must ship in the image:
+# /home is a symlink to var/home and useradd ships HOME=/home (#576), so any
+# `useradd --create-home` fails on a dangling symlink -- the installer chroot
+# on a fresh install, the tacklebox customize container, and the live ISO
+# build all broke with "cannot create directory /home", exit 12 (#602).
 RUN /usr/local/libexec/utah-fix-home-labels --check && \
     /usr/local/libexec/utah-clean-stage && \
+    mkdir -p /var/home && \
     bootc container lint --fatal-warnings --skip nonempty-boot
 
 LABEL org.opencontainers.image.title="Utah"

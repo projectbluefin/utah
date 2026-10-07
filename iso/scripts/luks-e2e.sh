@@ -119,6 +119,10 @@ ssh_target() {
     sshpass -p "${TEST_PASSWORD}" ssh "${SSH_OPTS[@]}" \
         -p "${SSH_PORT_INSTALLED}" "${TEST_USER}@127.0.0.1" "$@"
 }
+scp_target() {
+    sshpass -p "${TEST_PASSWORD}" scp "${SSH_OPTS[@]}" \
+        -P "${SSH_PORT_INSTALLED}" "$@"
+}
 
 monitor() {
     python3 - "$1" "$2" <<'PY'
@@ -830,7 +834,15 @@ if [[ -n "${UTAH_E2E_FLATPAKS-x}" ]]; then
     if [[ -n "${UTAH_E2E_FLATPAKS-}" ]]; then
         expected_flatpaks="${UTAH_E2E_FLATPAKS}"
     else
-        expected_flatpaks="$(ssh_target "awk -F '\"' '/^flatpak / {print \$2}' /usr/share/ublue-os/homebrew/system-flatpaks.Brewfile" 2>/dev/null || true)"
+        # /usr/local is the admin's domain, not image content: a bootc
+        # deployment never carries /usr/local/libexec, so the verifier the
+        # live guest has is absent on the installed system (exit 127). Copy
+        # the repo parser over and run it with the target's own python3
+        # against the installed contract's copy.
+        scp_target "${ROOT}/scripts/verify-desktop-contract.py" \
+            "${TEST_USER}@127.0.0.1:/tmp/utah-e2e-verify-desktop-contract.py" >/dev/null \
+            || fail "could not copy the Flatpak-list parser to the installed system"
+        expected_flatpaks="$(ssh_target "python3 /tmp/utah-e2e-verify-desktop-contract.py --flatpaks /usr/share/ublue-os/homebrew/system-flatpaks.Brewfile" 2>/dev/null || true)"
         [[ -n "${expected_flatpaks}" ]] || fail "could not read the default Flatpak Brewfile on the installed system"
     fi
     missing_flatpaks=()
