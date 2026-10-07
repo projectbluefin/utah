@@ -26,6 +26,10 @@ on:
         description: "Commit SHA the sync job just pushed to testing. Asserts github.sha matches; empty skips the check."
         required: false
         type: string
+      expected_source_sha:
+        description: Source workflow commit that the dispatched testing build must contain
+        required: false
+        type: string
 
 permissions: {}
 
@@ -60,52 +64,28 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           submodules: recursive
-      - name: Assert dispatched SHA matches github.sha (#371)
-        # sync-main-to-testing captures the SHA after the sync job and passes
-        # it as the target_sha input. The dispatch API still resolves --ref
-        # testing to whatever testing points at when the dispatch is accepted,
-        # and that is what github.sha is for every job in the run. If the two
-        # disagree, another commit landed on testing between capture and
-        # dispatch; fail loudly instead of building the wrong tree. A
-        # stale-read false positive is possible if the `git/ref/heads/testing`
-        # read in sync-main-to-testing.yml is served from a stale cache while
-        # the dispatch resolves the new head; the error text names the
-        # captured SHA and the resolved SHA so the operator can confirm the
-        # build was correct on inspection and re-dispatch. The reverse skew
-        # (the api/ref read AND the dispatch resolution both serving the
-        # pre-sync SHA from a stale cache) is what reusable-sync-branches
-        # produces on `testing` -- captured, dispatch, and `${{ github.sha }}`
-        # are all the same old tip and the run builds the pre-sync tree green.
-        # The in-repo invariant `reusable-sync-branches.yml:91-93,107-108` is
-        # that the sync lands `testing` on `origin/main`, so `$TARGET_SHA`
-        # must be reachable from `${{ github.sha }}` -- `ahead` or
-        # `identical`; `behind`/`diverged` means the captured SHA predates
-        # main and the ref read served a stale cache.
+      - name: Assert dispatched SHA matches the capture and source
         if: ${{ inputs.target_sha != '' }}
         env:
+          GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           GITHUB_SHA: ${{ github.sha }}
           TARGET_SHA: ${{ inputs.target_sha }}
+          SOURCE_SHA: ${{ inputs.expected_source_sha }}
         run: |
           set -euo pipefail
           if [ "$TARGET_SHA" != "$GITHUB_SHA" ]; then
-            echo "::error title=dispatch SHA mismatch::sync-main-to-testing captured $TARGET_SHA but the dispatch resolved testing@$GITHUB_SHA. Another commit landed on testing between the two reads; retry the dispatch."
+            echo "::error::Captured testing@$TARGET_SHA differs from resolved testing@$GITHUB_SHA"
             exit 1
           fi
-          COMPARE_STATUS=$(gh api "repos/$REPO/compare/$GITHUB_SHA...$TARGET_SHA" --jq .status)
-          case "$COMPARE_STATUS" in
-            ahead|identical)
-              echo "Dispatch SHA matches: testing@$TARGET_SHA (compare=$COMPARE_STATUS)"
-              ;;
-            behind|diverged)
-              echo "::error title=captured SHA predates main::sync-main-to-testing captured $TARGET_SHA but compare/$GITHUB_SHA...$TARGET_SHA returned '$COMPARE_STATUS' -- the ref read was served from a stale cache. Re-dispatch once the cache catches up."
-              exit 1
-              ;;
-            *)
-              echo "::error title=compare API failed::gh api .../compare returned status='$COMPARE_STATUS'; refusing to build."
-              exit 1
-              ;;
-          esac
+          if [ -n "$SOURCE_SHA" ]; then
+            status=$(gh api "repos/$REPO/compare/$SOURCE_SHA...$GITHUB_SHA" --jq .status)
+            case "$status" in
+              ahead|identical) ;;
+              *) echo "::error::testing@$GITHUB_SHA does not contain source@$SOURCE_SHA (compare=$status)"; exit 1 ;;
+            esac
+          fi
+          echo "Dispatch capture matches testing@$GITHUB_SHA"
       - name: Install just
         uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3
       - name: Validate manifests

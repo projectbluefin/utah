@@ -109,6 +109,16 @@ one unit.
 
 ### CI guard scripts and test coverage
 
+The front-matter description budget measures the content after stripping the
+leading YAML block indicator (`>`, `|`, and their chomping modifiers). Cover
+both 256 and 257 characters for each indicator so a folded description cannot
+fail because the checker counts YAML syntax. `.github/actionlint.yaml` admits
+the GitHub-hosted `ubuntu-26.04` label while the pinned actionlint predates it;
+all other labels remain checked. Remove that compatibility entry when a newer
+actionlint release recognizes the label.
+
+
+
 The fast gate relies on pure-verdict Python scripts under `scripts/` to halt
 the build before expensive compilation or container builds run:
 
@@ -262,46 +272,21 @@ Source pushes to `main` and the nightly schedule call
 `testing` with `actions: write`. README/verification-only pushes are excluded
 to avoid evidence-update build loops. Nightly runs still sync those changes.
 
-`sync-main-to-testing.yml` captures the commit `reusable-sync-branches` just
-fast-forwarded or force-reset testing to (via `git/ref/heads/testing`) and
-passes it to `build.yml` as the `target_sha` dispatch input. The dispatch
-API still resolves `--ref testing` to whatever testing points at when the
-dispatch is accepted, and that is what `github.sha` becomes for every job
-in the run. The build's `contract` job asserts `inputs.target_sha ==
-github.sha` and fails the run if they disagree. There are three directions
-the capture and resolution can disagree:
+The sync dispatcher captures `testing` and passes `target_sha`; the contract
+requires that capture to equal the dispatched `github.sha`. It also passes
+its immutable workflow source as `expected_source_sha`, and compares
+`source...testing` with an explicitly authenticated API call. Only `ahead` or
+`identical` passes. A target-to-target comparison is tautological and cannot
+reject two stale reads that agree. Regression tests exercise the actual shell
+step with a recorded comparison request, mismatch, stale/divergent source,
+and API failure.
 
-1. `testing` actually moved between the dispatcher's `git/ref/heads/testing`
-   capture and the dispatch API's `--ref testing` resolution — a real
-   dispatch-skew that the assertion exists to catch (#371).
-2. The `git/ref/heads/testing` read was served from a stale cache while
-   the dispatch resolved the new head — a false positive: the captured
-   SHA lags the resolved SHA, the assertion fires, the build was correct,
-   and the next nightly schedule (or a manual re-dispatch) clears the
-   red run.
-3. (False negative, caught by the compare step.) Both the
-   `git/ref/heads/testing` read AND the dispatch's `--ref testing`
-   resolution are served from a stale cache that returns the *pre-sync*
-   SHA. Captured SHA equals resolved SHA, the direct assertion passes,
-   and the run would build the pre-sync tree with a green contract job —
-   exactly the #371 symptom. The contract step now follows the equality
-   check with `gh api .../compare/${{ github.sha }}...$TARGET_SHA
-   --jq .status`; the in-repo invariant
-   (`reusable-sync-branches.yml:91-93,107-108`) is that the sync lands
-   `testing` on `origin/main`, so `$TARGET_SHA` must be `ahead`/`identical`
-   of `${{ github.sha }}`. A `behind`/`diverged` status means the
-   captured SHA predates main and the ref read served a stale cache; the
-   run fails with `::error title=captured SHA predates main::`. Any other
-   status (`null`, error) also fails the build.
-
-The assertion's error text names both SHAs so the operator can distinguish
-direction (1)/(2). Direction (3) shows up only as a stale testing build
-that the nightly corrects; if a stale testing build is observed, the
-recovery is to wait for the next nightly (no manual re-dispatch needed,
-since the dispatched build was the stale one). The checkouts themselves
-keep their default `github.sha` behavior, so every job in the run agrees
-on the same tree (push and pull_request events skip the assertion because
-`target_sha` is empty for them).
+The pinned shared sync workflow exports no actual source/target SHA. Its
+source fetch may include newer main commits than this workflow trigger, so
+the source input is an ancestry floor rather than an exact sync receipt.
+Its same-tree optimization may leave testing on another history; the ancestry
+check conservatively refuses such a result instead of claiming exact-source
+proof. Exact source handoff remains a shared-workflow output contract (#371).
 
 ## ISO LUKS gate and screenshots
 
@@ -435,3 +420,7 @@ PR event runs normal CI; every update still requires independent review.
 just check
 ~/.local/bin/pre-commit run actionlint --all-files
 ```
+
+Front-matter presence checks feed `grep -q` with a here-string. With
+`pipefail`, an early reader exit can make a successful matching pipeline
+look unsuccessful when its writer receives SIGPIPE.

@@ -168,16 +168,17 @@ class DescriptionLengthTest(CheckSkillFrontmatterTest):
         self.write("demo.md", page(f"description: >\n{lines}"))
         self.assert_fails_with("description is")
 
-    @unittest.expectedFailure
-    def test_folded_description_under_limit_passes(self) -> None:
-        """A 255-char folded description is under the 256 limit.
+    def test_block_description_at_limit_passes(self) -> None:
+        for indicator in (">", ">-", ">+", "|", "|-", "|+"):
+            with self.subTest(indicator=indicator):
+                self.write("demo.md", page(f"description: {indicator}\n  {'x' * MAX_DESC}"))
+                self.assert_passes()
 
-        Known bug: the leading `> ` block indicator is counted, so this is
-        reported as 257 chars. Remove this decorator once the script strips the
-        indicator; the unexpected success will fail the suite until then.
-        """
-        self.write("demo.md", page(f"description: >\n  {'x' * (MAX_DESC - 1)}"))
-        self.assert_passes()
+    def test_block_description_over_limit_fails(self) -> None:
+        for indicator in (">", ">-", ">+", "|", "|-", "|+"):
+            with self.subTest(indicator=indicator):
+                self.write("demo.md", page(f"description: {indicator}\n  {'x' * (MAX_DESC + 1)}"))
+                self.assert_fails_with(f"description is {MAX_DESC + 1} chars")
 
 
 class SizeBudgetTest(CheckSkillFrontmatterTest):
