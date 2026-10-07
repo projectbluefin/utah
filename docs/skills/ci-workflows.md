@@ -109,6 +109,16 @@ one unit.
 
 ### CI guard scripts and test coverage
 
+The front-matter description budget measures the content after stripping the
+leading YAML block indicator (`>`, `|`, and their chomping modifiers). Cover
+both 256 and 257 characters for each indicator so a folded description cannot
+fail because the checker counts YAML syntax. `.github/actionlint.yaml` admits
+the GitHub-hosted `ubuntu-26.04` label while the pinned actionlint predates it;
+all other labels remain checked. Remove that compatibility entry when a newer
+actionlint release recognizes the label.
+
+
+
 The fast gate relies on pure-verdict Python scripts under `scripts/` to halt
 the build before expensive compilation or container builds run:
 
@@ -393,3 +403,7 @@ PR event runs normal CI; every update still requires independent review.
 just check
 ~/.local/bin/pre-commit run actionlint --all-files
 ```
+
+Front-matter presence checks feed `grep -q` with a here-string. With
+`pipefail`, an early reader exit can make a successful matching pipeline
+look unsuccessful when its writer receives SIGPIPE.

@@ -133,69 +133,15 @@ comment, `Containerfile` ~L168; repo files copied at `Containerfile` L59).
 `Containerfile.kernel`'s builder stage may use the pinned Fedora 44 repository
 (`packages/fedora-44.repo`) strictly as a builder-only toolchain.
 
-Every allowlisted repository is attested on three axes. Its **origin** is pinned
-in `[repositories.baseurls]`: `verify-rpm-contract.py` fails a build that
-enables an allowlisted repository with a different `baseurl`, a `metalink`/
-`mirrorlist` (which DNF merges with any `baseurl` the section declares), or no
-`baseurl` at all. Its **RPM GPG key** is pinned in `[repositories.gpgkeys]`:
-every `gpgkey=` value in an allowlisted section must match one of the URLs or
-file paths listed there, and a `gpgkey=` with no manifest entry at all is
-rejected (#617). The gate has no other way to know which key the repository
-should be presenting, and an override drop-in could swap in a key the
-attacker signed. `utah-packages` has no entry because its section declares
-no `gpgkey=` (the bind-mounted RPM repository authenticates by OCI provenance
-rather than an RPM GPG key); it is not exempt, so a drop-in that adds a
-`gpgkey=` to it is rejected like any other unpinned key. Pins
-normalize scheme and host case and fold a trailing slash. Its **fetch
-integrity** is attested too: the same check rejects `proxy=`, `sslverify=0`,
-`gpgcheck=0` (or its libdnf5 alias `pkg_gpgcheck=0`), and `repo_gpgcheck=0`
-on an allowlisted repository (#345). `proxy` and `sslverify=0` reroute or
-blind the fetch and are never approved; `gpgcheck`/`repo_gpgcheck` disable RPM
-signature verification and are rejected unless the repository is named in
-`[repositories.security]` with the option it is approved to leave disabled
-(`gpgcheck` covers both `gpgcheck` and `pkg_gpgcheck`). A repository not named
-there may not explicitly disable signature verification (an omitted option
-falls back to the dnf5 default and is not rejected). The same options set to a
-disabled value in the resolved dnf5 `[main]` configuration are always rejected,
-since they apply to every repository and no per-repository approval covers
-them. A `[repositories.security]` or `[repositories.gpgkeys]` entry for a
-repository not in `[repositories.allowed]` is rejected as approving nothing,
-as is any `[repositories.security]` option other than `gpgcheck` or
-`repo_gpgcheck`. The two documented signature-check exceptions are
-`utah-packages` (RPMs are authenticated by the pinned package image and its
-OCI provenance, so both signature checks are disabled) and
-`nvidia-container-toolkit` (NVIDIA signs only its repomd.xml, so only package
-signature verification is disabled). `[repositories.gpgkeys]` pins
-`public-hummingbird-x86_64-rpms` (the local
-`file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2` path) and
-`nvidia-container-toolkit` (the key URL NVIDIA publishes); `utah-packages`
-declares no `gpgkey=` and has no entry.
-
-The install-source identity is single-sourced in `packages/*.repo`. Each repository
-participating in the package install transaction carries a `# utah-install: true`
-annotation (either directly preceding or within the `[section]` header in
-`packages/utah-packages.repo` and `packages/hummingbird.repo`).
-`scripts/install-packages.py` derives the `--enablerepo` set from these annotations
-ordered by priority (ascending), so rebuilds in `utah-packages` (`priority=1`)
-precede base Hummingbird packages (`priority=10`). Repositories without this marker
-(such as `nvidia-container-toolkit` or builder-only `fedora-44`) are excluded from
-the desktop package transaction.
-
-The pinned package image is an RPM repository, not a runtime dependency. It is
-bind-mounted into the package-contract and flavor-specific install RUN steps in
-[`Containerfile`](../../Containerfile), both identified by
-`--mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages,ro`,
-and never copied into a layer: a COPY of the whole ~4 GB repository would leave
-a permanent layer behind, so reproducibility now comes from the digest-pinned
-`packages` stage being the only source the package transaction can see rather
-than from the repository contents living in the image.
+See [the repository authenticity reference](package-contract/references/repository-authenticity.md)
+for origin pins, RPM GPG-key pins, signature exceptions, and override handling.
 
 The allowlist also runs **on-image**, against the composed image's runtime RPM
 repositories, not just the source files in `packages/`. `verify-rpm-contract.py`
 scans every `reposdir` dnf5 resolves at runtime, not a hardcoded list of
-defaults (#454, #513, #536). Repository override directories
-(`/etc/dnf/repos.override.d`) are not covered here; they are tracked
-separately (#527).
+defaults (#454, #513, #536). It also scans dnf5's repository override
+directories, `/etc/dnf/repos.override.d` and
+`/usr/share/dnf5/repos.override.d` (#524).
 
 - The `reposdir=` option in `/usr/share/dnf5/libdnf.conf.d/*.conf`,
   `/etc/dnf/libdnf5.conf.d/*.conf`, or `/etc/dnf/dnf.conf` replaces the
@@ -216,6 +162,31 @@ separately (#527).
   `[main]` the same way (later file wins, an empty `proxy=` clears an earlier
   one) and fails if the effective value sets a proxy or disables TLS
   verification (#352).
+- The override drop-in dirs are scanned **unconditionally**, as a separate loop
+  never folded into the `reposdir=`-derived list (#524). dnf5 reads them as
+  fixed constants -- a base image setting `reposdir=` does not add or remove
+  them (#536) -- so the gate scans them regardless of the runtime list; an
+  image that points `reposdir=` elsewhere still gets override coverage instead
+  of silently dropping it. A `.repo` override drop-in is partial by design: a
+  `[id]` section may set only `enabled=`/`priority=` with no `baseurl=` (that is
+  how the base disables a repo it ships), so the gate validates such a partial
+  override only for the keys it sets -- allowlist membership and the
+  `proxy=`/`sslverify=`/`gpgcheck=`/`pkg_gpgcheck=`/`repo_gpgcheck=` security
+  options -- but never rejects it for a missing `baseurl=`. A partial override
+  that leaves `enabled=` unset (for example `priority=` only) does not enable
+  the repo, so it passes for any id unless it sets a `proxy=` or disables
+  `sslverify=` or an unapproved signature check (`gpgcheck=`, `pkg_gpgcheck=`,
+  `repo_gpgcheck=`). A drop-in that sets any origin key (`baseurl=`, `metalink=` or
+  `mirrorlist=`) is pinned like any other enabled repo, so a `metalink=` or
+  `mirrorlist=` redirect fails the gate.
+- dnf5 matches override section names against repo ids as **globs**, so a
+  `[*]` or `[utah-*]` section applies to every matching repo. The gate cannot
+  enumerate those matches, so a wildcard override passes only when it cannot
+  widen the allowlist: it sets no origin key, does not set `enabled=` to a
+  true value, sets no `proxy=`, and disables neither `sslverify=` nor any
+  signature check (`gpgcheck=`, `pkg_gpgcheck=`, `repo_gpgcheck=`; no
+  `[repositories.security]` approval applies to a glob). A `[*]` drop-in
+  that sets only `priority=` or `enabled=0` passes.
 
 ## Printing and scanning gaps
 
@@ -471,54 +442,6 @@ python3 scripts/check-doc-counts.py
 
 ## Runtime ujust dependencies
 
-Common's `00-entry.just` imports `60-custom.just` after the shared recipes
-with duplicate recipes enabled, but earlier imports win at equal depth.
-The Containerfile preserves Common's entry point as `00-common.just` before
-installing Utah's local overlay. Utah's `00-entry.just` imports that file and
-`60-custom.just` at the same depth, so Utah's custom recipes are shallower
-than Common's defaults and take precedence. Common still supplies the default
-command and unrelated recipes. Keep these overrides small and test them through
-`just`, including import precedence, when changing Common's pin or runtime
-dependencies. The required Common import deliberately fails if composition
-forgets to preserve the original entry point.
-
-For #394, `device-info` prints a local report when `fpaste` is missing and
-only uploads after confirmation when it is available. Its temporary report is
-private and removed on exit. `changelogs` keeps Common's image/repository
-selection but prints Markdown directly when `glow` is absent; HTTP and parsing
-errors must remain failures. Enrollment reports the unsupported capability
-without running `sudo` or `mokutil`: Utah has no module-signing certificate,
-and shipping one without signing the modules would not fix Secure Boot.
-Signing and enrollment remain tracked by #395. Common's guarded
-`check-idle-power-draw` stays unchanged until the factory supplies `powerstat`.
-These fallbacks do not add packages or enable Fedora runtime repositories.
-
-For #446, `report` overrides Common's `bonedigger-report` recipe so bug
-reports route to `projectbluefin/utah` instead of falling through Common's
-`ublue-image-repo` grammar. The override sets
-`UBLUE_IMAGE_REPO_BIN=/usr/local/libexec/utah-image-repo`; that Utah-local
-shim short-circuits every `utah*` name to `projectbluefin/utah` and forwards
-every other name to Common's authoritative resolver (so non-Utah images
-inheriting from this image still resolve correctly). The shim itself is
-installed by `Containerfile` from `scripts/image-repo.sh` (alongside the
-other `utah-*` helpers, under the same `<name>.sh` -> `utah-<name>`
-rename) and listed in `just check`'s presence assertion. Its option
-loop mirrors Common's exactly — `--` and the first non-option both end
-option parsing — and the remaining positionals are forwarded verbatim,
-so an empty `IMAGE_NAME` keeps its slot instead of promoting
-`IMAGE_TAG` into it. `IMAGE_NAME` itself falls back to the `IMAGE_NAME`
-environment variable the same way Common's resolver does
-(`${1-${IMAGE_NAME-}}`), so callers that supply the name via the
-environment (without a positional) still hit the `utah*` short-circuit
-(#465); absent positionals are still omitted rather than synthesised
-as empty, so the upstream env fallback also applies on the fall-through
-path.
-
-Two deliberate differences from Common's `report` recipe: the override sets
-`BONEDIGGER_BRAND="🐦 Utah Bug Report"` so the prompt names Utah rather than
-Bluefin, and it does not forward Common's `BONEDIGGER_VERSION` because
-`bonedigger-report` never reads that variable and it is not in scope for a
-Utah-local recipe. The `--list` description is kept on a single comment line
-immediately above `[group('System')]`; `just` uses only that line, so the
-explanatory block above it must stay separated by a blank line or `ujust
---list` would print an implementation-comment fragment instead.
+See [the runtime ujust dependency reference](package-contract/references/ujust.md)
+for provider checks and the retained audit baseline. Keep detailed inventories
+in references so policy additions stay within the skill size budget.

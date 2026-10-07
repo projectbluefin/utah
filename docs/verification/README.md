@@ -56,4 +56,3 @@ graphical target. This is what proves the boot did not stop at a console.
 
 `utahtest`'s GNOME session, entered by typing the password at the
 greeter above.
-
