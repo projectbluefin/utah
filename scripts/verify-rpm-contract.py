@@ -78,8 +78,29 @@ DEFAULT_REPOS_DIRS: tuple[Path, ...] = (
 DNF_DISTRO_CONF_D = Path("/usr/share/dnf5/libdnf.conf.d")
 DNF_USER_CONF_D = Path("/etc/dnf/libdnf5.conf.d")
 DNF_MAIN_CONF = Path("/etc/dnf/dnf.conf")
+
+# dnf5 reads its two repo-override drop-in dirs as fixed constants, independent
+# of the reposdir= list above (#524): /etc/dnf/repos.override.d and the
+# distribution override /usr/share/dnf5/repos.override.d. A .repo file there can
+# flip enabled=/baseurl= on a repo id defined in a scanned reposdir, so an
+# override that re-enables one must be gated too. They are scanned unconditionally
+# -- a separate loop, never folded into runtime_reposdir_paths(), which a base
+# image can replace with reposdir= (#536) -- so an image that sets reposdir=
+# never drops override coverage.
+OVERRIDE_REPOS_DIRS: tuple[Path, ...] = (
+    Path("/etc/dnf/repos.override.d"),
+    Path("/usr/share/dnf5/repos.override.d"),
+)
 FACTORY_PIN_RE = re.compile(r"^# factory-pin: (?P<digest>\S+)\s*$", re.MULTILINE)
 
+# A dnf5 repo-override drop-in is partial by design: a [id] section may set only
+# enabled=/priority= with no baseurl= -- that is how the base disables a repo it
+# ships. Such a partial override of an allowlisted id is not a fresh pin, so the
+# gate validates it only for the keys it sets (allowlist membership and security
+# options) but never rejects it for a missing baseurl; a drop-in that sets any
+# origin key (baseurl=, metalink= or mirrorlist=) is pinned like any other
+# enabled repo. is_override on check_repo_sections selects this treatment for
+# OVERRIDE_REPOS_DIRS (#524).
 DISABLED_VALUES: frozenset[str] = frozenset({"0", "false", "no", "off"})
 # Fetch-integrity options a repository may be approved to leave disabled via
 # [repositories.security]; proxy= and sslverify=0 are never approvable.
@@ -92,6 +113,14 @@ SIGNATURE_OPTION_KEYS: dict[str, tuple[str, ...]] = {
     "gpgcheck": ("gpgcheck", "pkg_gpgcheck"),
     "repo_gpgcheck": ("repo_gpgcheck",),
 }
+
+# Keys that name where a repository fetches from. An override section that sets
+# any of them is a fresh origin, not a partial override, and is pinned (#524).
+ORIGIN_KEYS: tuple[str, ...] = ("baseurl", "metalink", "mirrorlist")
+
+# libdnf5 matches override section names against repo ids as globs, so
+# [*] or [utah-*] in a drop-in applies to every matching repo (#524).
+GLOB_CHARS_RE = re.compile(r"[*?\[]")
 
 
 def section(overlay: Path, name: str, key: str = "packages") -> list[str]:
@@ -553,31 +582,39 @@ def repo_security_option_errors(
     parser: configparser.ConfigParser,
     source: str,
     approved_security: dict[str, set[str]] | None = None,
+    *,
+    subject: str | None = None,
 ) -> list[str]:
-    """Name options that reroute or weaken an allowlisted repository's fetch.
+    """Name options that reroute or weaken a repository's fetch.
 
-    `proxy` and `sslverify=0` reroute or blind the fetch and are rejected for
-    every allowlisted repository. `gpgcheck` (or its libdnf5 alias
-    `pkg_gpgcheck`) and `repo_gpgcheck` disable RPM signature verification;
-    they are rejected unless this repository is named in
-    `[repositories.security]` with the option it is approved to leave disabled
-    -- the digest-pinned utah-packages repo authenticates RPMs by its pinned
-    image, and NVIDIA signs only its repomd.xml, so both are approved to drop a
-    signature check that would otherwise be a gap (#345).
+    `proxy` and `sslverify=0` reroute or blind the fetch and are always
+    rejected. `gpgcheck` (or its libdnf5 alias `pkg_gpgcheck`) and
+    `repo_gpgcheck` disable RPM signature verification; they are rejected
+    unless this repository is named in `[repositories.security]` with the
+    option it is approved to leave disabled -- the digest-pinned utah-packages
+    repo authenticates RPMs by its pinned image, and NVIDIA signs only its
+    repomd.xml, so both are approved to drop a signature check that would
+    otherwise be a gap (#345).
+
+    `subject` replaces the default "Allowlisted repository ... is enabled in
+    <source>" lead for callers (dnf5 repo overrides) whose section is not
+    necessarily allowlisted or enabled.
     """
+    if subject is None:
+        subject = f"Allowlisted repository '{section_name}' is enabled in {source}"
     errors: list[str] = []
     approved = approved_security.get(section_name, set()) if approved_security else set()
     proxy = parser.get(section_name, "proxy", fallback="").strip()
     if proxy:
         errors.append(
-            f"Allowlisted repository '{section_name}' is enabled in {source} with "
+            f"{subject} with "
             f"proxy={proxy}; a proxy routes fetches through an origin the allowlist "
             "does not name"
         )
     sslverify = parser.get(section_name, "sslverify", fallback="").strip()
     if sslverify.lower() in DISABLED_VALUES:
         errors.append(
-            f"Allowlisted repository '{section_name}' is enabled in {source} with "
+            f"{subject} with "
             f"sslverify={sslverify}; disabling TLS verification accepts any certificate "
             "the origin presents"
         )
@@ -590,11 +627,45 @@ def repo_security_option_errors(
             value = parser.get(section_name, key, fallback="").strip()
             if value.lower() in DISABLED_VALUES:
                 errors.append(
-                    f"Allowlisted repository '{section_name}' is enabled in {source} with "
+                    f"{subject} with "
                     f"{key}={value}; disabling RPM signature verification accepts unsigned "
                     "metadata or packages; approve this origin's signature drift explicitly "
                     f"as '{approval}' in [repositories.security] if it is intended"
                 )
+    return errors
+
+
+def glob_override_errors(
+    section_name: str,
+    parser: configparser.ConfigParser,
+    source: str,
+    partial_override: bool,
+) -> list[str]:
+    """Gate a wildcard override section, which applies to every matching repo id.
+
+    The gate cannot know every repo id the glob matches, so a wildcard override
+    passes only when it cannot widen what the allowlist approved: it sets no
+    origin key, does not set enabled= to a truthy value (which would turn on
+    any disabled, unapproved repo it matches), and sets no security option
+    that would weaken an allowlisted repo it matches.
+    """
+    errors: list[str] = []
+    if not partial_override:
+        errors.append(
+            f"Wildcard repository override '{section_name}' in {source} sets "
+            f"{'/'.join(ORIGIN_KEYS)}; it would reroute every repository it matches"
+        )
+    if parser.has_option(section_name, "enabled") and is_repo_enabled(
+        parser.get(section_name, "enabled")
+    ):
+        errors.append(
+            f"Wildcard repository override '{section_name}' in {source} sets "
+            "enabled=1; it would enable repositories the allowlist does not name"
+        )
+    errors.extend(repo_security_option_errors(
+        section_name, parser, source,
+        subject=f"Wildcard repository override '{section_name}' in {source}",
+    ))
     return errors
 
 
@@ -604,18 +675,48 @@ def check_repo_sections(
     allowed_repos: set[str],
     *,
     expected_baseurls: dict[str, tuple[str, ...]] | None,
+    is_override: bool = False,
     approved_security: dict[str, set[str]] | None = None,
 ) -> list[str]:
-    """Apply the allowlist to every section of an already-parsed config."""
+    """Apply the allowlist to every section of an already-parsed config.
+
+    `is_override` marks dnf5 repo-override drop-in dirs. A drop-in may set only
+    part of a repo id (enabled=/priority= with no baseurl=); a partial override
+    of an allowlisted id is not a fresh pin, so it is validated only for the
+    keys it sets -- allowlist membership and any security options -- but is never
+    rejected for a missing baseurl. A partial override that leaves enabled= unset
+    (e.g. priority= only) does not enable the repo, so only its security options
+    are checked, whatever the id. A drop-in that sets any origin key (baseurl=,
+    metalink= or mirrorlist=) is pinned like any other enabled repo. A wildcard
+    override section name is a glob over repo ids and goes through
+    glob_override_errors instead (#524).
+    """
     errors: list[str] = []
     for section_name in parser.sections():
+        # A partial override sets no origin (baseurl/metalink/mirrorlist) of its
+        # own; it is not a pin. One that sets any origin key is pinned.
+        partial_override = is_override and not any(
+            parser.has_option(section_name, key) for key in ORIGIN_KEYS
+        )
+        if is_override and GLOB_CHARS_RE.search(section_name):
+            errors.extend(
+                glob_override_errors(section_name, parser, source, partial_override)
+            )
+            continue
+        if partial_override and not parser.has_option(section_name, "enabled"):
+            # A priority-only drop-in never enables a repo by itself; only the
+            # keys it sets can weaken whatever repo it targets (#524).
+            errors.extend(repo_security_option_errors(
+                section_name, parser, source, approved_security,
+                subject=f"Repository override '{section_name}' in {source}",
+            ))
+            continue
+        pin = expected_baseurls is not None and not partial_override
         if not is_repo_enabled(parser.get(section_name, "enabled", fallback="1")):
             if section_name in allowed_repos:
-                errors.extend(
-                    repo_security_option_errors(
-                        section_name, parser, source, approved_security)
-                )
-                if expected_baseurls is not None:
+                errors.extend(repo_security_option_errors(
+                    section_name, parser, source, approved_security))
+                if pin:
                     errors.extend(repo_pin_errors(section_name, parser, source, expected_baseurls))
             continue
         if section_name in allowed_repos:
@@ -634,7 +735,7 @@ def check_repo_sections(
                 f"Unapproved repository '{section_name}' is enabled in {source}; "
                 f"allowed repositories: {sorted(allowed_repos)}"
             )
-        elif expected_baseurls is not None:
+        elif pin:
             errors.extend(repo_pin_errors(section_name, parser, source, expected_baseurls))
     return errors
 
@@ -676,12 +777,16 @@ def verify_repository_policy(
     expected_baseurls: dict[str, tuple[str, ...]] | None,
     approved_security: dict[str, set[str]] | None = None,
     check_mode: bool = False,
+    is_override: bool = False,
 ) -> list[str]:
     """Prove the system exposes only explicitly allowed runtime RPM repositories.
 
     In check_mode, a marked builder-only file is skipped only when Containerfile
     copies it into a builder and not into the final runtime stage. A comment
     alone cannot exempt a runtime repository from policy.
+
+    `is_override` marks dnf5 repo-override drop-in dirs; there a .repo file may
+    set only part of a repo id and must not be rejected for a missing baseurl.
     """
     errors: list[str] = []
     if not repos_dir.is_dir():
@@ -706,7 +811,7 @@ def verify_repository_policy(
         errors.extend(
             check_repo_sections(
                 parser, str(repo_file), allowed_repos,
-                expected_baseurls=expected_baseurls,
+                expected_baseurls=expected_baseurls, is_override=is_override,
                 approved_security=approved_security,
             )
         )
@@ -1106,6 +1211,24 @@ def main() -> int:
         )
     except Dnf5ConfigError as err:
         repo_errors.append(str(err))
+    # dnf5 reads its two repo-override drop-in dirs as fixed constants, independent
+    # of the reposdir= list above (#524). A .repo file there can flip enabled=/
+    # baseurl= on a repo id the reposdir scan saw disabled, so an override that
+    # re-enables one must be gated too. Scan them unconditionally -- a separate
+    # loop, never folded into runtime_reposdir_paths(), which a base image can
+    # replace with reposdir= (#536) -- so an image that sets reposdir= never drops
+    # override coverage. Override drop-ins are partial by design (a section may set
+    # only enabled=/priority= with no baseurl=), so is_override=True validates each
+    # only for the keys it sets and never rejects a missing baseurl, while a
+    # drop-in that sets baseurl=/metalink=/mirrorlist= is still pinned.
+    for repos_dir in OVERRIDE_REPOS_DIRS:
+        repo_errors.extend(
+            verify_repository_policy(
+                repos_dir, allowed_repos,
+                expected_baseurls=repo_baseurls, check_mode=False,
+                approved_security=approved_security, is_override=True,
+            )
+        )
     if repo_errors:
         for err in repo_errors:
             print(f"ERROR: {err}", file=sys.stderr)
