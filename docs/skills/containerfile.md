@@ -283,8 +283,11 @@ wall-clock build args held constant, and diffs the ordered layer digests
 `podman build` of an unchanged Containerfile otherwise replays the layer cache
 and passes whatever the build scripts leave behind. Two full builds, so it is
 not in `just check` or the PR matrix; run it when changing anything that writes
-into the image. No gate runs it, so a change claiming reproducibility should
-cite its own run. The comparator checks every ordered native layer; do not squash or ignore layers to claim a passing
+into the image. No regular PR gate runs it, so a change claiming reproducibility should
+cite its own run. An isolated review branch can dispatch the read-only review
+reproducibility job with `contract_only` and `review_repro` true; retain its
+source SHA, both inspections and comparison log. This establishes native
+layer behavior, while published rechunking still needs separate evidence. The comparator checks every ordered native layer; do not squash or ignore layers to claim a passing
 result.
 
 ### Timestamp discipline starts before the transaction
