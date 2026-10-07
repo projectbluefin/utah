@@ -1,7 +1,7 @@
 ---
 name: desktop-contract
 version: "1.0"
-last_updated: "2026-09-30"
+last_updated: "2026-10-06"
 id: desktop-contract
 one_line_purpose: Maintain Utah identity, Bluefin desktop defaults, and first-boot Flatpak policy.
 entry_point: docs/skills/desktop-contract.md
@@ -70,7 +70,9 @@ The TOML's sections are the contract's table of contents:
   `avahi-daemon.service`, `avahi-daemon.socket`, `switcheroo-control.service`,
   `bluetooth.service`, `ublue-system-setup.service`, `flatpak-preinstall.service`,
   `flatpak-nuke-fedora.service`, `brew-setup.service`, `dconf-update.service`,
-  `bootc-unified-storage.service`, `uupd.timer`. Update policy delegates
+  `bootc-unified-storage.service`, `input-remapper.service`,
+  `ModemManager.service`, `cups.socket`, `systemd-boot-update.service`,
+  `uupd.timer`. Update policy delegates
   background updates to `uupd.timer`; `bootc-fetch-apply-updates.timer` and
   `bootc-fetch-apply-updates.service` are masked in `/etc` and `/usr/lib` (and
   disabled in `85-utah-desktop.preset`) so cross-vendor `/etc` 3-way merges
@@ -276,8 +278,9 @@ session journal and `gnome-extensions info <uuid>` (`State: ACTIVE`).
 
 ## The OS logo is an os-release key
 
-GNOME Initial Setup's welcome page and Settings > About show the
-icon named by os-release `LOGO`. Fedora sets `LOGO=fedora-logo-icon` and
+GNOME Initial Setup's welcome page shows the icon named by os-release
+`LOGO`. Distributor builds of Settings > About use the compiled PNG paths
+described below. Fedora sets `LOGO=fedora-logo-icon` and
 Bluefin keeps it; common overlays the raptor at
 `/usr/share/pixmaps/fedora-logo-icon.png`. Hummingbird's os-release has no
 `LOGO`, so Utah showed the generic GNOME foot with the raptor already on disk.
@@ -347,15 +350,14 @@ consulting os-release `LOGO`; Utah's spec configures Fedora's
 under all four names, but the logos-RPM swap erases the early overlay.
 The desktop RUN bind-mounts Common's pinned pixmaps and branding restores
 those four files after the RPM transaction without adding a COPY layer.
+The package installer checks for residual distro artwork before this restore;
+the desktop contract then checks the restored Bluefin assets.
 
 The pinned command-menu extension creates `St.Icon` from `menuicon-setting`.
 Keep Bluefin's `ublue-logo-symbolic`, command labels/order/location and help
-URLs unchanged. Documentation and Ask Bluefin use native `gio open`: Utah has
-no `/usr/bin/xdg-open` on the guest, but `glib2` provides `/usr/bin/gio`.
-The contract requires the SVG and the compiled hicolor cache, which branding
+URLs unchanged. The contract requires the SVG and the compiled hicolor cache, which branding
 regenerates after all overlays. The menu must show the mark (not a
 placeholder), retain commands, and show Bluefin artwork with the Utah OS name.
-
 
 ## Services and login defaults
 

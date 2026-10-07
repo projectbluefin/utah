@@ -402,6 +402,97 @@ verify_desktop_and_identity() {
     fi
 }
 
+# Collect the systemd-boot entry listing from the guest and run the
+# bootmgr validator against the bootc status JSON that the phase already
+# produced. Each entry is emitted as `=== ENTRY <path> ===\n<content>\n=== END ===`
+# so the parser can read the file names back out without shell globbing; the
+# harness-side validation joins the phases together and surfaces a missing
+# entry as an explicit failure rather than letting a half-finalized staged
+# deployment boot the old kernel set.
+collect_bootmgr_listing() {
+    # Read both the Fedora/bootc layout's BLS root
+    # `/boot/loader/entries` (ostree writes Type #1 entries here per the
+    # sysroot deploy) and the alternative ESP `/boot/efi/loader/entries`
+    # (BLS spec says implementations should also pick those up). The
+    # find tolerates either or both being absent.
+    # Reads as root, since on a vfat ESP (/boot/efi) the loader entries
+    # are fmask=0077 root-only and an EPERM read silently produces an
+    # empty listing indistinguishable from "finalize wrote nothing".
+    # `sudo` is preferred over `2>/dev/null || true` so a permission
+    # failure fails loudly and the validator's missing-entry message is
+    # honest. The ext4 `/boot/loader/entries` is not root-only but the
+    # script reads both roots through one command, so the sudo is
+    # unconditional.
+    #
+    # The script travels as a `bash -c` argument through `ssh_target_sudo`,
+    # so stdin carries only sudo's password. Never pipe the script to
+    # `bash -s` after the password: if sudo did not consume the password
+    # line (NOPASSWD, cached ticket), bash would execute it as a command.
+    local script
+    script="$(cat <<'INNER'
+shopt -s nullglob
+seen=0
+for entries_dir in /boot/loader/entries /boot/efi/loader/entries; do
+    [ -d "$entries_dir" ] || continue
+    boot_root="${entries_dir%/loader/entries}"
+    [ -n "$boot_root" ] || boot_root="/"
+    for f in "$entries_dir"/*.conf; do
+        [ -f "$f" ] || continue
+        printf '=== ENTRY %s ===\n' "$f"
+        cat "$f"
+        printf '\n=== END ===\n'
+        # After the entry body (so parse_loader_listing's current_buf
+        # does not collect them into the entry), record existence of
+        # the paths the entry references (kernel, initrd, image) so a
+        # pruned kernel/initrd surfaces as missing-on-disk rather than
+        # as a BLS entry pointing at nothing. The STAT markers are
+        # consumed by validate_bootmgr_entries to fail any entry whose
+        # referenced files are not present. BLS Type #1 paths are
+        # partition-relative, so resolve them under the entry's boot root.
+        for path in $(awk '
+                    /^linux[[:space:]]/  { print $2 }
+                    /^initrd[[:space:]]/ { print $2 }
+                    /^image[[:space:]]/  { print $2 }
+                ' "$f"); do
+            target="${boot_root}/${path#/}"
+            if [ -e "$target" ]; then
+                printf 'STAT %s %s present\n' "$f" "$path"
+            else
+                printf 'STAT %s %s missing\n' "$f" "$path"
+            fi
+        done
+        seen=$((seen+1))
+    done
+done
+echo "$seen entries captured" >&2
+INNER
+)"
+    ssh_target_sudo bash -c "${script}"
+}
+
+# Arguments:
+#   $1 status-file: path to the bootc status JSON the phase captured
+#   $2 label: short label written to the evidence file
+#   $3 slots: comma-separated bootc slots the phase must have entries for
+verify_bootmgr_entries() {
+    local status_file="$1"
+    local label="$2"
+    local slots="${3:-booted,staged,rollback}"
+    local listing_file="${EVIDENCE}/loader-entries-${label}.txt"
+    local diag_file="${EVIDENCE}/bootmgr-${label}.json"
+
+    echo "Verifying systemd-boot entries (${label})..."
+    collect_bootmgr_listing > "${listing_file}" \
+        || diagnose_failure "Failed to collect systemd-boot entries during ${label}"
+    python3 "${ROOT}/scripts/bootc_lifecycle.py" validate-bootmgr \
+        --status "${status_file}" \
+        --listing "${listing_file}" \
+        --slots "${slots}" \
+        --output "${diag_file}" \
+        || diagnose_failure "systemd-boot entry validation failed during ${label} (see ${diag_file})"
+    echo "  boot-manager: BLS entries verified for slots ${slots}"
+}
+
 # --- Prepare Disk ---
 echo "=== Preparing test deployment ==="
 if [[ "${DISK_OR_ISO}" == *.iso ]]; then
@@ -479,6 +570,8 @@ python3 "${ROOT}/scripts/bootc_lifecycle.py" validate-phase baseline \
     || diagnose_failure "Baseline deployment validation failed"
 verify_boot_files baseline
 
+verify_bootmgr_entries "${WORK}/baseline-status.json" baseline booted
+
 python3 "${ROOT}/scripts/bootc_lifecycle.py" record-diagnostics \
     --output-dir "${EVIDENCE}" \
     --phase baseline \
@@ -539,6 +632,12 @@ python3 "${ROOT}/scripts/bootc_lifecycle.py" validate-phase staged \
 # must have their files now. The upgraded/rollback gates run after reboot.
 verify_boot_files staged
 
+# Phase 2 only checks `booted`: ostree-finalize-staged does not write the
+# staged BLS entry until shutdown, so on a correctly-functioning system the
+# entry does not exist yet and would fail the validator. Phase 3 (post-reboot)
+# checks both slots.
+verify_bootmgr_entries "${WORK}/staged-status.json" staged "booted"
+
 python3 "${ROOT}/scripts/bootc_lifecycle.py" record-diagnostics \
     --output-dir "${EVIDENCE}" \
     --phase staged \
@@ -575,6 +674,14 @@ python3 "${ROOT}/scripts/bootc_lifecycle.py" validate-phase upgraded \
     --candidate-digest "${EXPECTED_DIGEST}" \
     || diagnose_failure "Upgraded deployment validation failed"
 verify_boot_files upgraded
+
+# Phase 3 (post-upgrade reboot) must check both `booted` and `rollback`:
+# the upgraded deployment is the booted slot, and the previous baseline
+# (now the rollback target) is in the rollback slot. Checking only
+# `booted` would silently miss the regression where ostree-finalize-staged
+# failed to (re)write the rollback slot's BLS entry -- the booted entry
+# necessarily exists since the guest booted from it.
+verify_bootmgr_entries "${WORK}/upgraded-status.json" upgraded "booted,rollback"
 
 python3 "${ROOT}/scripts/bootc_lifecycle.py" record-diagnostics \
     --output-dir "${EVIDENCE}" \
@@ -614,6 +721,13 @@ python3 "${ROOT}/scripts/bootc_lifecycle.py" validate-phase rollback \
     --baseline-digest "${BASELINE_DIGEST}" \
     || diagnose_failure "Rollback verification failed"
 verify_boot_files rollback
+
+# Phase 4 (post-rollback) must check both `booted` and `rollback`: the
+# rolled-back baseline is now the booted slot, and the upgraded deployment
+# (previously booted, now booted-then-replaced) is in the rollback slot.
+# Checking only `booted` would miss the regression where the rollback slot
+# BLS entry went missing after `bootc rollback`.
+verify_bootmgr_entries "${WORK}/rollback-status.json" rollback "booted,rollback"
 
 python3 "${ROOT}/scripts/bootc_lifecycle.py" record-diagnostics \
     --output-dir "${EVIDENCE}" \

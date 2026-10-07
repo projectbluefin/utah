@@ -195,6 +195,17 @@ transaction. The lint that checks the result runs in the same layer
 (`bootc container lint --fatal-warnings --skip nonempty-boot`): nothing can
 change between the two (comment, `Containerfile`).
 
+The one deliberate exception is `/var/home`, created after clean-stage but
+before lint in that same RUN. `/home` is a symlink to `var/home` and
+useradd ships `HOME=/home` (#576), so any `useradd --create-home` fails on
+a dangling symlink -- the installer chroot on a fresh install (no tmpfiles
+has run there yet), the tacklebox customize container, and the live ISO
+build all broke with `cannot create directory /home`, exit 12 (#602).
+clean-stage strips all of `/var` except cache, so the mkdir cannot go
+earlier; placing it before lint keeps lint proving the directory is covered
+by the `utah-home.conf` tmpfiles entry. A tmpfiles `d` line alone is not
+enough -- it only runs at boot, never in the installer chroot.
+
 ## `just` override and the 1.56 floor
 
 Utah's `00-entry.just` imports Common's renamed entry (`00-common.just`) plus

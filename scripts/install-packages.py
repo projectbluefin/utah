@@ -257,7 +257,12 @@ def find_skew(installed_map: dict[tuple[str, str], str],
     return skew
 
 
-FEDORA_LOGO_FILES = ["fedora-gdm-logo.png", "fedora-logo.png", "fedora-logo-small.png"]
+# Check immediately after the distro-logo RPM swap. configure-branding.sh
+# later restores the pinned Bluefin artwork at the About-dialog paths.
+FEDORA_LOGO_FILES = [
+    "fedora-gdm-logo.png", "fedora-logo.png", "fedora-logo-small.png",
+    "fedora_logo_med.png", "fedora_whitelogo_med.png",
+]
 
 
 def logo_files_present(pixmaps: Path = Path("/usr/share/pixmaps")) -> list[str]:

@@ -126,7 +126,7 @@ def bluefin_packages(manifest_text: str) -> set[str]:
     treats Bluefin's contract as the union, because `multimedia_overrides`
     records the same names that are already satisfied under a different
     repository, not additional ones. See docs/skills/package-contract.md
-    "multimedia_overrides are not missing packages".
+    "Media packages and codec parity".
 
     The set of sections is derived from the manifest rather than enumerated,
     so a future `[fedora_v45]` (or any per-Fedora-version section Bluefin

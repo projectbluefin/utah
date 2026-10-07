@@ -417,6 +417,26 @@ class ServiceMaskParityTests(unittest.TestCase):
         self.assertIn("bootc-fetch-apply-updates.timer", masked)
         self.assertIn("bootc-fetch-apply-updates.service", masked)
 
+    def test_desktop_contract_services_listed_in_skill_doc(self):
+        # The [services] section of the skill doc enumerates the units the
+        # contract asserts; if a new unit is added to contracts/bluefin-desktop.toml
+        # without the doc following, the verifier still passes and the drift only
+        # shows up in review (#597). Assert each enabled unit is named in the doc.
+        import tomllib
+
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        enabled = contract.get("services", {}).get("enabled", [])
+        self.assertGreater(len(enabled), 0, "contract must list at least one enabled service")
+
+        skill_doc = (ROOT / "docs/skills/desktop-contract.md").read_text()
+        services_heading = skill_doc.split("`[services]`", 1)[1].split("\n\n", 1)[0]
+        missing = [unit for unit in enabled if unit not in services_heading]
+        self.assertEqual(
+            missing, [],
+            "every enabled unit must be named in docs/skills/desktop-contract.md "
+            f"under the [services] bullet; missing: {missing}",
+        )
+
     def test_grub_boot_success_timer_not_enabled(self):
         # /boot is read-only at runtime, so the boot-success mark can never be
         # written and the timer fails on every boot; nothing consumes the flag.
