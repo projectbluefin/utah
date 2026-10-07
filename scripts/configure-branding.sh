@@ -70,7 +70,7 @@ set_os_release OSTREE_VERSION "${VERSION}"
 set_os_release IMAGE_ID "${IMAGE_ID}"
 set_os_release IMAGE_VERSION "${VERSION}"
 set_os_release BUILD_ID "${SHA_HEAD_SHORT}"
-# The OS logo GNOME Initial Setup and Settings > About look up by
+# The OS logo GNOME Initial Setup looks up by
 # icon name. Fedora sets LOGO=fedora-logo-icon and Bluefin keeps it, with
 # common overlaying its raptor at /usr/share/pixmaps/fedora-logo-icon.png.
 # Hummingbird's os-release has no LOGO at all, so Utah fell back to the
@@ -88,6 +88,21 @@ fi
 # and matches the files shipped by Bluefin.
 printf '…\n' >/usr/share/ublue-os/fastfetch-user-count
 printf '…\n' >/usr/share/ublue-os/bazaar-install-count
+# GNOME Control Center's distro builds use these compile-time PNG paths, not
+# os-release NAME/LOGO. The RPM transaction erased Common's earlier overlay
+# while swapping distro logos. Restore Bluefin's matching light/dark artwork
+# only after the transaction, from the digest-pinned Common stage bind mount.
+# install-packages.py checks FEDORA_LOGO_FILES before this restore; identical
+# paths here contain Bluefin artwork and are checked by the desktop contract.
+for logo in fedora_logo_med.png fedora_whitelogo_med.png fedora-logo.png system-logo-white.png; do
+    install -Dm0644 "/tmp/utah-bluefin-pixmaps/${logo}" "/usr/share/pixmaps/${logo}"
+done
+
+# St.Icon in custom-command-menu resolves menuicon-setting through the theme.
+# Keep Bluefin's icon name and menu behavior; rebuild the index after every
+# overlay and logos-RPM operation so it includes our shipped symbolic SVG.
+gtk-update-icon-cache --force /usr/share/icons/hicolor
+
 
 # Compile the system dconf databases now so the GDM greeter picks up the
 # org.gnome.login-screen logo override (etc/dconf/db/gdm.d/01-bluefin-gdm-logo)

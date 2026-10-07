@@ -1,0 +1,26 @@
+# Ghostty, from the TunaOS OCI remote (/etc/flatpak/remotes.d/tuna-os.flatpakrepo).
+#
+# Utah ships no terminal emulator at all otherwise. Bluefin's own image test
+# asserts ptyxis, but ptyxis is not in Bluefin's package contract because
+# Fedora's base image carries it -- and Hummingbird's does not, nor does it
+# package ptyxis, vte291 or gnome-console, so there is nothing to install.
+# Until this factory builds a terminal, the flatpak is the terminal.
+#
+# Kept out of the Brewfile-derived brewfile.preinstall on purpose: the Brewfile
+# is the parity contract with Bluefin and verify-desktop-contract compares it
+# byte for byte. This is Utah's own addition and does not belong in it.
+#
+# preinstall.d has no key naming a remote; flatpak tries every configured
+# remote (or only those whose collection ID matches CollectionID). Only TunaOS
+# carries this app, and only on its master branch.
+#
+# That resolution is remote-wide, not per-entry, and tuna-os (OCI, no GPGKey)
+# is permanently configured on installed systems. So every Flathub entry --
+# bazaar.preinstall and the generated brewfile.preinstall -- pins
+# CollectionID=org.flathub.Stable, which only the Flathub remote carries
+# (configure-services.sh sets it on the descriptor; the ISO bake sets it on its
+# remote). This entry alone stays collection-less: an OCI remote has no
+# collection ID to name.
+[Flatpak Preinstall com.mitchellh.ghostty]
+Branch=master
+IsRuntime=false

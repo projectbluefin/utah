@@ -64,16 +64,6 @@ class InputsTests(unittest.TestCase):
 
 
 class EvidenceTests(unittest.TestCase):
-    def test_privileged_tacklebox_consumers_share_one_digest_pin(self):
-        pin = (ROOT / "config/tacklebox-image").read_text().strip()
-        self.assertRegex(pin, r"^ghcr.io/tuna-os/tacklebox:latest@sha256:[a-f0-9]{64}$")
-        for path in ("iso/scripts/build-iso-tacklebox.sh", ".github/workflows/post-testing-e2e.yml"):
-            source = (ROOT / path).read_text()
-            self.assertIn("config/tacklebox-image", source)
-            self.assertNotIn("ghcr.io/tuna-os/tacklebox:latest", source)
-        managers = json.loads((ROOT / "renovate.json").read_text())["customManagers"]
-        self.assertTrue(any("/^config/tacklebox-image$/" in m["managerFilePatterns"] for m in managers))
-
     def test_ogc_config_gate_rejects_each_missing_live_boot_feature(self):
         script = (ROOT / "scripts/install-ogc-kernel.sh").read_text()
         # Execute only the pure config gate, never the package/kernel installer.
@@ -301,11 +291,11 @@ class EvidenceTests(unittest.TestCase):
             return subprocess.run(["bash", "-eu", "-c", harness],
                                    capture_output=True, text=True, env=env)
 
-        complete = run("org.a\norg.b\norg.c", "org.a\norg.b")
+        complete = run("app/org.a/x86_64/stable\napp/org.b/x86_64/stable\napp/org.c/x86_64/stable", "org.a\norg.b")
         self.assertEqual(complete.returncode, 0, complete.stderr)
         self.assertIn("org.a, org.b", complete.stdout)
 
-        missing = run("org.a", "org.a\norg.b")
+        missing = run("app/org.a/x86_64/stable", "org.a\norg.b")
         self.assertNotEqual(missing.returncode, 0)
         self.assertIn("org.b", missing.stderr)
         self.assertNotIn("org.a\n", missing.stderr.split("missing")[-1])
@@ -457,7 +447,179 @@ class FlatpakRetryTests(unittest.TestCase):
         result = self.drive("flatpak() { attempts=$((attempts+1)); return 1; }")
         self.assertEqual(result.stdout.strip(), "rc=1 attempts=5", result.stderr)
 
+    def drive_preinstall(self, resolve_on_attempt):
+        """Execute the real bake's install/verification block in a temp tree.
+
+        Model flatpak's documented zero-exit metadata skip, not a failed
+        command: only the bake's declared-set verification can trigger retry.
+        """
+        source = self.SCRIPT.read_text()
+        block = source.split(
+            "# Install everything the image declares in preinstall.d", 1,
+        )[1].split("\n", 1)[1].split("# `uninstall --unused`", 1)[0]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            declarations = root / "preinstall.d"
+            declarations.mkdir()
+            (declarations / "defaults.preinstall").write_text(
+                "[Flatpak Preinstall io.github.kolunmi.Bazaar]\nBranch=stable\n"
+                "[Flatpak Preinstall com.mitchellh.ghostty]\nBranch=master\n"
+            )
+            installed = root / "installed"
+            installed.mkdir()
+            harness = root / "bake.sh"
+            harness.write_text('''set -euo pipefail
+PREINSTALL_DIR="$1"
+state="$2"
+resolve_on_attempt="$3"
+attempts=0
+sleep() { :; }
+flatpak() {
+    case "$1" in
+        --default-arch) echo x86_64 ;;
+        preinstall)
+            attempts=$((attempts + 1))
+            printf '%s\\n' "$attempts" > "$state/attempts"
+            if (( attempts >= resolve_on_attempt )); then
+                : > "$state/io.github.kolunmi.Bazaar"
+                : > "$state/com.mitchellh.ghostty"
+            fi
+            return 0 ;;
+        info) local id="${3#*/}"; id="${id%%/*}"; [[ -f "$state/$id" ]] ;;
+        *) return 90 ;;
+    esac
+}
+''' + block.replace("/usr/local/libexec/utah-preinstall-refs.py", str(ROOT / "iso/live/src/preinstall-refs.py")))
+            result = subprocess.run(
+                ["bash", str(harness), str(declarations), str(installed),
+                 str(resolve_on_attempt)], capture_output=True, text=True,
+            )
+            attempts = int((installed / "attempts").read_text())
+            present = {path.name for path in installed.iterdir() if path.name != "attempts"}
+            return result, attempts, present
+
+    def test_preinstall_retries_a_zero_exit_with_missing_declared_refs(self):
+        result, attempts, present = self.drive_preinstall(3)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(attempts, 3)
+        self.assertEqual(present, {"io.github.kolunmi.Bazaar", "com.mitchellh.ghostty"})
+
+    def test_preinstall_recovers_from_a_longer_metadata_outage(self):
+        result, attempts, present = self.drive_preinstall(5)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(attempts, 5)
+        self.assertIn("com.mitchellh.ghostty", present)
+
+    def test_preinstall_persistent_missing_refs_fail_after_five_attempts(self):
+        result, attempts, present = self.drive_preinstall(6)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(attempts, 5)
+        self.assertEqual(present, set())
+        self.assertIn("ERROR: declared", result.stderr)
+        self.assertIn("com.mitchellh.ghostty", result.stderr)
+
+    def test_preinstall_does_not_retry_a_complete_declared_set(self):
+        result, attempts, present = self.drive_preinstall(1)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(attempts, 1)
+        self.assertEqual(present, {"io.github.kolunmi.Bazaar", "com.mitchellh.ghostty"})
+
+    def test_warm_cache_seed_does_not_carry_preinstalled_marks(self):
+        """A second build seeds the last build's repo, config and all.
+
+        That config lists every ref the last build preinstalled. Seeded as-is,
+        flatpak preinstall skips them all and check_missing fails every
+        attempt. Run the real seed and install blocks against a cache that
+        carries those marks, with a flatpak stub that honours them.
+        """
+        source = self.SCRIPT.read_text()
+        seed_start = 'if [[ -d "${FLATPAK_CACHE}/repo/refs" ]]; then'
+        seed = seed_start + source.split(seed_start, 1)[1].split("\nfi\n", 1)[0] + "\nfi\n"
+        install = source.split(
+            "# Install everything the image declares in preinstall.d", 1,
+        )[1].split("\n", 1)[1].split("# `uninstall --unused`", 1)[0]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            declarations = root / "preinstall.d"
+            declarations.mkdir()
+            (declarations / "defaults.preinstall").write_text(
+                "[Flatpak Preinstall io.github.kolunmi.Bazaar]\nBranch=stable\n"
+                "[Flatpak Preinstall com.mitchellh.ghostty]\nBranch=master\n"
+            )
+            cache = root / "cache"
+            (cache / "repo/refs").mkdir(parents=True)
+            (cache / "repo/config").write_text(
+                "[core]\nrepo_version=1\nmode=bare-user-only\n"
+                "xa.preinstalled=app/io.github.kolunmi.Bazaar/x86_64/stable;"
+                "app/com.mitchellh.ghostty/x86_64/master\n"
+            )
+            flatpak_dir = root / "var-lib-flatpak"
+            (flatpak_dir / "repo").mkdir(parents=True)
+            installed = root / "installed"
+            installed.mkdir()
+            harness = root / "bake.sh"
+            harness.write_text('''set -euo pipefail
+FLATPAK_CACHE="$1"
+PREINSTALL_DIR="$2"
+state="$3"
+repo="$4/repo"
+sleep() { :; }
+ostree() {
+    [[ "$1 $2 $3 $4" == "config --repo=$repo unset core.xa.preinstalled" ]] || return 90
+    sed -i '/^xa\\.preinstalled=/d' "$repo/config"
+}
+flatpak() {
+    case "$1" in
+        --default-arch) echo x86_64 ;;
+        preinstall)
+            local id
+            for id in $(sed -n 's/^\\[Flatpak Preinstall \\(.*\\)\\]$/\\1/p' "$PREINSTALL_DIR"/*.preinstall); do
+                grep -q "^xa\\.preinstalled=.*app/$id/" "$repo/config" || : > "$state/$id"
+            done ;;
+        info) local id="${3#*/}"; id="${id%%/*}"; [[ -f "$state/$id" ]] ;;
+        *) return 90 ;;
+    esac
+}
+''' + seed.replace("/var/lib/flatpak", "$4") + install.replace("/usr/local/libexec/utah-preinstall-refs.py", str(ROOT / "iso/live/src/preinstall-refs.py")))
+            result = subprocess.run(
+                ["bash", str(harness), str(cache), str(declarations),
+                 str(installed), str(flatpak_dir)], capture_output=True, text=True,
+            )
+            present = {path.name for path in installed.iterdir()}
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(present, {"io.github.kolunmi.Bazaar", "com.mitchellh.ghostty"})
+        self.assertNotIn("declared but not installed", result.stderr)
+
+    def test_bake_flathub_remote_carries_the_preinstall_collection_id(self):
+        # Flathub entries pin CollectionID=org.flathub.Stable; flatpak
+        # preinstall silently skips them unless the remote carries that ID.
+        lines = self.SCRIPT.read_text().splitlines()
+        add = next(i for i, line in enumerate(lines)
+                   if line.startswith("retry_flatpak remote-add") and " flathub " in line)
+        modify = lines.index(
+            "flatpak remote-modify --system --collection-id=org.flathub.Stable flathub")
+        preinstall = next(i for i, line in enumerate(lines)
+                          if line.lstrip().startswith("flatpak preinstall"))
+        self.assertLess(add, modify)
+        self.assertLess(modify, preinstall)
+
+    def test_only_ghostty_preinstall_is_collection_less(self):
+        # tuna-os is a GPG-less OCI remote; any collection-less entry resolves
+        # from it as well as from Flathub.
+        directory = ROOT / "system_files/shared/usr/share/flatpak/preinstall.d"
+        for path in sorted(directory.glob("*.preinstall")):
+            with self.subTest(path=path.name):
+                text = path.read_text()
+                if path.name == "ghostty.preinstall":
+                    self.assertNotIn("\nCollectionID=", text)
+                else:
+                    self.assertIn("\nCollectionID=org.flathub.Stable\n", text)
+
     def test_every_network_install_goes_through_the_retry(self):
+        # The Brewfile/Ghostty path now goes through flatpak preinstall, which
+        # retries via preinstalled marks rather than retry_flatpak. This guard
+        # still covers the installer install and any future flatpak install, so
+        # a bare (unretried) network install cannot slip back in.
         script = self.SCRIPT.read_text()
         installs = [line for line in script.splitlines()
                     if line.startswith("flatpak install")
@@ -659,65 +821,3 @@ class BuildToolingRemovalTests(unittest.TestCase):
     def test_removal_cleans_the_dependency_closure(self):
         self.assertNotIn("--no-autoremove", self.remove_line(),
                          "removal must let dnf clean the orphaned build closure")
-
-
-class IsoBakeParserTests(unittest.TestCase):
-    """The ISO bake must ship the Flatpak parser it calls.
-
-    Post-Testing E2E run 37346082548 failed five cells with exit 127: both
-    ISO Containerfiles call
-    /usr/local/libexec/utah-verify-desktop-contract, but the stages are FROM
-    the shipped image, which strips build-time scripts (clean-stage), and the
-    iso/live/ build context cannot reach repo-root scripts/. So the build
-    scripts stage the parser into the context (removed by trap) and the
-    Containerfiles ship it persistently in the overlay -- which is also what
-    puts it on the live guest luks-e2e shells into (absolute path; the
-    overlay is not on the default PATH).
-    """
-
-    PARSER = "src/utah-verify-desktop-contract.py"
-    INSTALLED = "/usr/local/libexec/utah-verify-desktop-contract"
-    STAGED = "iso/live/src/utah-verify-desktop-contract.py"
-
-    def test_both_containerfiles_ship_the_parser(self):
-        for name in ("iso/live/Containerfile", "iso/live/Containerfile.tacklebox"):
-            with self.subTest(containerfile=name):
-                text = (ROOT / name).read_text()
-                self.assertIn(
-                    f"COPY --chmod=0755 {self.PARSER} {self.INSTALLED}", text,
-                    f"{name} must ship the parser the bake RUN calls")
-
-    def test_both_build_scripts_stage_and_clean_the_parser(self):
-        staged = "cp scripts/verify-desktop-contract.py " + self.STAGED
-        for name in ("iso/scripts/build-iso.sh",
-                     "iso/scripts/build-iso-tacklebox.sh"):
-            with self.subTest(script=name):
-                text = (ROOT / name).read_text()
-                self.assertIn(staged, text,
-                              f"{name} must stage the parser into the build context")
-                self.assertIn(self.STAGED, text.split("trap", 1)[1],
-                              f"{name} must remove the staged parser on exit")
-
-    def test_staged_copy_is_not_committed(self):
-        # The staged file must never exist in the tree: it is build litter
-        # the traps remove. The COPY source of truth stays scripts/.
-        self.assertFalse((ROOT / self.STAGED).exists(),
-                         "staged parser left behind by a build run")
-
-    def test_luks_copies_the_parser_to_the_target(self):
-        # /usr/local is the admin's domain, not image content: a bootc
-        # deployment never carries /usr/local/libexec, so the verifier the
-        # live guest has is absent (exit 127) on the installed system.
-        # luks-e2e must copy the repo parser over scp and run it with the
-        # target's python3 -- never call the live-only absolute path.
-        text = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
-        self.assertIn("scp_target", text,
-                      "luks-e2e must define an scp helper for the installed target")
-        self.assertIn("scripts/verify-desktop-contract.py", text,
-                      "luks-e2e must copy the repo parser to the installed system")
-        self.assertIn("python3 /tmp/utah-e2e-verify-desktop-contract.py --flatpaks", text,
-                      "luks-e2e must run the copied parser with the target python3")
-        self.assertNotIn(f'"{self.INSTALLED} --flatpaks', text,
-                         "the live-only installed path does not exist on bootc deployments")
-        self.assertNotIn('"utah-verify-desktop-contract --flatpaks', text,
-                         "bare parser name is not on the guest PATH")

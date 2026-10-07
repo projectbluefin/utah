@@ -1207,10 +1207,10 @@ class SupplyChainTests(unittest.TestCase):
             "https://packages.redhat.com/A/B",
         )
 
-    def test_normalize_gpgkey_strips_trailing_slash(self) -> None:
+    def test_normalize_gpgkey_preserves_trailing_slash(self) -> None:
         self.assertEqual(
             self.module.normalize_gpgkey("https://x.example.com/A/"),
-            "https://x.example.com/A",
+            "https://x.example.com/A/",
         )
 
     def test_normalize_gpgkey_keeps_file_scheme_lowercase(self) -> None:
@@ -1272,7 +1272,7 @@ class SupplyChainTests(unittest.TestCase):
         errors = self.module.repo_gpgkey_pin_errors("repo", parser, "fedora.repo", {})
         self.assertEqual(errors, [])
 
-    def test_repo_gpgkey_pin_errors_normalizes_case_and_trailing_slash(self) -> None:
+    def test_repo_gpgkey_pin_errors_rejects_different_key_path(self) -> None:
         """The same key in a different spelling still passes the pin."""
         parser = self._parser({"baseurl": "https://a.example.com/$basearch",
                                "gpgkey": "HTTPS://Packages.Redhat.com/A/B/"})
@@ -1280,7 +1280,8 @@ class SupplyChainTests(unittest.TestCase):
             "repo", parser, "fedora.repo",
             {"repo": ("https://packages.redhat.com/A/B",)}
         )
-        self.assertEqual(errors, [])
+        self.assertTrue(errors)
+        self.assertIn("unpinned gpgkey", errors[0])
 
     def test_repo_gpgkey_pin_errors_flags_unpinned_when_one_of_multiple_is_pinned(self) -> None:
         """A single unpinned key in a multi-key `gpgkey=` is still rejected.

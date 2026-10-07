@@ -30,6 +30,15 @@ class FlathubDescriptorIntegrityTests(unittest.TestCase):
         (uupd / "uupd").write_text("#!/bin/sh\nexit 0\n")
         (uupd / "uupd.service").write_text("[Service]\nExecStart=/usr/bin/uupd\n")
         (uupd / "uupd.timer").write_text("[Timer]\nOnBootSec=1h\n")
+        # configure-services.sh generates brewfile.preinstall from the
+        # Brewfile through the installed desktop-contract parser.
+        brewfile = self.root / "usr/share/ublue-os/homebrew/system-flatpaks.Brewfile"
+        brewfile.parent.mkdir(parents=True)
+        brewfile.write_text('flatpak "org.mozilla.firefox"\n')
+        parser = self.root / "usr/local/libexec/utah-verify-desktop-contract"
+        parser.parent.mkdir(parents=True)
+        parser.write_bytes((ROOT / "scripts/verify-desktop-contract.py").read_bytes())
+        parser.chmod(0o755)
 
     def run_script(self):
         source = (ROOT / "scripts/configure-services.sh").read_text()
@@ -73,6 +82,18 @@ curl() {
         self.assertEqual([installed[0]] + installed[2:], pinned)
         self.assertEqual(self.destination.stat().st_mode & 0o777, 0o644)
         self.assertFalse((self.root / "tmp/flathub.flatpakrepo").exists())
+
+    def test_generated_flathub_entries_pin_the_flathub_collection(self):
+        # tuna-os is a GPG-less OCI remote configured beside Flathub; an entry
+        # without CollectionID would resolve from it too.
+        result = self.run_script()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        generated = (self.root / "usr/share/flatpak/preinstall.d/brewfile.preinstall").read_text()
+        self.assertEqual(
+            generated,
+            "[Flatpak Preinstall org.mozilla.firefox]\nBranch=stable\n"
+            "IsRuntime=false\nCollectionID=org.flathub.Stable\n\n",
+        )
 
     def test_changed_descriptor_is_rejected_without_replacing_existing_remote(self):
         self.input.write_bytes(self.input.read_bytes() + b"Url=https://example.invalid/attacker\n")

@@ -7,6 +7,13 @@
 files = [
   "/usr/share/ublue-os/bluefin-logos/bluefin.png",
   "/usr/share/pixmaps/bluefin-gdm-logo.png",
+  # Control Center has compile-time logo paths, independent of os-release.
+  "/usr/share/pixmaps/fedora_logo_med.png",
+  "/usr/share/pixmaps/fedora_whitelogo_med.png",
+  "/usr/share/pixmaps/fedora-logo.png",
+  "/usr/share/pixmaps/system-logo-white.png",
+  "/usr/share/icons/hicolor/scalable/actions/ublue-logo-symbolic.svg",
+  "/usr/share/icons/hicolor/icon-theme.cache",
   # The os-release LOGO icon; common ships Bluefin's raptor under this name.
   "/usr/share/pixmaps/fedora-logo-icon.png",
   "/usr/share/ublue-os/bluefin-logos/chicken.png",
@@ -84,6 +91,7 @@ files = [
 "/etc/dconf/db/distro.d/04-bluefin-custom-command-menu" = [
   "Bazaar App Store",
   "docs.projectbluefin.io",
+  "menuicon-setting='ublue-logo-symbolic'",
 ]
 "/etc/dconf/db/distro.d/02-bluefin-keybindings" = [
   "xdg-terminal-exec",
@@ -107,7 +115,14 @@ files = [
 [flatpak]
 files = [
   "/etc/flatpak/remotes.d/flathub.flatpakrepo",
+  # Utah's default set is declared in preinstall.d, in the image: the live ISO
+  # bake reads it, as does flatpak-preinstall.service on first boot of a
+  # non-ISO install.
+  # brewfile.preinstall is generated from the Brewfile by configure-services.sh.
+  "/etc/flatpak/remotes.d/tuna-os.flatpakrepo",
   "/usr/share/flatpak/preinstall.d/bazaar.preinstall",
+  "/usr/share/flatpak/preinstall.d/brewfile.preinstall",
+  "/usr/share/flatpak/preinstall.d/ghostty.preinstall",
   "/usr/share/ublue-os/privileged-setup.hooks.d/99-flatpaks.sh",
   "/usr/share/ublue-os/homebrew/system-flatpaks.Brewfile",
   # Common's `system_files/bluefin/` profile supplies the Firefox preference

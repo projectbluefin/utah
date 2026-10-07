@@ -12,7 +12,7 @@
 #   7. log in at the GDM greeter and prove a GNOME session is running
 #
 # A trailing check, after phase 7's desktop and fastfetch evidence, confirms
-# the Brewfile's default Flatpak set is also present offline -- deferred
+# the preinstall.d default Flatpak set is also present offline -- deferred
 # because it deploys asynchronously on first boot and checking right after
 # login undercounts it.
 #
@@ -118,10 +118,6 @@ scp_live() { sshpass -p live scp "${SSH_OPTS[@]}" -P "${SSH_PORT}" "$@"; }
 ssh_target() {
     sshpass -p "${TEST_PASSWORD}" ssh "${SSH_OPTS[@]}" \
         -p "${SSH_PORT_INSTALLED}" "${TEST_USER}@127.0.0.1" "$@"
-}
-scp_target() {
-    sshpass -p "${TEST_PASSWORD}" scp "${SSH_OPTS[@]}" \
-        -P "${SSH_PORT_INSTALLED}" "$@"
 }
 
 monitor() {
@@ -670,6 +666,16 @@ X-GNOME-Autostart-enabled=true
 EOF
 " || fail "could not write the terminal autostart entry"
 
+if [[ "${UTAH_E2E_REVIEW_CHECKS:-0}" == 1 ]]; then
+    ssh_target 'cat > ~/.config/autostart/utah-review-about.desktop' <<'ABOUT'
+[Desktop Entry]
+Type=Application
+Name=Review About
+Exec=sh -c "while [ ! -f /tmp/utah-e2e-open-about ]; do sleep 1; done; exec gnome-control-center system about"
+X-GNOME-Autostart-enabled=true
+ABOUT
+fi
+
 # Type the password at the greeter. GDM offers the single account already
 # selected, so Enter opens the password field and the password submits it.
 echo "Logging in at the greeter as ${TEST_USER}..."
@@ -830,39 +836,44 @@ fi
 # in, and (when required) proving fastfetch on screen, so deployment has had
 # real time to complete; the loop below still tolerates a little more.
 #
-# Same Brewfile-to-list conversion iso/live/Containerfile uses to seed the
-# ISO's own Flatpak repo, run here against the installed contract's copy so
-# this checks the actual default set rather than one app (Ghostty) picked
-# only because the terminal-automation phase above happens to need it --
-# install-flatpaks.sh keeps Ghostty out of the Brewfile-derived list on
-# purpose, as Utah's own addition rather than the Bluefin parity contract.
+# The expected set is read from the installed system's own preinstall.d -- the
+# source of truth install-flatpaks.sh bakes the ISO from and
+# flatpak-preinstall.service reads (on an ISO install it finds the set already
+# baked and copied over by fisherman, and this guest has no network anyway) --
+# so this checks the actual default set rather than one app (Ghostty) picked only
+# because the terminal-automation phase above happens to need it. It was
+# derived from the Brewfile before, which silently excluded Utah's own
+# additions: Ghostty is kept out of the Brewfile-derived brewfile.preinstall on
+# purpose, as Utah's addition rather than the Bluefin parity contract, so an
+# ISO with no Ghostty -- the motivating symptom -- passed this check.
 # UTAH_E2E_FLATPAKS overrides the expected set directly; empty to skip.
 if [[ -n "${UTAH_E2E_FLATPAKS-x}" ]]; then
     if [[ -n "${UTAH_E2E_FLATPAKS-}" ]]; then
         expected_flatpaks="${UTAH_E2E_FLATPAKS}"
     else
-        # /usr/local is the admin's domain, not image content: a bootc
-        # deployment never carries /usr/local/libexec, so the verifier the
-        # live guest has is absent on the installed system (exit 127). Copy
-        # the repo parser over and run it with the target's own python3
-        # against the installed contract's copy.
-        scp_target "${ROOT}/scripts/verify-desktop-contract.py" \
-            "${TEST_USER}@127.0.0.1:/tmp/utah-e2e-verify-desktop-contract.py" >/dev/null \
-            || fail "could not copy the Flatpak-list parser to the installed system"
-        expected_flatpaks="$(ssh_target "python3 /tmp/utah-e2e-verify-desktop-contract.py --flatpaks /usr/share/ublue-os/homebrew/system-flatpaks.Brewfile" 2>/dev/null || true)"
-        [[ -n "${expected_flatpaks}" ]] || fail "could not read the default Flatpak Brewfile on the installed system"
+        scp_target "${ROOT}/iso/live/src/preinstall-refs.py" \
+            "${TEST_USER}@127.0.0.1:/tmp/utah-e2e-preinstall-refs.py" >/dev/null \
+            || fail "could not copy the effective preinstall parser"
+        expected_flatpaks="$(ssh_target 'python3 /tmp/utah-e2e-preinstall-refs.py --arch "$(flatpak --default-arch)"' 2>/dev/null)" \
+            || fail "could not read effective default Flatpak declarations"
+        [[ -n "${expected_flatpaks}" ]] || fail "effective default Flatpak set is empty"
     fi
     missing_flatpaks=()
     for _ in $(seq 1 12); do
-        # No --app: the Brewfile's default set includes two runtimes, the
+        # No --app: the default set includes two runtimes, the
         # adw-gtk3 GTK3 themes, and --app hides runtimes, so they read as
         # missing even when present (post-testing-e2e run 36068751481).
-        installed_flatpaks="$(ssh_target 'flatpak list --system --columns=application' 2>/dev/null || true)"
+        installed_flatpaks="$(ssh_target 'flatpak list --system --columns=ref' 2>/dev/null || true)"
         [[ -n "${installed_flatpaks}" ]] || { sleep 10; continue; }
         missing_flatpaks=()
         while IFS= read -r app; do
             [[ -n "${app}" ]] || continue
-            grep -qxF "${app}" <<< "${installed_flatpaks}" || missing_flatpaks+=("${app}")
+            if [[ "$app" == */* ]]; then
+                grep -qxF "${app}" <<< "${installed_flatpaks}" || missing_flatpaks+=("${app}")
+            else
+                # Preserve the explicit app-ID override for diagnostic runs.
+                grep -qF "/${app}/" <<< "${installed_flatpaks}" || missing_flatpaks+=("${app}")
+            fi
         done <<< "${expected_flatpaks}"
         (( ${#missing_flatpaks[@]} == 0 )) && break
         sleep 10
@@ -876,6 +887,22 @@ if [[ -n "${UTAH_E2E_FLATPAKS-x}" ]]; then
 fi
 
 echo
+if [[ "${UTAH_E2E_REVIEW_CHECKS:-0}" == 1 ]]; then
+    ssh_target 'touch /tmp/utah-e2e-open-about'
+    sleep 15
+    ssh_target 'pgrep -f "^gnome-control-center" >/dev/null' || fail "About did not open in the session"
+    shot installed-about "${MONITOR_INSTALLED}"
+    tesseract "${SHOTS}/installed-about.png" "${WORK}/about-ocr" 2>/dev/null
+    grep -qi Utah "${WORK}/about-ocr.txt" || fail "About screenshot does not show Utah"
+    ssh_target 'pkill -f "^gnome-control-center"' || true
+    monitor "${MONITOR_INSTALLED}" "mouse_move -2000 -2000"
+    monitor "${MONITOR_INSTALLED}" "mouse_move 15 15"
+    monitor "${MONITOR_INSTALLED}" "mouse_button 1"
+    monitor "${MONITOR_INSTALLED}" "mouse_button 0"
+    sleep 3
+    shot installed-command-menu "${MONITOR_INSTALLED}"
+fi
+
 echo "PASS: Utah installed to an encrypted disk, unlocked, and ${TEST_USER} logged"
 echo "      in to a GNOME session on it."
 echo "Screenshots: ${SHOTS}"
@@ -928,8 +955,9 @@ the check beside it passed.
    offline embedded payload, not a substitute reached over a network this
    guest does not have.
 7. The user logs in at the GDM greeter and gets a GNOME session.
-8. Every default Flatpak in the Brewfile contract is present and listed by
-   \`flatpak\` on the installed, network-isolated system.
+8. Every default Flatpak the image declares in
+   \`/usr/share/flatpak/preinstall.d\` is present and listed by \`flatpak\` on
+   the installed, network-isolated system.
 
 ## Screenshots
 

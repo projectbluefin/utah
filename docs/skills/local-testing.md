@@ -2,6 +2,7 @@
 name: local-testing
 version: "1.0"
 last_updated: "2026-10-07"
+last_updated: "2026-09-23"
 id: local-testing
 one_line_purpose: Build, install, and boot Utah locally in a VM or live ISO.
 entry_point: docs/skills/local-testing.md
@@ -207,23 +208,6 @@ Production live boot entries configure:
   pipelines, but currently module signing is not implemented in-tree and Secure
   Boot must remain disabled.
 
-The Flatpak list both ISO bakes install comes from
-`scripts/verify-desktop-contract.py --flatpaks` (the single Brewfile parser;
-the desktop contract owns it). The ISO stages are FROM the shipped image,
-which strips build-time scripts, and the `iso/live/` build context cannot
-reach repo-root `scripts/` -- so both build scripts stage the parser into
-`iso/live/src/` (removed by trap afterwards) and both Containerfiles ship it
-persistently at `/usr/local/libexec/utah-verify-desktop-contract`, which is
-also what puts it on the live guest. Never reference the parser by bare name
-on the guest: the overlay is not on the default PATH.
-
-That installed path is live-only. `/usr/local` is the admin's domain, not
-image content, so a bootc deployment never carries `/usr/local/libexec` --
-calling the verifier there on an installed system fails with exit 127.
-`luks-e2e.sh` copies `scripts/verify-desktop-contract.py` to the target over
-`scp_target` and runs it with the target's `python3` instead (stdlib-only,
-so no target dependencies).
-
 `iso/live/src/install-flatpaks.sh` pins the bootc-installer Flatpak bundle to
 a specific `tuna-os/bootc-installer` release rather than resolving
 `/releases/latest/download/` the way dakota-iso does: the bundle installs
@@ -235,6 +219,54 @@ so there is no tag-name continuity to lean on when bumping it.
 take the digest from that release's `org.bootcinstaller.Installer.flatpak`
 asset (`digest` field of `gh api repos/tuna-os/bootc-installer/releases/tags/<tag>`,
 or download and `sha256sum` it) rather than guessing or reusing an old value.
+
+The default Flatpaks are declared in the image's
+`/usr/share/flatpak/preinstall.d` and `/etc/flatpak/preinstall.d`, not in the ISO bake: `bazaar.preinstall`
+and `ghostty.preinstall` ship from `system_files`, and
+`scripts/configure-services.sh` generates `brewfile.preinstall` from the
+Bluefin Brewfile. `install-flatpaks.sh` only runs `flatpak preinstall`, so the
+ISO bakes exactly the declared set, and so does anything else that runs
+`flatpak preinstall` against the image -- including
+`flatpak-preinstall.service`, which the preset enables and which runs in the
+background on first boot of a non-ISO install (#544). On an ISO install the
+bake already installed and marked every declared ref, so that run has nothing
+to do. Bazaar is declared once, in `bazaar.preinstall`; the generated
+`brewfile.preinstall` skips it.
+
+preinstall.d has no key that names a remote: an entry resolves from every
+configured remote, or only those whose collection ID equals its
+`CollectionID`, and an entry nothing resolves is skipped with exit 0 (the bake
+checks every declared ref landed). Because the image also configures the
+TunaOS OCI remote, which has no `GPGKey`, every Flathub entry
+(`bazaar.preinstall` and the generated `brewfile.preinstall`) pins
+`CollectionID=org.flathub.Stable` so it resolves only from Flathub; the bake
+sets that collection ID on its `flathub` remote with `flatpak remote-modify`.
+Ghostty alone is collection-less, on TunaOS's `master` branch only.
+The TunaOS remote descriptor is vendored at
+`system_files/shared/etc/flatpak/remotes.d/tuna-os.flatpakrepo`, never fetched.
+
+`flatpak preinstall` marks every ref it installs as preinstalled in
+`/var/lib/flatpak`, and fisherman copies that state onto disk, so the marks
+survive into installed systems. Upstream then treats preinstall.d as the
+authoritative set: a marked ref that a later image no longer declares is
+uninstalled on the next `flatpak-preinstall.service` run. Dropping an app from
+the Brewfile (or from a `*.preinstall` file) therefore removes it from any
+system where that service runs, including copies users kept deliberately. That
+is intended flatpak semantics, and it is live wherever that service runs:
+Brewfile removals are user-visible uninstalls, not build-only changes.
+
+Flatpak 1.19.0's [preinstall manual](https://github.com/flatpak/flatpak/blob/ec707cb43a0b332e4eea581d49bf9bb11f0dbd73/doc/flatpak-preinstall.xml)
+and [sync implementation](https://github.com/flatpak/flatpak/blob/ec707cb43a0b332e4eea581d49bf9bb11f0dbd73/common/flatpak-transaction.c)
+are the pinned references for this policy. A user who removes an already
+marked default is not forced to reinstall it while the declaration remains;
+`--reinstall` explicitly overrides that opt-out. A zero preinstall exit alone
+is not bake evidence: missing remote metadata can be warned about and skipped.
+The bake retries preinstall and the declared-set check together, and fails
+after five incomplete attempts. Validate the real path with a rootless live
+image build and then `just luks-test` on its debug ISO; PR image-only CI does
+not exercise the ISO bake. The vendored TunaOS descriptor pins an OCI remote
+URL, not a GPG trust anchor; content trust still depends on TLS to the index and registry, plus OCI digest
+verification; the URL pin is not a GPG signing key.
 
 ## Tacklebox ISOs (unpublished variants)
 
@@ -291,9 +323,10 @@ disposable LUKS2 disk from the embedded payload, boots without the ISO,
 unlocks the disk, confirms `bootc status` reports the offline embedded
 payload (not a network pull) on a guest with no route out, and checks
 graphical login and extension states. A trailing check, after login,
-confirms every default Flatpak in the Brewfile contract is also present
-offline -- deferred past login because it deploys asynchronously on first
-boot. Both gates have escape hatches for unblocking a promotion when the
+confirms every default Flatpak the image declares in
+`/usr/share/flatpak/preinstall.d` -- the Brewfile parity set plus Utah's own
+additions, Ghostty among them -- is also present offline, deferred past login
+because it deploys asynchronously on first boot. Both gates have escape hatches for unblocking a promotion when the
 gate itself, rather than the image, is at fault: `UTAH_E2E_FLATPAKS` sets the
 expected Flatpak set directly (empty skips the check), and
 `UTAH_E2E_PAYLOAD_CHECK=""` skips the booted-image assertion. The booted-image
@@ -369,39 +402,6 @@ verification, rollback execution, and reboot verification returning to the
 baseline digest.
 Phase-keyed diagnostics (`evidence/lifecycle-*.json`, `lifecycle-summary.json`)
 and screendumps identify the active deployment and digest at every phase.
-
-After each lifecycle phase the harness also captures the BLS Type #1
-entries under the Fedora/bootc layout's BLS root `/boot/loader/entries/`
-(ostree writes them here per the sysroot deploy) and any
-`/boot/efi/loader/entries/` if present, then runs `validate-bootmgr`
-against them.
-This is the surface that an `ostree-finalize-staged` regression could
-silently leave behind: `bootc status` would still report the new
-deployment as queued, but the boot manager would have no entry to chain
-to it and the next reboot would boot the old kernel set. The validator
-parses the `ostree=/ostree/boot.N/<stateroot>/<bootcsum>/<serial>` path
-from each BLS entry's `options` line, groups both the expected
-deployments and the captured entries by their `(stateroot,
-deploy_serial)` tuple, and requires the count of entries in each group
-to be at least the count of deployments. A purely-by-serial match would
-let one BLS entry satisfy two deployments (ostree allocates
-`deployserial` per `(osname, commit)`, so two commits with no prior
-deployment at that commit both receive serial 0) and silently miss a
-missing-entry regression; the count check forces a failure in that
-case. The `<bootcsum>` segment in the path is the kernel+initramfs
-layout hash (ostree's `ostree_deployment_get_bootcsum`), NOT the
-commit checksum the deployment exposes as `ostree.checksum`, and is
-intentionally not used as a match key -- bootc's `BootEntryOstree`
-JSON does not expose it. Phase 3 (post-upgrade) and phase 4
-(post-rollback) both check the `booted` and `rollback` slots so a
-missing entry for the non-booted slot is caught even though the guest
-necessarily booted from the `booted` entry that already exists. The
-validator then confirms each matched entry carries a `linux` line and
-at least one of `initrd` or `options`. Evidence is written to
-`evidence/loader-entries-<phase>.txt` (the raw BLS listing) and
-`evidence/bootmgr-<phase>.json` (which slot matched which entry,
-which slots had no entry, and any entries whose `ostree=` karg did not
-parse).
 
 Each phase also runs `iso/scripts/verify-boot-files.sh` as root in the guest
 and saves `evidence/boot-files-<phase>.txt`. For every published OSTree BLS
@@ -488,3 +488,8 @@ logs and screenshots; earlier green VM runs do not verify a newer PR head.
 Runtime override tests restore their disposable drop-ins before returning.
 For rootless local-image inspection, run Skopeo inside `podman unshare`;
 host Skopeo cannot open that storage on runners that restrict its own unshare.
+The effective-ref parser follows the pinned Flatpak implementation: read sorted
+vendor files, then sorted administrator files; merge each group by app ID,
+retaining omitted keys. Honor `Install=false`, branch and runtime type, and
+verify complete refs in the bake and installed guest. Same filenames do not
+mask a whole file in this implementation.

@@ -13,7 +13,7 @@ attacker signed. `utah-packages` has no entry because its section declares
 no `gpgkey=` (the bind-mounted RPM repository authenticates by OCI provenance
 rather than an RPM GPG key); it is not exempt, so a drop-in that adds a
 `gpgkey=` to it is rejected like any other unpinned key. Pins
-normalize scheme and host case and fold a trailing slash. Its **fetch
+normalize scheme and host case and braced DNF variables; URL paths, including trailing slashes, remain exact. Its **fetch
 integrity** is attested too: the same check rejects `proxy=`, `sslverify=0`,
 `gpgcheck=0` (or its libdnf5 alias `pkg_gpgcheck=0`), and `repo_gpgcheck=0`
 on an allowlisted repository (#345). `proxy` and `sslverify=0` reroute or
@@ -38,5 +38,23 @@ signature verification is disabled). `[repositories.gpgkeys]` pins
 `nvidia-container-toolkit` (the key URL NVIDIA publishes); `utah-packages`
 declares no `gpgkey=` and has no entry.
 
-Partial and disabled named overrides must still check any `gpgkey` they set.
-Wildcard overrides may not replace keys; no single repository pin approves a glob.
+The install-source identity is single-sourced in `packages/*.repo`. Each repository
+participating in the package install transaction carries a `# utah-install: true`
+annotation (either directly preceding or within the `[section]` header in
+`packages/utah-packages.repo` and `packages/hummingbird.repo`).
+`scripts/install-packages.py` derives the `--enablerepo` set from these annotations
+ordered by priority (ascending), so rebuilds in `utah-packages` (`priority=1`)
+precede base Hummingbird packages (`priority=10`). Repositories without this marker
+(such as `nvidia-container-toolkit` or builder-only `fedora-44`) are excluded from
+the desktop package transaction.
+
+The pinned package image is an RPM repository, not a runtime dependency. It is
+bind-mounted into the package-contract and flavor-specific install RUN steps in
+[`Containerfile`](../../Containerfile), both identified by
+`--mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages,ro`,
+and never copied into a layer: a COPY of the whole ~4 GB repository would leave
+a permanent layer behind, so reproducibility now comes from the digest-pinned
+`packages` stage being the only source the package transaction can see rather
+than from the repository contents living in the image.
+
+Named partial and disabled overrides are checked before their early returns. Wildcard overrides cannot replace GPG keys because they can match repositories with different key pins. Pass the key-pin map to every runtime override scan.
