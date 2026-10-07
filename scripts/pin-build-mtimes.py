@@ -26,6 +26,12 @@ def normalize(root, packaged, epoch, mounts=()):
             os.utime(path, ns=(info.st_atime_ns, epoch * 1_000_000_000), follow_symlinks=False)
 
 
+def check_rewrite_epoch(packaged, epoch):
+    newer = [name for name, timestamp in packaged.items() if timestamp > epoch]
+    if newer:
+        raise RuntimeError(f"rewrite epoch {epoch} predates RPM payloads: {newer[:5]}")
+
+
 def main():
     root = Path("/")
     result = subprocess.run(["rpm", "-qa", "--qf", "[%{FILENAMES}\t%{FILEMTIMES}\n]"],
@@ -39,7 +45,10 @@ def main():
     # ismount alone cannot detect bind mounts on the same filesystem.
     mounts = {Path(re.sub(r"\\([0-7]{3})", lambda match: chr(int(match[1], 8)), line.split()[4]))
               for line in Path("/proc/self/mountinfo").read_text().splitlines()}
-    normalize(root, packaged, int(os.environ.get("SOURCE_DATE_EPOCH", "1704067200")), mounts)
+    epoch = int(os.environ.get("SOURCE_DATE_EPOCH", "1704067200"))
+    if os.environ.get("UTAH_REWRITE_TIMESTAMPS") == "1":
+        check_rewrite_epoch(packaged, epoch)
+    normalize(root, packaged, epoch, mounts)
 
 
 if __name__ == "__main__":

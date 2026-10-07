@@ -58,3 +58,8 @@ class PinBuildMtimesTests(unittest.TestCase):
             os.utime(payload, (3000, 3000))
             pin.normalize(root, {}, 1000, [mounted])
             self.assertEqual(payload.stat().st_mtime_ns, 3000 * 1_000_000_000)
+
+    def test_rewrite_rejects_epoch_older_than_any_rpm_payload(self):
+        with self.assertRaisesRegex(RuntimeError, "payload.py"):
+            pin.check_rewrite_epoch({"/usr/lib/payload.py": 2000}, 1000)
+        pin.check_rewrite_epoch({"/usr/lib/payload.py": 2000}, 2000)

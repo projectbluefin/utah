@@ -18,6 +18,9 @@ PODMAN="${PODMAN:-podman}"
 version="$("${PODMAN}" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | head -1 || true)"
 if [[ -n "${version}" ]] && [[ "$(printf '5.5\n%s\n' "${version}" | sort -V | head -1)" == "5.5" ]]; then
     printf '%s\n' --source-date-epoch "${epoch}"
+    if [[ "${2:-}" == rewrite ]]; then
+        printf '%s\n' --rewrite-timestamp
+    fi
 else
     echo "warning: podman ${version:-missing} < 5.5; building without reproducible timestamps" >&2
 fi

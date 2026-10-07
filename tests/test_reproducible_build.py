@@ -133,7 +133,10 @@ class ReproducibilityCheckTests(unittest.TestCase):
         result = self.run_check(IDENTICAL, IDENTICAL)
         self.assertEqual(result.returncode, 0, result.stderr)
         for invocation in self.builds():
-            self.assertIn("--source-date-epoch 1704067200", invocation)
+            epoch = subprocess.check_output(["git", "log", "-1", "--format=%ct"], cwd=ROOT, text=True).strip()
+            self.assertIn(f"--source-date-epoch {epoch}", invocation)
+            self.assertIn("--rewrite-timestamp", invocation)
+            self.assertIn("UTAH_REWRITE_TIMESTAMPS=1", invocation)
 
     def test_old_podman_warns_and_continues_without_the_flag(self):
         """Podman < 5.5 does not know --source-date-epoch; the probe must

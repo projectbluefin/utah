@@ -380,3 +380,11 @@ Skip bind mounts so normalization cannot alter read-only package repositories
 or build inputs. Final cleanup alone cannot repair earlier committed layers.
 
 The final normalizer must run from a read-only build-tools mount outside `/tmp`: cleanup removes installed Utah helpers and empties `/tmp` before lint. A helper installed earlier cannot be called after that sweep.
+
+Native deletion markers are invisible in the merged filesystem: the diagnostic
+found 175 whiteouts with wall-clock metadata, plus random machine-id/seed bytes
+in the RPM layer. Clear generated identities in that producing layer. The
+experimental native probe uses a source-commit epoch with tar timestamp rewriting
+and rejects an epoch older than any RPM payload before export. This guard is
+needed to preserve RPM/Python timestamp semantics. Production and chunkah
+acceptance still require proof before adopting this experimental export policy.

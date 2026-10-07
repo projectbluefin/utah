@@ -100,6 +100,7 @@ FROM ${BASE_IMAGE}
 # persist in the image config and leak the epoch into iso/live, every
 # `podman run`, and any downstream FROM.
 ARG SOURCE_DATE_EPOCH=1704067200
+ARG UTAH_REWRITE_TIMESTAMPS=0
 
 # Layer discipline, because it is where the build time goes.
 #
@@ -239,6 +240,8 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
           /var/log/dnf5.log* /var/cache/ibus/bus/registry \
           /var/cache/ldconfig/aux-cache \
           /var/cache/swcatalog/cache/C-local-metainfo.xb && \
+    : > /etc/machine-id && \
+    rm -f /var/lib/systemd/random-seed && \
     /usr/local/libexec/utah-pin-build-mtimes
 
 # Per-image arguments. Nothing above this line may read them; see the note on
