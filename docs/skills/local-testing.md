@@ -492,3 +492,6 @@ Installed Flatpak `--columns=ref` output omits the app/runtime namespace. Query
 apps and runtimes separately and restore each prefix before comparing canonical
 preinstall refs; an ID-only check cannot verify branch, architecture, or kind.
 Exercise the actual formatter with the displayed three-component output.
+
+See the [disposable ISO review matrix](local-testing/references/iso-review.md)
+for read-only, all-flavor offline installation tests on KVM runners.
