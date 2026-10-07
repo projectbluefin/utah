@@ -73,8 +73,8 @@ for f in "${skill_files[@]}"; do
         rc=1
     fi
 
-    # Size budget — applies uniformly to every skill; oversized skills are
-    # migrated to per-skill directories on sight (docs/skills/write-a-skill.md)
+    # Size budget — applies uniformly to every skill. Move detailed inventories
+    # into linked references (docs/skills/skill-improvement.md).
     lines=$(wc -l < "$f")
     base=$(basename "$f")
     if [ "$lines" -gt "$MAX_HARD" ]; then
