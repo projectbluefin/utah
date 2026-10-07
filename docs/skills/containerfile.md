@@ -250,12 +250,12 @@ extensions meson installs, the compiled schemas) and what the build rewrote
 after RPM wrote it (`ld.so.cache`, `sed -i` targets, every directory dnf wrote
 into). With no readable rpmdb -- a scratch tree in the unit tests -- the
 sweep falls back to pinning everything and says so on stderr.
-The epoch is fixed at 1704067200 (2024-01-01), never the commit time, in all
-three places that spell it (`Containerfile` ARG default, `clean-stage.sh`
-default, `just build-ghcr` default): feeding the commit time would change the
-ARG cache key on every push and rebuild the transaction each time, while a
-fixed value keeps docs-only pushes on the cached layers and still records
-identical rpmdb timestamps for identical sources.
+Canonical recipes derive the epoch from the latest Git commit affecting build
+input paths (`Containerfile`, packages, system_files, scripts, config, and
+.gitmodules). Documentation-only commits retain the cache key. The caller may
+supply a fixed SOURCE_DATE_EPOCH; guarded exports reject it if any RPM payload
+time is newer. The Containerfile and standalone cleanup retain their legacy
+fallback for direct invocations without canonical recipe arguments.
 That pin re-stamps every `/usr/share/fonts` directory dnf wrote into, which
 invalidates the system font caches in the layers a container runs from, so the
 pin loop is followed by `fc-cache --sysroot="$CLEAN_ROOT" --force --system-only`
@@ -283,8 +283,11 @@ wall-clock build args held constant, and diffs the ordered layer digests
 `podman build` of an unchanged Containerfile otherwise replays the layer cache
 and passes whatever the build scripts leave behind. Two full builds, so it is
 not in `just check` or the PR matrix; run it when changing anything that writes
-into the image. No gate runs it, so a change claiming reproducibility should
-cite its own run. The comparator checks every ordered native layer; do not squash or ignore layers to claim a passing
+into the image. No regular PR gate runs it, so a change claiming reproducibility should
+cite its own run. An isolated review branch can dispatch the read-only review
+reproducibility job with `contract_only` and `review_repro` true; retain its
+source SHA, both inspections and comparison log. This establishes native
+layer behavior, while published rechunking still needs separate evidence. The comparator checks every ordered native layer; do not squash or ignore layers to claim a passing
 result.
 
 ### Timestamp discipline starts before the transaction
@@ -296,15 +299,13 @@ leak into `iso/live`, `podman run` and downstream builds): the final RPM databas
 would otherwise still differ in the `INSTALLTIME`/`INSTALLTID` header fields,
 not merely its file mtime. The build recipes pass `--source-date-epoch` to
 Podman (guarded on Podman >= 5.5 by `scripts/podman-epoch-args.sh`, warn-and-continue below it), which fixes the
-image-created metadata. Do not add `--rewrite-timestamp` or `--timestamp`:
-`--rewrite-timestamp` replaces every newly committed mtime later than the epoch
-with the epoch, and every Fedora payload mtime is later than 2024-01-01, so it
-clamps all RPM-owned files in the transaction layer -- the blanket `/usr`
-re-stamp the selective pin above exists to avoid; `--timestamp` rewrites all of
-them unconditionally. Both break RPM's Python timestamp-bytecode pairing and
-`rpm -V`. Native-layer header clamping is unnecessary for the published image:
-chunkah re-splits the merged rootfs, whose mtimes `clean-stage.sh` already
-fixes.
+image-created metadata. Canonical exports also use `--rewrite-timestamp` with
+the build-input epoch to normalize generated deletion-marker headers, which
+are invisible in the merged filesystem. `UTAH_REWRITE_TIMESTAMPS=1` requires
+the per-layer helper to reject any RPM payload mtime newer than that epoch
+before export. An unguarded 2024 epoch would clamp packaged Python sources
+and invalidate their timestamp bytecode; never drop the guard or blindly
+rewrite all timestamps. Published chunkah ordering still needs its own proof.
 Timestamp plumbing does not cover files whose bytes, not mtimes, carry
 wall-clock or run-specific state: dnf5 logs, transaction-history SQLite WAL/SHM
 state, and the regenerated ibus, ldconfig and swcatalog caches. Those files are
@@ -361,3 +362,34 @@ reach it)
 unless the change justifies a new layer against the timings table above.
 Removing the package repository COPY dropped it from 13 to 12; a later change
 must earn its layer.
+
+When the two-build gate fails, final-rootfs cleanup cannot establish native
+layer equality: earlier committed layers retain their original metadata.
+Capture the first differing overlay layer's path metadata, xattrs, and content
+hashes in the disposable runner before it exits; retain that diagnostic with
+the two image manifests. A successful image build alone proves neither native
+layer nor rechunked publication reproducibility.
+
+The real two-build probe found COPY destination-parent directory mtimes in the
+first differing native layer. Stage COPY inputs in a scratch origin and bind
+that origin into the first runtime RUN; normalize generated mtimes before
+each runtime layer commits, preserving mtimes that match RPM's payload index.
+Skip bind mounts so normalization cannot alter read-only package repositories
+or build inputs. Final cleanup alone cannot repair earlier committed layers.
+
+The final normalizer must run from a read-only build-tools mount outside `/tmp`: cleanup removes installed Utah helpers and empties `/tmp` before lint. A helper installed earlier cannot be called after that sweep.
+
+Native deletion markers are invisible in the merged filesystem: the diagnostic
+found 175 whiteouts with wall-clock metadata, plus random machine-id/seed bytes
+in the RPM layer. Clear generated identities in that producing layer. The
+experimental native probe uses a source-commit epoch with tar timestamp rewriting
+and rejects an epoch older than any RPM payload before export. This guard is
+needed to preserve RPM/Python timestamp semantics. Canonical build recipes use the guarded policy; chunkah acceptance still
+requires its own proof.
+
+Two uncached native builds at e44e438 matched all 37 layers (run 37576445666).
+The production Just recipes now use the same guarded export policy. Derive the
+default epoch from commits affecting build input paths, rather than every Git
+commit, so documentation-only changes do not invalidate transaction caches.
+If a rolling RPM has a newer payload time, fail closed and supply an appropriate
+fixed SOURCE_DATE_EPOCH; do not clamp packaged Python source timestamps.

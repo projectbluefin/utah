@@ -24,10 +24,10 @@
 #
 # What is compared is RootFS.Layers: the ordered list of uncompressed layer
 # digests, which is a function of the tar stream and therefore of every mtime,
-# mode, owner and byte in it. The same fixed epoch as production (1704067200)
-# fixes config timestamps via --source-date-epoch (Podman >= 5.5). --rewrite-timestamp is not
-# passed: it would clamp every RPM-owned mtime to the epoch, which
-# clean-stage.sh deliberately leaves alone.
+# mode, owner and byte in it. Use the source commit epoch and rewrite newer
+# generated tar metadata, including whiteouts invisible to filesystem walks.
+# The per-layer helper rejects RPM payload times newer than the selected epoch
+# before export, so rewriting cannot invalidate timestamp-based Python caches.
 #
 # Known limitation, stated so a passing run is not read as more than it is: this
 # builds with podman, so it sees the layers the Containerfile declares, not the
@@ -46,11 +46,8 @@ PODMAN="${PODMAN:-podman}"
 VERSION="${VERSION:-reproducibility-probe}"
 SHA_HEAD_SHORT="${SHA_HEAD_SHORT:-probe}"
 REPO_ORGANIZATION="${REPO_ORGANIZATION:-projectbluefin}"
-# Fixed epoch matching production (Containerfile default, clean-stage.sh):
-# the probe compares two builds against each other, so any shared value
-# works, but sharing production's constant keeps the probe honest about
-# what ships.
-SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1704067200}"
+# Hold the source commit epoch constant across both uncached builds.
+SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct -- Containerfile packages system_files scripts config .gitmodules)}"
 
 case "${FLAVOR}" in
     main | nvidia | gaming | nvidia-gaming) ;;
@@ -82,7 +79,7 @@ fi
 
 # Same Podman >= 5.5 guard as the build recipes: older engines warn and
 # continue without --source-date-epoch rather than abort on an unknown flag.
-mapfile -t epoch_args < <(PODMAN="${PODMAN}" "$(dirname "$0")/podman-epoch-args.sh" "${SOURCE_DATE_EPOCH}")
+mapfile -t epoch_args < <(PODMAN="${PODMAN}" "$(dirname "$0")/podman-epoch-args.sh" "${SOURCE_DATE_EPOCH}" rewrite)
 
 build() {
     # $1 is the tag. Each run is a full, uncached build of the same inputs.
@@ -105,6 +102,8 @@ build() {
         --build-arg VERSION="${VERSION}" \
         --build-arg SHA_HEAD_SHORT="${SHA_HEAD_SHORT}" \
         --build-arg ENABLE_SSHD=0 \
+        --build-arg UTAH_REWRITE_TIMESTAMPS=1 \
+        --build-arg SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH}" \
         --tag "${tag}" \
         --file Containerfile .
 }

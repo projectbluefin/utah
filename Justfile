@@ -445,18 +445,15 @@ build-ghcr base_name stream flavor kernel_pin="":
       hb_revision="$(date -u -d "@${hb_revision}" +%Y-%m-%d)"
     fi
     echo "Hummingbird repository day: ${hb_revision}"
-    # Fixed epoch, never the commit time: the value is a cache key (an ARG is
-    # part of every layer key below it), so feeding the commit time would
-    # rebuild the transaction on every push. 1704067200 (2024-01-01) matches
-    # the Containerfile default and clean-stage.sh (utah#313). Probed here,
-    # after kernel-cache verification, so an unverified cache still fails
-    # before any podman use.
-    source_date_epoch="${SOURCE_DATE_EPOCH:-1704067200}"
-    # Podman >= 5.5 guard and the no --rewrite-timestamp rationale live in
-    # the shared helper.
-    mapfile -t epoch_args < <(scripts/podman-epoch-args.sh "${source_date_epoch}")
+    # Epoch follows commits to build inputs, so documentation-only commits
+    # retain the cache key. The layer helper rejects any newer RPM payload
+    # before timestamp rewriting could invalidate its Python caches.
+    source_date_epoch="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct -- Containerfile packages system_files scripts config .gitmodules)}"
+    mapfile -t epoch_args < <(scripts/podman-epoch-args.sh "${source_date_epoch}" rewrite)
     podman build \
       "${epoch_args[@]}" \
+      --build-arg SOURCE_DATE_EPOCH="${source_date_epoch}" \
+      --build-arg UTAH_REWRITE_TIMESTAMPS=1 \
       "${base_args[@]}" \
       "${layer_cache_args[@]}" \
       --build-arg HUMMINGBIRD_REPO_DAY="$hb_revision" \
@@ -488,13 +485,13 @@ build-local stream="testing" package_image="localhost/utah-packages:local-merged
       exit 1
     }
     version="local-{{ stream }}-$(git rev-parse --short HEAD)"
-    # Fixed epoch matching the Containerfile and clean-stage.sh defaults
-    # (utah#313); probed after the package-image check, like build-ghcr
-    # probes after kernel-cache verification.
-    source_date_epoch="${SOURCE_DATE_EPOCH:-1704067200}"
-    mapfile -t epoch_args < <(scripts/podman-epoch-args.sh "${source_date_epoch}")
+    # Same build-input epoch and guarded export policy as build-ghcr.
+    source_date_epoch="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct -- Containerfile packages system_files scripts config .gitmodules)}"
+    mapfile -t epoch_args < <(scripts/podman-epoch-args.sh "${source_date_epoch}" rewrite)
     podman build \
       "${epoch_args[@]}" \
+      --build-arg SOURCE_DATE_EPOCH="${source_date_epoch}" \
+      --build-arg UTAH_REWRITE_TIMESTAMPS=1 \
       --build-arg PACKAGE_IMAGE_REF="$package_image" \
       --build-arg IMAGE_NAME="{{ image }}" \
       --build-arg IMAGE_ID="{{ image }}" \
