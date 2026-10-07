@@ -16,7 +16,7 @@
 #
 # The cache image's own build has no /utah-cache, so the same scripts take their
 # source-build path here.  There is no second implementation to drift.
-ARG BASE_IMAGE=quay.io/hummingbird-community/bootc-os:latest@sha256:d4f6387e07514e54d45ca0ac3cf8660c8b8a51b868a6d87bc08ab16aa4da95dd
+ARG BASE_IMAGE=quay.io/hummingbird-community/bootc-os:latest@sha256:1bc8b59829ce87c6db1d9d8fc7b8cdcea7ddabc8fc6481bdff217d84b85bff75
 
 FROM ${BASE_IMAGE} AS builder
 
