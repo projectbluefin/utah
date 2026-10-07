@@ -176,16 +176,19 @@ directories, `/etc/dnf/repos.override.d` and
   that leaves `enabled=` unset (for example `priority=` only) does not enable
   the repo, so it passes for any id unless it sets a `proxy=` or disables
   `sslverify=` or an unapproved signature check (`gpgcheck=`, `pkg_gpgcheck=`,
-  `repo_gpgcheck=`). A drop-in that sets any origin key (`baseurl=`, `metalink=` or
+  `repo_gpgcheck=`) or sets an unpinned `gpgkey=`. A drop-in that sets any origin key (`baseurl=`, `metalink=` or
   `mirrorlist=`) is pinned like any other enabled repo, so a `metalink=` or
-  `mirrorlist=` redirect fails the gate.
+  `mirrorlist=` redirect fails the gate. A named override that sets `gpgkey=`
+  must match the id's `[repositories.gpgkeys]` pin even when it is partial or
+  sets `enabled=0`; an id with no declared pin may not set `gpgkey=` at all.
 - dnf5 matches override section names against repo ids as **globs**, so a
   `[*]` or `[utah-*]` section applies to every matching repo. The gate cannot
   enumerate those matches, so a wildcard override passes only when it cannot
   widen the allowlist: it sets no origin key, does not set `enabled=` to a
   true value, sets no `proxy=`, and disables neither `sslverify=` nor any
   signature check (`gpgcheck=`, `pkg_gpgcheck=`, `repo_gpgcheck=`; no
-  `[repositories.security]` approval applies to a glob). A `[*]` drop-in
+  `[repositories.security]` approval applies to a glob), and sets no
+  `gpgkey=` (a glob can match repos with different key pins). A `[*]` drop-in
   that sets only `priority=` or `enabled=0` passes.
 
 ## Printing and scanning gaps
