@@ -596,6 +596,14 @@ if [[ -n "${UTAH_E2E_PAYLOAD_CHECK-x}" ]]; then
     echo "  booted image: ${booted_image}"
 fi
 
+# An optional review matrix must prove the requested flavor actually booted.
+if [[ -n "${UTAH_E2E_EXPECT_FLAVOR:-}" ]]; then
+    [[ "$UTAH_E2E_EXPECT_FLAVOR" =~ ^[a-z-]+$ ]] || fail "invalid review flavor"
+    scp_target "${ROOT}/iso/scripts/verify-installed-flavor.py" "${TEST_USER}@127.0.0.1:/tmp/utah-verify-installed-flavor.py" >/dev/null
+    ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' python3 /tmp/utah-verify-installed-flavor.py --flavor '$UTAH_E2E_EXPECT_FLAVOR'" > "${WORK}/flavor-checks.json"
+    ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' bootc status --json" > "${WORK}/bootc-status.json"
+fi
+
 # clean-stage removes /var/lib from the image. Check boot-created state
 # before starting logrotate so the test cannot repair a missing tmpfiles rule.
 echo "Verifying logrotate state on the installed system..."
