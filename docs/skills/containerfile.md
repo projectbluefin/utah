@@ -378,3 +378,5 @@ that origin into the first runtime RUN; normalize generated mtimes before
 each runtime layer commits, preserving mtimes that match RPM's payload index.
 Skip bind mounts so normalization cannot alter read-only package repositories
 or build inputs. Final cleanup alone cannot repair earlier committed layers.
+
+The final normalizer must run from a read-only build-tools mount outside `/tmp`: cleanup removes installed Utah helpers and empties `/tmp` before lint. A helper installed earlier cannot be called after that sweep.
