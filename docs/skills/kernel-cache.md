@@ -160,3 +160,16 @@ session, compare `live-serial.log` for `[drm] Initialized` lines between the
 just kernel-cache-tag
 just check
 ```
+
+## Desktop sandboxes and VPN devices
+
+A gaming image that boots but cannot launch its Flatpak terminal has not passed
+ISO acceptance. Pinned x86 defconfig omits USER_NS (Kconfig defaults it off)
+and TUN. Enable and assert USER_NS, MEMCG, SECCOMP/SECCOMP_FILTER and TUN
+before compiling, and apply the same required-config checks to cached kernels.
+Probe unprivileged `unshare --user --map-root-user true` in the installed
+account and `modprobe tun` plus `/dev/net/tun` on the booted OGC kernel.
+A missing tun device causes Tailscale to restart repeatedly even without a
+network connection. Keep terminal stderr in failure diagnostics so a sandbox
+failure is not reported only as blank fastfetch OCR. These config edits move
+the kernel-cache tag and need a fresh signed cache plus an actual ISO VM test.

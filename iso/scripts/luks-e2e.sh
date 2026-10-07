@@ -599,6 +599,8 @@ fi
 if [[ "${UTAH_E2E_REVIEW_CHECKS:-0}" == 1 ]]; then
     ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' bootc status --json" > "${WORK}/bootc-status.json"
     scp_target "${ROOT}/scripts/verify-rpm-contract.py" "${TEST_USER}@127.0.0.1:/tmp/utah-review-rpm-contract.py" >/dev/null
+    ssh_target 'unshare --user --map-root-user true' || fail "unprivileged user namespaces unavailable for Flatpaks"
+    echo "  unprivileged user namespace: passed"
     scp_target "${ROOT}/iso/scripts/review-installed.py" "${TEST_USER}@127.0.0.1:/tmp/utah-review-installed.py" >/dev/null
     [[ "${UTAH_E2E_EXPECT_FLAVOR:-}" =~ ^[a-z-]*$ ]] || fail "invalid review flavor"
     ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' python3 /tmp/utah-review-installed.py --flavor '${UTAH_E2E_EXPECT_FLAVOR:-}'" > "${WORK}/review-checks.json"
@@ -675,7 +677,7 @@ CFG
 [Desktop Entry]
 Type=Application
 Name=Terminal
-Exec=bash -c \"while [ ! -f /tmp/utah-e2e-open-terminal ]; do sleep 1; done; rm -f /tmp/utah-e2e-open-terminal; exec \\\$@\" bash env LIBGL_ALWAYS_SOFTWARE=1 MESA_LOADER_DRIVER_OVERRIDE=llvmpipe flatpak --system run ${TERMINAL_APP}
+Exec=bash -c \"while [ ! -f /tmp/utah-e2e-open-terminal ]; do sleep 1; done; rm -f /tmp/utah-e2e-open-terminal; exec \\\$@ > /tmp/utah-e2e-terminal.log 2>&1\" bash env LIBGL_ALWAYS_SOFTWARE=1 MESA_LOADER_DRIVER_OVERRIDE=llvmpipe flatpak --system run ${TERMINAL_APP}
 X-GNOME-Autostart-enabled=true
 EOF
 " || fail "could not write the terminal autostart entry"
@@ -817,6 +819,8 @@ if [[ "${UTAH_E2E_REQUIRE_FASTFETCH:-0}" == 1 ]]; then
         # is to download the diagnostics artifact.
         echo "  last OCR transcript of installed-fastfetch.png:" >&2
         sed -n '1,40p' "${WORK}/fastfetch-ocr.txt" 2>/dev/null | sed 's/^/    /' >&2
+        echo "  terminal launch diagnostics:" >&2
+        ssh_target 'tail -40 /tmp/utah-e2e-terminal.log 2>/dev/null || true' >&2 || true
         fail "fastfetch output was not visible in the desktop screenshot"
     fi
 else

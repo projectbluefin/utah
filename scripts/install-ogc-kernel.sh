@@ -53,7 +53,8 @@ required_config=(SCHED_CLASS_EXT NTSYNC ANDROID_BINDERFS
                  OVERLAY_FS SQUASHFS SQUASHFS_ZSTD EROFS_FS BTRFS_FS
                  BLK_DEV_LOOP ISO9660_FS BLK_DEV_DM DM_SNAPSHOT DM_CRYPT
                  CRYPTO_XTS FUSE_FS FS_VERITY
-                 SYSFB_SIMPLEFB DRM_SIMPLEDRM VIDEO_DEV)
+                 SYSFB_SIMPLEFB DRM_SIMPLEDRM VIDEO_DEV
+                 NAMESPACES USER_NS MEMCG SECCOMP SECCOMP_FILTER TUN)
 verify_config() {
   local config="$1" symbol
   for symbol in "${required_config[@]}"; do
@@ -167,6 +168,12 @@ scripts/config --enable SYSFB --enable SYSFB_SIMPLEFB \
 # outcome before anything is compiled.
 scripts/config --module MEDIA_SUPPORT --enable MEDIA_CAMERA_SUPPORT \
                --module VIDEO_DEV
+# x86 defconfig leaves USER_NS and TUN disabled. Flatpak's unprivileged
+# bubblewrap sandbox cannot launch without USER_NS; Tailscale cannot create
+# /dev/net/tun without TUN. Enable sandbox resource/filter support explicitly
+# rather than relying on defconfig defaults, and assert it after olddefconfig.
+scripts/config --enable NAMESPACES --enable USER_NS --enable MEMCG \
+               --enable SECCOMP --enable SECCOMP_FILTER --module TUN
 scripts/config --set-str LOCALVERSION "-ogc1" --disable LOCALVERSION_AUTO
 make olddefconfig
 
