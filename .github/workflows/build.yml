@@ -13,6 +13,10 @@ on:
       # would push and sign testing images from upstream content nobody has
       # reviewed yet. contract_only runs the contract gates and nothing that
       # builds or publishes.
+      review_iso_all_flavors:
+        description: Test an offline ISO for every configured flavor (requires review_vm and contract_only)
+        type: boolean
+        default: false
       review_repro:
         description: Run two uncached local review builds (requires contract_only)
         type: boolean
@@ -51,6 +55,7 @@ jobs:
     permissions:
       contents: read
     outputs:
+      all_flavors: ${{ steps.flavors.outputs.all }}
       main_flavors: ${{ steps.flavors.outputs.main }}
       kernel_flavors: ${{ steps.flavors.outputs.kernel }}
       needs_kernel: ${{ steps.flavors.outputs.needs_kernel }}
@@ -89,6 +94,7 @@ jobs:
           KERNEL="$(python3 scripts/flavors.py list-kernel)"
           test -n "$MAIN" && test -n "$KERNEL"
           {
+            echo "all=$LIST"
             echo "main=$MAIN"
             echo "kernel=$KERNEL"
             echo "needs_kernel=$(python3 scripts/flavors.py needs-kernel)"
@@ -297,6 +303,12 @@ jobs:
     needs: contract
     runs-on: ubuntu-26.04
     timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor: ${{ fromJSON(inputs.review_iso_all_flavors && needs.contract.outputs.all_flavors || needs.contract.outputs.main_flavors) }}
+    env:
+      REVIEW_FLAVOR: ${{ matrix.flavor }}
     permissions:
       contents: read
       packages: read
@@ -325,15 +337,17 @@ jobs:
           ENABLE_SSHD: "0"
         run: |
           set -euo pipefail
-          just build-ghcr utah testing main 2>&1 | tee evidence/image-build.log
-          podman unshare skopeo inspect --raw containers-storage:localhost/utah:testing > evidence/payload-manifest.json
+          just build-ghcr utah testing "$REVIEW_FLAVOR" 2>&1 | tee evidence/image-build.log
+          image_name=$(python3 scripts/flavors.py image "$REVIEW_FLAVOR")
+          local_ref="localhost/${image_name}:testing"
+          podman unshare skopeo inspect --raw "containers-storage:$local_ref" > evidence/payload-manifest.json
           sha256sum evidence/payload-manifest.json > evidence/payload-manifest.sha256
-          podman image inspect localhost/utah:testing > evidence/image-inspect.json
-          printf 'ghcr.io/projectbluefin/utah:review-vm-%s\n' "$GITHUB_SHA" > evidence/image-ref.txt
-          jq -n --arg sha "$GITHUB_SHA" --arg run "$GITHUB_RUN_ID" \
+          podman image inspect "$local_ref" > evidence/image-inspect.json
+          printf 'ghcr.io/projectbluefin/%s:review-vm-%s\n' "$image_name" "$GITHUB_SHA" > evidence/image-ref.txt
+          jq -n --arg sha "$GITHUB_SHA" --arg run "$GITHUB_RUN_ID" --arg flavor "$REVIEW_FLAVOR" \
             --rawfile ref evidence/image-ref.txt \
             --rawfile manifest evidence/payload-manifest.sha256 \
-            '{source_sha:$sha,vm_run:$run,image_ref:$ref,manifest_sha256:$manifest,publication:false}' \
+            '{source_sha:$sha,flavor:$flavor,vm_run:$run,image_ref:$ref,manifest_sha256:$manifest,publication:false}' \
             > evidence/provenance.json
       - name: Compose offline debug ISO from the local candidate
         env:
@@ -341,8 +355,9 @@ jobs:
         run: |
           set -euo pipefail
           image_ref=$(cat evidence/image-ref.txt)
-          bash iso/scripts/build-iso.sh localhost/utah:testing "$PWD/output/utah-review.iso" \
-            "Utah Review VM" 1 "$image_ref" 2>&1 | tee evidence/iso-build.log
+          image_name=$(python3 scripts/flavors.py image "$REVIEW_FLAVOR")
+          bash iso/scripts/build-iso.sh "localhost/${image_name}:testing" "$PWD/output/utah-review.iso" \
+            "Utah Review $REVIEW_FLAVOR" 1 "$image_ref" 2>&1 | tee evidence/iso-build.log
           sha256sum output/utah-review.iso > evidence/iso.sha256
       - name: Boot live desktop, install LUKS, log in and test review fixes
         env:
@@ -352,6 +367,7 @@ jobs:
           UTAH_E2E_RAM: "6144"
           UTAH_E2E_CPUS: "2"
           UTAH_E2E_REVIEW_CHECKS: "1"
+          UTAH_E2E_EXPECT_FLAVOR: ${{ matrix.flavor }}
           UTAH_E2E_README: none
         run: |
           set -euo pipefail
@@ -366,7 +382,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: review-vm-${{ github.sha }}
+          name: review-vm-${{ matrix.flavor }}-${{ github.sha }}
           retention-days: 14
           if-no-files-found: warn
           path: |
