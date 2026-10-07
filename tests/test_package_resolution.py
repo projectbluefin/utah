@@ -59,12 +59,18 @@ class PackageResolutionTests(unittest.TestCase):
         loop = re.search(r"(for pair in .*?\bdone) &&", text, re.S).group(1)
         pairs = re.findall(r"([\w.-]+):(utah-[\w.-]+)", loop)
         self.assertTrue(pairs)
+        staged = [line for line in text.replace("\\\n", " ").splitlines()
+                  if line.startswith("COPY ") and line.rstrip().endswith("/tmp/utah-scripts/")]
+        self.assertEqual(len(staged), 1)
+        copy_sources = staged[0].split()[1:-1]
+        origins = {Path(name).name: ROOT / name for name in copy_sources}
+        self.assertEqual(len(origins), len(copy_sources))
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "sources"
             destination = Path(tmp) / "missing" / "libexec"
             source.mkdir()
             for name, _ in pairs:
-                (source / name).write_bytes((ROOT / "scripts" / name).read_bytes())
+                (source / name).write_bytes(origins[name].read_bytes())
             script = loop.replace("/tmp/utah-inputs/tmp/utah-scripts", str(source)).replace(
                 "/usr/local/libexec", str(destination))
             subprocess.run(["bash", "-eu", "-c", script], check=True)

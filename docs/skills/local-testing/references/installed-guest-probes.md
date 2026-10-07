@@ -26,3 +26,14 @@ running gaming kernel to match its OGC release receipt, and check NVIDIA module
 vermagic against the running kernel. A QEMU installation can prove these files
 and kernel boot paths; it cannot prove physical NVIDIA initialization, suspend,
 or Secure Boot enrollment. Keep those results explicitly separate.
+
+## Gaming kernel selection
+
+OGC's version can sort below Hummingbird's base kernel. Module-directory sort
+order and `/boot/vmlinuz` therefore cannot establish what bootc installs.
+Before the final initramfs rebuild, promote OGC into its bootc module-directory
+layout and remove other kernels' vmlinuz/initramfs boot files while retaining
+module trees. Require exactly one bootc kernel and select that same release
+for the live ISO. Its final dracut rebuild supplies microcode and unlock modules
+for the kernel actually deployed. This runtime layout repair does not modify
+kernel-cache inputs or require recompiling a previously verified OGC cache.

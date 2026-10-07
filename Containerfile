@@ -71,6 +71,7 @@ COPY scripts/install-packages.py \
      scripts/verify-efi-chain.sh \
      scripts/fix-home-labels.sh \
      scripts/regenerate-initramfs.sh \
+     iso/scripts/live-kernel.py \
      scripts/install-v4l2loopback.sh \
      scripts/image-repo.sh \
      /tmp/utah-scripts/
@@ -161,6 +162,7 @@ RUN --mount=type=bind,from=v4l2loopback,source=/out,target=/tmp/utah-v4l2loopbac
                 verify-efi-chain.sh:utah-verify-efi-chain \
                 fix-home-labels.sh:utah-fix-home-labels \
                 regenerate-initramfs.sh:utah-regenerate-initramfs \
+                live-kernel.py:utah-live-kernel \
                 install-v4l2loopback.sh:utah-install-v4l2loopback \
                 image-repo.sh:utah-image-repo; do \
       install -Dm 0755 "/tmp/utah-inputs/tmp/utah-scripts/${pair%%:*}" "/usr/local/libexec/${pair##*:}" || exit 1; \
