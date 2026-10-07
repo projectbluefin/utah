@@ -57,4 +57,8 @@ a permanent layer behind, so reproducibility now comes from the digest-pinned
 `packages` stage being the only source the package transaction can see rather
 than from the repository contents living in the image.
 
-Named partial and disabled overrides are checked before their early returns. Wildcard overrides cannot replace GPG keys because they can match repositories with different key pins. Pass the key-pin map to every runtime override scan.
+Repository override drop-ins are held to the same `gpgkey=` pin: a named
+override that sets `gpgkey=` is checked against `[repositories.gpgkeys]` even
+when it is partial (no origin key) or disables the repository, and a wildcard
+override may not set `gpgkey=` at all, because a glob can match repositories
+with different key pins.

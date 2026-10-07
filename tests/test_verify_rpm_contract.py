@@ -1273,7 +1273,7 @@ class SupplyChainTests(unittest.TestCase):
         self.assertEqual(errors, [])
 
     def test_repo_gpgkey_pin_errors_rejects_different_key_path(self) -> None:
-        """The same key in a different spelling still passes the pin."""
+        """A key path differing from the pin (trailing slash) is rejected as unpinned."""
         parser = self._parser({"baseurl": "https://a.example.com/$basearch",
                                "gpgkey": "HTTPS://Packages.Redhat.com/A/B/"})
         errors = self.module.repo_gpgkey_pin_errors(
@@ -1576,6 +1576,18 @@ class SupplyChainTests(unittest.TestCase):
                     expected_baseurls={}, is_override=True,
                     expected_gpgkeys={"utah-packages": ("https://trusted.example/key",)})
                 self.assertEqual(not errors, passes, errors)
+
+    def test_gpgkey_override_of_unapproved_repo_names_it_as_an_override(self) -> None:
+        """A non-allowlisted override with gpgkey= is not reported as an allowlisted repo."""
+        parser = configparser.ConfigParser(interpolation=None)
+        parser.read_string("[evil]\ngpgkey=https://evil.example/key\n")
+        errors = self.module.check_repo_sections(
+            parser, "override.repo", {"utah-packages"},
+            expected_baseurls={}, is_override=True,
+            expected_gpgkeys={"utah-packages": ("https://trusted.example/key",)})
+        joined = "\n".join(errors)
+        self.assertIn("Repository override 'evil' in override.repo with gpgkey=", joined)
+        self.assertNotIn("Allowlisted repository 'evil'", joined)
 
     def test_partial_overrides_preserve_named_signature_exceptions_only(self) -> None:
         cases = [

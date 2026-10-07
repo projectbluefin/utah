@@ -564,6 +564,8 @@ def repo_gpgkey_pin_errors(
     parser: configparser.ConfigParser,
     source: str,
     expected_gpgkeys: dict[str, tuple[str, ...]],
+    *,
+    subject: str | None = None,
 ) -> list[str]:
     """Check that an allowlisted repository's `gpgkey=` matches its manifest pin.
 
@@ -575,17 +577,20 @@ def repo_gpgkey_pin_errors(
     every `gpgkey=` value in an allowlisted section must match. A section
     that declares no `gpgkey=` is unchecked (some allowlisted repos -- the
     OCI-pinned `utah-packages` -- legitimately ship without an RPM GPG key).
+
+    `subject` replaces the default "Allowlisted repository ... is enabled in
+    <source>" lead-in, e.g. for a drop-in override whose id is not allowlisted.
     """
     gpgkey = parser.get(section_name, "gpgkey", fallback="").strip()
     if not gpgkey:
         return []
     declared = expected_gpgkeys.get(section_name)
     if not declared:
+        if subject is None:
+            subject = f"Allowlisted repository '{section_name}' is enabled in {source}"
         return [
-            f"Allowlisted repository '{section_name}' is enabled in {source} with "
-            f"gpgkey={gpgkey}; the manifest declares no pinned key for it in "
-            "[repositories.gpgkeys]; an id on the allowlist is not approval of an "
-            "unknown key"
+            f"{subject} with gpgkey={gpgkey}; the manifest declares no pinned key "
+            "for it in [repositories.gpgkeys]; an unpinned key is never approved"
         ]
     pinned = {normalize_gpgkey(url) for url in declared}
     unpinned = [
@@ -767,11 +772,21 @@ def check_repo_sections(
         partial_override = is_override and not any(
             parser.has_option(section_name, key) for key in ORIGIN_KEYS
         )
-        if expected_gpgkeys is not None and (is_override or section_name in allowed_repos):
-            if is_override and GLOB_CHARS_RE.search(section_name) and parser.get(section_name, "gpgkey", fallback="").strip():
-                errors.append(f"Wildcard repository override '{section_name}' in {source} may not replace gpgkey")
+        allowlisted = section_name in allowed_repos
+        if expected_gpgkeys is not None and (is_override or allowlisted):
+            sets_gpgkey = bool(parser.get(section_name, "gpgkey", fallback="").strip())
+            if is_override and GLOB_CHARS_RE.search(section_name) and sets_gpgkey:
+                errors.append(
+                    f"Wildcard repository override '{section_name}' in {source} "
+                    "may not replace gpgkey"
+                )
             else:
-                errors.extend(repo_gpgkey_pin_errors(section_name, parser, source, expected_gpgkeys))
+                subject = None if allowlisted else (
+                    f"Repository override '{section_name}' in {source}"
+                )
+                errors.extend(repo_gpgkey_pin_errors(
+                    section_name, parser, source, expected_gpgkeys, subject=subject,
+                ))
         if is_override and GLOB_CHARS_RE.search(section_name):
             errors.extend(
                 glob_override_errors(section_name, parser, source, partial_override)
