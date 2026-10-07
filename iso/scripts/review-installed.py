@@ -24,6 +24,18 @@ def main():
     require(*command)
     timers = {unit: require("systemctl", "is-enabled", unit) for unit in (
         "bluefin-stats-refresh.timer", "projectbluefin-countme.timer")}
+    optout = Path("/etc/projectbluefin/countme/disabled")
+    assert not optout.exists(), "clean VM unexpectedly opted out"
+    require("systemctl", "stop", "projectbluefin-countme.timer", "projectbluefin-countme.service")
+    optout.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        optout.touch()
+        require("systemctl", "start", "projectbluefin-countme.service")
+        condition = require("systemctl", "show", "projectbluefin-countme.service", "--property=ConditionResult", "--value")
+        assert condition == "no", condition
+    finally:
+        optout.unlink(missing_ok=True)
+        require("systemctl", "start", "projectbluefin-countme.timer")
     logo = Path("/usr/share/pixmaps/bluefin-gdm-logo.png").read_bytes()
     assert logo[:8] == b"\x89PNG\r\n\x1a\n", "invalid greeter PNG"
     dimensions = struct.unpack(">II", logo[16:24])
@@ -53,7 +65,7 @@ def main():
             assert result.returncode and "gpgkey" in result.stderr, result
     require(*command)
     print(json.dumps({"rpm_contract": "passed", "gpgkey_override_rejection": "passed",
-                      "timers": timers, "greeter_png": dimensions, "about_artwork": artwork,
+                      "timers": timers, "countme_optout": "passed", "greeter_png": dimensions, "about_artwork": artwork,
                       "kernel": require("uname", "-r")}))
 
 

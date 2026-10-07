@@ -76,13 +76,18 @@ The TOML's sections are the contract's table of contents:
   `flatpak-nuke-fedora.service`, `brew-setup.service`, `dconf-update.service`,
   `bootc-unified-storage.service`, `input-remapper.service`,
   `ModemManager.service`, `cups.socket`, `systemd-boot-update.service`,
-  `uupd.timer`, `bluefin-stats-refresh.timer`. Update policy delegates
+  `uupd.timer`, `bluefin-stats-refresh.timer`, `projectbluefin-countme.timer`. Update policy delegates
   background updates to `uupd.timer`; `bootc-fetch-apply-updates.timer` and
   `bootc-fetch-apply-updates.service` are masked in `/etc` and `/usr/lib` (and
   disabled in `85-utah-desktop.preset`) so cross-vendor `/etc` 3-way merges
   (e.g. switching from Bluefin) do not carry active `timers.target.wants`
   symlinks that bypass uupd staging or undo manual rollbacks. Switchers can
   also manually verify or mask them if a local `/etc` symlink was preserved.
+
+  Countme is enabled by default using Common's client and service conditions.
+  `/etc/projectbluefin/countme/disabled` opts out without replacing the client.
+  Verify timer enablement after installation: the review VM reached GDM but
+  found it disabled before this explicit script/preset/contract alignment.
 
   A unit being enabled in the built image is not the same as it being enabled
   on a booted one. bootc applies presets on first boot, and Hummingbird's
@@ -346,22 +351,8 @@ build.
 
 ## About artwork and the panel icon (#318)
 
-The About page's OS name is separate from its artwork. GNOME 51's
-`setup_os_logo` uses `DISTRIBUTOR_LOGO` and `DARK_MODE_DISTRIBUTOR_LOGO` before
-consulting os-release `LOGO`; Utah's spec configures Fedora's
-`fedora_logo_med.png`/`fedora_whitelogo_med.png` paths, or the RHEL
-`fedora-logo.png`/`system-logo-white.png` pair. Common ships Bluefin artwork
-under all four names, but the logos-RPM swap erases the early overlay.
-The desktop RUN bind-mounts Common's pinned pixmaps and branding restores
-those four files after the RPM transaction without adding a COPY layer.
-The package installer checks for residual distro artwork before this restore;
-the desktop contract then checks the restored Bluefin assets.
-
-The pinned command-menu extension creates `St.Icon` from `menuicon-setting`.
-Keep Bluefin's `ublue-logo-symbolic`, command labels/order/location and help
-URLs unchanged. The contract requires the SVG and the compiled hicolor cache, which branding
-regenerates after all overlays. The menu must show the mark (not a
-placeholder), retain commands, and show Bluefin artwork with the Utah OS name.
+See [the About artwork reference](desktop-contract/references/about-artwork.md)
+for compiled PNG paths, restoration after RPMs, and the symbolic panel icon.
 
 ## Services and login defaults
 

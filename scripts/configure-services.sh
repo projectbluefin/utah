@@ -81,6 +81,8 @@ enable_unit systemd-resolved.service
 enable_unit systemd-boot-update.service
 enable_unit bootc-unified-storage.service
 enable_unit bluefin-stats-refresh.timer
+# Countme is enabled by default; Common owns its client and opt-out conditions.
+enable_unit projectbluefin-countme.timer
 # input-remapper is installed by Bluefin's package set, but without its root
 # daemon running, udev autoload fails on input devices and the GUI prompts for
 # root credentials on launch. Enable it next to the desktop units; see #99.

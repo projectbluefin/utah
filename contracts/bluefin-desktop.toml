@@ -199,6 +199,7 @@ enabled = [
   "ublue-system-setup.service",
   "uupd.timer",
   "bluefin-stats-refresh.timer",
+  "projectbluefin-countme.timer",
   "systemd-boot-update.service",
 ]
 # Per-user services, checked with `systemctl --global is-enabled`. Hummingbird's
