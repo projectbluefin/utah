@@ -202,7 +202,10 @@ dracut refuses a module whose binaries are missing instead of skipping it, so
 a dracut.conf.d file from Common that names a new module means a package in
 `utah.toml` too: `tpm2-tss` needs `tpm2` (tpm2-tools) and `pcsc` needs
 `pcscd` (pcsc-lite). Check with
-`dracut --no-hostonly -f /var/tmp/t.img <kver>` on a booted VM.
+`dracut --no-hostonly -f /var/tmp/t.img <kver>` on a booted VM. Resolve those helpers
+from a published package pin before marking the change ready. When consuming
+Renovate's update, retain both its package ARG and repository cache stamp;
+static manifest validation alone does not prove the initramfs builds or boots.
 
 ## Clean and lint share a layer
 
