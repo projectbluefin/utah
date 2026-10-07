@@ -409,6 +409,11 @@ jobs:
           for tag in a b; do
             podman image inspect "localhost/utah-repro-${tag}:main" > "evidence/image-${tag}.json" || true
           done
+          if jq -e '.[0].RootFS.Layers' evidence/image-a.json evidence/image-b.json >/dev/null; then
+            graph_root=$(podman info --format '{{.Store.GraphRoot}}')
+            podman unshare python3 iso/scripts/review-repro-layers.py "$graph_root" \
+              evidence/image-a.json evidence/image-b.json > evidence/first-layer-diff.json
+          fi
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:

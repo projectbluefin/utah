@@ -364,3 +364,10 @@ reach it)
 unless the change justifies a new layer against the timings table above.
 Removing the package repository COPY dropped it from 13 to 12; a later change
 must earn its layer.
+
+When the two-build gate fails, final-rootfs cleanup cannot establish native
+layer equality: earlier committed layers retain their original metadata.
+Capture the first differing overlay layer's path metadata, xattrs, and content
+hashes in the disposable runner before it exits; retain that diagnostic with
+the two image manifests. A successful image build alone proves neither native
+layer nor rechunked publication reproducibility.
