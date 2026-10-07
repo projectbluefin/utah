@@ -120,6 +120,11 @@ ssh_target() {
         -p "${SSH_PORT_INSTALLED}" "${TEST_USER}@127.0.0.1" "$@"
 }
 
+scp_target() {
+    sshpass -p "${TEST_PASSWORD}" scp "${SSH_OPTS[@]}" \
+        -P "${SSH_PORT_INSTALLED}" "$@"
+}
+
 monitor() {
     python3 - "$1" "$2" <<'PY'
 import socket, sys, time

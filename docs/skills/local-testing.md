@@ -483,3 +483,7 @@ vendor files, then sorted administrator files; merge each group by app ID,
 retaining omitted keys. Honor `Install=false`, branch and runtime type, and
 verify complete refs in the bake and installed guest. Same filenames do not
 mask a whole file in this implementation.
+
+Installed-guest file copies require the installed SSH port and test-user
+password, using SCP's uppercase `-P`. Exercise that helper after merging
+harness changes; a missing function can otherwise fail only after installation.
