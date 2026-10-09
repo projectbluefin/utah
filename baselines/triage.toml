@@ -759,10 +759,9 @@ area = "cli-tools"
 issue = "#263"
 
 [package.nvtop]
-status = "unavailable"
+status = "planned"
 area = "cli-tools"
-reason = "packages/utah.toml [unavailable]"
-issue = "utah-packages#311"
+issue = "#451"
 # User-facing request: projectbluefin/utah#451. Homebrew nvtop is deprecated
 # (disabled 2027-09-17), so the factory build at utah-packages#311 is the
 # only path to keep the tool on NVIDIA images once the brew formula goes.

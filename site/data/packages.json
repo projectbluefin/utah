@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-06",
+  "generated_at": "2026-10-09",
   "generator": "scripts/generate-site-data.py",
   "groups": [
     {
@@ -156,6 +156,7 @@
         "linux-atm-libs",
         "lm_sensors",
         "man-db",
+        "nvtop",
         "pciutils",
         "pipewire-config-raop",
         "pipewire-utils",
@@ -228,8 +229,8 @@
     }
   ],
   "totals": {
-    "installed": 171,
-    "unavailable": 8
+    "installed": 172,
+    "unavailable": 7
   },
   "unavailable": [
     {
@@ -265,12 +266,6 @@
         499
       ],
       "name": "nss-mdns"
-    },
-    {
-      "issues": [
-        451
-      ],
-      "name": "nvtop"
     },
     {
       "issues": [
