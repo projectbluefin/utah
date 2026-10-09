@@ -239,6 +239,15 @@ packages = [
     "linux-atm-libs",
     "pipewire-config-raop",
     "setools-console",
+    # Initrd unlock helpers (#564). Common's 90-passkeys-tpm.conf asks dracut
+    # for the fido2, tpm2-tss, pkcs11 and pcsc modules so a LUKS volume can be
+    # unlocked by TPM or a passkey/smart card. dracut installs tpm2-tss only
+    # with the tpm2 binary (tpm2-tools) and pcsc only with pcscd (pcsc-lite);
+    # pcsc-lite-ccid is the reader driver. Silverblue supplies all three to
+    # Bluefin; utah-packages builds them for Utah (utah-packages#364).
+    "tpm2-tools",
+    "pcsc-lite",
+    "pcsc-lite-ccid",
     # Network filesystems: base-image parity measured from the published
     # Bluefin image (baselines/GAP.md, #263). Bluefin inherits the full samba
     # closure from Silverblue; samba resolves today against the pinned
@@ -299,9 +308,9 @@ packages = [
     "libertas-firmware",
     # Intel/AMD CPU microcode updates, packaged separately from
     # linux-firmware (#382). microcode_ctl was deliberately absent because
-    # the factory had no recipe; the factory now publishes one. Early loading
-    # also needs the initramfs regenerated after this install: until #564
-    # lands, the shipped initramfs carries no microcode at all.
+    # the factory had no recipe; the factory now publishes one. The image's
+    # last package step regenerates the initramfs, which puts this and
+    # linux-firmware's amd-ucode in the early microcode cpio (#564).
     "microcode_ctl",
 ]
 

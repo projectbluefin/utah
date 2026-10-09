@@ -65,7 +65,11 @@ RUN chmod 0755 /tmp/utah-live-src/configure-live.sh && \
 # dracut[E] FAILED line as the error it is.
 RUN set -euxo pipefail; \
     mkdir -p /var/roothome; \
-    kernel="$(ls /usr/lib/modules | sort -V | tail -1)"; \
+    kernel_dir="$(find /usr/lib/modules -mindepth 2 -maxdepth 2 -name vmlinuz -printf '%h\n')"; \
+    if [ -z "$kernel_dir" ] || [ "$(printf '%s\n' "$kernel_dir" | wc -l)" -ne 1 ]; then \
+      echo "Expected one bootc kernel for the live initramfs: $kernel_dir" >&2; exit 1; \
+    fi; \
+    kernel="${kernel_dir##*/}"; \
     dracut --force --reproducible --no-hostonly \
       --add dmsquash-live \
       --omit 'tpm2-tss pcsc' \

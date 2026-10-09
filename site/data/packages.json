@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-06",
+  "generated_at": "2026-10-07",
   "generator": "scripts/generate-site-data.py",
   "groups": [
     {
@@ -157,6 +157,8 @@
         "lm_sensors",
         "man-db",
         "pciutils",
+        "pcsc-lite",
+        "pcsc-lite-ccid",
         "pipewire-config-raop",
         "pipewire-utils",
         "poppler-utils",
@@ -168,6 +170,7 @@
         "setools-console",
         "stix-fonts",
         "systemd-container",
+        "tpm2-tools",
         "unzip",
         "vim-enhanced",
         "which",
@@ -228,7 +231,7 @@
     }
   ],
   "totals": {
-    "installed": 171,
+    "installed": 174,
     "unavailable": 8
   },
   "unavailable": [

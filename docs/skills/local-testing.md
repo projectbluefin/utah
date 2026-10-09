@@ -478,3 +478,6 @@ just boot-vm     # success: GDM appears and GNOME Shell renders in noVNC
 just iso testing
 just boot-iso    # success: live session renders; serial shows UTAH_LIVE_READY
 ```
+
+See [gaming kernel selection](local-testing/references/gaming-kernel-selection.md)
+for the shared bootc, live-initramfs and ISO kernel layout.

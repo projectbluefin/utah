@@ -3,7 +3,7 @@ ARG BASE_IMAGE=quay.io/hummingbird-community/bootc-os:latest@sha256:1bc8b59829ce
 # Keep this pin in Utah so an image build is reproducible and can be reviewed
 # against the exact package set it consumes.
 ARG PACKAGE_IMAGE=ghcr.io/projectbluefin/utah-packages
-ARG PACKAGE_IMAGE_SHA=sha256:d257e97a0057e37da47995bb142c180e2352960ab13bd44594215616a395b717
+ARG PACKAGE_IMAGE_SHA=sha256:1564d34c91af2f1b4028bbd7b50e520c2cc0af4d38d6c2573774558708b1e486
 # CI keeps PACKAGE_IMAGE_SHA pinned. PACKAGE_IMAGE_REF supports a local image
 # in containers-storage, where no registry digest is available.
 ARG PACKAGE_IMAGE_REF=${PACKAGE_IMAGE}@${PACKAGE_IMAGE_SHA}
@@ -86,6 +86,8 @@ COPY scripts/install-packages.py \
      scripts/mirror-shim.sh \
      scripts/verify-efi-chain.sh \
      scripts/fix-home-labels.sh \
+     scripts/regenerate-initramfs.sh \
+     iso/scripts/live-kernel.py \
      scripts/install-v4l2loopback.sh \
      scripts/image-repo.sh \
      /tmp/utah-scripts/
@@ -135,6 +137,8 @@ RUN --mount=type=bind,from=v4l2loopback,source=/out,target=/tmp/utah-v4l2loopbac
                 mirror-shim.sh:utah-mirror-shim \
                 verify-efi-chain.sh:utah-verify-efi-chain \
                 fix-home-labels.sh:utah-fix-home-labels \
+                regenerate-initramfs.sh:utah-regenerate-initramfs \
+                live-kernel.py:utah-live-kernel \
                 install-v4l2loopback.sh:utah-install-v4l2loopback \
                 image-repo.sh:utah-image-repo; do \
       install -Dm 0755 "/tmp/utah-scripts/${pair%%:*}" "/usr/local/libexec/${pair##*:}" || exit 1; \
@@ -290,6 +294,10 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
     esac && \
     IMAGE_FLAVOR="${IMAGE_FLAVOR}" /usr/local/libexec/utah-verify-rpm-contract \
       /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
+    # The base image's initramfs predates every package installed above, so
+    # rebuild it now that the last one is in: early microcode and Common's
+    # TPM/passkey unlock modules only reach the initrd this way (#564).
+    /usr/local/libexec/utah-regenerate-initramfs && \
     # The package repository is now only ever bind mounted, so it is absent from
     # the committed image. Flip it disabled here -- the last step that installs
     # anything -- so later dnf calls on the image (the live ISO build's included)
