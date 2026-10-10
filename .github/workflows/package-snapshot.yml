@@ -1,0 +1,59 @@
+name: Prove offline package snapshot
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/package-snapshot.yml
+      - ci/package-snapshot.py
+      - tests/test_package_snapshot.py
+  pull_request:
+    paths:
+      - .github/workflows/package-snapshot.yml
+      - ci/package-snapshot.py
+      - tests/test_package_snapshot.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-snapshot-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Install snapshot tooling
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y buildah createrepo-c
+      - name: Prove the transaction replays without network access
+        run: sudo python3 ci/package-snapshot.py --output "${RUNNER_TEMP}/package-snapshot"
+      - name: Record proof
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          output = Path(os.environ['RUNNER_TEMP']) / 'package-snapshot'
+          proof = json.loads((output / 'snapshot-proof.json').read_text())
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('## Offline package snapshot proof\n\n')
+              summary.write(f"{proof['requested']} requested packages verified; "
+                            f"{proof['snapshot_rpms']} downloaded RPMs.\n\n")
+              summary.write('The complete RPM inventory matches the online reference. '
+                            'Replay ran with network=none on a fresh pinned base.\n')
+          PY
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: package-snapshot-proof
+          path: ${{ runner.temp }}/package-snapshot/*.json
+          if-no-files-found: warn
+          retention-days: 7
