@@ -51,7 +51,7 @@ and no installer is published. The `:testing` consumer tag **is** published
 on `ghcr.io/projectbluefin/utah`, but only after the post-`testing`-e2e
 workflow validates a digest and runs
 `skopeo copy … "${ref%@*}:testing"`
-(`.github/workflows/post-testing-e2e.yml:309`). `stream_name: testing` in
+(`.github/workflows/post-testing-e2e.yml:353`). `stream_name: testing` in
 `.github/workflows/build.yml` is built with `publish_stream_tag: "false"`,
 which only defers the floating `:testing` tag — it does not block it. The
 pipeline also pushes dated `testing-<date>-<sha>` snapshots to
@@ -87,7 +87,7 @@ kernel cache image gets built at all.
 
 **`:testing` is published** on `ghcr.io/projectbluefin/utah:testing` after the
 post-`testing`-e2e workflow promotes a validated digest
-(`.github/workflows/post-testing-e2e.yml:286-309`). `:stable` is not yet
+(`.github/workflows/post-testing-e2e.yml:330-353`). `:stable` is not yet
 published — `:stable` is what the pipeline is built to produce from a future
 promotion off `:testing`, not something you can pull today.
 
