@@ -194,6 +194,13 @@ if user_unit_exists ublue-user-setup.service; then
     systemctl --global enable ublue-user-setup.service
 fi
 
+# Common's user preset is not applied by bootc's system preset-all. Without
+# a global enablement, ChairLift's GUI Brewfile is present but never installed.
+# This is required desktop setup: an absent unit or failed enablement must fail
+# the image build, rather than leave a Control Center launcher with no GUI.
+user_unit_exists brew-preinstall.service
+systemctl --global enable brew-preinstall.service
+
 # Match Bluefin's login behavior. The operations are idempotent and authselect
 # is present in the Hummingbird base.
 authselect enable-feature with-silent-lastlog

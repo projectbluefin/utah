@@ -22,3 +22,6 @@ enable wireplumber.service
 enable xdg-user-dirs.service
 enable obex.service
 enable mpris-proxy.service
+
+# Common installs the ChairLift GUI on login; enable globally at build time too.
+enable brew-preinstall.service

@@ -25,6 +25,11 @@ class FlathubDescriptorIntegrityTests(unittest.TestCase):
         units = self.root / "usr/lib/systemd/system"
         units.mkdir(parents=True)
         (units / "systemd-resolved.service").write_text("[Service]\nPrivateTmp=yes\n")
+        # ChairLift preinstallation is now required desktop setup, even when
+        # this fixture is exercising the independent Flatpak descriptor path.
+        user_units = self.root / "usr/lib/systemd/user"
+        user_units.mkdir(parents=True)
+        (user_units / "brew-preinstall.service").write_text("[Service]\nExecStart=/usr/bin/brew-preinstall\n")
         uupd = self.root / "tmp/uupd"
         uupd.mkdir(parents=True)
         (uupd / "uupd").write_text("#!/bin/sh\nexit 0\n")

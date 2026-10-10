@@ -65,6 +65,20 @@ fedora-version = '^\d+$'
 
 [configuration]
 files = [
+  # Common owns ChairLift's GUI preinstall and system integration (as on Dakota).
+  "/usr/share/applications/io.projectbluefin.chairlift.desktop",
+  "/usr/share/icons/hicolor/scalable/apps/io.projectbluefin.chairlift.svg",
+  "/usr/share/icons/hicolor/symbolic/apps/io.projectbluefin.chairlift-symbolic.svg",
+  "/usr/share/chairlift/config.yml",
+  "/usr/share/ublue-os/homebrew/preinstall.d/chairlift.Brewfile",
+  "/usr/bin/brew-preinstall",
+  "/usr/libexec/brew-preinstall",
+  "/usr/lib/systemd/user/brew-preinstall.service",
+  "/usr/libexec/bootc-update-stage",
+  "/usr/share/polkit-1/actions/io.projectbluefin.chairlift.bootc.policy",
+  "/usr/share/glib-2.0/schemas/io.projectbluefin.chairlift.livery.gschema.xml",
+  "/usr/share/glib-2.0/schemas/io.projectbluefin.chairlift.updates.gschema.xml",
+  "/usr/share/glib-2.0/schemas/io.projectbluefin.chairlift.firstrun.gschema.xml",
   "/etc/dconf/db/distro.d/01-bluefin-folders",
   "/etc/dconf/db/distro.d/02-bluefin-keybindings",
   "/etc/dconf/db/distro.d/03-bluefin-ptyxis-palette",
@@ -84,6 +98,18 @@ files = [
 ]
 
 [configuration.file_contains]
+"/usr/share/applications/io.projectbluefin.chairlift.desktop" = [
+  "Name=Control Center",
+  "Exec=/home/linuxbrew/.linuxbrew/bin/chairlift-wrapper",
+  "Icon=io.projectbluefin.chairlift",
+]
+"/usr/share/ublue-os/homebrew/preinstall.d/chairlift.Brewfile" = [
+  'tap "ublue-os/tap", trusted: true',
+  'cask "ublue-os/tap/chairlift"',
+]
+"/usr/share/polkit-1/actions/io.projectbluefin.chairlift.bootc.policy" = [
+  '<annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/bootc-update-stage</annotate>',
+]
 "/usr/share/glib-2.0/schemas/zz0-bluefin-modifications.gschema.override" = [
   "io.github.kolunmi.Bazaar.desktop",
   "picture-uri='file:///usr/share/backgrounds/bluefin/",
@@ -198,6 +224,8 @@ enabled = [
 # user preset disables everything but dbus; without these an installed Utah had
 # no audio server. See user-preset/85-utah-desktop.preset.
 user_enabled = [
+  "brew-preinstall.service",
+  "ublue-user-setup.service",
   "pipewire.socket",
   "pipewire-pulse.socket",
   "wireplumber.service",

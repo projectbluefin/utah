@@ -118,6 +118,22 @@ The same pinned Common artifact owns ChairLift's alpha.4 helper and ublue
 policy. Their payload matches the release and requires administrator
 authentication for all nine actions. The image contract requires both files;
 Utah does not layer a duplicate release install over Common's copy.
+The full Control Center integration follows Dakota: Common supplies the
+all-user launcher/icons, distro config, trusted `ublue-os/tap/chairlift`
+Brewfile, bootc staging helper/policy, and three GSettings schemas. The desktop
+contract checks those payloads and global enablement of
+`brew-preinstall.service` and `ublue-user-setup.service`.
+
+`brew-preinstall.service` installs the GUI into the shared Homebrew prefix
+on graphical login after user setup; network access and a working brew are
+required. Common's `01-brew-preinstall.preset` alone does not enable it on
+Utah: bootc applies system presets, not global user presets. Enable this
+required unit with `systemctl --global enable` during composition and fail
+if it is absent. Keep Common's lifecycle/migration implementation intact.
+On a fresh installed VM, check `systemctl --user status brew-preinstall`,
+`brew list --cask chairlift`, and launch Control Center from GNOME. Confirm
+settings persist and authenticated system update staging works; static gates
+prove image wiring, not a completed first-login download or GUI behavior.
 
 ## NoNewPrivileges and SELinux domain transitions
 
