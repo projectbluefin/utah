@@ -26,8 +26,16 @@ jobs:
     permissions:
       actions: write
     steps:
+      # Dispatch against the floating ref but pin the checkout to the SHA the
+      # sync just pushed. A job that resolves `testing` seconds later can
+      # otherwise land on the pre-push commit and build stale inputs under a
+      # fresh version stamp (#371); build.yml pins every checkout to this SHA.
       - name: Start the testing build explicitly after token-authenticated sync
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-        run: gh workflow run build.yml --repo "$REPOSITORY" --ref testing
+        run: |
+          SHA="$(gh api "repos/$REPOSITORY/commits/testing" --jq .sha)"
+          test -n "$SHA"
+          gh workflow run build.yml --repo "$REPOSITORY" --ref testing \
+            -f sha="$SHA"
