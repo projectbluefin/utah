@@ -158,5 +158,136 @@ class ResolveE2EInputsTests(unittest.TestCase):
                     artifact_dir(tmp, [f"utah|amd64|{DIGEST}"]), REPO)
 
 
+class ResolveE2EInputsEdgeTests(unittest.TestCase):
+    """Accepted forms and refusals the cases above do not reach.
+
+    Fixtures mirror projectbluefin/actions' reusable-build.yml uploads: one
+    image-digest-testing-* directory per leg, each with a .txt holding the
+    legacy name=digest line and/or the name|platform|digest line.
+    """
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name) / "digests"
+        self.root.mkdir()
+        self.nvidia = "sha256:" + "d" * 64
+
+    def write_leg(self, image, lines):
+        leg = self.root / f"image-digest-testing-{image}"
+        leg.mkdir(exist_ok=True)
+        (leg / f"{image}-x86_64.txt").write_text("\n".join(lines) + "\n")
+
+    def write_both(self):
+        self.write_leg("utah", [f"utah={DIGEST}", f"utah|amd64|{DIGEST}"])
+        self.write_leg("utah-nvidia", [f"utah-nvidia={self.nvidia}",
+                                       f"utah-nvidia|amd64|{self.nvidia}"])
+
+    def resolve(self, run=None, expected=("utah", "utah-nvidia"), repository=REPO):
+        return gate.resolve(run or good_run(), list(expected), str(self.root),
+                            repository)
+
+    def assert_refused(self, message, **kwargs):
+        with self.assertRaisesRegex(ValueError, message):
+            self.resolve(**kwargs)
+
+    def test_matrix_follows_configured_order(self):
+        self.write_both()
+        out = self.resolve(expected=("utah-nvidia", "utah"))
+        self.assertEqual([i["image"] for i in out["include"]],
+                         ["utah-nvidia", "utah"])
+
+    def test_dispatch_and_schedule_events_are_accepted(self):
+        self.write_both()
+        for event in ("workflow_dispatch", "schedule"):
+            with self.subTest(event=event):
+                self.assertEqual(
+                    len(self.resolve(run=good_run(event=event))["include"]), 2)
+
+    def test_registry_owner_is_lowercased(self):
+        self.write_both()
+        mixed = {"full_name": "ProjectBluefin/utah"}
+        out = self.resolve(
+            run=good_run(repository=mixed, head_repository=mixed),
+            repository="ProjectBluefin/utah")
+        self.assertTrue(all(i["ref"].startswith("ghcr.io/projectbluefin/")
+                            for i in out["include"]))
+
+    def test_legacy_only_and_pipe_only_lines_each_suffice(self):
+        self.write_leg("utah", [f"utah={DIGEST}"])
+        self.write_leg("utah-nvidia", [f"utah-nvidia|amd64|{self.nvidia}"])
+        self.assertEqual([i["digest"] for i in self.resolve()["include"]],
+                         [DIGEST, self.nvidia])
+
+    def test_blank_lines_and_non_txt_files_are_ignored(self):
+        self.write_leg("utah", ["", f"utah={DIGEST}", ""])
+        self.write_leg("utah-nvidia", [f"utah-nvidia={self.nvidia}"])
+        (self.root / "notes.json").write_text("utah=not-a-digest\n")
+        self.assertEqual(len(self.resolve()["include"]), 2)
+
+    def test_untrusted_run_fields_are_refused(self):
+        self.write_both()
+        cases = {
+            "conclusion missing": ("conclusion", None),
+            "pull_request_target event": ("event", "pull_request_target"),
+            "workflow_run event": ("event", "workflow_run"),
+            "short sha": ("head_sha", "b" * 7),
+            "uppercase sha": ("head_sha", "B" * 40),
+            "missing sha": ("head_sha", None),
+            "no repository": ("repository", None),
+            "no head repository": ("head_repository", None),
+        }
+        for label, (key, value) in cases.items():
+            with self.subTest(label):
+                run = good_run()
+                if value is None:
+                    del run[key]
+                else:
+                    run[key] = value
+                self.assert_refused("not a successful trusted", run=run)
+
+    def test_self_consistent_run_from_another_repository_is_refused(self):
+        self.write_both()
+        other = {"full_name": "someone/utah"}
+        self.assert_refused(
+            "not a successful trusted",
+            run=good_run(repository=other, head_repository=other))
+
+    def test_malformed_digests_are_refused(self):
+        bad = {
+            "short": "sha256:" + "a" * 63,
+            "uppercase": "sha256:" + "A" * 64,
+            "other algorithm": "sha512:" + "a" * 64,
+            "trailing space": DIGEST + " ",
+        }
+        for label, value in bad.items():
+            with self.subTest(label):
+                self.write_leg("utah", [f"utah={value}"])
+                self.write_leg("utah-nvidia", [f"utah-nvidia={self.nvidia}"])
+                self.assert_refused("unexpected image name or digest")
+
+    def test_empty_artifact_download_is_refused(self):
+        self.assert_refused("do not cover")
+
+    def test_malformed_lines_fail_closed(self):
+        for line in ("utah", f"utah|amd64|{DIGEST}|extra", f"utah={DIGEST}=x"):
+            with self.subTest(line=line):
+                self.write_leg("utah", [line])
+                self.write_leg("utah-nvidia", [f"utah-nvidia={self.nvidia}"])
+                with self.assertRaises(ValueError):
+                    self.resolve()
+
+    def test_cli_untrusted_run_exits_non_zero_with_no_matrix(self):
+        self.write_both()
+        run_f = self.root.parent / "run.json"
+        run_f.write_text(json.dumps(good_run(event="pull_request")))
+        proc = subprocess.run(
+            [sys.executable, str(SCRIPT), str(run_f), str(self.root), REPO],
+            text=True, capture_output=True, cwd=ROOT)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertEqual(proc.stdout, "")
+        self.assertIn("not a successful trusted", proc.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
