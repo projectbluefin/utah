@@ -55,6 +55,12 @@ jobs:
         uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3
       - name: Validate manifests
         run: just check
+      - name: Run unit suite
+        # build.yml ran only `just check` (syntax gate); the tests/ tree ran
+        # locally only (#650). The suite is static and needs no image build.
+        run: |
+          python3 -m pip install -q -r tests/requirements.txt
+          just test
       - name: Check Bluefin parity
         run: just check-parity
       - name: Check package availability in Utah's repositories
