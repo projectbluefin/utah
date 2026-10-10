@@ -117,9 +117,9 @@ resolving that library dependency is not proof of a working decoder.
 
 Remaining #383 gaps at the audit: `gstreamer1-plugin-libav`,
 `gstreamer1-plugins-ugly-free`, `gstreamer1-plugin-dav1d`,
-`papers-thumbnailer`, `gnome-epub-thumbnailer`, `ffmpegthumbnailer`, and
-`gst-thumbnailers`. Consume them only after factory builds and dependency
-closures resolve against Utah's pinned inputs. `totem-pl-parser` is not a
+`papers-thumbnailer`, `gnome-epub-thumbnailer`, and `gst-thumbnailers`.
+`ffmpegthumbnailer` is now consumed. Consume the rest only after factory builds
+and dependency closures resolve against Utah's pinned inputs. `totem-pl-parser` is not a
 replacement for those thumbnailers. Full FFmpeg versus `ffmpeg-free` remains
 a maintainer policy decision; keep #383 open for hardware and codec proof.
 
@@ -357,7 +357,7 @@ Raise the overlay change as its own pull request against `main`; the bump PR
 then picks the fix up on its next rebuild.
 
 Current counts, per the README "Package parity" section: 61 Bluefin contract
-packages installed, 111 Utah additions (GNOME 51, base-image parity, device
+packages installed, 112 Utah additions (GNOME 51, base-image parity, device
 firmware, desktop services), 7 genuinely unavailable. `scripts/check-doc-counts.py` (part of
 `just check`) recomputes these from the manifests and fails if either
 document drifts from `site/data/packages.json`.

@@ -8,9 +8,9 @@ the check beside it passed.
 
 | | |
 | --- | --- |
-| Captured | 2026-10-09T23:38:54Z |
+| Captured | 2026-10-09T02:01:19Z |
 | Live ISO | `utah-live.iso`, 4.2G |
-| Installed image | `ghcr.io/projectbluefin/utah@sha256:0a248279e8d101304e0b0b3f4fb6172e647ece71baa36344deec3f32aa2f7792` |
+| Installed image | `ghcr.io/projectbluefin/utah@sha256:309087e62c99157cf8974e05b3c26117c9d32952d8819817d8b357bf5a9f57cf` |
 | Root filesystem | btrfs on LUKS2, passphrase unlock |
 | Live session | GNOME, wayland |
 | Installed session | GNOME, wayland, user `utahtest` |
@@ -56,4 +56,3 @@ graphical target. This is what proves the boot did not stop at a console.
 
 `utahtest`'s GNOME session, entered by typing the password at the
 greeter above.
-

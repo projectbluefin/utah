@@ -221,6 +221,19 @@ packages = [
     "pipewire-utils",
     "pulseaudio-utils",
     "glycin-thumbnailer",
+    # Video thumbnailer for the media codec parity work (#383). The factory
+    # published it after the Intel runtimes landed in #397, so it resolves
+    # today against the pinned factory repodata (sha256:0f8595d) + Hummingbird
+    # primary: ffmpegthumbnailer-libs and the libav*-free 9.0.1 libraries it
+    # links (libavcodec/libavformat/libavutil/libavfilter) come from the
+    # factory, plus libjpeg-turbo/libpng from Hummingbird. libavformat-free and
+    # libavfilter-free are new to the image and pull zeromq, libssh, and
+    # libvmaf from Hummingbird, so expect image growth. The remaining
+    # thumbnailers (papers-thumbnailer, gnome-epub-thumbnailer) and the
+    # GStreamer H.264 plugins (gstreamer1-plugin-libav, openh264,
+    # gstreamer1-plugins-ugly-free, gstreamer1-plugin-dav1d) are still not in
+    # the factory and stay out until utah-packages publishes them (#383).
+    "ffmpegthumbnailer",
     "samba-client",
     "samba-common-tools",
     "krb5-workstation",

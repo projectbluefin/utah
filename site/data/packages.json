@@ -126,6 +126,7 @@
         "default-fonts-core-sans",
         "default-fonts-core-serif",
         "desktop-file-utils",
+        "ffmpegthumbnailer",
         "file",
         "fprintd",
         "fprintd-pam",
@@ -229,7 +230,7 @@
     }
   ],
   "totals": {
-    "installed": 172,
+    "installed": 173,
     "unavailable": 7
   },
   "unavailable": [
