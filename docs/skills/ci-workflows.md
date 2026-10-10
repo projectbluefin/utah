@@ -322,6 +322,15 @@ is the ceiling, not the measured size), per flavor, per dispatch, at 30-day
 retention. That is real Actions storage; if the matrix widens, revisit the
 retention window before the flavor count.
 
+Screenshot evidence identifies the tested image, not necessarily the E2E
+workflow checkout. Validate `source_sha` against `build_run` and the published
+image labels, then match the recorded digest to the E2E matrix job. A dispatch
+can run newer verifier code against an older build; differing workflow and
+image SHAs alone do not invalidate the evidence. Never treat those screenshots
+as runtime proof for a later image commit. An image build passing its desktop
+contract does not prove first-login GUI installation: ISO composition or boot
+failure still blocks that acceptance and tag promotion.
+
 Every matrix job preserves build/test logs, serial logs, and screenshots,
 including on failure. Only passing jobs upload `docs/verification` with the
 source commit, original build run, E2E run, image digest and ISO checksum.
