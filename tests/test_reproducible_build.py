@@ -15,6 +15,7 @@ and build args that differ between the runs for reasons unrelated to residue
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import tempfile
@@ -153,6 +154,26 @@ class ReproducibilityCheckTests(unittest.TestCase):
         self.run_check(IDENTICAL, IDENTICAL, flavor="nvidia-gaming")
         for invocation in self.builds():
             self.assertIn("--build-arg IMAGE_FLAVOR=nvidia-gaming", invocation)
+
+    def test_each_flavor_builds_under_its_published_image_name(self):
+        # build-ghcr takes IMAGE_NAME from scripts/flavors.py; the probe must
+        # too, or a kernel flavor bakes the main image's image-ref into
+        # image-info.json and the two builds compare an image CI never ships.
+        roster = subprocess.run(
+            ["python3", str(ROOT / "scripts" / "flavors.py"), "list"],
+            check=True, capture_output=True, text=True).stdout
+        for flavor in json.loads(roster):
+            with self.subTest(flavor=flavor):
+                self.build_log.write_text("")
+                expected = subprocess.run(
+                    ["python3", str(ROOT / "scripts" / "flavors.py"), "image", flavor],
+                    check=True, capture_output=True, text=True).stdout.strip()
+                result = self.run_check(IDENTICAL, IDENTICAL, flavor=flavor)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                builds = self.builds()
+                self.assertEqual(len(builds), 2)
+                for invocation in builds:
+                    self.assertIn(f"--build-arg IMAGE_NAME={expected} ", invocation)
 
     def test_kernel_flavors_build_only_the_verified_immutable_cache(self):
         result = self.run_check(IDENTICAL, IDENTICAL, flavor="nvidia")

@@ -49,13 +49,13 @@ REPO_ORGANIZATION="${REPO_ORGANIZATION:-projectbluefin}"
 # Hold the source commit epoch constant across both uncached builds.
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct -- Containerfile packages system_files scripts config .gitmodules)}"
 
-case "${FLAVOR}" in
-    main | nvidia | gaming | nvidia-gaming) ;;
-    *)
-        echo "unknown flavor: ${FLAVOR} (expected main, nvidia, gaming or nvidia-gaming)" >&2
-        exit 2
-        ;;
-esac
+# scripts/flavors.py owns the flavor roster and the published image name for
+# each flavor, as it does for build-ghcr. Building under any other IMAGE_NAME
+# would bake a different image-ref into image-info.json than CI ships.
+if ! IMAGE_NAME="$(python3 "$(dirname "$0")/flavors.py" image "${FLAVOR}" 2>/dev/null)"; then
+    echo "unknown flavor: ${FLAVOR} (expected one of: $(python3 "$(dirname "$0")/flavors.py" list))" >&2
+    exit 2
+fi
 
 # Match build-ghcr's cache route, resolving it once for both builds. Otherwise
 # kernel flavors compile from the pristine base rather than test the image CI
@@ -95,7 +95,7 @@ build() {
         --no-cache \
         "${epoch_args[@]}" \
         "${base_args[@]}" \
-        --build-arg IMAGE_NAME=utah \
+        --build-arg IMAGE_NAME="${IMAGE_NAME}" \
         --build-arg IMAGE_ID=utah \
         --build-arg IMAGE_FLAVOR="${FLAVOR}" \
         --build-arg IMAGE_VENDOR="${REPO_ORGANIZATION}" \
