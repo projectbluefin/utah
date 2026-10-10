@@ -81,6 +81,7 @@ def write_overlay(
     repositories: list[str] | None = None,
     baseurls: dict[str, str] | None = None,
     security: dict[str, list[str]] | None = None,
+    gpgkeys: dict[str, list[str]] | None = None,
     factory: list[str] | None = None,
 ) -> Path:
     """Write a utah.toml overlay that already carries the supply-chain sections.
@@ -120,6 +121,11 @@ def write_overlay(
         sections.append("[repositories.security]\n")
         for repo_id, options in security.items():
             rendered = ", ".join(f'"{opt}"' for opt in options)
+            sections.append(f'{repo_id} = [{rendered}]\n')
+    if gpgkeys:
+        sections.append("[repositories.gpgkeys]\n")
+        for repo_id, keys in gpgkeys.items():
+            rendered = ", ".join(f'"{key}"' for key in keys)
             sections.append(f'{repo_id} = [{rendered}]\n')
     if factory:
         sections.append(toml_section("factory", factory))
@@ -461,6 +467,88 @@ class CheckModeTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0, result.stderr)
         self.assertIn("ERROR", result.stderr)
         self.assertNotIn("Traceback", result.stderr)
+
+    def test_check_rejects_gpgkey_for_non_allowed_repo(self) -> None:
+        """A [repositories.gpgkeys] entry for a repo not in [repositories.allowed] is rejected."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(
+                directory, repositories=["public-hummingbird-x86_64-rpms"],
+                gpgkeys={"ghost-repo": ["file:///etc/pki/rpm-gpg/key"]})
+            result = self.run_check(manifest, overlay)
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertIn("ghost-repo", result.stderr)
+        self.assertIn("ERROR", result.stderr)
+
+    def test_check_rejects_non_table_gpgkeys(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(
+                directory, repositories=["public-hummingbird-x86_64-rpms"])
+            with overlay.open("a") as handle:
+                handle.write('[repositories.gpgkeys]\npublic-hummingbird-x86_64-rpms = "not-a-list"\n')
+            result = self.run_check(manifest, overlay)
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertIn("ERROR", result.stderr)
+        self.assertIn("non-list", result.stderr)
+
+    def test_check_rejects_empty_gpgkey_list(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(
+                directory, repositories=["public-hummingbird-x86_64-rpms"],
+                gpgkeys={"public-hummingbird-x86_64-rpms": []})
+            result = self.run_check(manifest, overlay)
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertIn("ERROR", result.stderr)
+
+    def test_check_rejects_non_string_gpgkey_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(
+                directory, repositories=["public-hummingbird-x86_64-rpms"])
+            with overlay.open("a") as handle:
+                handle.write(
+                    "[repositories.gpgkeys]\n"
+                    "public-hummingbird-x86_64-rpms = [1, 2]\n")
+            result = self.run_check(manifest, overlay)
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertIn("ERROR", result.stderr)
+        self.assertIn("non-string", result.stderr)
+
+    def test_check_rejects_unpinned_gpgkey_in_repo_file(self) -> None:
+        """A repo file with gpgkey= and no [repositories.gpgkeys] pin is rejected (#617)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(
+                directory, repositories=["public-hummingbird-x86_64-rpms"])
+            write_repo_file(
+                directory, "public-hummingbird-x86_64-rpms",
+                baseurl="https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
+                gpgkey="https://attacker.example.com/key")
+            result = self.run_check(manifest, overlay)
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertIn("attacker.example.com", result.stderr)
+
+    def test_check_accepts_pinned_gpgkey(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest = write_manifest(directory, ["bash"])
+            overlay = write_overlay(
+                directory, repositories=["public-hummingbird-x86_64-rpms"],
+                gpgkeys={"public-hummingbird-x86_64-rpms":
+                         ["file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2"]})
+            write_repo_file(
+                directory, "public-hummingbird-x86_64-rpms",
+                baseurl="https://packages.redhat.com/api/pulp-content/public-hummingbird/x86_64/",
+                gpgkey="file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2")
+            result = self.run_check(manifest, overlay)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 class VerifyModeTests(unittest.TestCase):
@@ -1166,6 +1254,249 @@ class SupplyChainTests(unittest.TestCase):
         errors = self.module.repo_security_option_errors("repo", parser, "fedora.repo", approved)
         self.assertEqual(len(errors), 1)
         self.assertIn("pkg_gpgcheck", errors[0])
+
+    def test_normalize_gpgkey_lowercases_scheme_and_host(self) -> None:
+        """Two spellings of the same key URL must compare equal after normalization."""
+        self.assertEqual(
+            self.module.normalize_gpgkey("https://Nvidia.GitHub.io/libnvidia-container/GPGKEY"),
+            "https://nvidia.github.io/libnvidia-container/GPGKEY",
+        )
+
+    def test_normalize_gpgkey_preserves_trailing_slash(self) -> None:
+        """A trailing slash distinguishes a key directory from a key file."""
+        with_slash = self.module.normalize_gpgkey("https://example.com/keys/")
+        without_slash = self.module.normalize_gpgkey("https://example.com/keys")
+        self.assertNotEqual(with_slash, without_slash)
+
+    def test_normalize_gpgkey_folds_dollar_var(self) -> None:
+        """${basearch} and $basearch are the same key after dnf5 expansion."""
+        self.assertEqual(
+            self.module.normalize_gpgkey("https://example.com/${basearch}/key"),
+            self.module.normalize_gpgkey("https://example.com/$basearch/key"),
+        )
+
+    def test_normalize_gpgkey_preserves_file_path(self) -> None:
+        """A file:// path keeps the path exact so two distinct files do not match."""
+        self.assertEqual(
+            self.module.normalize_gpgkey("file:///etc/pki/rpm-gpg/RPM-GPG-KEY-1"),
+            "file:///etc/pki/rpm-gpg/RPM-GPG-KEY-1",
+        )
+
+    def test_repo_gpgkey_pin_errors_passes_when_unset(self) -> None:
+        """An absent gpgkey= is not, by itself, an error."""
+        parser = self._parser({"baseurl": "https://a.example.com/$basearch"})
+        self.assertEqual(
+            self.module.repo_gpgkey_pin_errors(
+                "repo", parser, "fedora.repo",
+                {"repo": ("file:///etc/pki/rpm-gpg/key",)},
+            ),
+            [],
+        )
+
+    def test_repo_gpgkey_pin_errors_passes_when_pinned(self) -> None:
+        parser = self._parser(
+            {"baseurl": "https://a.example.com/$basearch",
+             "gpgkey": "file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2"})
+        self.assertEqual(
+            self.module.repo_gpgkey_pin_errors(
+                "repo", parser, "fedora.repo",
+                {"repo": ("file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2",)},
+            ),
+            [],
+        )
+
+    def test_repo_gpgkey_pin_errors_passes_when_pinned_case_insensitive(self) -> None:
+        """Scheme and host are normalized, so a differently-cased pin still matches."""
+        parser = self._parser(
+            {"baseurl": "https://a.example.com/$basearch",
+             "gpgkey": "HTTPS://NVIDIA.GITHUB.IO/libnvidia-container/gpgkey"})
+        self.assertEqual(
+            self.module.repo_gpgkey_pin_errors(
+                "repo", parser, "fedora.repo",
+                {"repo": ("https://nvidia.github.io/libnvidia-container/gpgkey",)},
+            ),
+            [],
+        )
+
+    def test_repo_gpgkey_pin_errors_flags_unpinned_allowlisted_repo(self) -> None:
+        """An allowlisted repo with gpgkey= but no pin in the manifest is rejected."""
+        parser = self._parser(
+            {"baseurl": "https://a.example.com/$basearch",
+             "gpgkey": "https://attacker.example.com/key"})
+        errors = self.module.repo_gpgkey_pin_errors(
+            "repo", parser, "fedora.repo",
+            {"repo": ("file:///etc/pki/rpm-gpg/RPM-GPG-KEY-1",)},
+        )
+        self.assertEqual(len(errors), 1)
+        self.assertIn("attacker.example.com", errors[0])
+        self.assertIn("not pinned", errors[0])
+
+    def test_repo_gpgkey_pin_errors_flags_unpinned_when_repo_not_in_pinset(self) -> None:
+        """An allowlisted repo with no [repositories.gpgkeys] entry is rejected."""
+        parser = self._parser(
+            {"baseurl": "https://a.example.com/$basearch",
+             "gpgkey": "https://attacker.example.com/key"})
+        errors = self.module.repo_gpgkey_pin_errors(
+            "repo", parser, "fedora.repo", {"other-repo": ("file:///some/key",)},
+        )
+        self.assertEqual(len(errors), 1)
+        self.assertIn("forbidden", errors[0])
+
+    def test_repo_gpgkey_pin_errors_passes_when_expected_gpgkeys_is_none(self) -> None:
+        """The check is opt-in: pass None to skip gpgkey= entirely (legacy path)."""
+        parser = self._parser(
+            {"baseurl": "https://a.example.com/$basearch",
+             "gpgkey": "https://attacker.example.com/key"})
+        self.assertEqual(
+            self.module.repo_gpgkey_pin_errors(
+                "repo", parser, "fedora.repo", None,
+            ),
+            [],
+        )
+
+    def test_repo_gpgkey_pin_errors_flags_attacker_key_in_override(self) -> None:
+        """Override drop-ins may not set gpgkey= at all, on any repo id."""
+        parser = self._parser(
+            {"gpgkey": "https://attacker.example.com/key"})
+        errors = self.module.repo_gpgkey_pin_errors(
+            "repo", parser, "/etc/dnf/repos.override.d/evil.repo",
+            {"repo": ("file:///etc/pki/rpm-gpg/RPM-GPG-KEY-1",)},
+            is_override=True,
+        )
+        self.assertEqual(len(errors), 1)
+        self.assertIn("forbidden", errors[0])
+
+    def test_repo_gpgkey_pin_errors_flags_attacker_key_in_override_even_when_pinned(self) -> None:
+        """An override drop-in with a pinned gpgkey= is still rejected."""
+        parser = self._parser(
+            {"gpgkey": "file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2"})
+        errors = self.module.repo_gpgkey_pin_errors(
+            "repo", parser, "/etc/dnf/repos.override.d/evil.repo",
+            {"repo": ("file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2",)},
+            is_override=True,
+        )
+        self.assertEqual(len(errors), 1)
+        self.assertIn("forbidden", errors[0])
+
+    def test_check_repo_sections_flags_unpinned_gpgkey_on_allowlisted_repo(self) -> None:
+        """The issue's literal scenario: a gpgkey= drop-in on an allowlisted id passes.
+
+        Until the gate, an override section [nvidia-container-toolkit] gpgkey=https://attacker/key
+        was accepted; the gpgkey= pin now rejects it (#617).
+        """
+        parser = self._parser(
+            {"baseurl": "https://nvidia.github.io/libnvidia-container/stable/rpm/$basearch",
+             "gpgkey": "https://attacker.example.com/key", "enabled": "1"})
+        errors = self.module.check_repo_sections(
+            parser, "/etc/yum.repos.d/nvidia-container.repo",
+            {"nvidia-container-toolkit"},
+            expected_baseurls={"nvidia-container-toolkit":
+                               ("https://nvidia.github.io/libnvidia-container/stable/rpm/$basearch",)},
+            expected_gpgkeys={"nvidia-container-toolkit":
+                              ("https://nvidia.github.io/libnvidia-container/gpgkey",)},
+        )
+        self.assertTrue(any("attacker.example.com" in e for e in errors), errors)
+
+    def test_check_repo_sections_flags_unpinned_gpgkey_on_disabled_allowlisted_repo(self) -> None:
+        """A disabled allowlisted repo with gpgkey= is still rejected, before any
+        early `continue` for the disabled branch (#617)."""
+        parser = self._parser(
+            {"baseurl": "https://nvidia.github.io/libnvidia-container/stable/rpm/$basearch",
+             "gpgkey": "https://attacker.example.com/key", "enabled": "0"})
+        errors = self.module.check_repo_sections(
+            parser, "/etc/yum.repos.d/nvidia-container.repo",
+            {"nvidia-container-toolkit"},
+            expected_baseurls={"nvidia-container-toolkit":
+                               ("https://nvidia.github.io/libnvidia-container/stable/rpm/$basearch",)},
+            expected_gpgkeys={"nvidia-container-toolkit":
+                              ("https://nvidia.github.io/libnvidia-container/gpgkey",)},
+        )
+        self.assertTrue(any("attacker.example.com" in e for e in errors), errors)
+
+    def test_check_repo_sections_flags_gpgkey_in_partial_override(self) -> None:
+        """A drop-in [nvidia-container-toolkit] priority=1 gpgkey= is rejected even
+        though baseurl= is absent and the section is a partial override."""
+        parser = self._parser({"priority": "1",
+                               "gpgkey": "https://attacker.example.com/key"})
+        errors = self.module.check_repo_sections(
+            parser, "/etc/dnf/repos.override.d/99-attacker.repo",
+            {"nvidia-container-toolkit"},
+            expected_baseurls={"nvidia-container-toolkit":
+                               ("https://nvidia.github.io/libnvidia-container/stable/rpm/$basearch",)},
+            expected_gpgkeys={"nvidia-container-toolkit":
+                              ("https://nvidia.github.io/libnvidia-container/gpgkey",)},
+            is_override=True,
+        )
+        self.assertTrue(any("attacker.example.com" in e for e in errors), errors)
+
+    def test_check_repo_sections_flags_gpgkey_in_wildcard_override(self) -> None:
+        """A wildcard override that sets gpgkey= is rejected before glob match."""
+        parser = configparser.ConfigParser(interpolation=None)
+        parser["[*]"] = {"gpgkey": "https://attacker.example.com/key"}
+        errors = self.module.check_repo_sections(
+            parser, "/etc/dnf/repos.override.d/wild.repo",
+            {"nvidia-container-toolkit"},
+            expected_baseurls={"nvidia-container-toolkit":
+                               ("https://nvidia.github.io/libnvidia-container/stable/rpm/$basearch",)},
+            expected_gpgkeys={"nvidia-container-toolkit":
+                              ("https://nvidia.github.io/libnvidia-container/gpgkey",)},
+            is_override=True,
+        )
+        gpgkey_errors = [e for e in errors if "gpgkey" in e]
+        self.assertEqual(len(gpgkey_errors), 1, errors)
+        self.assertIn("Wildcard", gpgkey_errors[0])
+
+    def test_check_repo_sections_passes_when_gpgkey_matches_pin(self) -> None:
+        parser = configparser.ConfigParser(interpolation=None)
+        parser["nvidia-container-toolkit"] = {
+            "baseurl": "https://nvidia.github.io/libnvidia-container/stable/rpm/$basearch",
+            "gpgkey": "https://nvidia.github.io/libnvidia-container/gpgkey",
+            "enabled": "1"}
+        errors = self.module.check_repo_sections(
+            parser, "/etc/yum.repos.d/nvidia-container.repo",
+            {"nvidia-container-toolkit"},
+            expected_baseurls={"nvidia-container-toolkit":
+                               ("https://nvidia.github.io/libnvidia-container/stable/rpm/$basearch",)},
+            expected_gpgkeys={"nvidia-container-toolkit":
+                              ("https://nvidia.github.io/libnvidia-container/gpgkey",)},
+        )
+        self.assertEqual(errors, [])
+
+    def test_check_repo_sections_skips_gpgkey_check_when_expected_gpgkeys_is_none(self) -> None:
+        """Passing None preserves the legacy behaviour: gpgkey= is not inspected."""
+        parser = self._parser(
+            {"baseurl": "https://a.example.com/$basearch",
+             "gpgkey": "https://attacker.example.com/key", "enabled": "1"})
+        errors = self.module.check_repo_sections(
+            parser, "fedora.repo", {"repo"},
+            expected_baseurls={"repo": ("https://a.example.com/$basearch",)},
+            expected_gpgkeys=None,
+        )
+        self.assertEqual(errors, [])
+
+    def test_check_repo_sections_flags_gpgkey_when_repo_not_in_pinset(self) -> None:
+        """An allowlisted repo with gpgkey= but no [repositories.gpgkeys] entry fails."""
+        parser = self._parser(
+            {"baseurl": "https://a.example.com/$basearch",
+             "gpgkey": "https://attacker.example.com/key", "enabled": "1"})
+        errors = self.module.check_repo_sections(
+            parser, "fedora.repo", {"repo"},
+            expected_baseurls={"repo": ("https://a.example.com/$basearch",)},
+            expected_gpgkeys={},
+        )
+        self.assertTrue(any("attacker.example.com" in e for e in errors), errors)
+
+    def test_glob_override_errors_flags_gpgkey_even_when_partial(self) -> None:
+        """A wildcard override with only gpgkey= set is rejected even though
+        no origin key is set."""
+        parser = configparser.ConfigParser(interpolation=None)
+        parser["[*]"] = {"gpgkey": "https://attacker.example.com/key"}
+        errors = self.module.glob_override_errors(
+            "[*]", parser, "/etc/dnf/repos.override.d/wild.repo", partial_override=True,
+        )
+        self.assertTrue(
+            any("gpgkey" in e and "Wildcard" in e for e in errors), errors,
+        )
 
     def test_check_repo_sections_flags_unapproved_repo(self) -> None:
         parser = self._parser({"baseurl": "https://a.example.com/$basearch", "enabled": "1"})

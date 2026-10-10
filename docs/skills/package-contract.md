@@ -75,7 +75,7 @@ hardware establishes that its radio works.
 It covers both kinds of parity gap: names in the copied `base.toml` contract,
 and names Bluefin's published image ships from a build file outside that
 contract (recorded in `baselines/bluefin/rpms.tsv` and triaged in
-`baselines/triage.toml` — `nvtop` is the current example). Each entry
+`baselines/triage.toml` — `nss-mdns` is the current example). Each entry
 **MUST carry a tracking issue**: the list is the documented parity debt, not
 a dumping ground for packages that are merely inconvenient (header comment,
 `packages/utah.toml`).
@@ -157,6 +157,13 @@ provenance, not an RPM GPG key, so both signature checks are disabled) and
 `nvidia-container-toolkit` (NVIDIA signs only its repomd.xml, so only package
 signature verification is disabled).
 
+A third axis, the **trust anchor**, is gated by `[repositories.gpgkeys]` (#617).
+`gpgkey=` rewrites where a repository fetches signing keys from; an unpinned
+entry lets a drop-in reroute the trust anchor to an attacker-controlled key
+server. All sections declaring `gpgkey=` must match `[repositories.gpgkeys]`;
+drop-ins cannot set `gpgkey=` on any section. Details and override rules live in
+[`references/repository-authenticity.md`](references/repository-authenticity.md).
+
 The install-source identity is single-sourced in `packages/*.repo`. Each repository
 participating in the package install transaction carries a `# utah-install: true`
 annotation (either directly preceding or within the `[section]` header in
@@ -210,23 +217,23 @@ directories, `/etc/dnf/repos.override.d` and
   of silently dropping it. A `.repo` override drop-in is partial by design: a
   `[id]` section may set only `enabled=`/`priority=` with no `baseurl=` (that is
   how the base disables a repo it ships), so the gate validates such a partial
-  override only for the keys it sets -- allowlist membership and the
+  override only for the keys it sets -- allowlist membership, the
   `proxy=`/`sslverify=`/`gpgcheck=`/`pkg_gpgcheck=`/`repo_gpgcheck=` security
-  options -- but never rejects it for a missing `baseurl=`. A partial override
-  that leaves `enabled=` unset (for example `priority=` only) does not enable
-  the repo, so it passes for any id unless it sets a `proxy=` or disables
-  `sslverify=` or an unapproved signature check (`gpgcheck=`, `pkg_gpgcheck=`,
-  `repo_gpgcheck=`). A drop-in that sets any origin key (`baseurl=`, `metalink=` or
-  `mirrorlist=`) is pinned like any other enabled repo, so a `metalink=` or
-  `mirrorlist=` redirect fails the gate.
+  options, and the absence of any `gpgkey=` (a drop-in that names a trust
+  anchor cannot tell which keys the underlying repo shipped, so it is
+  rejected outright, even on an allowlisted id) -- but never rejects it for a
+  missing `baseurl=`. A partial override that leaves `enabled=` unset (for
+  example `priority=` only) does not enable the repo, so it passes for any
+  id unless it sets a `proxy=`, disables `sslverify=`, fails an unapproved
+  signature check, or sets `gpgkey=`. A drop-in that sets any origin key
+  (`baseurl=`, `metalink=` or `mirrorlist=`) is pinned like any other enabled
+  repo.
 - dnf5 matches override section names against repo ids as **globs**, so a
   `[*]` or `[utah-*]` section applies to every matching repo. The gate cannot
   enumerate those matches, so a wildcard override passes only when it cannot
-  widen the allowlist: it sets no origin key, does not set `enabled=` to a
-  true value, sets no `proxy=`, and disables neither `sslverify=` nor any
-  signature check (`gpgcheck=`, `pkg_gpgcheck=`, `repo_gpgcheck=`; no
-  `[repositories.security]` approval applies to a glob). A `[*]` drop-in
-  that sets only `priority=` or `enabled=0` passes.
+  widen the allowlist: no origin key, no `enabled=1`, no `proxy=`, no disabled
+  `sslverify=`, no signature check, no `gpgkey=` (#617). A `[*]` drop-in that
+  sets only `priority=` or `enabled=0` passes.
 
 ## Printing and scanning gaps
 
@@ -350,8 +357,8 @@ Raise the overlay change as its own pull request against `main`; the bump PR
 then picks the fix up on its next rebuild.
 
 Current counts, per the README "Package parity" section: 61 Bluefin contract
-packages installed, 110 Utah additions (GNOME 51, base-image parity, device
-firmware, desktop services), 8 genuinely unavailable. `scripts/check-doc-counts.py` (part of
+packages installed, 111 Utah additions (GNOME 51, base-image parity, device
+firmware, desktop services), 7 genuinely unavailable. `scripts/check-doc-counts.py` (part of
 `just check`) recomputes these from the manifests and fails if either
 document drifts from `site/data/packages.json`.
 

@@ -533,6 +533,82 @@ def split_baseurls(raw: str) -> list[str]:
     return [entry for entry in re.split(r"[\s,]+", raw.strip()) if entry]
 
 
+def normalize_gpgkey(url: str) -> str:
+    """Normalize a gpgkey URL so two spellings of the same key compare equal.
+
+    Mirrors normalize_baseurl: lowercases scheme and host, keeps the path
+    exact (a trailing slash distinguishes a key directory from a key file in
+    a GPG keyring), and folds `${var}` to `$var` so dnf5's variable
+    expansion cannot be used to slip past the pin. file:/// paths are
+    compared as-is so a directory and a file at the same name do not match
+    each other.
+    """
+    value = url.strip()
+    if not value:
+        return ""
+    value = re.sub(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}", r"$\1", value)
+    scheme, sep, rest = value.partition("://")
+    if not sep:
+        return value
+    host, slash, path = rest.partition("/")
+    return f"{scheme.lower()}://{host.lower()}{slash}{path}"
+
+
+def split_gpgkeys(raw: str) -> list[str]:
+    """Split a gpgkey option into the keys DNF would fetch from.
+
+    A dnf5 gpgkey= value may list multiple keys separated by whitespace or
+    commas; dnf5 treats each entry as a separate key source.
+    """
+    return [entry for entry in re.split(r"[\s,]+", raw.strip()) if entry]
+
+
+def repo_gpgkey_pin_errors(
+    section_name: str,
+    parser: configparser.ConfigParser,
+    source: str,
+    expected_gpgkeys: dict[str, tuple[str, ...]] | None,
+    *,
+    is_override: bool = False,
+) -> list[str]:
+    """Reject an unpinned gpgkey= on a repository the allowlist has authority over.
+
+    `gpgkey=` names where a repository's signing key is fetched from, so an
+    unpinned entry lets a drop-in reroute the trust anchor to an attacker-
+    controlled key server and accept any signature the attacker mints. A
+    allowlisted repo that ships gpgkey= must declare every key it accepts in
+    `[repositories.gpgkeys]`; an override drop-in section must not set gpgkey=
+    on any repo id at all, since overrides are partial and the gate cannot
+    know which keys the underlying repo shipped (#617).
+
+    Returns an empty list when gpgkey= is unset; a missing entry in
+    [repositories.gpgkeys] is not itself an error -- the absence is the
+    prohibition.
+    """
+    if expected_gpgkeys is None:
+        return []
+    raw = parser.get(section_name, "gpgkey", fallback="").strip()
+    if not raw:
+        return []
+    declared = expected_gpgkeys.get(section_name, ())
+    if is_override or not declared:
+        return [
+            f"Repository '{section_name}' in {source} sets gpgkey={raw}; "
+            "gpgkey= rewrites the repository's trust anchor and is forbidden "
+            f"outside the entries pinned in [repositories.gpgkeys]"
+        ]
+    keys = {normalize_gpgkey(key) for key in declared}
+    unpinned = [url for url in split_gpgkeys(raw) if normalize_gpgkey(url) not in keys]
+    if unpinned:
+        listed = ", ".join(f"'{url}'" for url in unpinned)
+        return [
+            f"Repository '{section_name}' in {source} sets gpgkey={listed} which "
+            f"is not pinned in [repositories.gpgkeys]; expected one of: "
+            f"{', '.join(sorted(declared))} (#617)"
+        ]
+    return []
+
+
 def repo_pin_errors(
     section_name: str,
     parser: configparser.ConfigParser,
@@ -647,7 +723,9 @@ def glob_override_errors(
     passes only when it cannot widen what the allowlist approved: it sets no
     origin key, does not set enabled= to a truthy value (which would turn on
     any disabled, unapproved repo it matches), and sets no security option
-    that would weaken an allowlisted repo it matches.
+    that would weaken an allowlisted repo it matches. gpgkey= is a
+    trust-anchor rewrite, so a wildcard override is rejected for it before any
+    glob match (#617).
     """
     errors: list[str] = []
     if not partial_override:
@@ -661,6 +739,12 @@ def glob_override_errors(
         errors.append(
             f"Wildcard repository override '{section_name}' in {source} sets "
             "enabled=1; it would enable repositories the allowlist does not name"
+        )
+    if parser.has_option(section_name, "gpgkey"):
+        errors.append(
+            f"Wildcard repository override '{section_name}' in {source} sets "
+            "gpgkey=; it would rewrite the trust anchor of every repository it "
+            "matches"
         )
     errors.extend(repo_security_option_errors(
         section_name, parser, source,
@@ -677,6 +761,7 @@ def check_repo_sections(
     expected_baseurls: dict[str, tuple[str, ...]] | None,
     is_override: bool = False,
     approved_security: dict[str, set[str]] | None = None,
+    expected_gpgkeys: dict[str, tuple[str, ...]] | None = None,
 ) -> list[str]:
     """Apply the allowlist to every section of an already-parsed config.
 
@@ -690,15 +775,37 @@ def check_repo_sections(
     metalink= or mirrorlist=) is pinned like any other enabled repo. A wildcard
     override section name is a glob over repo ids and goes through
     glob_override_errors instead (#524).
+
+    gpgkey= is checked before the early `continue` branches: a drop-in that
+    sets gpgkey= on a named repo id is rejected with the gpgkey-pin error. This
+    runs for every named section, including disabled and non-allowlisted ones,
+    so any reposdir .repo that ships gpgkey= for an id without a
+    [repositories.gpgkeys] entry fails the gate. A wildcard override is
+    rejected once, by glob_override_errors (#617). The check is skipped when `expected_gpgkeys` is None, which
+    matches the existing skip semantics for the other pin maps.
     """
     errors: list[str] = []
     for section_name in parser.sections():
+        # gpgkey= rewrites the trust anchor; reject it before any branch that
+        # could let a drop-in past. A pinned gpgkey= on a reposdir section is
+        # checked against the manifest; any gpgkey= in an override is
+        # forbidden, since overrides are partial and the gate cannot know
+        # which keys the underlying repo shipped (#617).
+        is_glob_override = is_override and bool(GLOB_CHARS_RE.search(section_name))
+        if (
+            expected_gpgkeys is not None
+            and not is_glob_override
+            and parser.has_option(section_name, "gpgkey")
+        ):
+            errors.extend(repo_gpgkey_pin_errors(
+                section_name, parser, source, expected_gpgkeys, is_override=is_override,
+            ))
         # A partial override sets no origin (baseurl/metalink/mirrorlist) of its
         # own; it is not a pin. One that sets any origin key is pinned.
         partial_override = is_override and not any(
             parser.has_option(section_name, key) for key in ORIGIN_KEYS
         )
-        if is_override and GLOB_CHARS_RE.search(section_name):
+        if is_glob_override:
             errors.extend(
                 glob_override_errors(section_name, parser, source, partial_override)
             )
@@ -778,6 +885,7 @@ def verify_repository_policy(
     approved_security: dict[str, set[str]] | None = None,
     check_mode: bool = False,
     is_override: bool = False,
+    expected_gpgkeys: dict[str, tuple[str, ...]] | None = None,
 ) -> list[str]:
     """Prove the system exposes only explicitly allowed runtime RPM repositories.
 
@@ -787,6 +895,9 @@ def verify_repository_policy(
 
     `is_override` marks dnf5 repo-override drop-in dirs; there a .repo file may
     set only part of a repo id and must not be rejected for a missing baseurl.
+    `expected_gpgkeys` is the gpgkey= pin set from [repositories.gpgkeys];
+    None skips the gpgkey= check entirely, matching the existing skip
+    semantics for `expected_baseurls` (#617).
     """
     errors: list[str] = []
     if not repos_dir.is_dir():
@@ -813,6 +924,7 @@ def verify_repository_policy(
                 parser, str(repo_file), allowed_repos,
                 expected_baseurls=expected_baseurls, is_override=is_override,
                 approved_security=approved_security,
+                expected_gpgkeys=expected_gpgkeys,
             )
         )
     return errors
@@ -1074,6 +1186,46 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    # Pinned RPM GPG keys per allowlisted repository, from [repositories.gpgkeys].
+    # A repository named here may declare gpgkey= for the listed keys; no other
+    # allowlisted repository may set gpgkey= at all, and dnf5 override drop-ins
+    # (reposdir /etc/dnf/repos.override.d and /usr/share/dnf5/repos.override.d)
+    # may not set gpgkey= in any section, since the gate cannot tell which keys
+    # the underlying repo shipped (#617).
+    repo_gpgkeys_raw = overlay_data["repositories"].get("gpgkeys", {})
+    if not isinstance(repo_gpgkeys_raw, dict):
+        print(
+            f"ERROR: Overlay manifest '{overlay}' has a non-table [repositories.gpgkeys] "
+            "section",
+            file=sys.stderr,
+        )
+        return 1
+    repo_gpgkeys: dict[str, tuple[str, ...]] = {}
+    for repo_id, keys in repo_gpgkeys_raw.items():
+        if not isinstance(keys, list) or not keys:
+            print(
+                f"ERROR: Overlay manifest '{overlay}' lists [repositories.gpgkeys].{repo_id} "
+                "as a non-list or empty; name the gpgkey URLs the repository may declare",
+                file=sys.stderr,
+            )
+            return 1
+        for key in keys:
+            if not isinstance(key, str) or not key.strip():
+                print(
+                    f"ERROR: Overlay manifest '{overlay}' has a non-string gpgkey entry in "
+                    f"[repositories.gpgkeys].{repo_id}",
+                    file=sys.stderr,
+                )
+                return 1
+        repo_gpgkeys[repo_id] = tuple(keys)
+    unapproved_gpgkey_repos = sorted(set(repo_gpgkeys) - allowed_repos)
+    if unapproved_gpgkey_repos:
+        print(
+            f"ERROR: Overlay manifest '{overlay}' pins gpgkey= for repositories not in "
+            f"[repositories.allowed]: {', '.join(unapproved_gpgkey_repos)}",
+            file=sys.stderr,
+        )
+        return 1
     factory_packages = set(section(overlay, "factory"))
     factory_parity = set(section(overlay, "factory", "parity"))
     # [factory].packages is the GNOME identity contract; other sections use
@@ -1128,6 +1280,7 @@ def main() -> int:
             expected_baseurls=repo_baseurls,
             approved_security=approved_security,
             check_mode=True,
+            expected_gpgkeys=repo_gpgkeys,
         )
         if repo_errors:
             for err in repo_errors:
@@ -1199,6 +1352,7 @@ def main() -> int:
                 repos_dir, allowed_repos,
                 expected_baseurls=repo_baseurls,
                 approved_security=approved_security, check_mode=False,
+                expected_gpgkeys=repo_gpgkeys,
             )
         )
     # A proxy= or sslverify=0 in the resolved [main] section of dnf.conf/libdnf5.conf
@@ -1227,6 +1381,7 @@ def main() -> int:
                 repos_dir, allowed_repos,
                 expected_baseurls=repo_baseurls, check_mode=False,
                 approved_security=approved_security, is_override=True,
+                expected_gpgkeys=repo_gpgkeys,
             )
         )
     if repo_errors:

@@ -3,7 +3,7 @@
 <!-- BEGIN E2E VERIFICATION -->
 [![Verified ISO desktop](docs/verification/screenshots/installed-fastfetch.png)](docs/verification/README.md)
 
-*LUKS ISO test passed for commit `1b1ab2091d5d`. [CI run](https://github.com/projectbluefin/utah/actions/runs/37518075761); [screenshots and provenance](docs/verification/README.md).*
+*LUKS ISO test passed for commit `a4607268f42e`. [CI run](https://github.com/projectbluefin/utah/actions/runs/37871100834); [screenshots and provenance](docs/verification/README.md).*
 <!-- END E2E VERIFICATION -->
 
 †Utahraptor ostrommaysi
@@ -101,15 +101,15 @@ than being noticed later.
 | | count |
 | --- | --- |
 | Bluefin contract installed | **61** |
-| Utah additions (GNOME 51, base-image parity, device firmware, desktop services) | 110 |
-| Genuinely unavailable | **8** |
+| Utah additions (GNOME 51, base-image parity, device firmware, desktop services) | 111 |
+| Genuinely unavailable | **7** |
 
 The install writes its resolved list to `/usr/share/utah/contract.txt` and the
 verify step asserts *that file*, so the two cannot disagree. The unavailable
 row is not limited to the copied contract: it also holds image-level parity
 gaps — names Bluefin's published image ships from a build file outside
 `base.toml`, recorded in `baselines/bluefin/rpms.tsv` and triaged in
-`baselines/triage.toml` (`nvtop` is the current example). The runtime
+`baselines/triage.toml` (`nss-mdns` is the current example). The runtime
 repository allowlist is asserted both by `--check` against the `.repo` files
 in `packages/` before composition and by the on-image verifier against the
 composed image's runtime repositories: every `reposdir` dnf5 resolves at

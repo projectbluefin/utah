@@ -62,6 +62,8 @@ jobs:
             printf "Updates the Bluefin package contract from \`%s\` to \`%s\`.\n\n" \
               "$current_ref" "$upstream_ref"
             printf 'This PR intentionally does not auto-merge; review any required Utah overlay changes before adopting the upstream package set.\n\n'
+            # Markdown backticks are literal.
+            # shellcheck disable=SC2016
             printf 'After merging, run `just audit-bluefin-parity --write` locally and commit the refreshed `baselines/audit-baseline.json`; until then `just check-audit-parity` reports a stale baseline.\n\n'
             printf '## Upstream diff\n\n'
             diff_body="$(git diff --no-ext-diff --unified=3 -- packages/bluefin.toml)"

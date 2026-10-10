@@ -109,6 +109,16 @@ one unit.
 
 ### CI guard scripts and test coverage
 
+The front-matter description budget measures the content after stripping the
+leading YAML block indicator (`>`, `|`, and their chomping modifiers). Cover
+both 256 and 257 characters for each indicator so a folded description cannot
+fail because the checker counts YAML syntax. `.github/actionlint.yaml` admits
+the GitHub-hosted `ubuntu-26.04` label while the pinned actionlint predates it;
+all other labels remain checked. Remove that compatibility entry when a newer
+actionlint release recognizes the label.
+
+
+
 The fast gate relies on pure-verdict Python scripts under `scripts/` to halt
 the build before expensive compilation or container builds run:
 
@@ -210,7 +220,7 @@ Docker keychain outside the checkout and are removed at recipe exit.
 `build_main` needs only `contract`, so `main` starts the moment the gate
 passes; `build_kernel` needs `contract` and `kernel_cache`, so a cache miss
 holds up only the flavors that consume it. Both call
-`reusable-build.yml@4f6c41ff0a16a224f5e54ae80d7affbe2409b3d0 # v1`, and
+`reusable-build.yml@ae7d740d261d56354aeaf0a72af6f87e442e0472 # v1`, and
 `just check` asserts that pin with
 `grep -qE 'reusable-build\.yml@(v1|[0-9a-f]{40} # v1)$' .github/workflows/build.yml`
 (recipe, `Justfile`, `check`). Both pass `publish_stream_tag: "false"` --
@@ -219,7 +229,7 @@ testing is advanced only after post-testing-e2e validates the build
 opt the testing stream into rechunking and build SBOMs, which
 reusable-build skips by default. That opt-in requires the reusable
 workflow's `rechunk` input added in projectbluefin/actions#557 (which
-4f6c41ff0a16a224f5e54ae80d7affbe2409b3d0 includes); `workflow_call` validates
+ae7d740d261d56354aeaf0a72af6f87e442e0472 includes); `workflow_call` validates
 the caller's `with:` against the declared inputs.
 
 The two calls carry different `brand_name` values on purpose. The reusable
@@ -404,3 +414,7 @@ come from `needs.resolve.outputs.digests` and the suite mappings from
 This job surfaces scenario results, fastfetch OCR logs, and screenshots directly
 in GitHub Actions without gating `:testing` tag promotion, keeping deployments
 unblocked while maintaining visible QA signal across flavors.
+
+Front-matter presence checks feed `grep -q` with a here-string. With
+`pipefail`, an early reader exit can make a successful matching pipeline
+look unsuccessful when its writer receives SIGPIPE.

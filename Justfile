@@ -249,11 +249,21 @@ baselines bluefin="ghcr.io/ublue-os/bluefin:stable" utah="ghcr.io/projectbluefin
       podman pull -q "$image" >/dev/null
       python3 scripts/image-baseline.py extract "$image" "baselines/$dir"
     done
-    run=$(gh run list -R projectbluefin/dakota -w publish.yml -b main -s success -L 20 \
+    # Dakota's publish.yml runs only for its `testing` and `next` branches;
+    # `testing` is the one that publishes the image Bluefin users get.
+    dakota_branch=testing
+    run=$(gh run list -R projectbluefin/dakota -w publish.yml -b "$dakota_branch" -s success -L 20 \
       --json databaseId --jq '.[].databaseId' | while read -r id; do
-        gh api "repos/projectbluefin/dakota/actions/runs/$id/artifacts" \
-          --jq '.artifacts[].name' | grep -qx sbom-dakota && { echo "$id"; break; }
+        if gh api "repos/projectbluefin/dakota/actions/runs/$id/artifacts" \
+          --jq '.artifacts[].name' | grep -x sbom-dakota >/dev/null; then
+          echo "$id"
+          break
+        fi
       done)
+    if [ -z "$run" ]; then
+      echo "no successful projectbluefin/dakota publish.yml run on $dakota_branch in the last 20 has an sbom-dakota artifact" >&2
+      exit 1
+    fi
     python3 scripts/image-baseline.py dakota "$run" baselines/dakota
     python3 scripts/image-baseline.py gap
 

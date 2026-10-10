@@ -206,6 +206,11 @@ packages = [
     "lm_sensors",
     "libimobiledevice-utils",
     "vim-enhanced",
+    # GPU process monitor. Bluefin's published image ships it from a build
+    # file outside the copied base.toml (baselines/bluefin/rpms.tsv); the
+    # Homebrew formula is deprecated, so the factory build published by
+    # utah-packages#311 is the source. Tracked by #451.
+    "nvtop",
     # Base-image parity measured from the published Bluefin image rather than
     # its manifest (baselines/GAP.md, #263). Bluefin inherits all of these from
     # Silverblue; each resolves today against Hummingbird and the pinned
@@ -444,30 +449,6 @@ packages = [
 # pipewire-libs-extra is supplied by the pinned September 10 factory candidate
 # and returns to the install contract (#35).
 #
-# nvtop
-#   Interactive GPU process monitor (htop-like for NVIDIA / AMD / Intel).
-#   Unlike the other entries here, nvtop is not in packages/bluefin.toml: it is
-#   an image-level parity gap, recorded in the published Bluefin image snapshot
-#   (baselines/bluefin/rpms.tsv, nvtop 3.3.2-1.fc44) and triaged in
-#   baselines/triage.toml, so Bluefin installs it from a build file outside the
-#   copied base.toml contract -- it is not inherited from Fedora's Silverblue
-#   base, which does not ship it. The package exists in Fedora 44 proper
-#   (3.3.2-1.fc44, verified from
-#   dl.fedoraproject.org/pub/fedora/linux/releases/44/Everything/x86_64/os/
-#   Packages/n/nvtop-3.3.2-1.fc44.x86_64.rpm) but Utah's install transaction
-#   resolves against `utah-packages` and `public-hummingbird-x86_64-rpms`
-#   only -- Fedora 44 is a builder-stage toolchain in Containerfile.kernel,
-#   not a runtime source. The Homebrew formula is deprecated upstream
-#   (formulae.brew.sh/formula/nvtop) and slated for disablement on
-#   2027-09-17, which is what surfaces the request on the NVIDIA flavor.
-#   Homebrew's stated reason is that the release tarball checksum changed
-#   after publication, so upstream may have been compromised; the factory
-#   recipe must pin a source verified against upstream's retagged release
-#   rather than reuse the brew formula's URL (recorded as an acceptance
-#   requirement on utah-packages#311). Add `nvtop` to `[parity]` once
-#   utah-packages#311 publishes an Hummingbird-targeted build, which must only
-#   happen after that verification. Tracked by #451 and utah-packages#311.
-#
 # nss-mdns
 #   nss-mdns is the Name Service Switch module that resolves .local hostnames
 #   over mDNS, so `ping foo.local` resolves. Bluefin ships it
@@ -488,7 +469,6 @@ packages = [
     "evolution-ews-core",
     "firefox",
     "fish",
-    "nvtop",
     "nss-mdns",
     "slitherer",
 ]
@@ -567,6 +547,18 @@ utah-packages = ["gpgcheck", "repo_gpgcheck"]
 # NVIDIA signs its repomd.xml (repo_gpgcheck=1) but not the package payloads,
 # so only package signature verification (gpgcheck) is disabled here.
 nvidia-container-toolkit = ["gpgcheck"]
+
+# Pinned RPM GPG key URLs per allowlisted repository. verify-rpm-contract.py
+# rejects gpgkey= on an allowlisted repository that is not named here, and
+# forbids gpgkey= entirely in dnf5 repo-override drop-ins (#617). A drop-in
+# cannot tell which keys the underlying .repo shipped, so a gpgkey= in an
+# override is always rejected even when the id is allowlisted.
+# utah-packages is absent: packages/utah-packages.repo declares no gpgkey=,
+# because the OCI pin is the trust anchor. Adding a gpgkey= to utah-packages
+# in any .repo file is rejected.
+[repositories.gpgkeys]
+public-hummingbird-x86_64-rpms = ["file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2"]
+nvidia-container-toolkit = ["https://nvidia.github.io/libnvidia-container/gpgkey"]
 
 # GNOME desktop components the utah-packages factory rebuilds with the .bfin
 # release tag, so a Bluefin image is never built against Hummingbird's server
