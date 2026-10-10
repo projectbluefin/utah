@@ -1,0 +1,44 @@
+name: Unit Tests
+
+# The host-side unit suite (tests/run_suite.py, invoked by `just test`).
+#
+# build.yml runs `just check` in its contract gate, and `just check` happens to
+# include `just test` as one of its steps -- so the suite has been running in
+# CI incidentally, hidden inside the syntax/contract gate rather than as its
+# own first-class job. That coupling is the correctness hazard this workflow
+# removes: `just check` is ordered so a manifest or download-integrity failure
+# halts it well before the `just test` line, and anyone reading build.yml sees
+# only a "syntax gate". If `just check` were ever refactored to run the suite
+# last, or to skip it, the suite would stop running in CI with no workflow to
+# point at. The suite must be its own job so its presence does not depend on
+# `just check` keeping the invocation.
+#
+# The suite is host-side and needs no image, so it runs on a bare runner just
+# like `just check`, and the same `ubuntu-26.04` label that actionlint
+# recognizes here.
+on:
+  pull_request:
+  push:
+    branches: [testing]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: utah-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  unit:
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          submodules: recursive
+      - name: Install just
+        uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3
+      - name: Run the host-side unit suite
+        run: just test

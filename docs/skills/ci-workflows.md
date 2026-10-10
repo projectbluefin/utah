@@ -25,6 +25,19 @@ metadata:
 This overview covers the build, promotion, branch-sync, parity-sync, and
 post-build verification workflows, not the complete workflow inventory:
 
+- `.github/workflows/unit-tests.yml` -- the host-side unit suite
+  (`tests/run_suite.py`, i.e. `just test`) as its own job. This is the fix for
+  the finding that the suite had only ever run incidentally, hidden inside
+  `just check` within build.yml's `contract` gate: `just check` includes
+  `just test` as one step, but it is ordered so a manifest or download-integrity
+  failure halts it long before that line, and build.yml reads as a "syntax
+  gate". A refactored `just check` could silently stop the suite in CI, so the
+  suite is now its own workflow and its presence no longer depends on
+  `just check` keeping the invocation. Triggers on the same events as
+  build.yml (pull_request, push to `testing`, dispatch) and needs no image, so
+  it runs on a bare `ubuntu-26.04` runner with `submodules: recursive` so the
+  GNOME extension tests exercise the pinned sources instead of skipping.
+
 - `.github/workflows/build.yml` -- pull requests, pushes to `testing`, a
   manual dispatch. Top-level `permissions: {}`; each job
   grants its own. Cancels in-progress runs per workflow and ref. A dispatch
