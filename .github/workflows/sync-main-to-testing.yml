@@ -25,9 +25,39 @@ jobs:
     runs-on: ubuntu-26.04
     permissions:
       actions: write
+      # The target_sha capture runs `gh api git/ref/heads/testing`. Today the
+      # endpoint allows public read without authentication, but a future
+      # visibility change would surface as a 404 here. Grant read explicitly
+      # so the capture is robust regardless of repo visibility (#562).
+      contents: read
     steps:
       - name: Start the testing build explicitly after token-authenticated sync
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-        run: gh workflow run build.yml --repo "$REPOSITORY" --ref testing
+        run: |
+          set -euo pipefail
+          # Capture the SHA reusable-sync-branches just fast-forwarded or
+          # force-reset testing to. The dispatch API still resolves --ref
+          # testing at acceptance time, so the build's contract job asserts
+          # the two SHAs agree; a mismatch means testing moved between this
+          # capture and the dispatch, and the run fails loudly instead of
+          # silently building a different tree (#371). `gh workflow run`
+          # does not expose a JSON output mode (only the dispatch URL on
+          # stdout), so the dispatched run cannot be queried in-process to
+          # confirm the SHA it accepted; the build.yml assertion is the
+          # single source of truth. The reverse skew (stale `git/ref/heads/testing`
+          # read AND stale dispatch resolution both serving the pre-sync SHA
+          # from cache) is caught by the build.yml compare step -- the
+          # in-repo invariant `reusable-sync-branches.yml:91-93,107-108` is
+          # that the sync lands `testing` on `origin/main`, so `$TARGET_SHA`
+          # must be `ahead`/`identical` of `${{ github.sha }}`; `behind`/`diverged`
+          # fails the run. See ci-workflows.md for the full operator-facing
+          # description.
+          TARGET_SHA="$(gh api \
+              -H 'Accept: application/vnd.github+json' \
+              "/repos/$REPOSITORY/git/ref/heads/testing" \
+              --jq '.object.sha')"
+          echo "Dispatching build.yml against testing@$TARGET_SHA"
+          gh workflow run build.yml --repo "$REPOSITORY" --ref testing \
+              -f "target_sha=$TARGET_SHA"

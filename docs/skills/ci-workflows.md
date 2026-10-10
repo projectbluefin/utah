@@ -1,7 +1,7 @@
 ---
 name: ci-workflows
 version: "1.1"
-last_updated: "2026-10-02"
+last_updated: "2026-10-04"
 id: ci-workflows
 one_line_purpose: Navigate Utah's build, promote, and sync workflow topology.
 entry_point: docs/skills/ci-workflows.md
@@ -272,6 +272,47 @@ Source pushes to `main` and the nightly schedule call
 `testing` with `actions: write`. README/verification-only pushes are excluded
 to avoid evidence-update build loops. Nightly runs still sync those changes.
 
+`sync-main-to-testing.yml` captures the commit `reusable-sync-branches` just
+fast-forwarded or force-reset testing to (via `git/ref/heads/testing`) and
+passes it to `build.yml` as the `target_sha` dispatch input. The dispatch
+API still resolves `--ref testing` to whatever testing points at when the
+dispatch is accepted, and that is what `github.sha` becomes for every job
+in the run. The build's `contract` job asserts `inputs.target_sha ==
+github.sha` and fails the run if they disagree. There are three directions
+the capture and resolution can disagree:
+
+1. `testing` actually moved between the dispatcher's `git/ref/heads/testing`
+   capture and the dispatch API's `--ref testing` resolution — a real
+   dispatch-skew that the assertion exists to catch (#371).
+2. The `git/ref/heads/testing` read was served from a stale cache while
+   the dispatch resolved the new head — a false positive: the captured
+   SHA lags the resolved SHA, the assertion fires, the build was correct,
+   and the next nightly schedule (or a manual re-dispatch) clears the
+   red run.
+3. (False negative, caught by the compare step.) Both the
+   `git/ref/heads/testing` read AND the dispatch's `--ref testing`
+   resolution are served from a stale cache that returns the *pre-sync*
+   SHA. Captured SHA equals resolved SHA, the direct assertion passes,
+   and the run would build the pre-sync tree with a green contract job —
+   exactly the #371 symptom. The contract step now follows the equality
+   check with `gh api .../compare/${{ github.sha }}...$TARGET_SHA
+   --jq .status`; the in-repo invariant
+   (`reusable-sync-branches.yml:91-93,107-108`) is that the sync lands
+   `testing` on `origin/main`, so `$TARGET_SHA` must be `ahead`/`identical`
+   of `${{ github.sha }}`. A `behind`/`diverged` status means the
+   captured SHA predates main and the ref read served a stale cache; the
+   run fails with `::error title=captured SHA predates main::`. Any other
+   status (`null`, error) also fails the build.
+
+The assertion's error text names both SHAs so the operator can distinguish
+direction (1)/(2). Direction (3) shows up only as a stale testing build
+that the nightly corrects; if a stale testing build is observed, the
+recovery is to wait for the next nightly (no manual re-dispatch needed,
+since the dispatched build was the stale one). The checkouts themselves
+keep their default `github.sha` behavior, so every job in the run agrees
+on the same tree (push and pull_request events skip the assertion because
+`target_sha` is empty for them).
+
 ## ISO LUKS gate and screenshots
 
 `post-testing-e2e.yml` downloads the originating build's digest artifacts.
@@ -375,7 +416,8 @@ The cadence is RFC'd in #336. What runs today:
   is not how a `main` commit reaches the image tags: the sync pushes `testing`
   with the workflow's own `GITHUB_TOKEN`, and a `GITHUB_TOKEN` push starts no
   workflow. `sync-main-to-testing.yml`'s `build` job therefore dispatches the
-  build explicitly (`gh workflow run build.yml --ref testing`) once the sync
+  build explicitly (`gh workflow run build.yml --ref testing -f
+  target_sha=<sha>`) once the sync
   job returns, which is the path that actually produces the images.
 - `:testing` advances per green build, not on a clock: the tags move in
   `post-testing-e2e.yml`, after the LUKS ISO matrix and the production-ISO
