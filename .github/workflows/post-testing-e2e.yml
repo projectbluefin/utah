@@ -25,6 +25,8 @@ jobs:
       main_ref: ${{ steps.inputs.outputs.main_ref }}
       sha: ${{ steps.inputs.outputs.sha }}
       run: ${{ steps.inputs.outputs.run }}
+      digests: ${{ steps.inputs.outputs.digests }}
+      suites: ${{ steps.inputs.outputs.suites }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -48,11 +50,22 @@ jobs:
           # kernel flavors are covered by the luks job above. Resolve that one
           # ref here so tacklebox-iso stays a single build, not a matrix.
           main_ref=$(python3 -c "import json,sys; m=json.load(sys.stdin); print(next(x['ref'] for x in m['include'] if x['image']=='utah'))" <<<"$matrix")
+          digests=$(jq -c 'reduce .include[] as $i ({}; . + {($i.image): $i.ref})' <<< "$matrix")
+          suites_json=$(python3 scripts/flavors.py suites)
+          missing=$(jq -r --argjson d "$digests" \
+            '[.[] | .image | select(($d[.]) == null or ($d[.] | length) == 0)]
+            | (if length == 0 then "" else ": \(join(", "))" end)' \
+            <<< "$suites_json")
+          if [ -n "$missing" ]; then
+            echo "::warning::testsuite: missing published exact-digest for flavor(s)$missing"
+          fi
           {
             echo "matrix=$matrix"
             echo "main_ref=$main_ref"
             echo "sha=$(jq -r .head_sha run.json)"
             echo "run=$BUILD_RUN"
+            echo "digests=$digests"
+            echo "suites=$suites_json"
           } >> "$GITHUB_OUTPUT"
 
   luks:
@@ -284,6 +297,27 @@ jobs:
           path: |
             output/utah-live.iso
             output/utah-live.iso.sha256
+
+  # Run the testsuite against each exact built digest asynchronously.
+  # This surfaces scenario results and desktop screenshots for every flavor
+  # directly in the workflow run without blocking :testing promotion.
+  testsuite:
+    needs: resolve
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.resolve.outputs.suites) }}
+    uses: projectbluefin/testsuite/.github/workflows/e2e.yml@v1
+    with:
+      image: ${{ fromJSON(needs.resolve.outputs.digests)[matrix.image] }}
+      compose_image: false
+      suites: ${{ matrix.suites }}
+      test_repository: projectbluefin/testsuite
+      test_ref: v1
 
   promote-to-testing:
     needs: [resolve, luks, production-iso]

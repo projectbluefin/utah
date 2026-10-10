@@ -413,6 +413,17 @@ just check
 ~/.local/bin/pre-commit run actionlint --all-files
 ```
 
+## Testsuite reporting (exact-digest VM suites)
+
+`post-testing-e2e.yml` runs the `testsuite` job asynchronously against each
+flavor's exact `@digest` in the `projectbluefin/testsuite` QEMU VM. The digests
+come from `needs.resolve.outputs.digests` and the suite mappings from
+`scripts/flavors.py suites`.
+
+This job surfaces scenario results, fastfetch OCR logs, and screenshots directly
+in GitHub Actions without gating `:testing` tag promotion, keeping deployments
+unblocked while maintaining visible QA signal across flavors.
+
 Front-matter presence checks feed `grep -q` with a here-string. With
 `pipefail`, an early reader exit can make a successful matching pipeline
 look unsuccessful when its writer receives SIGPIPE.

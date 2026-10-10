@@ -104,6 +104,32 @@ class QueryTests(unittest.TestCase):
             {"image": "utah-gaming", "source_tag": "testing", "target_tag": "stable"},
         ])
 
+    def test_suites_uses_configured_values_in_active_flavor_order(self):
+        cli = build_tree({
+            "flavors": ["gaming", "main"],
+            "suites": {"main": "smoke", "gaming": "smoke,common,bazzite",
+                       "nvidia": "smoke,common,nvidia"},
+            "retired": {"nvidia": "off"},
+        })
+        self.addCleanup(shutil.rmtree, cli.parents[1])
+        result = run(cli, "suites")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), [
+            {"image": "utah-gaming", "suites": "smoke,common,bazzite"},
+            {"image": "utah", "suites": "smoke"},
+        ])
+
+    def test_suites_fails_without_an_entry_for_every_active_flavor(self):
+        for suites in ({}, {"main": "smoke,common"}):
+            with self.subTest(suites=suites):
+                cli = build_tree({"flavors": ["main", "nvidia"], "suites": suites})
+                self.addCleanup(shutil.rmtree, cli.parents[1])
+                result = run(cli, "suites")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("no suites", result.stderr)
+                self.assertIn("nvidia", result.stderr)
+                self.assertEqual(result.stdout, "")
+
     def test_needs_kernel_is_false_for_main_only(self):
         cli = build_tree({"flavors": ["main"], "retired": {}})
         self.assertEqual(run(cli, "needs-kernel").stdout.strip(), "false")
@@ -131,7 +157,7 @@ class QueryTests(unittest.TestCase):
 
     def test_unknown_flavor_in_config_fails_every_query(self):
         cli = build_tree({"flavors": ["main", "utah-nvidia"], "retired": {}})
-        for query in ("list", "images", "releases", "needs-kernel", "list-kernel", "image"):
+        for query in ("list", "images", "releases", "suites", "needs-kernel", "list-kernel", "image"):
             result = run(cli, query)
             self.assertNotEqual(result.returncode, 0, f"{query} accepted it")
             self.assertIn("unknown flavor", result.stderr)

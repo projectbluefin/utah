@@ -76,6 +76,10 @@ group on that name; Utah's Justfile ignores it when naming images.
 - `list-main` -- flavors that build on the pristine base (never wait for the
   kernel cache).
 - `list-kernel` -- flavors that build on the kernel cache image.
+- `suites` -- each flavor's image with its configured testsuite suites,
+  read from the `suites` map in `config/flavors.json` (the `testsuite` matrix
+  in `post-testing-e2e.yml`). A flavor with no `suites` entry is a hard error,
+  so a new flavor needs its suites declared alongside it.
 - `needs-kernel` -- `true`/`false`; with no OGC or NVIDIA flavor in the set,
   building the cache is 45 minutes spent on nothing.
 - `images` / `releases` -- the same set shaped for the promote and release
