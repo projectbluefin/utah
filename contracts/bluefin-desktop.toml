@@ -102,6 +102,13 @@ files = [
   # loops) trip systemd's default start limit and leave a failed unit that
   # fails the health check. The drop-in widens the burst window; #741.
   "/usr/lib/systemd/system/projectbluefin-countme.service.d/10-utah-burst-tolerance.conf",
+  # Dakota desktop parity (#675): monthly wallpaper rotation, first-boot
+  # install-date stamping, and the booted-image snapshot for fastfetch.
+  "/usr/lib/systemd/system/bluefin-wallpaper-month.service",
+  "/usr/libexec/bluefin-wallpaper-month-sync",
+  "/usr/lib/systemd/system/ublue-firstboot-date.service",
+  "/usr/lib/systemd/system/ublue-booted-image.service",
+  "/usr/bin/ublue-booted-image-sync",
 ]
 
 [configuration.file_contains]
@@ -119,7 +126,25 @@ files = [
 ]
 "/usr/share/glib-2.0/schemas/zz0-bluefin-modifications.gschema.override" = [
   "io.github.kolunmi.Bazaar.desktop",
-  "picture-uri='file:///usr/share/backgrounds/bluefin/",
+  # Dakota parity (#675): the background rotates monthly through the symlink
+  # bluefin-wallpaper-month.service maintains, not a fixed month file.
+  "picture-uri='file:///var/lib/bluefin/backgrounds/current-bluefin.xml",
+]
+# Dakota parity (#675): fastfetch reads the first-boot install date stamped
+# by ublue-firstboot-date.service instead of inferring age from /var/log.
+"/usr/share/ublue-os/fastfetch.jsonc" = [
+  "/var/lib/ublue-os/install-date",
+]
+# Dakota parity (#675): ublue-image-info.sh prefers the boot-time snapshot
+# ublue-booted-image.service writes, since unprivileged bootc status fails on
+# bootc >= 1.14.
+"/usr/bin/ublue-image-info.sh" = [
+  "/run/ublue-os/booted-image",
+]
+# Dakota parity (#675): GDM's non-interactive login shell sources
+# /etc/profile too, so uwelcome must only greet interactive shells.
+"/etc/profile.d/uwelcome.sh" = [
+  "case $- in",
 ]
 "/etc/dconf/db/distro.d/04-bluefin-custom-command-menu" = [
   "Bazaar App Store",
@@ -220,6 +245,10 @@ enabled = [
   "avahi-daemon.service",
   "avahi-daemon.socket",
   "bluetooth.service",
+  # Dakota desktop parity (#675).
+  "bluefin-wallpaper-month.service",
+  "ublue-firstboot-date.service",
+  "ublue-booted-image.service",
   "bootc-unified-storage.service",
   "brew-setup.service",
   "cups.socket",

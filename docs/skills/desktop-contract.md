@@ -73,12 +73,21 @@ The TOML's sections are the contract's table of contents:
   `bootc-unified-storage.service`, `input-remapper.service`,
   `ModemManager.service`, `projectbluefin-countme.timer`, `cups.socket`,
   `systemd-boot-update.service`, `uupd.timer`, `bluefin-stats-refresh.timer`. Update policy delegates
+- **`[services]`** — systemd units the preset must enable: `gdm.service`, `avahi-daemon.service`,
+  `avahi-daemon.socket`, `switcheroo-control.service`, `bluetooth.service`, `ublue-system-setup.service`,
+  `flatpak-preinstall.service`, `flatpak-nuke-fedora.service`, `brew-setup.service`, `dconf-update.service`,
+  `bootc-unified-storage.service`, `input-remapper.service`, `ModemManager.service`, `cups.socket`,
+  `systemd-boot-update.service`, `uupd.timer`, `bluefin-stats-refresh.timer`, `bluefin-wallpaper-month.service`,
+  `ublue-firstboot-date.service`, `ublue-booted-image.service`. Update policy delegates
   background updates to `uupd.timer`; `bootc-fetch-apply-updates.timer` and
   `bootc-fetch-apply-updates.service` are masked in `/etc` and `/usr/lib` (and
   disabled in `85-utah-desktop.preset`) so cross-vendor `/etc` 3-way merges
   (e.g. switching from Bluefin) do not carry active `timers.target.wants`
   symlinks that bypass uupd staging or undo manual rollbacks. Switchers can
   also manually verify or mask them if a local `/etc` symlink was preserved.
+
+  The last three units are Dakota parity (#675) — wallpaper rotation, install-date stamping, and the
+  booted-image snapshot fastfetch reads — enabled and patched by `configure-services.sh`.
 
   A unit being enabled in the built image is not the same as it being enabled
   on a booted one. bootc applies presets on first boot, and Hummingbird's

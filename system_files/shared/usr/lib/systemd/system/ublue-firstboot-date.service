@@ -1,0 +1,13 @@
+[Unit]
+Description=Record Utah first-boot installation date
+Documentation=https://github.com/projectbluefin/utah/issues/675
+ConditionPathExists=!/var/lib/ublue-os/install-date
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'mkdir -p /var/lib/ublue-os && date +%Y-%m-%d > /var/lib/ublue-os/install-date'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
