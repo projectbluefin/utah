@@ -17,7 +17,7 @@ next to the list rather than in a commit message.
     flavors.py list-main      ["main"]            flavors that build on the pristine base
     flavors.py list-kernel    ["nvidia", ...]     flavors that build on the kernel cache
     flavors.py image FLAVOR   utah / utah-nvidia  published image name for flavor
-    flavors.py suites     [{"image": "utah", "suites": "smoke,common"}, ...]  gate
+    flavors.py suites     [{"image": "utah", "suites": "smoke,common"}, ...]  matrix
 """
 import json
 import sys

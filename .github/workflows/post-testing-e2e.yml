@@ -309,13 +309,13 @@ jobs:
       fail-fast: false
       matrix:
         include: ${{ fromJSON(needs.resolve.outputs.suites) }}
-    uses: projectbluefin/testsuite/.github/workflows/e2e.yml@v1
+    uses: projectbluefin/testsuite/.github/workflows/e2e.yml@7da50e5b6f165a4704159b0ce5a4898caff6466a # v1
     with:
       image: ${{ fromJSON(needs.resolve.outputs.digests)[matrix.image] }}
       compose_image: false
       suites: ${{ matrix.suites }}
       test_repository: projectbluefin/testsuite
-      test_ref: v1
+      test_ref: 7da50e5b6f165a4704159b0ce5a4898caff6466a
 
   promote-to-testing:
     needs: [resolve, luks, production-iso]

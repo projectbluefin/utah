@@ -397,13 +397,6 @@ No `image-versions.yml` alias or second literal pin is introduced. Renovate's
 PR event runs normal CI; every update still requires independent review.
 
 
-## Verification
-
-```bash
-just check
-~/.local/bin/pre-commit run actionlint --all-files
-```
-
 ## Testsuite reporting (exact-digest VM suites)
 
 `post-testing-e2e.yml` runs the `testsuite` job asynchronously against each
@@ -414,6 +407,13 @@ come from `needs.resolve.outputs.digests` and the suite mappings from
 This job surfaces scenario results, fastfetch OCR logs, and screenshots directly
 in GitHub Actions without gating `:testing` tag promotion, keeping deployments
 unblocked while maintaining visible QA signal across flavors.
+
+## Verification
+
+```bash
+just check
+~/.local/bin/pre-commit run actionlint --all-files
+```
 
 Front-matter presence checks feed `grep -q` with a here-string. With
 `pipefail`, an early reader exit can make a successful matching pipeline
