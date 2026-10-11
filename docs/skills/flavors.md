@@ -51,7 +51,8 @@ commentary -- it is what a flavor moves to when it is switched off
 or recipe may carry its own copy of the flavor list or image names -- that drift
 is what `config/flavors.json` and `scripts/flavors.py` exist to stop. Recipes
 that need an image name ask for it at the source -- `build-ghcr`, `gen-sbom`,
-and `secureboot` each run `python3 scripts/flavors.py image <flavor>` -- so
+`secureboot`, and `scripts/check-reproducible-build.sh` each run
+`python3 scripts/flavors.py image <flavor>` -- so
 build, promote, and release always agree on published image names. `just
 image_name` is the same query wrapped for callers outside the Justfile; no
 recipe goes through it.
