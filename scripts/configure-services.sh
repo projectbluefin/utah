@@ -75,6 +75,7 @@ enable_unit fwupd-refresh.timer
 enable_unit dconf-update.service
 enable_unit tailscaled.service
 enable_unit uupd.timer
+enable_unit projectbluefin-countme.timer
 enable_unit bluefin-stats-refresh.timer
 enable_unit ublue-system-setup.service
 enable_unit systemd-resolved.service

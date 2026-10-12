@@ -2,6 +2,13 @@
 # Exercise the shared CountMe client on a booted Utah image without sending a
 # production ping. The VM supplies its real image-info and bootc status; only
 # curl is replaced so the request payload can be inspected locally.
+#
+# The shipped timer (OnActiveSec=0) also starts the real service at boot, before
+# this script runs, and that unstubbed run does attempt to reach
+# countme.projectbluefin.io. It cannot get there: luks-e2e.sh boots the
+# installed disk on a QEMU user netdev with restrict=on, which gives the guest
+# no outbound route. That isolation, not this stub, keeps the review VM's boot
+# from being counted.
 set -euo pipefail
 
 expected_flavor="${1:?expected flavor required}"
@@ -33,7 +40,9 @@ systemctl is-active --quiet "${timer}" || {
 }
 
 work="$(mktemp -d /tmp/utah-countme.XXXXXX)"
-trap 'rm -rf "${work}"; rm -f "${opt_out}"' EXIT
+# Leave the system as shipped: no opt-out marker and the timer running again
+# after the opt-out check below stops it.
+trap 'rm -rf "${work}"; rm -f "${opt_out}"; systemctl start "${timer}" >/dev/null 2>&1 || true' EXIT
 mkdir -p "${work}/bin" "${work}/state"
 cat > "${work}/bin/curl" <<'EOF'
 #!/usr/bin/bash
