@@ -221,13 +221,16 @@ trap cleanup EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
 check_system_unit_state() {
-    local unit="$1" required_enabled="${2:-false}" required_run="${3:-false}" state load_state result start_time
-    local -a state_fields=()
-    state="$(ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' systemctl show --property=LoadState --property=ActiveState --property=Result --property=ExecMainStartTimestamp --value '${unit}'" 2>/dev/null || true)"
-    mapfile -t state_fields <<< "${state}"
-    load_state="${state_fields[0]:-}"
-    start_time="${state_fields[3]:-}"
-    result="${state_fields[2]:-}"
+    local unit="$1" required_enabled="${2:-false}" required_run="${3:-false}"
+    local state load_state="" result="" start_time="" key value
+    state="$(ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' systemctl show --property=LoadState --property=Result --property=ExecMainStartTimestamp '${unit}'" 2>/dev/null || true)"
+    while IFS='=' read -r key value; do
+        case "${key}" in
+            LoadState) load_state="${value}" ;;
+            Result) result="${value}" ;;
+            ExecMainStartTimestamp) start_time="${value}" ;;
+        esac
+    done <<< "${state}"
     [[ "${load_state}" == loaded ]] || fail "required system unit ${unit} is ${load_state:-unavailable}"
     [[ "${result}" != failed ]] || fail "system unit ${unit} failed during first boot"
     if [[ "${required_run}" == true && ( -z "${start_time}" || "${start_time}" == "n/a" ) ]]; then
@@ -241,13 +244,15 @@ check_system_unit_state() {
 }
 
 check_user_setup_unit() {
-    local unit="ublue-user-setup.service" state load_state result start_time enabled
-    local -a state_fields=()
-    state="$(ssh_target "systemctl --user show --property=LoadState --property=ActiveState --property=Result --property=ExecMainStartTimestamp --value '${unit}'" 2>/dev/null || true)"
-    mapfile -t state_fields <<< "${state}"
-    load_state="${state_fields[0]:-}"
-    result="${state_fields[2]:-}"
-    start_time="${state_fields[3]:-}"
+    local unit="ublue-user-setup.service" state load_state="" result="" start_time="" enabled="" key value
+    state="$(ssh_target "systemctl --user show --property=LoadState --property=Result --property=ExecMainStartTimestamp '${unit}'" 2>/dev/null || true)"
+    while IFS='=' read -r key value; do
+        case "${key}" in
+            LoadState) load_state="${value}" ;;
+            Result) result="${value}" ;;
+            ExecMainStartTimestamp) start_time="${value}" ;;
+        esac
+    done <<< "${state}"
     [[ "${load_state}" == loaded ]] || fail "user unit ${unit} is ${load_state:-unavailable}"
     [[ "${result}" != failed ]] || fail "user unit ${unit} failed during first boot"
     [[ -n "${start_time}" && "${start_time}" != "n/a" ]] \
@@ -295,7 +300,7 @@ verify_flatpaks_after_repeat() {
 repeat_installed_boot() {
     local serial_repeat="${WORK}/installed-repeat-boot.log"
     local unlock_output="${WORK}/repeat-boot-unlock.log"
-    local disconnected=0 status=0 ssh_ready=0
+    local disconnected=0 restart_seen=0 status=0 ssh_ready=0 graphical_ready=0
     : > "${serial_repeat}"
     echo "Starting serial capture and requesting a graceful reboot..."
     tail -n 0 -F "${SERIAL_INSTALLED}" > "${serial_repeat}" &
@@ -312,27 +317,43 @@ repeat_installed_boot() {
     done
     (( disconnected == 1 )) || fail "installed system did not disconnect for the requested reboot"
 
+    # SSH can disappear before QEMU has reset; until serial records shutdown,
+    # the framebuffer may still be the static desktop and resemble Plymouth.
+    for _ in $(seq 1 60); do
+        if grep -qaE 'Stopping ostree-finalize-staged\.service|Stopped target sysinit\.target|Reached target (shutdown|reboot)\.target|systemd-shutdown|reboot: Restarting system' "${serial_repeat}"; then
+            restart_seen=1
+            break
+        fi
+        sleep 1
+    done
+    (( restart_seen == 1 )) || fail "serial console did not confirm shutdown before repeat-boot unlock"
+
     python3 "${ROOT}/iso/scripts/luks-unlock.py" qemu \
-        "${MONITOR_INSTALLED}" "${PASSPHRASE}" "${serial_repeat}" \
+        "${MONITOR_INSTALLED}" "${PASSPHRASE}" "${serial_repeat}" "${SSH_PORT_INSTALLED}" \
         > "${unlock_output}" 2>&1 || status=$?
-    kill "${serial_follow_pid}" 2>/dev/null || true
-    wait "${serial_follow_pid}" 2>/dev/null || true
-    serial_follow_pid=""
     if (( status != 0 )); then
         cat "${unlock_output}" >&2
         tail -80 "${serial_repeat}" >&2 || true
         fail "repeat-boot LUKS unlock or post-unlock boot failed (exit ${status})"
     fi
-    for _ in $(seq 1 60); do
+    for _ in $(seq 1 120); do
         if ssh_target true 2>/dev/null; then
             ssh_ready=1
-            break
         fi
+        if grep -qaE 'Reached target.*Graphical' "${serial_repeat}"; then
+            graphical_ready=1
+        fi
+        (( ssh_ready == 1 && graphical_ready == 1 )) && break
         sleep 5
     done
+    kill "${serial_follow_pid}" 2>/dev/null || true
+    wait "${serial_follow_pid}" 2>/dev/null || true
+    serial_follow_pid=""
     (( ssh_ready == 1 )) || fail "SSH did not return after the repeat boot"
-    echo "  repeat boot: LUKS unlocked and reached the graphical target"
+    (( graphical_ready == 1 )) || fail "repeat boot did not reach the graphical target"
+    echo "  repeat boot: LUKS unlocked, SSH returned, and graphical target reached"
 }
+
 
 # A failed boot is diagnosed from the units that failed, not from whatever
 # happened to scroll past last. The console keeps printing after a unit fails
