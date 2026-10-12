@@ -119,7 +119,7 @@ policy. Their payload matches the release and requires administrator
 authentication for all nine actions. The image contract requires both files;
 Utah does not layer a duplicate release install over Common's copy.
 The full Control Center integration follows Dakota: Common supplies the
-all-user launcher/icons, distro config, trusted `ublue-os/tap/chairlift`
+all-user launcher/icons, distro config, trusted `projectbluefin/tap/chairlift`
 Brewfile, bootc staging helper/policy, and three GSettings schemas. The desktop
 contract checks those payloads and global enablement of
 `brew-preinstall.service` and `ublue-user-setup.service`.

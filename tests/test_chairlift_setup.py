@@ -148,8 +148,8 @@ class ChairLiftContractAlignmentTests(unittest.TestCase):
         expectations = self._file_contains(
             "/usr/share/ublue-os/homebrew/preinstall.d/chairlift.Brewfile"
         )
-        self.assertIn('tap "ublue-os/tap", trusted: true', expectations)
-        self.assertIn('cask "ublue-os/tap/chairlift"', expectations)
+        self.assertIn('tap "projectbluefin/tap", trusted: true', expectations)
+        self.assertIn('cask "projectbluefin/tap/chairlift"', expectations)
 
     def test_brew_preinstall_service_in_user_enabled(self):
         # `brew-preinstall.service` is a per-user unit (the cask lands in

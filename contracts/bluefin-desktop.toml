@@ -106,8 +106,8 @@ files = [
   "Icon=io.projectbluefin.chairlift",
 ]
 "/usr/share/ublue-os/homebrew/preinstall.d/chairlift.Brewfile" = [
-  'tap "ublue-os/tap", trusted: true',
-  'cask "ublue-os/tap/chairlift"',
+  'tap "projectbluefin/tap", trusted: true',
+  'cask "projectbluefin/tap/chairlift"',
 ]
 "/usr/share/polkit-1/actions/io.projectbluefin.chairlift.bootc.policy" = [
   '<annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/bootc-update-stage</annotate>',
