@@ -1,1 +1,1 @@
-ghcr.io/ublue-os/bluefin@sha256:76aa5d6f4f2f3e18b244587bfbd45ae1777a7d0934f869534228eab6af1f0101
+ghcr.io/ublue-os/bluefin:stable@sha256:61c3d546bea3a0012378214de3603d9eadc2111330765a4a31b14215d4bacaea

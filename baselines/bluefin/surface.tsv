@@ -1,4 +1,5 @@
 (unowned)	/usr/bin/distroshelf-helper
+(unowned)	/usr/bin/gen_grub_cfgstub
 (unowned)	/usr/bin/luks-tpm2-autounlock
 (unowned)	/usr/bin/missioncenter-helper
 (unowned)	/usr/bin/starship
@@ -45,6 +46,7 @@
 (unowned)	/usr/share/applications/documentation.desktop
 (unowned)	/usr/share/applications/noop.desktop
 (unowned)	/usr/share/applications/system-update.desktop
+(unowned)	/usr/share/ublue-os/firefox-config/01-bluefin-global.js
 7zip	/usr/bin/7z
 7zip	/usr/sbin/7z
 ImageMagick	/usr/bin/animate
@@ -1902,7 +1904,6 @@ groff-base	/usr/sbin/soelim.groff
 groff-base	/usr/sbin/tbl
 groff-base	/usr/sbin/troff
 groff-base	/usr/sbin/zsoelim
-grub2-efi-ia32	/usr/bin/gen_grub_cfgstub
 grub2-tools	/usr/bin/grub2-bios-setup
 grub2-tools	/usr/bin/grub2-file
 grub2-tools	/usr/bin/grub2-install
@@ -5479,7 +5480,6 @@ virtualbox-guest-additions	/usr/bin/VBoxControl
 virtualbox-guest-additions	/usr/bin/VBoxDRMClient
 virtualbox-guest-additions	/usr/bin/VBoxService
 virtualbox-guest-additions	/usr/bin/mount.vboxsf
-virtualbox-guest-additions	/usr/bin/vboxwl
 virtualbox-guest-additions	/usr/lib/systemd/system/vboxclient.service
 virtualbox-guest-additions	/usr/lib/systemd/system/vboxservice.service
 virtualbox-guest-additions	/usr/sbin/VBoxClient
@@ -5488,7 +5488,6 @@ virtualbox-guest-additions	/usr/sbin/VBoxControl
 virtualbox-guest-additions	/usr/sbin/VBoxDRMClient
 virtualbox-guest-additions	/usr/sbin/VBoxService
 virtualbox-guest-additions	/usr/sbin/mount.vboxsf
-virtualbox-guest-additions	/usr/sbin/vboxwl
 vpnc	/usr/bin/cisco-decrypt
 vpnc	/usr/bin/vpnc
 vpnc	/usr/bin/vpnc-disconnect
