@@ -36,4 +36,3 @@ requested names, RPM hashes, reference inventory, and replay verdict. RPMs and
 containers are disposable runner data. A later production integration would
 need durable snapshot distribution and renewal policy; this lane only proves
 that freezing the mutable dependency transaction can preserve the package set.
-

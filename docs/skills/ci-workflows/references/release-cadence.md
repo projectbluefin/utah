@@ -39,5 +39,3 @@ the inherited local preset is `config:recommended`. This replaces the separate
 scheduled factory updater rather than running two bots over the same pins.
 No `image-versions.yml` alias or second literal pin is introduced. Renovate's
 PR event runs normal CI; every update still requires independent review.
-
-

@@ -109,4 +109,3 @@ come from `needs.resolve.outputs.digests` and the suite mappings from
 This job surfaces scenario results, fastfetch OCR logs, and screenshots directly
 in GitHub Actions without gating `:testing` tag promotion, keeping deployments
 unblocked while maintaining visible QA signal across flavors.
-
