@@ -26,6 +26,9 @@
 # utah-packages repository supplies the complete GNOME 51 dependency graph.
 packages = [
     "gnome-control-center",
+    # blur-my-shell loads this Mutter 51-linked runtime library at run time.
+    # Keep its -devel RPM out of the image; no Utah build links against it.
+    "gnome-rounded-blur",
     "gnome-session",
     "gnome-settings-daemon",
     "gnome-shell",
@@ -630,6 +633,7 @@ nvidia-container-toolkit = ["https://nvidia.github.io/libnvidia-container/gpgkey
 packages = [
     "gnome-shell",
     "mutter",
+    "gnome-rounded-blur",
     "gnome-session",
     "gnome-settings-daemon",
     "gnome-control-center",

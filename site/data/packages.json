@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-13",
+  "generated_at": "2026-10-14",
   "generator": "scripts/generate-site-data.py",
   "groups": [
     {
@@ -78,6 +78,7 @@
         "glibc-all-langpacks",
         "gnome-control-center",
         "gnome-initial-setup",
+        "gnome-rounded-blur",
         "gnome-session",
         "gnome-settings-daemon",
         "gnome-shell",
@@ -239,7 +240,7 @@
     }
   ],
   "totals": {
-    "installed": 182,
+    "installed": 183,
     "unavailable": 10
   },
   "unavailable": [
