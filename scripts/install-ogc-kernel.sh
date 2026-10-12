@@ -53,7 +53,7 @@ required_config=(SCHED_CLASS_EXT NTSYNC ANDROID_BINDERFS
                  OVERLAY_FS SQUASHFS SQUASHFS_ZSTD EROFS_FS BTRFS_FS
                  BLK_DEV_LOOP ISO9660_FS BLK_DEV_DM DM_SNAPSHOT DM_CRYPT
                  CRYPTO_XTS FUSE_FS FS_VERITY
-                 SYSFB_SIMPLEFB DRM_SIMPLEDRM VIDEO_DEV)
+                 SYSFB_SIMPLEFB DRM_SIMPLEDRM VIDEO_DEV USER_NS TUN)
 verify_config() {
   local config="$1" symbol
   for symbol in "${required_config[@]}"; do
@@ -158,6 +158,9 @@ scripts/config --module OVERLAY_FS --module SQUASHFS --enable SQUASHFS_ZSTD \
 scripts/config --enable SYSFB --enable SYSFB_SIMPLEFB \
                --enable DRM --enable DRM_SIMPLEDRM \
                --module DRM_VIRTIO_GPU --module DRM_BOCHS
+# GNOME's Flatpak sandbox needs unprivileged user namespaces, and Tailscale
+# needs the TUN device. x86_64_defconfig leaves both off in the OGC kernel.
+scripts/config --enable NAMESPACES --enable USER_NS --module TUN
 # The V4L2 core for v4l2loopback (see required_config). VIDEO_DEV sits inside
 # `if MEDIA_SUPPORT`, in a menu that MEDIA_SUPPORT_FILTER (on by default
 # without EXPERT) hides, so it takes its default -- which is on only when a

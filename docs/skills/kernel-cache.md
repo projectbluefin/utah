@@ -142,6 +142,15 @@ into a one-line diagnosis. Changes to this contract invalidate the cache
 through the existing script hash and require a real kernel rebuild plus the ISO
 boot tests.
 
+The gaming desktop also depends on two OGC config options that the x86_64
+defconfig omits: Flatpak's Bubblewrap sandbox needs unprivileged user
+namespaces (`CONFIG_USER_NS`), and Tailscale needs the TUN device
+(`CONFIG_TUN`). A gaming VM boot exposed both gaps in `7.1.8-ogc1`: user
+namespace creation returned `EINVAL`, and Tailscale could not load `tun`.
+`install-ogc-kernel.sh` now checks both in `required_config`, so a cached or
+fresh OGC kernel fails during image build instead of losing these desktop
+features at runtime.
+
 The contract also covers the display. `x86_64_defconfig` enables DRM and the
 Intel i915 driver and nothing else, so on any other GPU, QEMU's included, the
 OGC kernel registered no DRM device: GDM started, mutter had no KMS device to
