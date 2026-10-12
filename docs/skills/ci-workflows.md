@@ -95,7 +95,9 @@ post-build verification workflows, not the complete workflow inventory:
   issue transfers via `prow-transfer.yml`, and label syncing via
   `cncf/prow-github-actions`. Labels and configuration are centrally defined in
   `projectbluefin/.project/prow.yaml`, and approvers are read from the root `OWNERS`
-  file, kept in sync with `maintainers.yaml`.
+  file, kept in sync with `maintainers.yaml`. Run `label-sync` via manual
+  `workflow_dispatch` on Actions → Prow after merge and after every change to
+  `projectbluefin/.project/prow.yaml` to initialize or update repository labels.
 
 CI delegates builds, vulnerability reporting, keyless signatures, provenance,
 and caching to `projectbluefin/actions@v1` (originated as a `docs/building.md`
