@@ -102,4 +102,3 @@ Source pushes to `main` and the nightly schedule call
 `reusable-sync-branches.yml@v1`, then explicitly dispatch `build.yml` on
 `testing` with `actions: write`. README/verification-only pushes are excluded
 to avoid evidence-update build loops. Nightly runs still sync those changes.
-
