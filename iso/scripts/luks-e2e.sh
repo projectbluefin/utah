@@ -178,6 +178,7 @@ send_keys() {
 }
 
 qemu_pids=()
+serial_follow_pid=""
 # Never the disk itself: post-testing-e2e.yml explicitly never uploads
 # install.qcow2 because it carries the test LUKS passphrase, the test
 # account password, and host keys. qemu-img's own metadata is not guest
@@ -207,6 +208,10 @@ cleanup() {
     # trap that always runs, not only in the helper that sometimes does.
     local status=$?
     (( status != 0 )) && preserve_failed_disk_diagnostics
+    if [[ -n "${serial_follow_pid}" ]]; then
+        kill "${serial_follow_pid}" 2>/dev/null || true
+        wait "${serial_follow_pid}" 2>/dev/null || true
+    fi
     for pid in "${qemu_pids[@]:-}"; do
         [[ -n "${pid}" ]] && kill "${pid}" 2>/dev/null || true
     done
@@ -214,6 +219,120 @@ cleanup() {
 trap cleanup EXIT
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
+
+check_system_unit_state() {
+    local unit="$1" required_enabled="${2:-false}" required_run="${3:-false}" state load_state result start_time
+    local -a state_fields=()
+    state="$(ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' systemctl show --property=LoadState --property=ActiveState --property=Result --property=ExecMainStartTimestamp --value '${unit}'" 2>/dev/null || true)"
+    mapfile -t state_fields <<< "${state}"
+    load_state="${state_fields[0]:-}"
+    start_time="${state_fields[3]:-}"
+    result="${state_fields[2]:-}"
+    [[ "${load_state}" == loaded ]] || fail "required system unit ${unit} is ${load_state:-unavailable}"
+    [[ "${result}" != failed ]] || fail "system unit ${unit} failed during first boot"
+    if [[ "${required_run}" == true && ( -z "${start_time}" || "${start_time}" == "n/a" ) ]]; then
+        fail "required first-boot system unit ${unit} did not execute"
+    fi
+    if [[ "${required_enabled}" == true ]]; then
+        state="$(ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' systemctl is-enabled '${unit}'" 2>/dev/null || true)"
+        [[ "${state}" == enabled ]] || fail "required system unit ${unit} is ${state:-not enabled}"
+    fi
+    echo "  ${unit}: ${result:-unknown}"
+}
+
+check_user_setup_unit() {
+    local unit="ublue-user-setup.service" state load_state result start_time enabled
+    local -a state_fields=()
+    state="$(ssh_target "systemctl --user show --property=LoadState --property=ActiveState --property=Result --property=ExecMainStartTimestamp --value '${unit}'" 2>/dev/null || true)"
+    mapfile -t state_fields <<< "${state}"
+    load_state="${state_fields[0]:-}"
+    result="${state_fields[2]:-}"
+    start_time="${state_fields[3]:-}"
+    [[ "${load_state}" == loaded ]] || fail "user unit ${unit} is ${load_state:-unavailable}"
+    [[ "${result}" != failed ]] || fail "user unit ${unit} failed during first boot"
+    [[ -n "${start_time}" && "${start_time}" != "n/a" ]] \
+        || fail "user unit ${unit} did not execute during first boot"
+    enabled="$(ssh_target "systemctl --user is-enabled '${unit}'" 2>/dev/null || true)"
+    [[ "${enabled}" == enabled ]] || fail "user unit ${unit} is ${enabled:-not enabled}"
+    echo "  ${unit}: ${result:-unknown}; enabled"
+}
+
+verify_first_boot_setup_state() {
+    echo "Checking first-boot setup units and desktop enablement..."
+    # Exclude network-bound update jobs and optional Tailscale: this VM has no
+    # network, so those are not first-boot setup failures.
+    check_system_unit_state flatpak-nuke-fedora.service true
+    check_system_unit_state flatpak-preinstall.service true true
+    check_system_unit_state ublue-system-setup.service true true
+    check_system_unit_state brew-setup.service true
+    for unit in input-remapper.service bluefin-stats-refresh.timer uupd.timer; do
+        check_system_unit_state "${unit}" true
+    done
+    check_user_setup_unit
+}
+
+verify_flathub_remote() {
+    local remotes
+    remotes="$(ssh_target 'flatpak remotes --system --columns=name' 2>/dev/null || true)"
+    grep -qxF flathub <<< "${remotes}" || fail "system Flathub remote is not configured"
+    echo "  system Flathub remote present"
+}
+
+verify_flatpaks_after_repeat() {
+    local expected="$1" installed app
+    local -a missing=()
+    installed="$(ssh_target 'flatpak list --system --columns=application' 2>/dev/null || true)"
+    [[ -n "${installed}" ]] || fail "'flatpak list --system' returned nothing after the repeat boot"
+    while IFS= read -r app; do
+        [[ -n "${app}" ]] || continue
+        grep -qxF "${app}" <<< "${installed}" || missing+=("${app}")
+    done <<< "${expected}"
+    (( ${#missing[@]} == 0 )) \
+        || fail "default Flatpak(s) missing after the repeat boot: ${missing[*]}"
+    echo "  default Flatpaks remain present after the repeat boot"
+}
+
+repeat_installed_boot() {
+    local serial_repeat="${WORK}/installed-repeat-boot.log"
+    local unlock_output="${WORK}/repeat-boot-unlock.log"
+    local disconnected=0 status=0 ssh_ready=0
+    : > "${serial_repeat}"
+    echo "Starting serial capture and requesting a graceful reboot..."
+    tail -n 0 -F "${SERIAL_INSTALLED}" > "${serial_repeat}" &
+    serial_follow_pid=$!
+    sleep 1
+    ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' systemctl reboot" \
+        >/dev/null 2>&1 || true
+    for _ in $(seq 1 60); do
+        if ! ssh_target true 2>/dev/null; then
+            disconnected=1
+            break
+        fi
+        sleep 1
+    done
+    (( disconnected == 1 )) || fail "installed system did not disconnect for the requested reboot"
+
+    python3 "${ROOT}/iso/scripts/luks-unlock.py" qemu \
+        "${MONITOR_INSTALLED}" "${PASSPHRASE}" "${serial_repeat}" \
+        > "${unlock_output}" 2>&1 || status=$?
+    kill "${serial_follow_pid}" 2>/dev/null || true
+    wait "${serial_follow_pid}" 2>/dev/null || true
+    serial_follow_pid=""
+    if (( status != 0 )); then
+        cat "${unlock_output}" >&2
+        tail -80 "${serial_repeat}" >&2 || true
+        fail "repeat-boot LUKS unlock or post-unlock boot failed (exit ${status})"
+    fi
+    for _ in $(seq 1 60); do
+        if ssh_target true 2>/dev/null; then
+            ssh_ready=1
+            break
+        fi
+        sleep 5
+    done
+    (( ssh_ready == 1 )) || fail "SSH did not return after the repeat boot"
+    echo "  repeat boot: LUKS unlocked and reached the graphical target"
+}
 
 # A failed boot is diagnosed from the units that failed, not from whatever
 # happened to scroll past last. The console keeps printing after a unit fails
@@ -885,9 +1004,25 @@ if [[ -n "${UTAH_E2E_FLATPAKS-x}" ]]; then
     [[ -n "${installed_flatpaks}" ]] \
         || fail "'flatpak list --system' returned nothing on the installed system"
     if (( ${#missing_flatpaks[@]} > 0 )); then
+        echo "Flatpak first-boot service diagnostics:" >&2
+        if [[ -n "${TEST_PASSWORD:-}" ]]; then
+            ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' systemctl --no-pager status flatpak-preinstall.service" >&2 2>/dev/null || true
+            ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' journalctl -b -u flatpak-preinstall.service --no-pager -n 80" >&2 2>/dev/null || true
+        fi
         fail "default Flatpak(s) missing on the installed, network-isolated system: ${missing_flatpaks[*]}"
     fi
     echo "  default Flatpaks present offline: ${expected_flatpaks//$'\n'/, }"
+fi
+verify_flathub_remote
+
+if [[ -n "${UTAH_E2E_EXPECT_FLAVOR:-}" ]]; then
+    verify_first_boot_setup_state
+    repeat_installed_boot
+    verify_first_boot_setup_state
+    verify_flathub_remote
+    if [[ -n "${UTAH_E2E_FLATPAKS-x}" ]]; then
+        verify_flatpaks_after_repeat "${expected_flatpaks}"
+    fi
 fi
 
 echo

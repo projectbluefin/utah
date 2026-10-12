@@ -300,6 +300,12 @@ expected Flatpak set directly (empty skips the check), and
 `UTAH_E2E_PAYLOAD_CHECK=""` skips the booted-image assertion. The booted-image
 read falls back to `sudo` when `bootc status --json` returns nothing to the
 unprivileged test user.
+
+When `UTAH_E2E_EXPECT_FLAVOR` is set (the `review_vm` workflow), the harness
+also checks first-boot service policy and status plus the Flathub remote, then
+performs a graceful second boot, unlocks the same LUKS disk, and rechecks
+services, Flathub, and the default Flatpaks. This is the repeat-boot
+idempotence gate; plain `just luks-test` remains a single boot.
 Read the recipe and script prerequisites before running it: it creates test
 accounts and requires local QEMU/KVM access, not a production installation.
 
