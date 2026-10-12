@@ -595,6 +595,12 @@ if [[ -n "${UTAH_E2E_EXPECT_FLAVOR:-}" ]]; then
     scp_target "${ROOT}/iso/scripts/verify-installed-flavor.py" "${TEST_USER}@127.0.0.1:/tmp/utah-verify-installed-flavor.py" >/dev/null
     ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' python3 /tmp/utah-verify-installed-flavor.py --flavor '$UTAH_E2E_EXPECT_FLAVOR'" > "${WORK}/flavor-checks.json" \
         || fail "installed flavor probe failed"
+    ssh_target 'rpm -q gnome-rounded-blur' \
+        || fail "installed image lacks the gnome-rounded-blur runtime package"
+    if ssh_target 'rpm -q gnome-rounded-blur-devel'; then
+        fail "build-only gnome-rounded-blur-devel leaked into the installed image"
+    fi
+    echo "  rounded-blur runtime/devel split: passed"
     ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' bootc status --json" > "${WORK}/bootc-status.json"
 fi
 
