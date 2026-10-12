@@ -101,11 +101,12 @@ post-build verification workflows, not the complete workflow inventory:
 
 CI delegates builds, vulnerability reporting, keyless signatures, provenance,
 and caching to `projectbluefin/actions@v1` (originated as a `docs/building.md`
-design bullet; now lives in this skill). The reusable workflow supports
-rechunking and build SBOMs, but its `testing`-stream guard skips the package
-update-interval xattrs, rechunk, and SBOM steps. Utah publishes only the
-`testing` stream, so its images are not rechunked and do not produce those SBOM
-artifacts; enabling them requires a reusable-workflow change (#131).
+design bullet; now lives in this skill). The reusable workflow skips package
+update-interval xattrs, rechunking, and SBOM steps on `testing` by default.
+Both Utah image jobs explicitly set `rechunk: "true"`, opting the testing
+stream into those steps (#226; actions#557). This does not settle published
+chunkah layer order: `scripts/check-reproducible-build.sh` compares native
+`RootFS.Layers`, not the post-rechunk image (#313; actions#591).
 
 ## Detailed workflow references
 - [Package snapshot proof](ci-workflows/references/package-snapshot.md)
