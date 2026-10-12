@@ -696,6 +696,15 @@ if (( ! logged_in )); then
     fail "no gnome-shell for ${TEST_USER} after logging in at the greeter"
 fi
 echo "  gnome-shell: running as ${TEST_USER}"
+if [[ -n "${UTAH_E2E_EXPECT_FLAVOR:-}" ]]; then
+    echo "Verifying the shared CountMe timer, report identity, and opt-out..."
+    scp_target "${ROOT}/iso/scripts/verify-countme-runtime.sh" \
+        "${TEST_USER}@127.0.0.1:/tmp/utah-verify-countme-runtime.sh" >/dev/null \
+        || fail "could not copy the CountMe runtime verifier"
+    ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' bash /tmp/utah-verify-countme-runtime.sh '${UTAH_E2E_EXPECT_FLAVOR}'" \
+        || fail "shared CountMe runtime verification failed"
+fi
+
 
 # A shell session that started is not the same as one whose extensions loaded.
 # Assert the enabled extensions raised no load-time error this boot -- the

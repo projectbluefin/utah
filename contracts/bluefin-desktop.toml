@@ -225,6 +225,7 @@ enabled = [
   "gdm.service",
   "input-remapper.service",
   "ModemManager.service",
+  "projectbluefin-countme.timer",
   "switcheroo-control.service",
   "ublue-system-setup.service",
   "uupd.timer",
