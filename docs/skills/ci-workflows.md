@@ -1,7 +1,7 @@
 ---
 name: ci-workflows
 version: "1.1"
-last_updated: "2026-10-11"
+last_updated: "2026-10-12"
 id: ci-workflows
 one_line_purpose: Navigate Utah's build, promote, and sync workflow topology.
 entry_point: docs/skills/ci-workflows.md
@@ -90,6 +90,12 @@ post-build verification workflows, not the complete workflow inventory:
   merge is enabled.
 - `.github/workflows/post-testing-e2e.yml` -- successful non-PR testing builds
   explicitly dispatch this, or manually supply a successful testing build run ID.
+- `.github/workflows/prow.yml` -- slash commands on issues and pull requests,
+  roster authorization via `projectbluefin/.project/.github/workflows/prow-authorize.yml`,
+  issue transfers via `prow-transfer.yml`, and label syncing via
+  `cncf/prow-github-actions`. Labels and configuration are centrally defined in
+  `projectbluefin/.project/prow.yaml`, and approvers are read from the root `OWNERS`
+  file, kept in sync with `maintainers.yaml`.
 
 CI delegates builds, vulnerability reporting, keyless signatures, provenance,
 and caching to `projectbluefin/actions@v1` (originated as a `docs/building.md`
