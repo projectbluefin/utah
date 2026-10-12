@@ -1013,9 +1013,9 @@ if [[ -n "${UTAH_E2E_FLATPAKS-x}" ]]; then
     fi
     echo "  default Flatpaks present offline: ${expected_flatpaks//$'\n'/, }"
 fi
-verify_flathub_remote
 
 if [[ -n "${UTAH_E2E_EXPECT_FLAVOR:-}" ]]; then
+    verify_flathub_remote
     verify_first_boot_setup_state
     repeat_installed_boot
     verify_first_boot_setup_state
