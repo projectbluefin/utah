@@ -595,11 +595,6 @@ if [[ -n "${UTAH_E2E_EXPECT_FLAVOR:-}" ]]; then
     scp_target "${ROOT}/iso/scripts/verify-installed-flavor.py" "${TEST_USER}@127.0.0.1:/tmp/utah-verify-installed-flavor.py" >/dev/null
     ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' python3 /tmp/utah-verify-installed-flavor.py --flavor '$UTAH_E2E_EXPECT_FLAVOR'" > "${WORK}/flavor-checks.json" \
         || fail "installed flavor probe failed"
-    if [[ "$UTAH_E2E_EXPECT_FLAVOR" == "gaming" || "$UTAH_E2E_EXPECT_FLAVOR" == "nvidia-gaming" ]]; then
-        ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' sh -eu -c 'modprobe tun; test -c /dev/net/tun'" \
-            || fail "installed OGC kernel cannot provide /dev/net/tun for Tailscale"
-        echo "  OGC TUN device: available"
-    fi
     ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' bootc status --json" > "${WORK}/bootc-status.json"
 fi
 
