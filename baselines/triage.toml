@@ -9,22 +9,7 @@
 # `just check` fails on any gap missing from this file, so a new gap needs a
 # decision before it can land. Drop an entry once it stops being a gap.
 
-[package.wpa_supplicant]
-status = "planned"
-area = "wifi"
-issue = "#262"
-
 [package.iwd]
-status = "planned"
-area = "wifi"
-issue = "#262"
-
-[package.wireless-regdb]
-status = "planned"
-area = "wifi"
-issue = "#262"
-
-[package.iw]
 status = "planned"
 area = "wifi"
 issue = "#262"
@@ -49,72 +34,17 @@ status = "planned"
 area = "wifi"
 issue = "#262"
 
-[package.ModemManager]
-status = "planned"
-area = "wifi"
-issue = "#262"
-
 [package.usb_modeswitch]
 status = "planned"
 area = "wifi"
 issue = "#262"
-
-[package.libmbim-utils]
-status = "planned"
-area = "wifi"
-issue = "#262"
-
-[package.libqmi-utils]
-status = "planned"
-area = "wifi"
-issue = "#262"
-
-[package.gnome-initial-setup]
-status = "planned"
-area = "first-boot"
-issue = "#261"
 
 [package.gnome-tour]
 status = "planned"
 area = "first-boot"
 issue = "#261"
 
-[package.nautilus]
-status = "planned"
-area = "files-devices"
-issue = "#263"
-
-[package.localsearch]
-status = "planned"
-area = "files-devices"
-issue = "#263"
-
-[package.gvfs-mtp]
-status = "planned"
-area = "files-devices"
-issue = "#263"
-
-[package.gvfs-afc]
-status = "planned"
-area = "files-devices"
-issue = "#263"
-
-[package.gvfs-gphoto2]
-status = "planned"
-area = "files-devices"
-issue = "#263"
-
-[package.usbmuxd]
-status = "planned"
-area = "files-devices"
-issue = "#263"
-
 [package.ifuse]
-status = "planned"
-area = "files-devices"
-issue = "#263"
-
-[package.libimobiledevice-utils]
 status = "planned"
 area = "files-devices"
 issue = "#263"
@@ -144,36 +74,6 @@ status = "planned"
 area = "files-devices"
 issue = "#263"
 
-[package.cups]
-status = "planned"
-area = "printing"
-issue = "#263"
-
-[package.cups-client]
-status = "planned"
-area = "printing"
-issue = "#263"
-
-[package.cups-filters]
-status = "planned"
-area = "printing"
-issue = "#263"
-
-[package.cups-filters-driverless]
-status = "planned"
-area = "printing"
-issue = "#263"
-
-[package.cups-browsed]
-status = "planned"
-area = "printing"
-issue = "#263"
-
-[package.cups-ipptool]
-status = "planned"
-area = "printing"
-issue = "#263"
-
 [package.ipp-usb]
 status = "planned"
 area = "printing"
@@ -195,21 +95,6 @@ area = "printing"
 issue = "#263"
 
 [package.foo2zjs]
-status = "planned"
-area = "printing"
-issue = "#263"
-
-[package.ghostscript]
-status = "planned"
-area = "printing"
-issue = "#263"
-
-[package.ghostscript-tools-fontutils]
-status = "planned"
-area = "printing"
-issue = "#263"
-
-[package.ghostscript-tools-printing]
 status = "planned"
 area = "printing"
 issue = "#263"
@@ -244,29 +129,9 @@ status = "planned"
 area = "printing"
 issue = "#263"
 
-[package.poppler-utils]
-status = "planned"
-area = "printing"
-issue = "#263"
-
 [package.libieee1284]
 status = "planned"
 area = "printing"
-issue = "#263"
-
-[package.plymouth]
-status = "planned"
-area = "hardware-power"
-issue = "#263"
-
-[package.plymouth-scripts]
-status = "planned"
-area = "hardware-power"
-issue = "#263"
-
-[package.fprintd]
-status = "planned"
-area = "hardware-power"
 issue = "#263"
 
 [package.bolt]
@@ -299,20 +164,6 @@ status = "planned"
 area = "hardware-power"
 issue = "#263"
 
-# zram-generator ships in packages/utah.toml [services] as of #384, but the
-# baselines are extracted from the published image, so it stays a gap -- and so
-# needs an entry here -- until `just baselines` reruns against an image that
-# carries it. Drop this entry then.
-[package.zram-generator]
-status = "planned"
-area = "hardware-power"
-issue = "#384"
-
-[package.lm_sensors]
-status = "planned"
-area = "hardware-power"
-issue = "#263"
-
 [package.smartmontools]
 status = "planned"
 area = "hardware-power"
@@ -328,37 +179,12 @@ status = "planned"
 area = "hardware-power"
 issue = "#263"
 
-[package.pciutils]
-status = "planned"
-area = "hardware-power"
-issue = "#263"
-
-[package.alsa-utils]
-status = "planned"
-area = "hardware-power"
-issue = "#263"
-
-[package.pipewire-utils]
-status = "planned"
-area = "hardware-power"
-issue = "#263"
-
-[package.pulseaudio-utils]
-status = "planned"
-area = "hardware-power"
-issue = "#263"
-
 [package.kernel-tools]
 status = "planned"
 area = "hardware-power"
 issue = "#263"
 
 [package.hdparm]
-status = "planned"
-area = "hardware-power"
-issue = "#263"
-
-[package.dmidecode]
 status = "planned"
 area = "hardware-power"
 issue = "#263"
@@ -493,17 +319,7 @@ status = "planned"
 area = "desktop-apps"
 issue = "#263"
 
-[package.glycin-thumbnailer]
-status = "planned"
-area = "desktop-apps"
-issue = "#263"
-
 [package.gst-thumbnailers]
-status = "planned"
-area = "desktop-apps"
-issue = "#263"
-
-[package.ffmpegthumbnailer]
 status = "planned"
 area = "desktop-apps"
 issue = "#263"
@@ -618,22 +434,12 @@ status = "planned"
 area = "auth-security"
 issue = "#263"
 
-[package.pcsc-lite]
-status = "planned"
-area = "auth-security"
-issue = "#263"
-
 [package.tpm2-tools]
 status = "planned"
 area = "auth-security"
 issue = "#263"
 
 [package.gssproxy]
-status = "planned"
-area = "auth-security"
-issue = "#263"
-
-[package.krb5-workstation]
 status = "planned"
 area = "auth-security"
 issue = "#263"
@@ -661,21 +467,6 @@ issue = "#263"
 [package.oddjob]
 status = "planned"
 area = "auth-security"
-issue = "#263"
-
-[package.samba]
-status = "planned"
-area = "network-fs"
-issue = "#263"
-
-[package.samba-client]
-status = "planned"
-area = "network-fs"
-issue = "#263"
-
-[package.samba-common-tools]
-status = "planned"
-area = "network-fs"
 issue = "#263"
 
 [package.samba-winbind]
@@ -748,23 +539,10 @@ status = "planned"
 area = "cli-tools"
 issue = "#263"
 
-[package.vim-enhanced]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
-
 [package.htop]
 status = "planned"
 area = "cli-tools"
 issue = "#263"
-
-[package.nvtop]
-status = "planned"
-area = "cli-tools"
-issue = "#451"
-# User-facing request: projectbluefin/utah#451. Homebrew nvtop is deprecated
-# (disabled 2027-09-17), so the factory build at utah-packages#311 is the
-# only path to keep the tool on NVIDIA images once the brew formula goes.
 
 [package.lsof]
 status = "planned"
@@ -827,21 +605,6 @@ area = "cli-tools"
 issue = "#263"
 
 [package.7zip]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
-
-[package.bzip2]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
-
-[package.acl]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
-
-[package.attr]
 status = "planned"
 area = "cli-tools"
 issue = "#263"
@@ -911,11 +674,6 @@ status = "planned"
 area = "cli-tools"
 issue = "#263"
 
-[package.buildah]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
-
 [package.criu]
 status = "planned"
 area = "cli-tools"
@@ -976,10 +734,6 @@ reason = "Pulled in by gnome-user-share's WebDAV in Bluefin; tracked with gnome-
 status = "waived"
 reason = "Legacy SysV service shim"
 
-[package.ppp]
-status = "unavailable"
-reason = "packages/utah.toml [unavailable]"
-
 [package.ptyxis]
 status = "waived"
 reason = "Utah's terminal is the Ghostty Flatpak (Hummingbird packages no ptyxis/vte291)"
@@ -996,18 +750,9 @@ reason = "Utah is a bootc image and updates with bootc; rpm-ostree is not part o
 status = "waived"
 reason = "Utah manages networking with NetworkManager"
 
-[package.v4l2loopback]
-status = "planned"
-area = "files-devices"
-issue = "#291"
-
 [package.zfs]
 status = "waived"
 reason = "Out-of-tree kernel module; not built for Hummingbird's kernel"
-
-[package.zsh]
-status = "unavailable"
-reason = "packages/utah.toml [unavailable]"
 
 [package.ImageMagick]
 status = "untriaged"
@@ -1016,9 +761,6 @@ status = "untriaged"
 status = "untriaged"
 
 [package.argyllcms]
-status = "untriaged"
-
-[package.avahi]
 status = "untriaged"
 
 [package.avahi-tools]
@@ -1036,25 +778,10 @@ status = "untriaged"
 [package.capstone]
 status = "untriaged"
 
-[package.cracklib-dicts]
-status = "untriaged"
-
-[package.desktop-file-utils]
-status = "untriaged"
-
 [package.dnf5daemon-server]
 status = "untriaged"
 
 [package.dnsmasq]
-status = "untriaged"
-
-[package.exempi]
-status = "untriaged"
-
-[package.exiv2]
-status = "untriaged"
-
-[package.ffmpeg]
 status = "untriaged"
 
 [package.flex]
@@ -1090,16 +817,7 @@ status = "untriaged"
 [package.libavc1394]
 status = "untriaged"
 
-[package.libbs2b]
-status = "untriaged"
-
-[package.libgsf]
-status = "untriaged"
-
 [package.liblouisutdml-utils]
-status = "untriaged"
-
-[package.libosinfo]
 status = "untriaged"
 
 [package.libraw1394]
@@ -1133,9 +851,6 @@ status = "untriaged"
 status = "untriaged"
 
 [package.openal-soft]
-status = "untriaged"
-
-[package.osinfo-db-tools]
 status = "untriaged"
 
 [package.passwdqc-utils]
@@ -1184,9 +899,6 @@ status = "untriaged"
 status = "untriaged"
 
 [package.serd]
-status = "untriaged"
-
-[package.setools-console]
 status = "untriaged"
 
 [package.sord]
@@ -1243,5 +955,3 @@ status = "untriaged"
 [package.xset]
 status = "untriaged"
 
-[package.zeromq]
-status = "untriaged"
