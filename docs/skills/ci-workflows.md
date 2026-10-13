@@ -28,6 +28,11 @@ post-build verification workflows, not the complete workflow inventory:
   manual dispatch. Top-level `permissions: {}`; each job
   grants its own. Cancels in-progress runs per workflow and ref. A dispatch
   with `contract_only=true` skips the publication jobs and `dispatch-iso`.
+  Publishing dispatches (`contract_only=false`) must target `testing`; a
+  dispatch from any other ref, including the Actions UI default `main`,
+  fails unless `contract_only=true`. An optional `sha` input must equal the
+  dispatched ref's `github.sha`, so a sync race fails closed and `testing`
+  waits for the next sync or nightly run.
   With the default `review_vm=false`, only the contract checks run. Set
   `review_vm=true` as well to build a disposable image on the runner, compose
   and boot an offline ISO, and retain test evidence; `review_iso_all_flavors`
