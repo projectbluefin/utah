@@ -161,10 +161,10 @@ files = [
   "\"keyPath\": \"/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release\"",
 ]
 "/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release" = [
-  "Key fingerprint = 567E 347A D004 4ADE 55BA 8A5F 199E 2F91 FD43 1D51",
+  "Key fingerprint = 567E 347A D004 4ADE 55BA  8A5F 199E 2F91 FD43 1D51",
 ]
 "/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2" = [
-  "Key fingerprint = 567E 347A D004 4ADE 55BA 8A5F 199E 2F91 FD43 1D51",
+  "Key fingerprint = 567E 347A D004 4ADE 55BA  8A5F 199E 2F91 FD43 1D51",
 ]
 "/etc/dconf/db/distro.d/04-bluefin-custom-command-menu" = [
   "Bazaar App Store",

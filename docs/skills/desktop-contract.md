@@ -96,6 +96,13 @@ The TOML's sections are the contract's table of contents:
   stamping, and the booted-image snapshot fastfetch reads. `configure-services.sh`
   enables them and patches Common's fastfetch, image-info, wallpaper, and
   `uwelcome.sh` configuration; non-interactive shells skip the welcome greeting.
+  Wallpaper rotation is intentionally the system-level monthly symlink
+  (`bluefin-wallpaper-month.service`), matching Dakota: once the default
+  `picture-uri` points outside `/usr/share/backgrounds/bluefin/`, Common's
+  per-user `bluefin-dynamic-wallpaper` timer treats it as a personal wallpaper
+  and stands down, so the system symlink wins. That rotator is northern
+  hemisphere only; keeping Common's hemisphere-aware timer instead would mean
+  dropping the Dakota-parity default, so the system symlink stays.
 
   A unit being enabled in the built image is not the same as it being enabled
   on a booted one. bootc applies presets on first boot, and Hummingbird's

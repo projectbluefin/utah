@@ -100,6 +100,7 @@ if [ -f "${GSCHEMA_OVERRIDE}" ]; then
         : already patched
     elif grep -qE 'file:///usr/share/backgrounds/bluefin/[0-9][0-9]-bluefin\.xml' "${GSCHEMA_OVERRIDE}"; then
         sed -i "s#file:///usr/share/backgrounds/bluefin/[0-9][0-9]-bluefin\\.xml#${WALLPAPER_LINK}#g" "${GSCHEMA_OVERRIDE}"
+        glib-compile-schemas /usr/share/glib-2.0/schemas
     else
         echo "ERROR: ${GSCHEMA_OVERRIDE} changed upstream -- re-fit the wallpaper-month patch (see bluefin-wallpaper-month.service)" >&2
         exit 1
