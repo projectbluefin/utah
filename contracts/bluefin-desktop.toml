@@ -111,6 +111,11 @@ files = [
   "/usr/lib/systemd/system/ublue-firstboot-date.service",
   "/usr/lib/systemd/system/ublue-booted-image.service",
   "/usr/bin/ublue-booted-image-sync",
+  # Common files configure-services.sh patches for Dakota parity. file_contains
+  # skips missing files, so list them here to fail the build if Common drops one.
+  "/usr/share/ublue-os/fastfetch.jsonc",
+  "/usr/bin/ublue-image-info.sh",
+  "/etc/profile.d/uwelcome.sh",
   # Common's Red Hat signature policy uses the unsuffixed key path. The pinned
   # Hummingbird base carries that key; Utah also stages its repository copy.
   "/etc/containers/policy.json",

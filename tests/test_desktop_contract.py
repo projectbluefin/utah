@@ -9,6 +9,7 @@ rejecting anything would still report success.
 
 import importlib.util
 import json
+import tomllib
 import tempfile
 import unittest
 from pathlib import Path
@@ -365,6 +366,34 @@ class ServiceMaskParityTests(unittest.TestCase):
         self.assertIn('"bluefin-stats-refresh.timer"', contract)
         self.assertIn("enable bluefin-stats-refresh.timer", preset)
         self.assertIn("enable_unit bluefin-stats-refresh.timer", services)
+
+    def test_dakota_parity_units_enabled_in_contract_preset_and_script(self):
+        contract = (ROOT / "contracts/bluefin-desktop.toml").read_text()
+        preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset").read_text()
+        services = (ROOT / "scripts/configure-services.sh").read_text()
+        for unit in (
+            "bluefin-wallpaper-month.service",
+            "ublue-firstboot-date.service",
+            "ublue-booted-image.service",
+        ):
+            with self.subTest(unit=unit):
+                self.assertIn(f'"{unit}"', contract)
+                self.assertIn(f"enable {unit}", preset)
+                self.assertIn(f"enable_unit {unit}", services)
+                self.assertTrue((ROOT / "system_files/shared/usr/lib/systemd/system" / unit).is_file())
+
+    def test_dakota_parity_patch_targets_are_required_files(self):
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        files = contract["configuration"]["files"]
+        file_contains = contract["configuration"]["file_contains"]
+        for path in (
+            "/usr/share/ublue-os/fastfetch.jsonc",
+            "/usr/bin/ublue-image-info.sh",
+            "/etc/profile.d/uwelcome.sh",
+        ):
+            with self.subTest(path=path):
+                self.assertIn(path, files)
+                self.assertIn(path, file_contains)
 
     def test_bootc_fetch_apply_updates_masked_and_disabled(self):
         preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset").read_text()

@@ -102,7 +102,10 @@ The TOML's sections are the contract's table of contents:
   per-user `bluefin-dynamic-wallpaper` timer treats it as a personal wallpaper
   and stands down, so the system symlink wins. That rotator is northern
   hemisphere only; keeping Common's hemisphere-aware timer instead would mean
-  dropping the Dakota-parity default, so the system symlink stays.
+  dropping the Dakota-parity default, so the system symlink stays. The service
+  is a boot-time oneshot with no timer (as on Dakota), so a machine that stays
+  up across a month boundary keeps the previous month's wallpaper until the
+  next reboot.
 
   A unit being enabled in the built image is not the same as it being enabled
   on a booted one. bootc applies presets on first boot, and Hummingbird's
