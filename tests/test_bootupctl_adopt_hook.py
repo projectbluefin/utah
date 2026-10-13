@@ -117,6 +117,11 @@ class BootupctlAdoptHookContractTests(unittest.TestCase):
                 "version-script-check bootupctl-adopt privileged 1 || exit 0"
             )
         )
+        self.assertLess(
+            self.body.index("/grub2"), self.body.index(
+                "version-script-check bootupctl-adopt privileged 1 || exit 0"
+            )
+        )
 
     def test_compat_shim_covers_pre_1196_libsetup(self):
         # The pinned COMMON_IMAGE_SHA has no version-script-check/-commit yet,
@@ -135,9 +140,10 @@ class BootupctlAdoptHookContractTests(unittest.TestCase):
 
 
 class BootupctlAdoptHookBehaviourTests(unittest.TestCase):
-    """Drive the real hook against stub binaries that emulate the four first-boot
-    transitions: a fresh install, a re-run after success, a live session, and a
-    system without bootupctl installed."""
+    """Drive the real hook against stub binaries that emulate the first-boot
+    transitions: a fresh install, a re-run after success, a live session, a
+    system without bootupctl installed, and a systemd-boot layout with no
+    GRUB second stage to adopt."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -197,6 +203,12 @@ class BootupctlAdoptHookBehaviourTests(unittest.TestCase):
         self.env["HOOK_STATE_DIR"] = str(self.fake / "state")
         self.env["HOOK_ROOT_FSTYPE"] = "ext4"
         self.env["HOOK_BOOTUPD_RC"] = "0"
+        # Scratch boot dir with a GRUB second stage, so the systemd-boot
+        # guard passes and the tests reach bootupctl; the guard tests below
+        # remove it. Production always uses /boot.
+        self.boot_dir = self.fake / "boot"
+        (self.boot_dir / "grub2").mkdir(parents=True)
+        self.env["BOOTUPCTL_BOOT_DIR"] = str(self.boot_dir)
 
     def run_hook(self):
         """Run the real hook with a wrapper that points libsetup at the stub."""
@@ -329,6 +341,22 @@ class BootupctlAdoptHookBehaviourTests(unittest.TestCase):
         self.assertFalse(
             (self.fake / "state" / "privileged-bootupctl-adopt-1").exists(),
             "failed adoption must not be committed",
+        )
+
+    def test_systemd_boot_layout_skips_without_committing(self):
+        # No /boot/grub2 means a systemd-boot layout with nothing adoptable;
+        # bootupctl would fail opening the directory, so the hook must skip
+        # before the check and leave no commit marker for retry.
+        import shutil
+        shutil.rmtree(self.boot_dir / "grub2")
+        r = self.run_hook()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertFalse(
+            (self.fake / "state" / "bootupctl_args").exists(),
+            "systemd-boot layout must not call bootupctl",
+        )
+        self.assertFalse(
+            (self.fake / "state" / "privileged-bootupctl-adopt-1").exists()
         )
 
 
