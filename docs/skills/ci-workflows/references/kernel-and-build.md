@@ -28,14 +28,12 @@ boundaries decide whether that can work (job `env:` and the same step):
   such care: there the inspect runs after `podman pull`, which records the
   registry digest.
 
-`cosign verify` pins the issuer and the identity to this exact workflow in
-this repo, then accepts any `refs/heads/*` or `refs/pull/N/merge` ref. A
-manual `workflow_dispatch` signs with `refs/heads/<branch>` -- and the
-Actions UI defaults to the default branch -- so a regexp naming only
-`testing` made a dispatched run sign the image and then fail its own
-verify. Everyone who can dispatch this workflow can already sign from an
-arbitrary branch via a same-repo pull request, so accepting branch heads
-widens nothing (#316).
+`cosign verify` pins the issuer and identity to this workflow and accepts
+only `refs/heads/testing` and `refs/pull/N/merge`. Manual dispatches may
+publish only from `testing`; branch previews must set `contract_only` and
+therefore skip the kernel cache and reusable image publishers. A same-repo
+pull request may still publish a kernel-cache image under its `pull/N/merge`
+identity (#316).
 
 The consumer (`build-ghcr`) also fails closed: CI downloads cosign v2.6.1
 with the platform SHA-256 pinned by `sigstore/cosign-installer@7e8b541e…`,
@@ -102,3 +100,10 @@ Source pushes to `main` and the nightly schedule call
 `reusable-sync-branches.yml@v1`, then explicitly dispatch `build.yml` on
 `testing` with `actions: write`. README/verification-only pushes are excluded
 to avoid evidence-update build loops. Nightly runs still sync those changes.
+
+The sync workflow passes the current full `testing` SHA. Before checkout, the
+contract job rejects any non-empty `sha` input that differs from the run's
+immutable `github.sha`, and rejects publisher dispatches from refs other than
+`testing`. Therefore the `inputs.sha` preflight/cache tree and the reusable
+build's `github.sha` tree cannot diverge; if the branch moves during dispatch,
+the contract fails before either image publisher can run.
