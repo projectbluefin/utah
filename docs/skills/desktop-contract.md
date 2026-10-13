@@ -54,9 +54,11 @@ The TOML's sections are the contract's table of contents:
   `ostree-image-signed` ref pattern.
 - **`[configuration]`** — the dconf distro databases and locks under
   `/etc/dconf/db/distro.d/` must exist, and `/etc/dconf/profile/user` must
-  select both `user-db:user` and `system-db:distro`. Hummingbird does not ship
-  this profile; without it, the distro keyfiles are inert even when
-  `dconf-update.service` is enabled. The GDM keyfile under
+  select both `user-db:user` and `system-db:distro`. The factory `dconf` RPM
+  ships that profile (including the `local` and `site` admin layers), so Utah
+  must not overlay its own copy — a shorter file would silently drop the admin
+  override layers even though the distro keyfiles keep working (#732 review).
+  The GDM keyfile under
   `/etc/dconf/db/gdm.d/01-bluefin-gdm-logo` overrides
   `org.gnome.login-screen.logo` to point at the Bluefin mark; otherwise
   gnome-shell falls back to `fedora-logos`' Fedora wordmark at the greeter
@@ -83,7 +85,7 @@ The TOML's sections are the contract's table of contents:
   `avahi-daemon.socket`, `switcheroo-control.service`, `bluetooth.service`, `ublue-system-setup.service`,
   `flatpak-preinstall.service`, `flatpak-nuke-fedora.service`, `brew-setup.service`, `dconf-update.service`,
   `bootc-unified-storage.service`, `input-remapper.service`, `ModemManager.service`, `cups.socket`,
-  `systemd-boot-update.service`, `uupd.timer`, `bluefin-stats-refresh.timer`, `bluefin-wallpaper-month.service`,
+  `systemd-boot-update.service`, `uupd.timer`, `bluefin-stats-refresh.timer`,
   `ublue-firstboot-date.service`, `ublue-booted-image.service`. Update policy delegates
   background updates to `uupd.timer`; `bootc-fetch-apply-updates.timer` and
   `bootc-fetch-apply-updates.service` are masked in `/etc` and `/usr/lib` (and
@@ -92,20 +94,14 @@ The TOML's sections are the contract's table of contents:
   symlinks that bypass uupd staging or undo manual rollbacks. Switchers can
   also manually verify or mask them if a local `/etc` symlink was preserved.
 
-  The last three units are Dakota parity (#675): wallpaper rotation, install-date
-  stamping, and the booted-image snapshot fastfetch reads. `configure-services.sh`
-  enables them and patches Common's fastfetch, image-info, wallpaper, and
-  `uwelcome.sh` configuration; non-interactive shells skip the welcome greeting.
-  Wallpaper rotation is intentionally the system-level monthly symlink
-  (`bluefin-wallpaper-month.service`), matching Dakota: once the default
-  `picture-uri` points outside `/usr/share/backgrounds/bluefin/`, Common's
-  per-user `bluefin-dynamic-wallpaper` timer treats it as a personal wallpaper
-  and stands down, so the system symlink wins. That rotator is northern
-  hemisphere only; keeping Common's hemisphere-aware timer instead would mean
-  dropping the Dakota-parity default, so the system symlink stays. The service
-  is a boot-time oneshot with no timer (as on Dakota), so a machine that stays
-  up across a month boundary keeps the previous month's wallpaper until the
-  next reboot.
+  The last two units are Dakota parity (#675): install-date stamping and the
+  booted-image snapshot fastfetch reads. `configure-services.sh` enables them
+  and patches Common's fastfetch, image-info, and `uwelcome.sh` configuration;
+  non-interactive shells skip the welcome greeting. Wallpaper rotation is
+  deliberately NOT Dakota parity: Common's per-user `bluefin-dynamic-wallpaper`
+  timer is hemisphere-aware and rotates live at month boundaries, while
+  Dakota's boot-time month symlink is northern-only and stale until reboot —
+  repointing the default would stand the better rotator down (#675 decision).
 
   A unit being enabled in the built image is not the same as it being enabled
   on a booted one. bootc applies presets on first boot, and Hummingbird's

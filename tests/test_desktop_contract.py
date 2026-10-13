@@ -372,7 +372,6 @@ class ServiceMaskParityTests(unittest.TestCase):
         preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset").read_text()
         services = (ROOT / "scripts/configure-services.sh").read_text()
         for unit in (
-            "bluefin-wallpaper-month.service",
             "ublue-firstboot-date.service",
             "ublue-booted-image.service",
         ):

@@ -85,27 +85,15 @@ enable_unit bootc-unified-storage.service
 # Dakota desktop parity (#675). The units ship in
 # system_files/shared/usr/lib/systemd/system/; the preset agrees so bootc's
 # first-boot preset application keeps them enabled (see #98).
-enable_unit bluefin-wallpaper-month.service
 enable_unit ublue-firstboot-date.service
 enable_unit ublue-booted-image.service
 # Apply Dakota's runtime desktop integrations onto common's files. Each patch
 # is guarded: already-patched is a no-op, an unrecognized upstream file fails
 # the build loudly instead of silently shipping unpatched behavior.
-# Monthly wallpaper rotation: point common's gschema background at the symlink
-# bluefin-wallpaper-month.service maintains, instead of a fixed month file.
-GSCHEMA_OVERRIDE=/usr/share/glib-2.0/schemas/zz0-bluefin-modifications.gschema.override
-WALLPAPER_LINK=file:///var/lib/bluefin/backgrounds/current-bluefin.xml
-if [ -f "${GSCHEMA_OVERRIDE}" ]; then
-    if grep -qF "${WALLPAPER_LINK}" "${GSCHEMA_OVERRIDE}"; then
-        : already patched
-    elif grep -qE 'file:///usr/share/backgrounds/bluefin/[0-9][0-9]-bluefin\.xml' "${GSCHEMA_OVERRIDE}"; then
-        sed -i "s#file:///usr/share/backgrounds/bluefin/[0-9][0-9]-bluefin\\.xml#${WALLPAPER_LINK}#g" "${GSCHEMA_OVERRIDE}"
-        glib-compile-schemas /usr/share/glib-2.0/schemas
-    else
-        echo "ERROR: ${GSCHEMA_OVERRIDE} changed upstream -- re-fit the wallpaper-month patch (see bluefin-wallpaper-month.service)" >&2
-        exit 1
-    fi
-fi
+# Wallpaper rotation stays with Common's per-user bluefin-dynamic-wallpaper
+# timer (hemisphere-aware, live month-boundary rotation) rather than Dakota's
+# boot-time month symlink: repointing the default would stand the Common
+# rotator down with no replacement until reboot (#675 decision, #732 review).
 # Installation date for fastfetch: read the first-boot timestamp instead of
 # inferring the image age from /var/log timestamps.
 FASTFETCH_JSONC=/usr/share/ublue-os/fastfetch.jsonc
