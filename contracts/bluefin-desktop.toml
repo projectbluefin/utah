@@ -97,6 +97,11 @@ files = [
   # reconfigure", and degrades the boot. The drop-in adds ConditionPathIsReadWrite=/
   # so the unit is skipped, not failed. #585.
   "/usr/lib/systemd/system/systemd-remount-fs.service.d/10-utah-composefs-skip.conf",
+  # projectbluefin-countme.service.d/10-utah-burst-tolerance.conf. The daily
+  # ping exits 0 per start, but harness-driven bursts (test unmask/reload
+  # loops) trip systemd's default start limit and leave a failed unit that
+  # fails the health check. The drop-in widens the burst window; #741.
+  "/usr/lib/systemd/system/projectbluefin-countme.service.d/10-utah-burst-tolerance.conf",
 ]
 
 [configuration.file_contains]
