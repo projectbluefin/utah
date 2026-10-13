@@ -70,9 +70,11 @@ jobs:
     if: needs.authorize.outputs.triage == 'true' && github.event_name == 'issue_comment'
     permissions:
       issues: write
-    uses: projectbluefin/.project/.github/workflows/prow-transfer.yml@ae5ac56a5529b7a3d491c32d97a5416d40230b23
+    uses: projectbluefin/.project/.github/workflows/prow-transfer.yml@db427290d0012fe4aabf63030d468ee2a71b3987
     with:
       authorized: ${{ needs.authorize.outputs.triage }}
+      # Pin the executed parser to the same reviewed commit as this workflow.
+      app-ref: db427290d0012fe4aabf63030d468ee2a71b3987
     secrets:
       MERGERAPTOR_APP_ID: ${{ secrets.MERGERAPTOR_APP_ID }}
       MERGERAPTOR_PRIVATE_KEY: ${{ secrets.MERGERAPTOR_PRIVATE_KEY }}
