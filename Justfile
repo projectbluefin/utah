@@ -399,7 +399,7 @@ build-ghcr base_name stream flavor kernel_pin="":
       cache_ref="${cache_ref%:*}@${digest}"
       "$cosign_bin" verify "$cache_ref" \
         --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-        --certificate-identity-regexp '^https://github\.com/projectbluefin/utah/\.github/workflows/build\.yml@refs/(heads/[^@]+|pull/[0-9]+/merge)$'
+        --certificate-identity-regexp '^https://github\.com/projectbluefin/utah/\.github/workflows/build\.yml@refs/(heads/testing|pull/[0-9]+/merge)$'
       base_args=(--build-arg BASE_IMAGE="$cache_ref")
     fi
     # Registry layer cache, the same arrangement Bluefin uses.  The package

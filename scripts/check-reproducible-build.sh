@@ -87,7 +87,7 @@ if [ "${FLAVOR}" != main ]; then
         BASE_IMAGE="${cache_repository%:*}@${digest}"
         "${COSIGN}" verify "${BASE_IMAGE}" \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-            --certificate-identity-regexp '^https://github\.com/projectbluefin/utah/\.github/workflows/build\.yml@refs/(heads/[^@]+|pull/[0-9]+/merge)$'
+            --certificate-identity-regexp '^https://github\.com/projectbluefin/utah/\.github/workflows/build\.yml@refs/(heads/testing|pull/[0-9]+/merge)$'
     fi
 fi
 
