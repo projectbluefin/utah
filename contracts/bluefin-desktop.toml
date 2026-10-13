@@ -128,6 +128,9 @@ files = [
 "/usr/share/glib-2.0/schemas/zz3-bluefin-unsupported-stuff.gschema.override" = [
   "disable-extension-version-validation=true",
   "tilingshell@ferrarodomenico.com",
+  # Power status color alerts the reboot/uptime state the upstream testsuite
+  # asserts (#741); keep it in the default-enabled set.
+  "power-status-color@projectbluefin.io",
 ]
 "/etc/dconf/db/distro.d/02-bluefin-keybindings" = [
   "xdg-terminal-exec",
