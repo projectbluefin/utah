@@ -318,6 +318,13 @@ jobs:
       suites: ${{ matrix.suites }}
       test_repository: projectbluefin/testsuite
       test_ref: 7da50e5b6f165a4704159b0ce5a4898caff6466a
+      # Scoped exclusion, not a silent skip: the @orca scenarios assert RPMs
+      # (orca, speech-dispatcher) no enabled Utah repository provides. They
+      # are tracked as parity debt in packages/utah.toml [unavailable] under
+      # #741 with factory request utah-packages#447. Remove this exclusion
+      # (and move the packages into the install contract) as soon as the
+      # factory publishes the stack.
+      extra-tags: "~@orca"
 
   promote-to-testing:
     needs: [resolve, luks, production-iso]
