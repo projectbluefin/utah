@@ -497,6 +497,14 @@ packages = [
 #   resolution, which is what this module provides; the two are separate
 #   (found while reviewing #411). Returns once the factory builds nss-mdns for
 #   Hummingbird and utah-packages publishes the build; tracked by #499.
+#
+# orca, speech-dispatcher, speech-dispatcher-espeak-ng
+#   Screen reader stack Bluefin ships (baselines/bluefin/rpms.tsv: orca 50.2,
+#   speech-dispatcher 0.12.1) and the upstream testsuite asserts (`rpm -q orca
+#   speech-dispatcher`, plus a working spd-say module list). Neither enabled
+#   repository provides them (verified via just check-repos: No match for all
+#   three). Returns once the factory builds the stack for Hummingbird and
+#   utah-packages publishes it; tracked by #741, factory request utah-packages#447.
 packages = [
     "grub2-efi-x64-cdboot",
     "anaconda-live",
@@ -504,7 +512,10 @@ packages = [
     "firefox",
     "fish",
     "nss-mdns",
+    "orca",
     "slitherer",
+    "speech-dispatcher",
+    "speech-dispatcher-espeak-ng",
 ]
 
 # nvidia-container-toolkit was recorded here as a second gap. It is not one, and
