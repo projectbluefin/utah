@@ -112,7 +112,7 @@ if [ -f "${FASTFETCH_JSONC}" ]; then
     if grep -qF '/var/lib/ublue-os/install-date' "${FASTFETCH_JSONC}"; then
         : already patched
     elif grep -qF 'ls -alct /var/log' "${FASTFETCH_JSONC}"; then
-        sed -i "s#date -d\$(ls -alct /var/log --time-style=full-iso|tail -1|awk '{print \$6}')#date -d\"\$(cat /var/lib/ublue-os/install-date 2>/dev/null || date +%Y-%m-%d)\"#" "${FASTFETCH_JSONC}"
+        sed -i "s#date -d\$(ls -alct /var/log --time-style=full-iso|tail -1|awk '{print \$6}')#date -d\$(cat /var/lib/ublue-os/install-date 2>/dev/null || date +%Y-%m-%d)#" "${FASTFETCH_JSONC}"
     else
         echo "ERROR: ${FASTFETCH_JSONC} changed upstream -- re-fit the install-date patch (see ublue-firstboot-date.service)" >&2
         exit 1

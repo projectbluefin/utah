@@ -65,18 +65,6 @@ check:
     grep -q 'systemctl mask serial-getty@ttyS0.service' scripts/configure-services.sh
     grep -q 'ln -sf /dev/null /usr/lib/systemd/system/serial-getty@ttyS0.service' scripts/configure-services.sh
     grep -q 'serial-getty@ttyS0.service' contracts/bluefin-desktop.toml
-    # Dakota desktop parity (#675): the wallpaper, install-date and
-    # booted-image units must stay enabled in the preset, the build-time
-    # script and the desktop contract together.
-    grep -q 'enable bluefin-wallpaper-month.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
-    grep -q 'enable ublue-firstboot-date.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
-    grep -q 'enable ublue-booted-image.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
-    grep -q 'enable_unit bluefin-wallpaper-month.service' scripts/configure-services.sh
-    grep -q 'enable_unit ublue-firstboot-date.service' scripts/configure-services.sh
-    grep -q 'enable_unit ublue-booted-image.service' scripts/configure-services.sh
-    grep -q 'bluefin-wallpaper-month.service' contracts/bluefin-desktop.toml
-    grep -q 'ublue-firstboot-date.service' contracts/bluefin-desktop.toml
-    grep -q 'ublue-booted-image.service' contracts/bluefin-desktop.toml
     test -f scripts/configure-services.sh
     test -f scripts/configure-branding.sh
     test -f scripts/verify-desktop-contract.py

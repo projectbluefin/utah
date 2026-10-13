@@ -79,6 +79,8 @@ files = [
   "/usr/share/glib-2.0/schemas/io.projectbluefin.chairlift.livery.gschema.xml",
   "/usr/share/glib-2.0/schemas/io.projectbluefin.chairlift.updates.gschema.xml",
   "/usr/share/glib-2.0/schemas/io.projectbluefin.chairlift.firstrun.gschema.xml",
+  # dconf reads distro keyfiles only when the user profile names system-db:distro.
+  "/etc/dconf/profile/user",
   "/etc/dconf/db/distro.d/01-bluefin-folders",
   "/etc/dconf/db/distro.d/02-bluefin-keybindings",
   "/etc/dconf/db/distro.d/03-bluefin-ptyxis-palette",
@@ -109,6 +111,11 @@ files = [
   "/usr/lib/systemd/system/ublue-firstboot-date.service",
   "/usr/lib/systemd/system/ublue-booted-image.service",
   "/usr/bin/ublue-booted-image-sync",
+  # Common's Red Hat signature policy uses the unsuffixed key path. The pinned
+  # Hummingbird base carries that key; Utah also stages its repository copy.
+  "/etc/containers/policy.json",
+  "/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release",
+  "/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2",
 ]
 
 [configuration.file_contains]
@@ -145,6 +152,19 @@ files = [
 # /etc/profile too, so uwelcome must only greet interactive shells.
 "/etc/profile.d/uwelcome.sh" = [
   "case $- in",
+]
+"/etc/dconf/profile/user" = [
+  "user-db:user",
+  "system-db:distro",
+]
+"/etc/containers/policy.json" = [
+  "\"keyPath\": \"/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release\"",
+]
+"/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release" = [
+  "Key fingerprint = 567E 347A D004 4ADE 55BA 8A5F 199E 2F91 FD43 1D51",
+]
+"/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2" = [
+  "Key fingerprint = 567E 347A D004 4ADE 55BA 8A5F 199E 2F91 FD43 1D51",
 ]
 "/etc/dconf/db/distro.d/04-bluefin-custom-command-menu" = [
   "Bazaar App Store",

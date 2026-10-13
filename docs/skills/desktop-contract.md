@@ -1,7 +1,7 @@
 ---
 name: desktop-contract
 version: "1.0"
-last_updated: "2026-10-11"
+last_updated: "2026-10-13"
 id: desktop-contract
 one_line_purpose: Maintain Utah identity, Bluefin desktop defaults, and first-boot Flatpak policy.
 entry_point: docs/skills/desktop-contract.md
@@ -53,15 +53,21 @@ The TOML's sections are the contract's table of contents:
   flavor pattern `(main|nvidia|gaming|nvidia-gaming)` and the matching
   `ostree-image-signed` ref pattern.
 - **`[configuration]`** — the dconf distro databases and locks under
-  `/etc/dconf/db/distro.d/` must exist, plus the GDM keyfile under
-  `/etc/dconf/db/gdm.d/01-bluefin-gdm-logo` that overrides
+  `/etc/dconf/db/distro.d/` must exist, and `/etc/dconf/profile/user` must
+  select both `user-db:user` and `system-db:distro`. Hummingbird does not ship
+  this profile; without it, the distro keyfiles are inert even when
+  `dconf-update.service` is enabled. The GDM keyfile under
+  `/etc/dconf/db/gdm.d/01-bluefin-gdm-logo` overrides
   `org.gnome.login-screen.logo` to point at the Bluefin mark; otherwise
   gnome-shell falls back to `fedora-logos`' Fedora wordmark at the greeter
   (#378). `file_contains` pins the live configuration: the gschema override
   references Bazaar and the Bluefin background path, the custom command menu
   points at `docs.projectbluefin.io`, the keybindings set
   `xdg-terminal-exec`, the GDM keyfile declares the login-screen schema and
-  the Bluefin asset path.
+  the Bluefin asset path. Common's container signature policy names
+  `/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release`; the pinned Hummingbird base
+  supplies that key (fingerprint `567E…1D51`) alongside Utah's
+  `RPM-GPG-KEY-redhat-release-2`, so no policy weakening or alias is needed.
 - **`[flatpak]`** — first-boot policy: the Flathub remote
   (`https://dl.flathub.org/repo/`), the Bazaar preinstall, the
   `99-flatpaks.sh` privileged-setup hook, and the system-flatpaks Brewfile
@@ -86,8 +92,10 @@ The TOML's sections are the contract's table of contents:
   symlinks that bypass uupd staging or undo manual rollbacks. Switchers can
   also manually verify or mask them if a local `/etc` symlink was preserved.
 
-  The last three units are Dakota parity (#675) — wallpaper rotation, install-date stamping, and the
-  booted-image snapshot fastfetch reads — enabled and patched by `configure-services.sh`.
+  The last three units are Dakota parity (#675): wallpaper rotation, install-date
+  stamping, and the booted-image snapshot fastfetch reads. `configure-services.sh`
+  enables them and patches Common's fastfetch, image-info, wallpaper, and
+  `uwelcome.sh` configuration; non-interactive shells skip the welcome greeting.
 
   A unit being enabled in the built image is not the same as it being enabled
   on a booted one. bootc applies presets on first boot, and Hummingbird's
