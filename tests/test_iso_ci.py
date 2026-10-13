@@ -645,6 +645,17 @@ class ReviewIsoBudgetMeasurementTests(unittest.TestCase):
         self.assertIn("compression_level", run)
         self.assertIn("iso_bytes", run)
 
+    def test_initramfs_builds_use_reproducible_zstd(self):
+        # Plain nvidia exceeded the 6 GiB size ceiling (#740) because the base
+        # kernel's uncompressed/gzip initramfs was duplicated across pxeboot,
+        # efi.img ESP, live squashfs, and offline container store. Both the
+        # installed image regeneration and the live ISO rebuild must pass --zstd
+        # and --reproducible to stay compact.
+        regen = (ROOT / "scripts/regenerate-initramfs.sh").read_text()
+        self.assertIn("dracut --no-hostonly --reproducible --zstd", regen)
+        live = (ROOT / "iso/live/Containerfile").read_text()
+        self.assertIn("dracut --force --reproducible --zstd --no-hostonly", live)
+
 
 class ConcurrencyTests(unittest.TestCase):
     """A testing build must not be cancelled by the next one.

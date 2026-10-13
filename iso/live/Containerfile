@@ -45,6 +45,11 @@ RUN chmod 0755 /tmp/utah-live-src/configure-live.sh && \
 # a harmless /root install warning in the container build context but still
 # returns a successful image with dmsquash-live included.
 #
+# --zstd keeps the generic (--no-hostonly) initramfs under ~60 MiB. Without it,
+# dracut's default compression leaves a ~240 MiB archive that is duplicated
+# across the ISO (pxeboot, efi.img ESP, live squashfs, and offline container
+# store), causing plain nvidia to exceed the 6 GiB size ceiling (#740).
+#
 # Keep TPM and smart-card unlock helpers out of the live initramfs: this
 # environment boots an unencrypted squashfs payload and has no encrypted
 # volume to unlock. The installed image builds its own initramfs after the
@@ -63,7 +68,7 @@ RUN set -euxo pipefail; \
       echo "Expected one bootc kernel for the live initramfs: $kernel_dirs" >&2; exit 1; \
     fi; \
     kernel="${kernel_dirs##*/}"; \
-    dracut --force --reproducible --no-hostonly \
+    dracut --force --reproducible --zstd --no-hostonly \
       --add dmsquash-live \
       --omit 'tpm2-tss pcsc' \
       --add-drivers 'squashfs overlay loop iso9660 sr_mod cdrom' \
