@@ -221,7 +221,7 @@ trap cleanup EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
 check_system_unit_state() {
-    local unit="$1" required_enabled="${2:-false}" required_run="${3:-false}"
+    local unit="$1" required_enabled="${2:-false}" required_run="${3:-false}" boot_pass="${4:-first}"
     local state load_state="" result="" start_time="" key value
     state="$(ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' systemctl show --property=LoadState --property=Result --property=ExecMainStartTimestamp '${unit}'" 2>/dev/null || true)"
     while IFS='=' read -r key value; do
@@ -232,9 +232,9 @@ check_system_unit_state() {
         esac
     done <<< "${state}"
     [[ "${load_state}" == loaded ]] || fail "required system unit ${unit} is ${load_state:-unavailable}"
-    [[ "${result}" != failed ]] || fail "system unit ${unit} failed during first boot"
+    [[ "${result}" != failed ]] || fail "system unit ${unit} failed during ${boot_pass} boot"
     if [[ "${required_run}" == true && ( -z "${start_time}" || "${start_time}" == "n/a" ) ]]; then
-        fail "required first-boot system unit ${unit} did not execute"
+        fail "required system unit ${unit} did not execute during ${boot_pass} boot"
     fi
     if [[ "${required_enabled}" == true ]]; then
         state="$(ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' systemctl is-enabled '${unit}'" 2>/dev/null || true)"
@@ -244,6 +244,7 @@ check_system_unit_state() {
 }
 
 check_user_setup_unit() {
+    local boot_pass="${1:-first}"
     local unit="ublue-user-setup.service" state load_state="" result="" start_time="" enabled="" key value
     state="$(ssh_target "systemctl --user show --property=LoadState --property=Result --property=ExecMainStartTimestamp '${unit}'" 2>/dev/null || true)"
     while IFS='=' read -r key value; do
@@ -254,26 +255,27 @@ check_user_setup_unit() {
         esac
     done <<< "${state}"
     [[ "${load_state}" == loaded ]] || fail "user unit ${unit} is ${load_state:-unavailable}"
-    [[ "${result}" != failed ]] || fail "user unit ${unit} failed during first boot"
+    [[ "${result}" != failed ]] || fail "user unit ${unit} failed during ${boot_pass} boot"
     [[ -n "${start_time}" && "${start_time}" != "n/a" ]] \
-        || fail "user unit ${unit} did not execute during first boot"
+        || fail "user unit ${unit} did not execute during ${boot_pass} boot"
     enabled="$(ssh_target "systemctl --user is-enabled '${unit}'" 2>/dev/null || true)"
     [[ "${enabled}" == enabled ]] || fail "user unit ${unit} is ${enabled:-not enabled}"
     echo "  ${unit}: ${result:-unknown}; enabled"
 }
 
-verify_first_boot_setup_state() {
-    echo "Checking first-boot setup units and desktop enablement..."
+verify_setup_state() {
+    local boot_pass="${1:-first}"
+    echo "Checking ${boot_pass}-boot setup units and desktop enablement..."
     # Exclude network-bound update jobs and optional Tailscale: this VM has no
-    # network, so those are not first-boot setup failures.
-    check_system_unit_state flatpak-nuke-fedora.service true
-    check_system_unit_state flatpak-preinstall.service true true
-    check_system_unit_state ublue-system-setup.service true true
-    check_system_unit_state brew-setup.service true
+    # network, so neither boot's setup checks should fail on those units.
+    check_system_unit_state flatpak-nuke-fedora.service true false "${boot_pass}"
+    check_system_unit_state flatpak-preinstall.service true true "${boot_pass}"
+    check_system_unit_state ublue-system-setup.service true true "${boot_pass}"
+    check_system_unit_state brew-setup.service true false "${boot_pass}"
     for unit in input-remapper.service bluefin-stats-refresh.timer uupd.timer; do
-        check_system_unit_state "${unit}" true
+        check_system_unit_state "${unit}" true false "${boot_pass}"
     done
-    check_user_setup_unit
+    check_user_setup_unit "${boot_pass}"
 }
 
 verify_flathub_remote() {
@@ -320,7 +322,7 @@ repeat_installed_boot() {
     # SSH can disappear before QEMU has reset; until serial records shutdown,
     # the framebuffer may still be the static desktop and resemble Plymouth.
     for _ in $(seq 1 60); do
-        if grep -qaE 'Stopping ostree-finalize-staged\.service|Stopped target sysinit\.target|Reached target (shutdown|reboot)\.target|systemd-shutdown|reboot: Restarting system' "${serial_repeat}"; then
+        if grep -qaF 'reboot: Restarting system' "${serial_repeat}"; then
             restart_seen=1
             break
         fi
@@ -351,6 +353,7 @@ repeat_installed_boot() {
     serial_follow_pid=""
     (( ssh_ready == 1 )) || fail "SSH did not return after the repeat boot"
     (( graphical_ready == 1 )) || fail "repeat boot did not reach the graphical target"
+    login_installed_user "repeat boot"
     echo "  repeat boot: LUKS unlocked, SSH returned, and graphical target reached"
 }
 
@@ -816,26 +819,30 @@ EOF
 
 # Type the password at the greeter. GDM offers the single account already
 # selected, so Enter opens the password field and the password submits it.
-echo "Logging in at the greeter as ${TEST_USER}..."
-monitor "${MONITOR_INSTALLED}" "sendkey ret" || true
-sleep 3
-send_keys "${MONITOR_INSTALLED}" "${TEST_PASSWORD}"
+login_installed_user() {
+    local boot_pass="$1" logged_in=0
+    echo "Logging in at the greeter as ${TEST_USER} (${boot_pass})..."
+    monitor "${MONITOR_INSTALLED}" "sendkey ret" || true
+    sleep 3
+    send_keys "${MONITOR_INSTALLED}" "${TEST_PASSWORD}"
 
-echo "Waiting for a GNOME session..."
-logged_in=0
-for i in $(seq 1 48); do
-    if ssh_target "pgrep -u ${TEST_USER} -x gnome-shell >/dev/null" 2>/dev/null; then
-        logged_in=1; break
+    echo "Waiting for a GNOME session after ${boot_pass}..."
+    for i in $(seq 1 48); do
+        if ssh_target "pgrep -u ${TEST_USER} -x gnome-shell >/dev/null" 2>/dev/null; then
+            logged_in=1
+            break
+        fi
+        sleep 5
+    done
+    if (( ! logged_in )); then
+        shot installed-login-failed "${MONITOR_INSTALLED}" || true
+        echo "--- sessions ---" >&2
+        ssh_target 'loginctl list-sessions --no-legend' >&2 2>/dev/null || true
+        fail "no gnome-shell for ${TEST_USER} after ${boot_pass} login"
     fi
-    sleep 5
-done
-if (( ! logged_in )); then
-    shot installed-login-failed "${MONITOR_INSTALLED}" || true
-    echo "--- sessions ---" >&2
-    ssh_target 'loginctl list-sessions --no-legend' >&2 2>/dev/null || true
-    fail "no gnome-shell for ${TEST_USER} after logging in at the greeter"
-fi
-echo "  gnome-shell: running as ${TEST_USER}"
+    echo "  gnome-shell: running as ${TEST_USER}"
+}
+login_installed_user "first boot"
 if [[ -n "${UTAH_E2E_EXPECT_FLAVOR:-}" ]]; then
     echo "Verifying the shared CountMe timer, report identity, and opt-out..."
     scp_target "${ROOT}/iso/scripts/verify-countme-runtime.sh" \
@@ -844,7 +851,6 @@ if [[ -n "${UTAH_E2E_EXPECT_FLAVOR:-}" ]]; then
     ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' bash /tmp/utah-verify-countme-runtime.sh '${UTAH_E2E_EXPECT_FLAVOR}'" \
         || fail "shared CountMe runtime verification failed"
 fi
-
 
 # A shell session that started is not the same as one whose extensions loaded.
 # Assert the enabled extensions raised no load-time error this boot -- the
@@ -1037,9 +1043,9 @@ fi
 
 if [[ -n "${UTAH_E2E_EXPECT_FLAVOR:-}" ]]; then
     verify_flathub_remote
-    verify_first_boot_setup_state
+    verify_setup_state first
     repeat_installed_boot
-    verify_first_boot_setup_state
+    verify_setup_state repeat
     verify_flathub_remote
     if [[ -n "${UTAH_E2E_FLATPAKS-x}" ]]; then
         verify_flatpaks_after_repeat "${expected_flatpaks}"
