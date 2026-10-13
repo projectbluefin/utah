@@ -37,7 +37,8 @@ just build-kernel-cache
 ```
 
 CI reuses a published cache only when its digest is signed by this repository's
-`build.yml` (GitHub OIDC issuer; branch heads and same-repo PR merge refs).
+`build.yml` (GitHub OIDC issuer; `refs/heads/testing` and same-repo PR merge
+refs only).
 Misses and unsigned or wrongly signed hits are built, pushed, signed and
 verified. The consumer resolves the content tag once, requires cosign, verifies
 that immutable digest with the same identity regexp, and passes only those
