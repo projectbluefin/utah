@@ -63,6 +63,14 @@ jobs:
       variants: ${{ needs.variants.outputs.list }}
       cosign_identity_regexp: ^https://github\.com/projectbluefin/actions/\.github/workflows/reusable-build\.yml@[0-9a-f]{40}$
       fast_forward_sha: ${{ github.sha }}
-      run_release_gate: true
+      # OVERRIDE (human-authorized, #757): the release gate runs smoke,common
+      # fresh at release time, and three scenario groups fail for reasons
+      # outside this repo — GOA providers (factory utah-packages#448),
+      # power_status (upstream testsuite#982), orca (factory
+      # utah-packages#447). Everything Utah controls is green on the promoted
+      # tree (see #741 for per-leg evidence). The gate stays OFF only until
+      # those three go green, then #757 restores `true` (plus removing the
+      # `extra-tags: ~@orca` exclusion when orca ships).
+      run_release_gate: false
       gate_suites: smoke,common
     secrets: inherit
