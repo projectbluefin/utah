@@ -285,6 +285,14 @@ verify_flathub_remote() {
     echo "  system Flathub remote present"
 }
 
+dump_flatpak_preinstall_diagnostics() {
+    local boot_pass="$1"
+    echo "Flatpak preinstall service diagnostics (${boot_pass}):" >&2
+    [[ -n "${TEST_PASSWORD:-}" ]] || return 0
+    ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' systemctl --no-pager status flatpak-preinstall.service" >&2 2>/dev/null || true
+    ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' journalctl -b -u flatpak-preinstall.service --no-pager -n 80" >&2 2>/dev/null || true
+}
+
 verify_flatpaks_after_repeat() {
     local expected="$1" installed app
     local -a missing=()
@@ -294,9 +302,41 @@ verify_flatpaks_after_repeat() {
         [[ -n "${app}" ]] || continue
         grep -qxF "${app}" <<< "${installed}" || missing+=("${app}")
     done <<< "${expected}"
-    (( ${#missing[@]} == 0 )) \
-        || fail "default Flatpak(s) missing after the repeat boot: ${missing[*]}"
+    if (( ${#missing[@]} > 0 )); then
+        dump_flatpak_preinstall_diagnostics "repeat boot"
+        fail "default Flatpak(s) missing after the repeat boot: ${missing[*]}"
+    fi
     echo "  default Flatpaks remain present after the repeat boot"
+}
+
+# luks-unlock.py returns on the sshd banner, which can precede GDM. Without
+# this gate the repeat-boot password can be typed before the greeter exists and
+# the dropped keystrokes would read as an idempotence failure.
+wait_for_repeat_greeter() {
+    local gdm_active=0 greeter_up=0
+    for _ in $(seq 1 24); do
+        if ssh_target 'systemctl is-active gdm.service' 2>/dev/null | grep -qx active; then
+            gdm_active=1
+            break
+        fi
+        sleep 5
+    done
+    (( gdm_active == 1 )) || fail "gdm is not running after the repeat boot"
+    echo "  repeat boot: gdm.service active"
+    # Before login the only gnome-shell is the greeter's own.
+    for _ in $(seq 1 24); do
+        if ssh_target 'pgrep -x gnome-shell >/dev/null' 2>/dev/null; then
+            greeter_up=1
+            break
+        fi
+        sleep 5
+    done
+    if (( greeter_up == 0 )); then
+        shot installed-repeat-no-greeter "${MONITOR_INSTALLED}" || true
+        fail "GDM greeter shell did not start after the repeat boot"
+    fi
+    sleep 5
+    shot installed-repeat-greeter "${MONITOR_INSTALLED}" || true
 }
 
 repeat_installed_boot() {
@@ -353,6 +393,7 @@ repeat_installed_boot() {
     serial_follow_pid=""
     (( ssh_ready == 1 )) || fail "SSH did not return after the repeat boot"
     (( graphical_ready == 1 )) || fail "repeat boot did not reach the graphical target"
+    wait_for_repeat_greeter
     login_installed_user "repeat boot"
     echo "  repeat boot: LUKS unlocked, SSH returned, and graphical target reached"
 }
@@ -1031,11 +1072,7 @@ if [[ -n "${UTAH_E2E_FLATPAKS-x}" ]]; then
     [[ -n "${installed_flatpaks}" ]] \
         || fail "'flatpak list --system' returned nothing on the installed system"
     if (( ${#missing_flatpaks[@]} > 0 )); then
-        echo "Flatpak first-boot service diagnostics:" >&2
-        if [[ -n "${TEST_PASSWORD:-}" ]]; then
-            ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' systemctl --no-pager status flatpak-preinstall.service" >&2 2>/dev/null || true
-            ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' journalctl -b -u flatpak-preinstall.service --no-pager -n 80" >&2 2>/dev/null || true
-        fi
+        dump_flatpak_preinstall_diagnostics "first boot"
         fail "default Flatpak(s) missing on the installed, network-isolated system: ${missing_flatpaks[*]}"
     fi
     echo "  default Flatpaks present offline: ${expected_flatpaks//$'\n'/, }"

@@ -313,6 +313,7 @@ class EvidenceTests(unittest.TestCase):
                 "sleep() { :; }\n"
                 "ssh_target() { [[ \"$1\" == *'flatpak list'* ]] && printf '%s\\n' \"$INSTALLED\"; }\n"
                 "fail() { echo \"FAIL: $*\" >&2; exit 1; }\n"
+                "dump_flatpak_preinstall_diagnostics() { echo \"DIAG: $1\" >&2; }\n"
                 + block
             )
             env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"),
@@ -328,6 +329,7 @@ class EvidenceTests(unittest.TestCase):
         self.assertNotEqual(missing.returncode, 0)
         self.assertIn("org.b", missing.stderr)
         self.assertNotIn("org.a\n", missing.stderr.split("missing")[-1])
+        self.assertIn("DIAG: first boot", missing.stderr)
 
         skipped = run("org.a", "")
         self.assertEqual(skipped.returncode, 0, skipped.stderr)
