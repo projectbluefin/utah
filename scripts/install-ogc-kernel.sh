@@ -165,8 +165,9 @@ scripts/config --enable NAMESPACES --enable USER_NS --module TUN
 # The testsuite drives key combos through /dev/uinput, and x86_64_defconfig
 # leaves that off too: without it the guest has no uinput device even after
 # `modprobe uinput`, and every uinput step errors (#741, smoke-b "Settings
-# closes cleanly via Ctrl+Q" on the gaming flavors). Built in, as Fedora ships it.
-scripts/config --enable INPUT_UINPUT
+# closes cleanly via Ctrl+Q" on the gaming flavors). Module, as Fedora ships
+# it (CONFIG_INPUT_UINPUT=m); the harness modprobes it before use.
+scripts/config --module INPUT_UINPUT
 # The V4L2 core for v4l2loopback (see required_config). VIDEO_DEV sits inside
 # `if MEDIA_SUPPORT`, in a menu that MEDIA_SUPPORT_FILTER (on by default
 # without EXPERT) hides, so it takes its default -- which is on only when a
@@ -196,7 +197,7 @@ require_config '^CONFIG_SCHED_CLASS_EXT=y$' CONFIG_SCHED_CLASS_EXT
 require_config '^CONFIG_NTSYNC=(y|m)$' CONFIG_NTSYNC
 require_config '^CONFIG_ANDROID_BINDERFS=y$' CONFIG_ANDROID_BINDERFS
 require_config '^CONFIG_DRM_SIMPLEDRM=y$' CONFIG_DRM_SIMPLEDRM
-require_config '^CONFIG_INPUT_UINPUT=y$' CONFIG_INPUT_UINPUT
+require_config '^CONFIG_INPUT_UINPUT=(y|m)$' CONFIG_INPUT_UINPUT
 verify_config .config
 
 make modules_prepare

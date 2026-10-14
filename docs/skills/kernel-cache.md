@@ -152,6 +152,12 @@ namespace creation returned `EINVAL`, and Tailscale could not load `tun`.
 fresh OGC kernel fails during image build instead of losing these desktop
 features at runtime.
 
+The testsuite drives key combos through `/dev/uinput`, which the defconfig
+also omits: the guest has no uinput device even after `modprobe uinput`, so
+every uinput step errors (smoke-b "Settings closes cleanly via Ctrl+Q" on the
+gaming flavors, #741). The script builds it as a module, as Fedora ships it,
+and gates on it like the options above.
+
 The contract also covers the display. `x86_64_defconfig` enables DRM and the
 Intel i915 driver and nothing else, so on any other GPU, QEMU's included, the
 OGC kernel registered no DRM device: GDM started, mutter had no KMS device to
