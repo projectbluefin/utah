@@ -232,7 +232,7 @@ check_system_unit_state() {
         esac
     done <<< "${state}"
     [[ "${load_state}" == loaded ]] || fail "required system unit ${unit} is ${load_state:-unavailable}"
-    [[ "${result}" != failed ]] || fail "system unit ${unit} failed during ${boot_pass} boot"
+    [[ "${result}" == success ]] || fail "system unit ${unit} failed during ${boot_pass} boot (Result=${result:-unknown})"
     if [[ "${required_run}" == true && ( -z "${start_time}" || "${start_time}" == "n/a" ) ]]; then
         fail "required system unit ${unit} did not execute during ${boot_pass} boot"
     fi
@@ -255,7 +255,7 @@ check_user_setup_unit() {
         esac
     done <<< "${state}"
     [[ "${load_state}" == loaded ]] || fail "user unit ${unit} is ${load_state:-unavailable}"
-    [[ "${result}" != failed ]] || fail "user unit ${unit} failed during ${boot_pass} boot"
+    [[ "${result}" == success ]] || fail "user unit ${unit} failed during ${boot_pass} boot (Result=${result:-unknown})"
     [[ -n "${start_time}" && "${start_time}" != "n/a" ]] \
         || fail "user unit ${unit} did not execute during ${boot_pass} boot"
     enabled="$(ssh_target "systemctl --user is-enabled '${unit}'" 2>/dev/null || true)"
