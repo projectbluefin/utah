@@ -18,10 +18,13 @@ The cadence is RFC'd in #336. What runs today:
   heartbeat, so `:testing` is at most a day behind `main` and `main` is at
   most a day behind the newest validated `testing` image.
 - `:stable` moves in `execute-release.yml` on every promotion push to `main`,
-  gated by `run_release_gate: true` over `smoke,common`. A weekly promotion
-  rather than a per-promotion one is still an open question in #336 -- that is
-  a maintainer policy call, not a code gap, and nothing in this tree should
-  encode a guess at it.
+  normally gated by `run_release_gate: true` over `smoke,common`. OVERRIDE
+  (#757): the gate is `false` while GOA providers (factory utah-packages#448),
+  power_status (upstream testsuite#982), and orca (factory utah-packages#447)
+  fail outside this repo; restore `true` (and drop the `~@orca` exclusion)
+  when those go green. A weekly promotion rather than a per-promotion one is
+  still an open question in #336 -- that is a maintainer policy call, not a
+  code gap, and nothing in this tree should encode a guess at it.
 
 `ARG PACKAGE_IMAGE_SHA` is the digest of `ghcr.io/projectbluefin/utah-packages`,
 the RPM repository every image installs from. The built-in Dockerfile manager
