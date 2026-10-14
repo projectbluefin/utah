@@ -335,6 +335,42 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(skipped.returncode, 0, skipped.stderr)
         self.assertNotIn("present offline", skipped.stdout)
 
+    def test_setup_unit_checks_reject_non_success_results(self):
+        # systemd's Result= is success/exit-code/signal/timeout/...; it is never
+        # "failed" (that is an ActiveState). A setup unit that exited non-zero
+        # must fail the gate on both the system and user helper.
+        script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
+        start = script.index("check_system_unit_state() {")
+        end = script.index("\nverify_setup_state() {", start)
+        block = script[start:end]
+
+        def run(call, active, result):
+            harness = (
+                "fail() { echo \"FAIL: $*\" >&2; exit 1; }\n"
+                "ssh_target() {\n"
+                "  case \"$1\" in\n"
+                "    *is-enabled*) echo enabled ;;\n"
+                "    *) printf 'LoadState=loaded\\nActiveState=%s\\nResult=%s\\n"
+                "ExecMainStartTimestamp=Tue 2026-10-13 10:00:00 UTC\\n' \"$ACTIVE\" \"$RESULT\" ;;\n"
+                "  esac\n"
+                "}\n"
+                + block + "\n" + call + "\n"
+            )
+            env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+                   "TEST_PASSWORD": "pw", "ACTIVE": active, "RESULT": result}
+            return subprocess.run(["bash", "-eu", "-c", harness],
+                                   capture_output=True, text=True, env=env)
+
+        for call in ("check_system_unit_state ublue-system-setup.service true true first",
+                     "check_user_setup_unit second"):
+            ok = run(call, "inactive", "success")
+            self.assertEqual(ok.returncode, 0, ok.stderr)
+            for active, result in (("inactive", "exit-code"), ("failed", "exit-code"),
+                                   ("failed", "success"), ("inactive", "timeout")):
+                bad = run(call, active, result)
+                self.assertNotEqual(bad.returncode, 0, (call, active, result))
+                self.assertIn(f"Result={result}", bad.stderr)
+
     def test_failure_diagnostics_run_from_the_exit_trap_not_only_fail(self):
         script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
         self.assertIn("preserve_failed_disk_diagnostics", script)

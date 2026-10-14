@@ -222,17 +222,20 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 
 check_system_unit_state() {
     local unit="$1" required_enabled="${2:-false}" required_run="${3:-false}" boot_pass="${4:-first}"
-    local state load_state="" result="" start_time="" key value
-    state="$(ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' systemctl show --property=LoadState --property=Result --property=ExecMainStartTimestamp '${unit}'" 2>/dev/null || true)"
+    local state load_state="" active_state="" result="" start_time="" key value
+    state="$(ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' systemctl show --property=LoadState --property=ActiveState --property=Result --property=ExecMainStartTimestamp '${unit}'" 2>/dev/null || true)"
     while IFS='=' read -r key value; do
         case "${key}" in
             LoadState) load_state="${value}" ;;
+            ActiveState) active_state="${value}" ;;
             Result) result="${value}" ;;
             ExecMainStartTimestamp) start_time="${value}" ;;
         esac
     done <<< "${state}"
     [[ "${load_state}" == loaded ]] || fail "required system unit ${unit} is ${load_state:-unavailable}"
-    [[ "${result}" == success ]] || fail "system unit ${unit} failed during ${boot_pass} boot (Result=${result:-unknown})"
+    # Result= is success/exit-code/signal/timeout/...; it is never "failed".
+    [[ "${active_state}" != failed && "${result}" == success ]] \
+        || fail "system unit ${unit} failed during ${boot_pass} boot (ActiveState=${active_state:-unknown} Result=${result:-unknown})"
     if [[ "${required_run}" == true && ( -z "${start_time}" || "${start_time}" == "n/a" ) ]]; then
         fail "required system unit ${unit} did not execute during ${boot_pass} boot"
     fi
@@ -245,17 +248,20 @@ check_system_unit_state() {
 
 check_user_setup_unit() {
     local boot_pass="${1:-first}"
-    local unit="ublue-user-setup.service" state load_state="" result="" start_time="" enabled="" key value
-    state="$(ssh_target "systemctl --user show --property=LoadState --property=Result --property=ExecMainStartTimestamp '${unit}'" 2>/dev/null || true)"
+    local unit="ublue-user-setup.service" state load_state="" active_state="" result="" start_time="" enabled="" key value
+    state="$(ssh_target "systemctl --user show --property=LoadState --property=ActiveState --property=Result --property=ExecMainStartTimestamp '${unit}'" 2>/dev/null || true)"
     while IFS='=' read -r key value; do
         case "${key}" in
             LoadState) load_state="${value}" ;;
+            ActiveState) active_state="${value}" ;;
             Result) result="${value}" ;;
             ExecMainStartTimestamp) start_time="${value}" ;;
         esac
     done <<< "${state}"
     [[ "${load_state}" == loaded ]] || fail "user unit ${unit} is ${load_state:-unavailable}"
-    [[ "${result}" == success ]] || fail "user unit ${unit} failed during ${boot_pass} boot (Result=${result:-unknown})"
+    # Result= is success/exit-code/signal/timeout/...; it is never "failed".
+    [[ "${active_state}" != failed && "${result}" == success ]] \
+        || fail "user unit ${unit} failed during ${boot_pass} boot (ActiveState=${active_state:-unknown} Result=${result:-unknown})"
     [[ -n "${start_time}" && "${start_time}" != "n/a" ]] \
         || fail "user unit ${unit} did not execute during ${boot_pass} boot"
     enabled="$(ssh_target "systemctl --user is-enabled '${unit}'" 2>/dev/null || true)"
