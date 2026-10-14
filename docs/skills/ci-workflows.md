@@ -1,7 +1,7 @@
 ---
 name: ci-workflows
 version: "1.1"
-last_updated: "2026-10-13"
+last_updated: "2026-10-14"
 id: ci-workflows
 one_line_purpose: Navigate Utah's build, promote, and sync workflow topology.
 entry_point: docs/skills/ci-workflows.md
@@ -122,6 +122,7 @@ chunkah layer order: `scripts/check-reproducible-build.sh` compares native
 - [Kernel cache and build matrix](ci-workflows/references/kernel-and-build.md)
 - [ISO end-to-end verification](ci-workflows/references/iso-e2e.md)
 - [Release cadence and factory pin](ci-workflows/references/release-cadence.md)
+- [Testsuite triage runbook](ci-workflows/references/testsuite-triage.md)
 
 ## Verification
 
