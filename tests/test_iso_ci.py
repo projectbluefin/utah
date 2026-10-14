@@ -555,6 +555,20 @@ class OgcKernelConfigGateTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 1)
                 self.assertIn(f"missing CONFIG_{symbol}", result.stderr)
 
+    def test_uinput_is_required_for_testsuite_key_combos(self):
+        # smoke-b "Settings closes cleanly via Ctrl+Q" errors on the gaming
+        # flavors because the OGC guest has no /dev/uinput even after
+        # `modprobe uinput` (#741). The gate must reject a config without it.
+        symbols = self.required_symbols()
+        self.assertIn("INPUT_UINPUT", symbols)
+        body = "".join(f"CONFIG_{s}=y\n" for s in symbols
+                       if s != "INPUT_UINPUT")
+        result = self.gate(body)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("missing CONFIG_INPUT_UINPUT", result.stderr)
+        self.assertRegex(
+            self.SCRIPT.read_text(), r"--enable INPUT_UINPUT(?:\s|$)")
+
     def test_a_config_missing_btrfs_is_rejected_by_name(self):
         body = "".join(f"CONFIG_{s}=y\n" for s in self.required_symbols()
                        if s != "BTRFS_FS")
