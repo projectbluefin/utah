@@ -7,7 +7,8 @@
 # (projectbluefin/utah#675).
 set -euo pipefail
 
-ref="$(bootc status --json | jq -r '.status.booted.image.image.image // empty')"
+bootc_json="$(bootc status --json 2>/dev/null || true)"
+ref="$(jq -r '.status.booted.image.image.image // empty' <<<"${bootc_json}" 2>/dev/null || true)"
 if [ -z "${ref}" ]; then
     echo "no booted bootc image found; leaving no state file" >&2
     exit 0

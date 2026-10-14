@@ -80,11 +80,6 @@ The TOML's sections are the contract's table of contents:
   `flatpak-nuke-fedora.service`, `brew-setup.service`, `dconf-update.service`,
   `bootc-unified-storage.service`, `input-remapper.service`,
   `ModemManager.service`, `projectbluefin-countme.timer`, `cups.socket`,
-  `systemd-boot-update.service`, `uupd.timer`, `bluefin-stats-refresh.timer`. Update policy delegates
-- **`[services]`** — systemd units the preset must enable: `gdm.service`, `avahi-daemon.service`,
-  `avahi-daemon.socket`, `switcheroo-control.service`, `bluetooth.service`, `ublue-system-setup.service`,
-  `flatpak-preinstall.service`, `flatpak-nuke-fedora.service`, `brew-setup.service`, `dconf-update.service`,
-  `bootc-unified-storage.service`, `input-remapper.service`, `ModemManager.service`, `cups.socket`,
   `systemd-boot-update.service`, `uupd.timer`, `bluefin-stats-refresh.timer`,
   `ublue-firstboot-date.service`, `ublue-booted-image.service`. Update policy delegates
   background updates to `uupd.timer`; `bootc-fetch-apply-updates.timer` and
