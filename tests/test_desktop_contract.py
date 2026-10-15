@@ -305,11 +305,15 @@ class FlatpaksModeTests(unittest.TestCase):
 
 class GnomeExtensionTests(unittest.TestCase):
     def shipped_tree(self, tmp, versions="51", uuids=None):
+        # Modes as the build leaves them, independent of the caller's umask.
         base = Path(tmp) / "usr/share/gnome-shell/extensions"
         for uuid in uuids if uuids is not None else extensions.SOURCE_EXTENSIONS:
             path = base / uuid / "metadata.json"
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps({"shell-version": [versions]}))
+            path.chmod(0o644)
+            path.parent.chmod(0o755)
+        base.chmod(0o755)
         return Path(tmp)
 
     def run_main(self, root):
@@ -319,6 +323,22 @@ class GnomeExtensionTests(unittest.TestCase):
     def test_complete_tree_declaring_gnome_51_passes(self):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(self.run_main(self.shipped_tree(tmp)), 0)
+
+    def test_metadata_the_user_cannot_read_fails(self):
+        # Release zips kept 0600 metadata: gnome-shell, running as the user,
+        # could not load those extensions ("Permission denied").
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.shipped_tree(tmp)
+            uuid = next(iter(extensions.SOURCE_EXTENSIONS))
+            (root / "usr/share/gnome-shell/extensions" / uuid / "metadata.json").chmod(0o600)
+            self.assertEqual(self.run_main(root), 1)
+
+    def test_world_writable_extension_file_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.shipped_tree(tmp)
+            uuid = next(iter(extensions.SOURCE_EXTENSIONS))
+            (root / "usr/share/gnome-shell/extensions" / uuid / "metadata.json").chmod(0o666)
+            self.assertEqual(self.run_main(root), 1)
 
     def test_missing_extension_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
