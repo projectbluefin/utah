@@ -280,7 +280,10 @@ its `metadata.json`. It runs in two modes from the same script:
 - **Installed mode** — the default checks `/usr/share/gnome-shell/extensions`
   under an image root; this is what runs in the Containerfile as
   `/usr/local/libexec/utah-verify-gnome-extensions`, right after
-  `utah-build-gnome-extensions`.
+  `utah-build-gnome-extensions`. It also fails on any extension file that is
+  not world-readable or is group/world-writable: release zips kept `0600`
+  metadata, so gnome-shell hit "Permission denied". The build script
+  normalizes the tree with `chmod -R u+rwX,go+rX,go-w`.
 
 Building GSConnect runs meson install. Because `desktop-file-utils` is not
 published by Hummingbird or Utah's repository, `scripts/build-gnome-extensions.sh`

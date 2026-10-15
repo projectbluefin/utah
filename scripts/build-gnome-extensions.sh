@@ -118,4 +118,11 @@ glib-compile-schemas --strict "${renamer_dir}/schemas"
 
 rm -rf /usr/share/gnome-shell/extensions/tmp
 
+# Release zips and build outputs carry their authors' file modes: unzip kept
+# 0600/0770 metadata.json for the quick-settings audio extensions, so
+# gnome-shell (running as the user) failed with "Permission denied", and
+# tilingshell landed 0777. Make everything readable, drop group/world write,
+# and keep existing exec bits (GSConnect launches its daemon directly).
+chmod -R u+rwX,go+rX,go-w /usr/share/gnome-shell/extensions
+
 echo "::endgroup::"
