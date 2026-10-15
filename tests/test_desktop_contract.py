@@ -333,6 +333,17 @@ class GnomeExtensionTests(unittest.TestCase):
             (root / "usr/share/gnome-shell/extensions" / uuid / "metadata.json").chmod(0o600)
             self.assertEqual(self.run_main(root), 1)
 
+    def test_untraversable_extension_directory_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.shipped_tree(tmp)
+            uuid = next(iter(extensions.SOURCE_EXTENSIONS))
+            directory = root / "usr/share/gnome-shell/extensions" / uuid
+            directory.chmod(0o744)
+            try:
+                self.assertEqual(self.run_main(root), 1)
+            finally:
+                directory.chmod(0o755)
+
     def test_world_writable_extension_file_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = self.shipped_tree(tmp)

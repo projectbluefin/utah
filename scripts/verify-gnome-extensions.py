@@ -88,6 +88,8 @@ def main() -> int:
             mode = path.lstat().st_mode
             if not mode & stat.S_IROTH:
                 failures.append(f"{path}: not world-readable ({stat.filemode(mode)})")
+            if stat.S_ISDIR(mode) and not mode & stat.S_IXOTH:
+                failures.append(f"{path}: directory not traversable ({stat.filemode(mode)})")
             if mode & (stat.S_IWGRP | stat.S_IWOTH):
                 failures.append(f"{path}: group/world-writable ({stat.filemode(mode)})")
 
