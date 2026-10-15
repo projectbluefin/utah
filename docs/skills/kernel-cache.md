@@ -158,6 +158,12 @@ every uinput step errors (smoke-b "Settings closes cleanly via Ctrl+Q" on the
 gaming flavors, #741). The script builds it as a module, as Fedora ships it,
 and gates on it like the options above.
 
+zram is missing too, but nothing errors outright: zram-generator asks for
+`/dev/zram0`, systemd waits 50s for `dev-zram0.device`, and the late boot
+pushes `geoclue.service` past its start timeout ("No failed systemd units at
+boot" on the gaming flavors, #741). A serial log with `Timed out waiting for
+device dev-zram0.device` means this. Built as a module with `ZSMALLOC`, gated.
+
 The contract also covers the display. `x86_64_defconfig` enables DRM and the
 Intel i915 driver and nothing else, so on any other GPU, QEMU's included, the
 OGC kernel registered no DRM device: GDM started, mutter had no KMS device to

@@ -54,7 +54,7 @@ required_config=(SCHED_CLASS_EXT NTSYNC ANDROID_BINDERFS
                  BLK_DEV_LOOP ISO9660_FS BLK_DEV_DM DM_SNAPSHOT DM_CRYPT
                  CRYPTO_XTS FUSE_FS FS_VERITY
                  SYSFB_SIMPLEFB DRM_SIMPLEDRM VIDEO_DEV USER_NS TUN
-                 INPUT_UINPUT)
+                 INPUT_UINPUT ZRAM)
 verify_config() {
   local config="$1" symbol
   for symbol in "${required_config[@]}"; do
@@ -168,6 +168,11 @@ scripts/config --enable NAMESPACES --enable USER_NS --module TUN
 # closes cleanly via Ctrl+Q" on the gaming flavors). Module, as Fedora ships
 # it (CONFIG_INPUT_UINPUT=m); the harness modprobes it before use.
 scripts/config --module INPUT_UINPUT
+# zram-generator-defaults asks for /dev/zram0, and x86_64_defconfig has no
+# zram: systemd then waits 50s for dev-zram0.device, and the late boot starves
+# geoclue past its start timeout (#741, gaming smoke-b "No failed systemd
+# units at boot"). Module with the zsmalloc allocator, as Fedora ships it.
+scripts/config --enable ZSMALLOC --module ZRAM
 # The V4L2 core for v4l2loopback (see required_config). VIDEO_DEV sits inside
 # `if MEDIA_SUPPORT`, in a menu that MEDIA_SUPPORT_FILTER (on by default
 # without EXPERT) hides, so it takes its default -- which is on only when a
@@ -198,6 +203,7 @@ require_config '^CONFIG_NTSYNC=(y|m)$' CONFIG_NTSYNC
 require_config '^CONFIG_ANDROID_BINDERFS=y$' CONFIG_ANDROID_BINDERFS
 require_config '^CONFIG_DRM_SIMPLEDRM=y$' CONFIG_DRM_SIMPLEDRM
 require_config '^CONFIG_INPUT_UINPUT=(y|m)$' CONFIG_INPUT_UINPUT
+require_config '^CONFIG_ZRAM=(y|m)$' CONFIG_ZRAM
 verify_config .config
 
 make modules_prepare

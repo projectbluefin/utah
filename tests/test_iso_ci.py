@@ -607,6 +607,17 @@ class OgcKernelConfigGateTests(unittest.TestCase):
         self.assertRegex(
             self.SCRIPT.read_text(), r"--module INPUT_UINPUT(?:\s|$)")
 
+    def test_zram_is_required_so_boot_does_not_wait_for_zram0(self):
+        # zram-generator asks for /dev/zram0; without CONFIG_ZRAM systemd waits
+        # 50s for it and geoclue times out on the gaming flavors (#741).
+        symbols = self.required_symbols()
+        self.assertIn("ZRAM", symbols)
+        body = "".join(f"CONFIG_{s}=y\n" for s in symbols if s != "ZRAM")
+        result = self.gate(body)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("missing CONFIG_ZRAM", result.stderr)
+        self.assertRegex(self.SCRIPT.read_text(), r"--module ZRAM(?:\s|$)")
+
     def test_a_config_missing_btrfs_is_rejected_by_name(self):
         body = "".join(f"CONFIG_{s}=y\n" for s in self.required_symbols()
                        if s != "BTRFS_FS")
