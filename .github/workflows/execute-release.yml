@@ -51,7 +51,7 @@ jobs:
   execute:
     needs: [check-trigger, variants]
     if: needs.check-trigger.outputs.is-promotion == 'true'
-    uses: projectbluefin/actions/.github/workflows/reusable-execute-release.yml@be65356ab70aa7753d0197794cdafb4a1a059379 # v1
+    uses: projectbluefin/actions/.github/workflows/reusable-execute-release.yml@738a58d8220312c2a9f3ce7803245038d656851a # v1
     permissions:
       actions: read
       contents: write
@@ -63,14 +63,11 @@ jobs:
       variants: ${{ needs.variants.outputs.list }}
       cosign_identity_regexp: ^https://github\.com/projectbluefin/actions/\.github/workflows/reusable-build\.yml@[0-9a-f]{40}$
       fast_forward_sha: ${{ github.sha }}
-      # OVERRIDE (human-authorized, #757): the release gate runs smoke,common
-      # fresh at release time, and three scenario groups fail for reasons
-      # outside this repo — GOA providers (factory utah-packages#448),
-      # power_status (upstream testsuite#982), orca (factory
-      # utah-packages#447). Everything Utah controls is green on the promoted
-      # tree (see #741 for per-leg evidence). The gate stays OFF only until
-      # those three go green, then #757 restores `true` (plus removing the
-      # `extra-tags: ~@orca` exclusion when orca ships).
-      run_release_gate: false
+      # The release gate re-runs smoke,common against the exact candidate
+      # digests. @orca stays excluded, matching post-testing-e2e.yml, until
+      # orca and speech-dispatcher ship (factory utah-packages#447); drop
+      # gate_extra_tags then.
+      run_release_gate: true
       gate_suites: smoke,common
+      gate_extra_tags: "~@orca"
     secrets: inherit
