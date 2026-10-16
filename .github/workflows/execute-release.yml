@@ -51,7 +51,7 @@ jobs:
   execute:
     needs: [check-trigger, variants]
     if: needs.check-trigger.outputs.is-promotion == 'true'
-    uses: projectbluefin/actions/.github/workflows/reusable-execute-release.yml@59f783ed76fd9d449ef6887a6649446801bd5434 # v1
+    uses: projectbluefin/actions/.github/workflows/reusable-execute-release.yml@a7e7bba6c7ae819006cabc9a106318c77c2635f8 # v1
     permissions:
       actions: read
       contents: write
@@ -69,4 +69,8 @@ jobs:
       run_release_gate: true
       gate_suites: smoke,common
       gate_extra_tags: "~@orca"
+      # The same testsuite commit post-testing-e2e.yml validated, not the
+      # floating v1 tag, so the gate cannot drift from that evidence (#773).
+      # tests/test_iso_ci.py keeps the two refs equal.
+      gate_test_ref: f690d22e4dfb8f71a3cdb7e56c20fb1f9e88066a
     secrets: inherit
