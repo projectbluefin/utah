@@ -210,18 +210,16 @@ class EvidenceTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0, result.stdout)
         self.assertIn("exceeds 6 GB budget", result.stderr)
 
-    def test_testsuite_orca_exclusion_stays_scoped_and_tracked(self):
-        # orca ships now (utah-packages#447) but has not passed @orca on any
-        # image yet. The exclusion must stay exactly that scope with its
-        # tracking (#757), never a blanket skip.
+    def test_release_gate_runs_the_testsuite_commit_post_testing_validated(self):
+        # A gate on a different testsuite commit can pass or fail on tests the
+        # promoted image never ran (#773). Bump both refs together.
         import yaml
-        text = (ROOT / ".github/workflows/post-testing-e2e.yml").read_text()
-        call = yaml.safe_load(text)["jobs"]["testsuite"]["with"]
-        self.assertEqual(call["extra-tags"], "~@orca")
-        anchor = text.index('extra-tags: "~@orca"')
-        context = text[max(0, anchor - 700):anchor]
-        self.assertIn("utah-packages#447", context)
-        self.assertIn("#757", context)
+        e2e = yaml.safe_load((ROOT / ".github/workflows/post-testing-e2e.yml").read_text())
+        release = yaml.safe_load((ROOT / ".github/workflows/execute-release.yml").read_text())
+        validated = e2e["jobs"]["testsuite"]["with"]["test_ref"]
+        gated = release["jobs"]["execute"]["with"]["gate_test_ref"]
+        self.assertRegex(validated, r"^[0-9a-f]{40}$")
+        self.assertEqual(gated, validated)
 
     def test_build_explicitly_dispatches_iso_after_both_image_jobs(self):
         import yaml

@@ -297,6 +297,8 @@ packages = [
     "orca",
     "speech-dispatcher",
     "speech-dispatcher-espeak-ng",
+    # spd-say, which the @orca "module list" scenario runs; Bluefin ships it.
+    "speech-dispatcher-utils",
 ]
 
 [hardware]

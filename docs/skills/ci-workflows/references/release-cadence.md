@@ -19,12 +19,14 @@ The cadence is RFC'd in #336. What runs today:
   most a day behind the newest validated `testing` image.
 - `:stable` moves in `execute-release.yml` on every promotion push to `main`,
   gated by `run_release_gate: true` over `smoke,common` against the exact
-  candidate digests. `gate_extra_tags: "~@orca"` (actions#655) keeps the same
-  scoped exclusion as `post-testing-e2e.yml` until a run with `@orca`
-  included is green (#757); never switch the whole gate off to get past one red
-  group. A weekly promotion rather than a per-promotion one is still an open
-  question in #336 -- that is a maintainer policy call, not a code gap, and
-  nothing in this tree should encode a guess at it.
+  candidate digests, with no scenarios excluded. `gate_test_ref` pins the
+  gate to the testsuite commit `post-testing-e2e.yml` validated (`test_ref`,
+  #773); bump both together, a test enforces it. If a scenario group goes red
+  for a reason outside this repo, scope it with `gate_extra_tags`
+  (actions#655) plus the matching `extra-tags` in `post-testing-e2e.yml` and a
+  tracking issue; never switch the whole gate off. A weekly promotion rather
+  than a per-promotion one is still an open question in #336 -- a maintainer
+  policy call, not a code gap; nothing in this tree should encode a guess.
 
 `ARG PACKAGE_IMAGE_SHA` is the digest of `ghcr.io/projectbluefin/utah-packages`,
 the RPM repository every image installs from. The built-in Dockerfile manager
