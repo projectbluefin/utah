@@ -1,8 +1,9 @@
 # Utah — Agent Operating Contract
 
 Utah composes [Bluefin](https://projectbluefin.io) on the Fedora Hummingbird
-`os-minimal` base. Experimental pre-alpha: it has a build, not users. Nothing is
-published — no image, no ISO artifact, no installer.
+`os-minimal` base. Experimental pre-alpha: it has a build, not users. Only
+testing artifacts exist — `:testing` container images and a testing live ISO
+for hardware testing; no `:stable` promotion, nothing ready for real machines.
 
 ## Read order
 
