@@ -1,0 +1,4 @@
+[Flatpak Preinstall com.mitchellh.ghostty]
+Branch=master
+IsRuntime=false
+CollectionID=org.tunaos

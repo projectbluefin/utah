@@ -207,6 +207,8 @@ files = [
 files = [
   "/etc/flatpak/remotes.d/flathub.flatpakrepo",
   "/usr/share/flatpak/preinstall.d/bazaar.preinstall",
+  "/usr/share/flatpak/preinstall.d/ghostty.preinstall",
+  "/etc/flatpak/remotes.d/tuna-os.flatpakrepo",
   "/usr/share/ublue-os/privileged-setup.hooks.d/99-flatpaks.sh",
   "/usr/share/ublue-os/homebrew/system-flatpaks.Brewfile",
   # Common's `system_files/bluefin/` profile supplies the Firefox preference
