@@ -1,7 +1,7 @@
 ---
 name: setup-hooks
 version: "1.0"
-last_updated: "2026-10-12"
+last_updated: "2026-10-13"
 id: setup-hooks
 one_line_purpose: Change a first-boot setup hook without breaking the once-only contract.
 entry_point: docs/skills/setup-hooks.md
@@ -131,7 +131,12 @@ Bluefin do (`scripts/fix-home-labels.sh`). ostree rebuilds the SELinux policy
 the `/etc` merge, so `20-home-labels.sh` rewrites a lingering exact
 `HOME=/var/home` to `HOME=/home` and warns about any other non-`/home`
 value. `utah-fix-home-labels --check` at the image's last step repeats that
-rebuild and fails the build if `file_contexts.homedirs` changes. Build-time
+rebuild and fails the build if `file_contexts.homedirs` changes. Since #551
+the module store that rebuild reads lives under `/etc/selinux` rather than
+Hummingbird's `/usr/lib/selinux` (`utah-relocate-selinux-store`, see
+`containerfile.md`), so a user's own `semodule`/`semanage` changes take part
+in the same rebuild; the home-rule invariant above is what keeps those
+rebuilds from re-keying `/var/home`. Build-time
 `useradd -m` must name `/var/home/<user>` explicitly: `/var/home` does not
 exist in a container, so the `/home` symlink dangles (#281).
 

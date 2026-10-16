@@ -211,6 +211,46 @@ This is the honest list, and it is why the label above says pre-alpha.
 See the [open issues](https://github.com/projectbluefin/utah/issues) for where
 things stand.
 
+## Persistent SELinux changes
+
+SELinux stays enforcing on Utah, and lasting policy changes are made with the
+same commands as on Bluefin: `sudo setsebool -P` for a boolean,
+`sudo semanage fcontext` for a file-labelling rule, `sudo semanage port` for a
+port label, and `sudo semodule -i` for a local module built with `audit2allow`.
+Each of those survives a reboot.
+
+Hummingbird's base image keeps the SELinux policy store under `/usr`, which is
+read-only on a running system, so all of those commands used to fail — the
+first of them silently. Utah moves the store to `/etc/selinux`, where Fedora
+atomic and Bluefin keep it (links #551).
+
+What happens on an update: the system rebuilds the policy in the new
+deployment from the new image's policy plus your local changes, so both take
+effect after the reboot. Nothing you changed is lost, and new policy shipped
+in the image still reaches your machine.
+
+One case needs attention: a local module the new image's policy can no longer
+satisfy (for example, one that refers to a type the new policy removed) stops
+that update from being applied. The machine simply keeps running the image it
+had; nothing breaks. To recognise it, `bootc status` still shows the old image
+after a reboot, and the log of the step that finalises updates names the
+failed policy rebuild:
+
+```bash
+journalctl -b -1 -u ostree-finalize-staged.service
+```
+
+To recover, remove the module (`sudo semodule -r <name>`) and update again.
+If you would rather discard every local SELinux change, restore the image's
+own copy of the store and reboot:
+
+```bash
+sudo mv /etc/selinux /etc/selinux.local && sudo cp -a /usr/etc/selinux /etc/selinux
+```
+
+Changes carried in from another image (for example, a machine switched to
+Utah from Bluefin) are kept, but are not promised to take effect on Utah.
+
 ## Contributing or building from source
 
 See [docs/building.md](docs/building.md) for how to build the image locally,

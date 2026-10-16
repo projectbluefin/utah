@@ -47,6 +47,7 @@ COPY scripts/install-packages.py \
      scripts/mirror-shim.sh \
      scripts/verify-efi-chain.sh \
      scripts/fix-home-labels.sh \
+     scripts/relocate-selinux-store.sh \
      scripts/regenerate-initramfs.sh \
      iso/scripts/live-kernel.py \
      scripts/install-v4l2loopback.sh \
@@ -160,6 +161,7 @@ RUN --mount=type=bind,from=v4l2loopback,source=/out,target=/tmp/utah-v4l2loopbac
                 mirror-shim.sh:utah-mirror-shim \
                 verify-efi-chain.sh:utah-verify-efi-chain \
                 fix-home-labels.sh:utah-fix-home-labels \
+                relocate-selinux-store.sh:utah-relocate-selinux-store \
                 regenerate-initramfs.sh:utah-regenerate-initramfs \
                 live-kernel.py:utah-live-kernel \
                 install-v4l2loopback.sh:utah-install-v4l2loopback \
@@ -228,6 +230,11 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
       /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
     IMAGE_FLAVOR=main /usr/local/libexec/utah-verify-rpm-contract \
       /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
+    # The SELinux module store moves from Hummingbird's read-only
+    # /usr/lib/selinux to /etc/selinux so setsebool -P, semanage and semodule
+    # work on a booted system (#551). It runs before the home-label rebuild
+    # below so the rebuilt policy lands in the store's final location.
+    /usr/local/libexec/utah-relocate-selinux-store && \
     /usr/local/libexec/utah-fix-home-labels && \
     DNF="$(command -v dnf5 || command -v dnf)" && \
     "$DNF" clean all && rm -rf /var/cache/libdnf5 /var/cache/dnf && \

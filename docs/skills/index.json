@@ -126,7 +126,7 @@
       ],
       "description": "Local validation loop: build-ghcr, bootc install to-disk, QEMU/noVNC boot, live ISO boot paths, and Secure Boot strategy. Use when validating changes end-to-end or debugging boot, GDM, or live-session failures.",
       "version": "1.0",
-      "last_updated": "2026-10-11",
+      "last_updated": "2026-10-13",
       "doc_type": "runbook"
     },
     {
@@ -163,7 +163,7 @@
       ],
       "description": "First-boot setup hooks stamp completion through libsetup.sh. Use when editing a hook, migrating one off the legacy `version-script` gate, or debugging a hook that never runs or runs every boot.",
       "version": "1.0",
-      "last_updated": "2026-10-12",
+      "last_updated": "2026-10-13",
       "doc_type": "procedure"
     },
     {
