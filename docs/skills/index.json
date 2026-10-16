@@ -72,7 +72,7 @@
       ],
       "description": "README is the upstream source for docs.projectbluefin.io/utah; the docs page is rendered at build time. Use when the README changes touch what the docs page shows, when the docs page gains a live component, or when reconciling the two for a release.",
       "version": "1.0",
-      "last_updated": "2026-10-03",
+      "last_updated": "2026-10-15",
       "doc_type": "procedure"
     },
     {
