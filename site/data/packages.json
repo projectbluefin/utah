@@ -180,6 +180,7 @@
         "setools-console",
         "speech-dispatcher",
         "speech-dispatcher-espeak-ng",
+        "speech-dispatcher-utils",
         "stix-fonts",
         "systemd-container",
         "tpm2-tools",
@@ -243,7 +244,7 @@
     }
   ],
   "totals": {
-    "installed": 186,
+    "installed": 187,
     "unavailable": 7
   },
   "unavailable": [
