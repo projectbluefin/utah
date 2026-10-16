@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-14",
+  "generated_at": "2026-10-16",
   "generator": "scripts/generate-site-data.py",
   "groups": [
     {
@@ -162,6 +162,7 @@
         "lm_sensors",
         "man-db",
         "nvtop",
+        "orca",
         "pciutils",
         "pcsc-lite",
         "pcsc-lite-ccid",
@@ -177,6 +178,8 @@
         "samba-client",
         "samba-common-tools",
         "setools-console",
+        "speech-dispatcher",
+        "speech-dispatcher-espeak-ng",
         "stix-fonts",
         "systemd-container",
         "tpm2-tools",
@@ -240,8 +243,8 @@
     }
   ],
   "totals": {
-    "installed": 183,
-    "unavailable": 10
+    "installed": 186,
+    "unavailable": 7
   },
   "unavailable": [
     {
@@ -280,27 +283,9 @@
     },
     {
       "issues": [
-        741
-      ],
-      "name": "orca"
-    },
-    {
-      "issues": [
         83
       ],
       "name": "slitherer"
-    },
-    {
-      "issues": [
-        741
-      ],
-      "name": "speech-dispatcher"
-    },
-    {
-      "issues": [
-        741
-      ],
-      "name": "speech-dispatcher-espeak-ng"
     }
   ]
 }
