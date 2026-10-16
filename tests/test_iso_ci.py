@@ -221,19 +221,6 @@ class EvidenceTests(unittest.TestCase):
         self.assertRegex(validated, r"^[0-9a-f]{40}$")
         self.assertEqual(gated, validated)
 
-    def test_testsuite_orca_exclusion_stays_scoped_and_tracked(self):
-        # orca ships now (utah-packages#447) but has not passed @orca on any
-        # image yet. The exclusion must stay exactly that scope with its
-        # tracking (#757), never a blanket skip.
-        import yaml
-        text = (ROOT / ".github/workflows/post-testing-e2e.yml").read_text()
-        call = yaml.safe_load(text)["jobs"]["testsuite"]["with"]
-        self.assertEqual(call["extra-tags"], "~@orca")
-        anchor = text.index('extra-tags: "~@orca"')
-        context = text[max(0, anchor - 700):anchor]
-        self.assertIn("utah-packages#447", context)
-        self.assertIn("#757", context)
-
     def test_build_explicitly_dispatches_iso_after_both_image_jobs(self):
         import yaml
         build = yaml.safe_load((ROOT / ".github/workflows/build.yml").read_text())

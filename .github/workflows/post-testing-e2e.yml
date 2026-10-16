@@ -318,12 +318,6 @@ jobs:
       suites: ${{ matrix.suites }}
       test_repository: projectbluefin/testsuite
       test_ref: f690d22e4dfb8f71a3cdb7e56c20fb1f9e88066a
-      # Scoped exclusion, not a silent skip: orca, speech-dispatcher and
-      # speech-dispatcher-espeak-ng are now in the install contract (factory
-      # utah-packages#447), but no image carrying them has passed the @orca
-      # scenarios yet. Drop this (and gate_extra_tags in execute-release.yml)
-      # once a run with @orca included is green; tracked in #757.
-      extra-tags: "~@orca"
 
   promote-to-testing:
     needs: [resolve, luks, production-iso]
