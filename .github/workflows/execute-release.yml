@@ -64,7 +64,10 @@ jobs:
       cosign_identity_regexp: ^https://github\.com/projectbluefin/actions/\.github/workflows/reusable-build\.yml@[0-9a-f]{40}$
       fast_forward_sha: ${{ github.sha }}
       # The release gate re-runs smoke,common against the exact candidate
-      # digests, with no scenario exclusions.
+      # digests. @orca stays excluded, matching post-testing-e2e.yml, until
+      # orca and speech-dispatcher ship (factory utah-packages#447); drop
+      # gate_extra_tags then.
       run_release_gate: true
       gate_suites: smoke,common
+      gate_extra_tags: "~@orca"
     secrets: inherit

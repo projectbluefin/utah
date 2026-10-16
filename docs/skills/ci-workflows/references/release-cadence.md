@@ -19,10 +19,10 @@ The cadence is RFC'd in #336. What runs today:
   most a day behind the newest validated `testing` image.
 - `:stable` moves in `execute-release.yml` on every promotion push to `main`,
   gated by `run_release_gate: true` over `smoke,common` against the exact
-  candidate digests, with no exclusions. If a scenario group goes red for a
-  reason outside this repo, scope it with `gate_extra_tags` (actions#655) and
-  the matching `extra-tags` in `post-testing-e2e.yml`, with the tracking issue
-  beside it; never switch the whole gate off to get past one red group. A weekly promotion rather than a per-promotion one is still an open
+  candidate digests. `gate_extra_tags: "~@orca"` (actions#655) keeps the same
+  scoped exclusion as `post-testing-e2e.yml` until orca ships (factory
+  utah-packages#447); never switch the whole gate off to get past one red
+  group. A weekly promotion rather than a per-promotion one is still an open
   question in #336 -- that is a maintainer policy call, not a code gap, and
   nothing in this tree should encode a guess at it.
 
