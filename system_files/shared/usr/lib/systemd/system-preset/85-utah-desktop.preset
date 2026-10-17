@@ -28,7 +28,7 @@ enable dconf-update.service
 # bootc's first-boot preset application from undoing that (see #98).
 enable ublue-firstboot-date.service
 enable ublue-booted-image.service
-# First-boot Flatpaks (Bazaar, from common's preinstall.d). configure-services.sh
+# First-boot Flatpaks (Bazaar, and Ghostty from TunaOS). configure-services.sh
 # enabled these at build time, but with no line here bootc's first-boot preset
 # application turned them back off, and an image installed by anything but the
 # ISO booted with no app store at all.
