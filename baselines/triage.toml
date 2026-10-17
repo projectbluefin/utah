@@ -696,7 +696,7 @@ issue = "#263"
 
 [package.dbus-daemon]
 status = "planned"
-area = "system-daemons"
+area = "cli-tools"
 issue = "#263"
 
 [package.dbus-x11]
