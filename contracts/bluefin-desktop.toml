@@ -28,7 +28,7 @@ files = [
 ]
 
 [branding.os_release]
-NAME = "Utah"
+NAME = "Bluefin Utah"
 ID = "hummingbird"
 ID_LIKE = "fedora"
 HOME_URL = "https://projectbluefin.io"
@@ -41,7 +41,7 @@ IMAGE_ID = "utah"
 LOGO = "fedora-logo-icon"
 
 [branding.os_release_patterns]
-PRETTY_NAME = '^Utah \(Version: .+\)$'
+PRETTY_NAME = '^Bluefin Utah \(Version: .+\)$'
 VERSION = '^.+ \(Hummingbird\)$'
 VARIANT_ID = '^utah(-.*)?$'
 # ID, VERSION_ID and CPE_NAME are left at the Hummingbird base values so CVE
