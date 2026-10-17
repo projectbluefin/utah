@@ -757,17 +757,17 @@ reason = "Out-of-tree kernel module; not built for Hummingbird's kernel"
 
 [package.ImageMagick]
 status = "planned"
-area = "factory-backlog"
+area = "cli-tools"
 issue = "#263"
 
 [package.antiword]
 status = "planned"
-area = "factory-backlog"
+area = "cli-tools"
 issue = "#263"
 
 [package.argyllcms]
 status = "planned"
-area = "factory-backlog"
+area = "cli-tools"
 issue = "#263"
 
 [package.avahi-tools]
@@ -777,17 +777,17 @@ issue = "#263"
 
 [package.b43-fwcutter]
 status = "planned"
-area = "factory-backlog"
+area = "cli-tools"
 issue = "#263"
 
 [package.bcache-tools]
 status = "planned"
-area = "factory-backlog"
+area = "cli-tools"
 issue = "#263"
 
 [package.bison]
 status = "planned"
-area = "factory-backlog"
+area = "cli-tools"
 issue = "#263"
 
 [package.capstone]
@@ -802,17 +802,17 @@ issue = "#263"
 
 [package.dnsmasq]
 status = "planned"
-area = "factory-backlog"
+area = "networking"
 issue = "#263"
 
 [package.flex]
 status = "planned"
-area = "factory-backlog"
+area = "cli-tools"
 issue = "#263"
 
 [package.gamemode]
 status = "planned"
-area = "factory-backlog"
+area = "desktop"
 issue = "#263"
 
 [package.gdbm]
@@ -822,72 +822,72 @@ issue = "#263"
 
 [package.gst-editing-services]
 status = "planned"
-area = "factory-backlog"
+area = "media"
 issue = "#263"
 
 [package.gstreamer1-plugins-bad-free]
 status = "planned"
-area = "factory-backlog"
+area = "media"
 issue = "#263"
 
 [package.hfsplus-tools]
 status = "planned"
-area = "factory-backlog"
+area = "files-and-devices"
 issue = "#263"
 
 [package.ipset]
 status = "planned"
-area = "factory-backlog"
+area = "networking"
 issue = "#263"
 
 [package.iptstate]
 status = "planned"
-area = "factory-backlog"
+area = "networking"
 issue = "#263"
 
 [package.kpartx]
 status = "planned"
-area = "factory-backlog"
+area = "cli-tools"
 issue = "#263"
 
 [package.lcms]
 status = "planned"
-area = "factory-backlog"
+area = "cli-tools"
 issue = "#263"
 
 [package.libavc1394]
 status = "planned"
-area = "factory-backlog"
+area = "cli-tools"
 issue = "#263"
 
 [package.liblouisutdml-utils]
 status = "planned"
-area = "factory-backlog"
+area = "cli-tools"
 issue = "#263"
 
 [package.libraw1394]
 status = "planned"
-area = "factory-backlog"
+area = "cli-tools"
 issue = "#263"
 
 [package.libuser]
 status = "planned"
-area = "factory-backlog"
+area = "cli-tools"
 issue = "#263"
 
 [package.libwnck3]
 status = "planned"
-area = "factory-backlog"
+area = "desktop"
 issue = "#263"
 
 [package.lockdev]
 status = "planned"
-area = "factory-backlog"
+area = "cli-tools"
 issue = "#263"
 
 [package.lrzsz]
 status = "planned"
-area = "factory-backlog"
+area = "cli-tools"
 issue = "#263"
 
 [package.m4]
@@ -897,37 +897,37 @@ issue = "#263"
 
 [package.mcelog]
 status = "planned"
-area = "factory-backlog"
+area = "hardware-and-power"
 issue = "#263"
 
 [package.memstrack]
 status = "planned"
-area = "factory-backlog"
+area = "hardware-and-power"
 issue = "#263"
 
 [package.mkpasswd]
 status = "planned"
-area = "factory-backlog"
+area = "cli-tools"
 issue = "#263"
 
 [package.nilfs-utils]
 status = "planned"
-area = "factory-backlog"
+area = "files-and-devices"
 issue = "#263"
 
 [package.openal-soft]
 status = "planned"
-area = "factory-backlog"
+area = "media"
 issue = "#263"
 
 [package.passwdqc-utils]
 status = "planned"
-area = "factory-backlog"
+area = "cli-tools"
 issue = "#263"
 
 [package.powerstat]
 status = "planned"
-area = "factory-backlog"
+area = "hardware-and-power"
 issue = "#263"
 
 [package.python-unversioned-command]
@@ -942,12 +942,12 @@ issue = "#263"
 
 [package.python3-email-validator]
 status = "planned"
-area = "factory-backlog"
+area = "python-libraries"
 issue = "#263"
 
 [package.python3-html2text]
 status = "planned"
-area = "factory-backlog"
+area = "python-libraries"
 issue = "#263"
 
 [package.python3-idna]
@@ -957,32 +957,32 @@ issue = "#263"
 
 [package.python3-inotify]
 status = "planned"
-area = "factory-backlog"
+area = "python-libraries"
 issue = "#263"
 
 [package.python3-jmespath]
 status = "planned"
-area = "factory-backlog"
+area = "python-libraries"
 issue = "#263"
 
 [package.python3-keyring]
 status = "planned"
-area = "factory-backlog"
+area = "python-libraries"
 issue = "#263"
 
 [package.python3-linux-procfs]
 status = "planned"
-area = "factory-backlog"
+area = "python-libraries"
 issue = "#263"
 
 [package.python3-pskc]
 status = "planned"
-area = "factory-backlog"
+area = "python-libraries"
 issue = "#263"
 
 [package.python3-shtab]
 status = "planned"
-area = "factory-backlog"
+area = "python-libraries"
 issue = "#263"
 
 [package.qt6-qtbase]
@@ -992,32 +992,32 @@ issue = "#263"
 
 [package.quota]
 status = "planned"
-area = "factory-backlog"
+area = "cli-tools"
 issue = "#263"
 
 [package.serd]
 status = "planned"
-area = "factory-backlog"
+area = "cli-tools"
 issue = "#263"
 
 [package.sord]
 status = "planned"
-area = "factory-backlog"
+area = "cli-tools"
 issue = "#263"
 
 [package.sos]
 status = "planned"
-area = "factory-backlog"
+area = "hardware-and-power"
 issue = "#263"
 
 [package.soundtouch]
 status = "planned"
-area = "factory-backlog"
+area = "media"
 issue = "#263"
 
 [package.sysstat]
 status = "planned"
-area = "factory-backlog"
+area = "cli-tools"
 issue = "#263"
 
 [package.tcl]
@@ -1027,12 +1027,12 @@ issue = "#263"
 
 [package.tslib]
 status = "planned"
-area = "factory-backlog"
+area = "cli-tools"
 issue = "#263"
 
 [package.uchardet]
 status = "planned"
-area = "factory-backlog"
+area = "cli-tools"
 issue = "#263"
 
 [package.unbound-anchor]
@@ -1042,7 +1042,7 @@ issue = "#263"
 
 [package.uresourced]
 status = "planned"
-area = "factory-backlog"
+area = "cli-tools"
 issue = "#263"
 
 [package.uriparser]
@@ -1052,28 +1052,27 @@ issue = "#263"
 
 [package.usbip]
 status = "planned"
-area = "factory-backlog"
+area = "cli-tools"
 issue = "#263"
 
 [package.usermode]
 status = "planned"
-area = "factory-backlog"
+area = "cli-tools"
 issue = "#263"
 
 [package.uupd]
 status = "planned"
-area = "factory-backlog"
+area = "system-daemons"
 issue = "#263"
 
 [package.virt-what]
 status = "planned"
-area = "factory-backlog"
+area = "cli-tools"
 issue = "#263"
 
 [package.xdriinfo]
-status = "planned"
-area = "factory-backlog"
-issue = "#263"
+status = "waived"
+reason = "X11 client tool; Utah ships the Wayland session only"
 
 [package.xmlsec1]
 status = "planned"
@@ -1081,12 +1080,10 @@ area = "cli-tools"
 issue = "#263"
 
 [package.xrandr]
-status = "planned"
-area = "factory-backlog"
-issue = "#263"
+status = "waived"
+reason = "X11 client tool; Utah ships the Wayland session only"
 
 [package.xset]
-status = "planned"
-area = "factory-backlog"
-issue = "#263"
+status = "waived"
+reason = "X11 client tool; Utah ships the Wayland session only"
 
