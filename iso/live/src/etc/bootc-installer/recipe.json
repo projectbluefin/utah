@@ -21,8 +21,8 @@
     },
     "completed": {
       "image": "/run/host/usr/share/bootc-installer/images/utahraptor.png",
-      "title": "Bluefin Utah is installed",
-      "description": "Restart your computer to begin using Bluefin Utah."
+      "title": "Bluefin is installed",
+      "description": "Restart your computer to begin using Bluefin."
     }
   },
   "steps": {

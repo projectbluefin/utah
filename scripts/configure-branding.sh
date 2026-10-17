@@ -5,7 +5,7 @@
 
 set -eoux pipefail
 
-IMAGE_PRETTY_NAME="Bluefin Utah"
+IMAGE_PRETTY_NAME="Bluefin"
 IMAGE_LIKE="fedora"
 IMAGE_NAME="${IMAGE_NAME:-utah}"
 # Canonical OS identity is always "utah", regardless of which image repository
@@ -22,7 +22,6 @@ BASE_IMAGE_NAME="${BASE_IMAGE_NAME:-hummingbird}"
 FEDORA_MAJOR_VERSION="${FEDORA_MAJOR_VERSION:-$(rpm -E %fedora)}"
 UBLUE_IMAGE_TAG="${UBLUE_IMAGE_TAG:-${VERSION}}"
 IMAGE_INFO="/usr/share/ublue-os/image-info.json"
-CODENAME="Utahraptor"
 
 install -d -m0755 /usr/share/ublue-os
 
@@ -64,8 +63,8 @@ set_os_release HOME_URL "https://projectbluefin.io"
 set_os_release DOCUMENTATION_URL "https://docs.projectbluefin.io"
 set_os_release SUPPORT_URL "https://github.com/projectbluefin/utah/issues/"
 set_os_release BUG_REPORT_URL "https://github.com/projectbluefin/utah/issues/"
-set_os_release DEFAULT_HOSTNAME "${CODENAME,,}"
-set_os_release VERSION_CODENAME "${CODENAME}"
+set_os_release DEFAULT_HOSTNAME "${IMAGE_PRETTY_NAME,,}"
+set_os_release VERSION_CODENAME "Utahraptor"
 set_os_release VERSION "${VERSION} (${BASE_IMAGE_NAME^})"
 set_os_release OSTREE_VERSION "${VERSION}"
 set_os_release IMAGE_ID "${IMAGE_ID}"

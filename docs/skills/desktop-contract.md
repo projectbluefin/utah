@@ -36,14 +36,14 @@ The TOML's sections are the contract's table of contents:
 - **`[branding]`** — files that must exist (Bluefin logos, backgrounds, the
   `zz0-bluefin-modifications` gschema override, fastfetch and Bazaar count
   files) plus the os-release identity. The identity fields are exact values:
-  `NAME=Bluefin Utah`, `ID=hummingbird`, `ID_LIKE=fedora`, `VERSION_CODENAME=Utahraptor`,
-  `DEFAULT_HOSTNAME=utahraptor`, `IMAGE_ID=utah`, and the projectbluefin.io URLs.
+  `NAME=Bluefin`, `ID=hummingbird`, `ID_LIKE=fedora`, `VERSION_CODENAME=Utahraptor`,
+  `DEFAULT_HOSTNAME=bluefin`, `IMAGE_ID=utah`, and the projectbluefin.io URLs.
   `ID`, `VERSION_ID` and `CPE_NAME` are left at the Hummingbird base values
   (issue #377) so CVE scanners still recognise the image as Hummingbird-based;
   `CPE_NAME` is asserted as a base-identity pattern
   (`^cpe:/a:redhat:hummingbird:\d+$`) rather than a utah-branded exact value.
   `[branding.os_release_patterns]` shapes the fields the build generates:
-  `PRETTY_NAME` is `Bluefin Utah (Version: ...)`, `VERSION` carries `(Hummingbird)`,
+  `PRETTY_NAME` is `Bluefin (Version: ...)`, `VERSION` carries `(Hummingbird)`,
   `VARIANT_ID` starts with `utah`. The verifier checks both `/usr/lib/os-release` and
   `/etc/os-release` (the file the GNOME About panel reads, which is a regular
   file rather than a symlink on some bases), and fails if either is missing or
