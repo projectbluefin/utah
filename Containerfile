@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=quay.io/hummingbird-community/os-minimal:latest@sha256:007b5e1a7f56269f66d59a3523823cd430c581ac905e91481c0da9b7bc9e2ace
+ARG BASE_IMAGE=quay.io/hummingbird-community/os-minimal:latest@sha256:04b9d026ae2135bc4992d1e9fc208f8b0fc1093951272929d3a1b18da4b009cc
 # The package factory publishes a complete, digest-addressable RPM repository.
 # Keep this pin in Utah so an image build is reproducible and can be reviewed
 # against the exact package set it consumes.
