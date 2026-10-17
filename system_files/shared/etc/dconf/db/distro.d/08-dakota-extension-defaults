@@ -6,15 +6,15 @@
 # database applies regardless of which schema source is used, so extension
 # defaults belong here, not in zz3-bluefin-unsupported-stuff.gschema.override.
 
-[org/gnome/shell/extensions/tilingshell]
+[org/gnome/shell/extensions/tilingshell@ferrarodomenico.com]
 show-indicator=false
 layouts-json='[{"id": "Horizontal","tiles": [{"x": 0,"y": 0,"width": 0.5,"height": 1,"groups": [1]},{"x": 0.5,"y": 0,"width": 0.5,"height": 1,"groups": [1]}]},{"id": "Vertical","tiles": [{"x": 0,"y": 0,"width": 1,"height": 0.5,"groups": [1]},{"x": 0,"y": 0.5,"width": 1,"height": 0.5,"groups": [1]}]},{"id": "Quarters","tiles": [{"x": 0,"y": 0,"width": 0.5,"height": 0.5,"groups": [1]},{"x": 0.5,"y": 0.5,"width": 0.5,"height": 0.5,"groups": [1]},{"x": 0.5,"y": 0.5,"width": 0.5,"height": 0.5,"groups": [1]},{"x": 0.5,"y": 0.5,"width": 0.5,"height": 0.5,"groups": [1]}]},{"id": "Full","tiles": [{"x": 0,"y": 0,"width": 1,"height": 1,"groups": [1]}]}]'
 
-[org/gnome/shell/extensions/BudsLink-Companion]
+[org/gnome/shell/extensions/BudsLink-Companion@maniacx.github.com]
 level-indicator-color=0
 
-[org/gnome/shell/extensions/syncthing-toggle]
+[org/gnome/shell/extensions/syncthing-toggle@projectbluefin.io]
 start-stop-only=true
 
-[org/gnome/shell/extensions/blur-my-shell/popup]
+[org/gnome/shell/extensions/blur-my-shell@aunetx/popup]
 blur=true
