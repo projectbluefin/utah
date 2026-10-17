@@ -102,11 +102,19 @@ To estimate the ISO effect, compress the candidate files in independent
 128 KiB blocks with zstd level 3 -- `mksquashfs -b 131072 -comp zstd
 -Xcompression-level 3` is what the ISO does -- rather than streaming them;
 the tree came out at about 150 MiB that way, against the 98.8 MiB overage.
-The remaining measured candidate is the unstripped NVIDIA modules: 200 MiB
-across both kernels, of which about 26 MiB compressed is `.debug_*` sections
-that `strip --strip-debug` (what `INSTALL_MOD_STRIP=1` runs) would remove,
-at the cost of a kernel cache rebuild because `install-nvidia.sh` is in the
-cache tag.
+
+For plain `nvidia` (#740, measuring 6,640,365,568 B / ~6.18 GiB in diagnostic
+run 38429837410 against the 6 GiB ceiling), the overage was driven by the
+generic (`--no-hostonly`) initramfs for distribution kernel `7.2.9`. Because
+neither `regenerate-initramfs.sh` nor `iso/live/Containerfile` specified a
+compression algorithm, dracut defaulted to gzip, producing a ~240 MiB
+initramfs. This ~240 MiB archive was duplicated four times across the offline
+ISO media (inside `efi.img` ESP, in `images/pxeboot`, in the live squashfs root,
+and in the embedded `/usr/lib/containers/storage` layer). Switching both
+dracut invocations to `--zstd --reproducible` shrinks each archive from
+~240 MiB to under ~60 MiB, saving ~360 MiB outside squashfs and over 100 MiB
+inside squashfs, bringing plain `nvidia` comfortably below the 6 GiB budget
+without modifying the kernel cache tag.
 
 ### Tacklebox image pin
 

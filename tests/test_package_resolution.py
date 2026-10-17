@@ -604,6 +604,7 @@ class ImageSizeTests(unittest.TestCase):
         self.assertIn("mkdir -p /var/roothome", source)
         self.assertIn("set -euxo pipefail", source)
         self.assertIn("dracut\\[E\\]: FAILED", source)
+        self.assertIn("--zstd", source)
 
 
 class DesktopUnitEnablementTests(unittest.TestCase):
