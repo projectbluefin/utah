@@ -876,7 +876,9 @@ area = "cli-tools"
 issue = "#263"
 
 [package.python3-charset-normalizer]
-status = "untriaged"
+status = "planned"
+area = "python-libraries"
+issue = "#263"
 
 [package.python3-email-validator]
 status = "untriaged"
@@ -885,7 +887,9 @@ status = "untriaged"
 status = "untriaged"
 
 [package.python3-idna]
-status = "untriaged"
+status = "planned"
+area = "python-libraries"
+issue = "#263"
 
 [package.python3-inotify]
 status = "untriaged"
@@ -906,7 +910,9 @@ status = "untriaged"
 status = "untriaged"
 
 [package.qt6-qtbase]
-status = "untriaged"
+status = "planned"
+area = "desktop"
+issue = "#263"
 
 [package.quota]
 status = "untriaged"

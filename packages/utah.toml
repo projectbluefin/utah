@@ -318,6 +318,11 @@ packages = [
     "capstone",
     "tcl",
     "unbound-anchor",
+    # Slice 3 base system parity additions (baselines/GAP.md, #263):
+    # Qt6 base desktop runtime and core Python network libraries.
+    "qt6-qtbase",
+    "python3-charset-normalizer",
+    "python3-idna",
 ]
 
 [hardware]

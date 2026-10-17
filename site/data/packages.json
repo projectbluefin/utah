@@ -181,7 +181,10 @@
         "poppler-utils",
         "pulseaudio-utils",
         "python-unversioned-command",
+        "python3-charset-normalizer",
+        "python3-idna",
         "python3-pip",
+        "qt6-qtbase",
         "samba",
         "samba-client",
         "samba-common-tools",
@@ -256,7 +259,7 @@
     }
   ],
   "totals": {
-    "installed": 199,
+    "installed": 202,
     "unavailable": 7
   },
   "unavailable": [
