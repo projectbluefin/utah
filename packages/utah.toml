@@ -299,6 +299,30 @@ packages = [
     "speech-dispatcher-espeak-ng",
     # spd-say, which the @orca "module list" scenario runs; Bluefin ships it.
     "speech-dispatcher-utils",
+    # Essential base utilities and tools for Bluefin parity (baselines/GAP.md, #263):
+    # dbus-daemon supplies dbus-run-session (needed for headless/preinstall OCI token auth);
+    # python-unversioned-command provides /usr/bin/python; m4, gdbm, uriparser, xmlsec1,
+    # and avahi-tools supply standard command-line tools and libraries.
+    "dbus-daemon",
+    "python-unversioned-command",
+    "m4",
+    "gdbm",
+    "uriparser",
+    "xmlsec1",
+    "avahi-tools",
+    # Slice 2 base system parity additions (baselines/GAP.md, #263):
+    # Security/smartcard daemon: gnupg2-scdaemon.
+    # Diagnostics & system services: dnf5daemon-server, capstone, tcl, unbound-anchor.
+    "gnupg2-scdaemon",
+    "dnf5daemon-server",
+    "capstone",
+    "tcl",
+    "unbound-anchor",
+    # Slice 3 base system parity additions (baselines/GAP.md, #263):
+    # Qt6 base desktop runtime and core Python network libraries.
+    "qt6-qtbase",
+    "python3-charset-normalizer",
+    "python3-idna",
 ]
 
 [hardware]
@@ -643,4 +667,11 @@ parity = [
     "alsa-utils",
     "fprintd",
     "fprintd-pam",
+    # Media packages already consumed from the pinned factory (#12, #383).
+    # Fail the image build if a base package silently replaces one of them.
+    "intel-gmmlib",
+    "libva-intel-media-driver",
+    "intel-mediasdk",
+    "intel-vpl-gpu-rt",
+    "ffmpegthumbnailer",
 ]

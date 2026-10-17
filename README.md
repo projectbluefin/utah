@@ -3,7 +3,7 @@
 <!-- BEGIN E2E VERIFICATION -->
 [![Verified ISO desktop](docs/verification/screenshots/installed-fastfetch.png)](docs/verification/README.md)
 
-*LUKS ISO test passed for commit `8d5b16d3d58c`. [CI run](https://github.com/projectbluefin/utah/actions/runs/38913582848); [screenshots and provenance](docs/verification/README.md).*
+*LUKS ISO test passed for commit `c840e304dbbe`. [CI run](https://github.com/projectbluefin/utah/actions/runs/38979313784); [screenshots and provenance](docs/verification/README.md).*
 <!-- END E2E VERIFICATION -->
 
 †Utahraptor ostrommaysi
@@ -62,7 +62,7 @@ Like Bluefin, Utah builds four hardware flavors (`utah`, `utah-nvidia`,
 | | count |
 | --- | --- |
 | Bluefin contract installed | **61** |
-| Utah additions (GNOME 51, base-image parity, device firmware, desktop services) | 126 |
+| Utah additions (GNOME 51, base-image parity, device firmware, desktop services) | 141 |
 | Genuinely unavailable | **7** |
 
 ## Known gaps

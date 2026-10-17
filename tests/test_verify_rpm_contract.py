@@ -1119,6 +1119,19 @@ class SupplyChainTests(unittest.TestCase):
         self.assertTrue(factory_parity, "the shipped overlay declares no factory parity packages")
         self.assertEqual([p for p in factory_parity if p not in parity], [])
 
+    def test_shipped_factory_media_packages_keep_factory_identity(self) -> None:
+        """Installed media packages must not fall back to base builds."""
+        overlay = ROOT / "packages" / "utah.toml"
+        factory_parity = set(self.module.section(overlay, "factory", "parity"))
+        media = {
+            "intel-gmmlib", "libva-intel-media-driver", "intel-mediasdk",
+            "intel-vpl-gpu-rt", "ffmpegthumbnailer",
+        }
+        self.assertLessEqual(media, factory_parity)
+        installed = {pkg: {"release": "1-1.hum.x86_64"} for pkg in media}
+        errors = self.module.verify_parity_origin(sorted(media), installed, factory_parity)
+        self.assertEqual(len(errors), len(media))
+
     def test_shipped_gnome_versions_cover_the_gnome_release_packages(self) -> None:
         """nautilus and gnome-initial-setup track GNOME, so they are asserted too."""
         overlay = ROOT / "packages" / "utah.toml"

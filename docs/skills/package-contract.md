@@ -97,6 +97,10 @@ pull it in, so read the resolved origin from the build's
 Utah also requests `libvpl`, which is not an overrides name but a dependency
 of `intel-vpl-gpu-rt`, so the media request is five packages in total.
 
+The four requested overrides and `ffmpegthumbnailer` are in `[factory].parity`;
+their installed releases must carry `.bfin` to prevent base substitution.
+Check new names with `just check-repos` and the image's `package-origins.txt`.
+
 `gstreamer1-plugins-bad-free` and `totem-pl-parser` are published package
 names but are omitted from the install request because their dependency
 closures are unsatisfied in the pinned factory inputs: bad-free needs
@@ -359,7 +363,7 @@ Raise the overlay change as its own pull request against `main`; the bump PR
 then picks the fix up on its next rebuild.
 
 Current counts, per the README "Package parity" section: 61 Bluefin contract
-packages installed, 126 Utah additions (GNOME 51, base-image parity, device
+packages installed, 141 Utah additions (GNOME 51, base-image parity, device
 firmware, desktop services), 7 genuinely unavailable. `scripts/check-doc-counts.py` (part of
 `just check`) recomputes these from the manifests and fails if either
 document drifts from `site/data/packages.json`.
