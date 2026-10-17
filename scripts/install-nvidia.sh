@@ -130,8 +130,8 @@ fi
 # not been re-recorded for -- so a guard that refused to proceed whenever the
 # kernel differed from the recorded NEVR would make the override unreachable in
 # the only case it is for. Override both, or neither.
-KERNEL_DEVEL_NEVR="${UTAH_KERNEL_DEVEL_NEVR:-7.2.9-201.fc44.x86_64}"
-KERNEL_DEVEL_SHA256="${UTAH_KERNEL_DEVEL_SHA256:-17e14518fe28ea6897bc448bf3e50434ac5ed58d4ca10d3c1c20ef145a16e7cd}"
+KERNEL_DEVEL_NEVR="${UTAH_KERNEL_DEVEL_NEVR:-7.2.10-200.fc44.x86_64}"
+KERNEL_DEVEL_SHA256="${UTAH_KERNEL_DEVEL_SHA256:-d9b62e7c3c72748b1d14cf6c1e4e540f141eb4e5637a8320980fd63abaf24577}"
 
 build_tree="/usr/lib/modules/${kernel}/build"
 installed_kernel_devel=""
