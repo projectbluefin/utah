@@ -99,6 +99,34 @@ class ValidateContractTests(unittest.TestCase):
         )
 
 
+class ExtensionDefaultsUuidTests(unittest.TestCase):
+    """Every section in 08-dakota-extension-defaults must name a real extension.
+
+    dconf paths for extensions carry the full UUID (#754): a header without
+    the @domain suffix lands on an orphan path no extension ever reads.
+    """
+
+    def test_every_section_header_matches_a_shipped_extension_uuid(self):
+        import re
+
+        text = (
+            ROOT
+            / "system_files/shared/etc/dconf/db/distro.d/08-dakota-extension-defaults"
+        ).read_text()
+        headers = re.findall(r"^\[(org/gnome/shell/extensions/[^\]]+)\]", text, re.MULTILINE)
+        self.assertTrue(headers, "no extension sections found")
+        ext_dir = ROOT / "system_files/shared/usr/share/gnome-shell/extensions"
+        known = {d.name for d in ext_dir.iterdir() if d.is_dir() and "@" in d.name}
+        build = (ROOT / "scripts/build-gnome-extensions.sh").read_text()
+        for header in headers:
+            uuid = header.split("org/gnome/shell/extensions/")[1].split("/")[0]
+            self.assertIn("@", uuid, f"{header} is missing the @domain suffix")
+            self.assertTrue(
+                uuid in known or f"/extensions/{uuid}" in build,
+                f"{uuid} matches no extension in system_files or build-gnome-extensions.sh",
+            )
+
+
 class ReadOsReleaseTests(unittest.TestCase):
     def read(self, text):
         with tempfile.TemporaryDirectory() as tmp:
