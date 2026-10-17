@@ -299,6 +299,17 @@ packages = [
     "speech-dispatcher-espeak-ng",
     # spd-say, which the @orca "module list" scenario runs; Bluefin ships it.
     "speech-dispatcher-utils",
+    # Essential base utilities and tools for Bluefin parity (baselines/GAP.md, #263):
+    # dbus-daemon supplies dbus-run-session (needed for headless/preinstall OCI token auth);
+    # python-unversioned-command provides /usr/bin/python; m4, gdbm, uriparser, xmlsec1,
+    # and avahi-tools supply standard command-line tools and libraries.
+    "dbus-daemon",
+    "python-unversioned-command",
+    "m4",
+    "gdbm",
+    "uriparser",
+    "xmlsec1",
+    "avahi-tools",
 ]
 
 [hardware]

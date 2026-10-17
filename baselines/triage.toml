@@ -695,8 +695,9 @@ area = "cli-tools"
 issue = "#263"
 
 [package.dbus-daemon]
-status = "waived"
-reason = "Utah uses dbus-broker, as Bluefin does for the system bus"
+status = "planned"
+area = "system-daemons"
+issue = "#263"
 
 [package.dbus-x11]
 status = "waived"
@@ -764,7 +765,9 @@ status = "untriaged"
 status = "untriaged"
 
 [package.avahi-tools]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.b43-fwcutter]
 status = "untriaged"
@@ -791,7 +794,9 @@ status = "untriaged"
 status = "untriaged"
 
 [package.gdbm]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.gst-editing-services]
 status = "untriaged"
@@ -836,7 +841,9 @@ status = "untriaged"
 status = "untriaged"
 
 [package.m4]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.mcelog]
 status = "untriaged"
@@ -860,7 +867,9 @@ status = "untriaged"
 status = "untriaged"
 
 [package.python-unversioned-command]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.python3-charset-normalizer]
 status = "untriaged"
@@ -929,7 +938,9 @@ status = "untriaged"
 status = "untriaged"
 
 [package.uriparser]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.usbip]
 status = "untriaged"
@@ -947,7 +958,9 @@ status = "untriaged"
 status = "untriaged"
 
 [package.xmlsec1]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.xrandr]
 status = "untriaged"

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-16",
+  "generated_at": "2026-10-17",
   "generator": "scripts/generate-site-data.py",
   "groups": [
     {
@@ -111,6 +111,7 @@
         "alsa-ucm",
         "alsa-utils",
         "attr",
+        "avahi-tools",
         "bash-completion",
         "bind-utils",
         "bluez-cups",
@@ -123,6 +124,7 @@
         "cups-client",
         "cups-filters",
         "cups-ipptool",
+        "dbus-daemon",
         "dbus-tools",
         "default-fonts-core-emoji",
         "default-fonts-core-mono",
@@ -134,6 +136,7 @@
         "fprintd",
         "fprintd-pam",
         "fuse-libs",
+        "gdbm",
         "ghostscript",
         "glycin-thumbnailer",
         "google-noto-sans-math-fonts",
@@ -160,6 +163,7 @@
         "libvpl",
         "linux-atm-libs",
         "lm_sensors",
+        "m4",
         "man-db",
         "nvtop",
         "orca",
@@ -173,6 +177,7 @@
         "plymouth-theme-spinner",
         "poppler-utils",
         "pulseaudio-utils",
+        "python-unversioned-command",
         "python3-pip",
         "samba",
         "samba-client",
@@ -185,10 +190,12 @@
         "systemd-container",
         "tpm2-tools",
         "unzip",
+        "uriparser",
         "vim-enhanced",
         "which",
         "wireless-regdb",
         "wpa_supplicant",
+        "xmlsec1",
         "xxd",
         "zip"
       ],
@@ -244,7 +251,7 @@
     }
   ],
   "totals": {
-    "installed": 187,
+    "installed": 194,
     "unavailable": 7
   },
   "unavailable": [
