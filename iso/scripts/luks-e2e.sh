@@ -156,6 +156,110 @@ shot() {
     echo "  screenshot: ${ppm}"
 }
 
+# A screenshot that is one flat colour is not evidence the desktop rendered:
+# a solid-black or frozen frame of a few kilobytes still passes the -s (non-
+# empty) gate above and would be published as proof a session started. This
+# rejects a capture whose pixels are essentially a single colour -- a blank or
+# frozen frame. A truncated or corrupt file is rejected separately, when the
+# decoder below fails to open it. It reads the PNG with the Python standard
+# library only, because ffmpeg and ImageMagick are not guaranteed to be
+# installed where this gate runs.
+screenshot_not_blank() {
+    local png="$1" msg=""
+    if ! msg="$(python3 -c '
+import sys, zlib, struct
+data = open(sys.argv[1], "rb").read()
+def ppm(d):
+    i = 2
+    def tok():
+        nonlocal i
+        while d[i:i+1] in b" \t\n\r":
+            i += 1
+        s = i
+        while d[i:i+1] not in b" \t\n\r":
+            i += 1
+        return int(d[s:i])
+    w = tok(); h = tok(); tok()
+    while d[i:i+1] in b" \t\n\r":
+        i += 1
+    body = d[i:i + w*h*3]
+    px = [(body[k], body[k+1], body[k+2]) for k in range(0, len(body) - 2, 3)]
+    return w, h, px
+def png(d):
+    w = struct.unpack(">I", d[16:20])[0]
+    h = struct.unpack(">I", d[20:24])[0]
+    ct = d[25]
+    idat = bytearray()
+    pos = 8
+    while pos < len(d):
+        ln = struct.unpack(">I", d[pos:pos+4])[0]
+        k = d[pos+4:pos+8]
+        cp = pos + 8
+        if k == b"IDAT":
+            idat += d[cp:cp+ln]
+        elif k == b"IEND":
+            break
+        pos = cp + ln + 4
+    bpp = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[ct]
+    stride = w * bpp
+    dec = zlib.decompress(bytes(idat))
+    unf = bytearray()
+    prev = bytearray(stride)
+    idx = 0
+    for y in range(h):
+        ft = dec[idx]; idx += 1
+        line = bytearray(dec[idx:idx + stride]); idx += stride
+        for x in range(stride):
+            a = line[x - bpp] if x >= bpp else 0
+            b = prev[x]
+            c = prev[x - bpp] if x >= bpp else 0
+            v = line[x]
+            if ft == 1:
+                line[x] = (v + a) & 255
+            elif ft == 2:
+                line[x] = (v + b) & 255
+            elif ft == 3:
+                line[x] = (v + ((a + b) >> 1)) & 255
+            elif ft == 4:
+                p = b - a
+                pr = a + c - p
+                nd = min(abs(pr - a), abs(pr - c), abs(pr - b))
+                cc = c if abs(pr - c) == nd else (b if abs(pr - b) == nd else a)
+                line[x] = (v + cc) & 255
+            unf += bytes([line[x]])
+        prev = line
+    grey = ct == 0
+    out = []
+    off = 0
+    for y in range(h):
+        row = unf[off:off + stride]; off += stride
+        for k in range(w):
+            b0 = k * bpp
+            if grey or ct == 3:
+                val = row[b0]
+                out.append((val, val, val))
+            else:
+                out.append((row[b0], row[b0 + 1], row[b0 + 2] if bpp >= 3 else row[b0]))
+    return w, h, out
+if data[:2] == b"P6":
+    w, h, px = ppm(data)
+elif data[:8] == b"\x89PNG\r\n\x1a\n":
+    w, h, px = png(data)
+else:
+    sys.stderr.write("not a PNG or PPM file\n")
+    sys.exit(2)
+if not px:
+    sys.stderr.write("empty screenshot\n")
+    sys.exit(2)
+colors = len(set(px))
+if colors <= 4:
+    sys.stderr.write("blank frame: only " + str(colors) + " distinct colours in a " + str(w) + "x" + str(h) + " shot\n")
+    sys.exit(3)
+' "${png}" 2>&1)"; then
+        fail "screenshot ${png} shows a blank or frozen frame rather than the desktop: ${msg}"
+    fi
+}
+
 # Type a string at whatever has focus, then Enter. Same mechanism the LUKS
 # unlock uses, because the GDM greeter is equally invisible to the serial port.
 send_keys() {
@@ -1031,6 +1135,7 @@ fi
 if [[ "${UTAH_E2E_REQUIRE_SCREENSHOTS:-0}" == 1 ]]; then
     for label in live-desktop installed-greeter installed-desktop installed-fastfetch; do
         [[ -s "${SHOTS}/${label}.png" ]] || fail "missing required screenshot: ${label}"
+        screenshot_not_blank "${SHOTS}/${label}.png"
     done
 fi
 if [[ -s "${SHOTS}/installed-desktop.png" && -s "${SHOTS}/installed-fastfetch.png" ]]; then

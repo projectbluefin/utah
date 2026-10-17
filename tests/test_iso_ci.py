@@ -280,6 +280,68 @@ class EvidenceTests(unittest.TestCase):
         self.assertIn("systemd.wants=sshd.service", script)
         self.assertIn("fastfetch output was not visible", script)
         self.assertIn("missing required screenshot", script)
+        # #786: the gate must also reject a blank/frozen frame, not only an
+        # empty one. screenshot_not_blank is called for every required label.
+        gate = script[script.index("UTAH_E2E_REQUIRE_SCREENSHOTS"):script.index(
+            "installed-desktop.png and installed-fastfetch.png")]
+        self.assertIn("screenshot_not_blank", gate)
+        # Defined once, called once inside the per-label loop.
+        self.assertEqual(script.count("screenshot_not_blank()"), 1)
+        self.assertEqual(gate.count("screenshot_not_blank"), 1)
+
+    def _make_png(self, path, solid):
+        import struct, zlib
+        w, h = 1920, 1080
+        if solid:
+            px = [(0, 0, 0)] * (w * h)
+        else:
+            # A busy gradient: thousands of distinct colours, unlike a frozen
+            # frame. The point is that it is nowhere near a single colour.
+            px = []
+            for y in range(h):
+                for x in range(w):
+                    px.append(((x * 7) % 256, (y * 11) % 256, ((x + y) * 3) % 256))
+        raw = bytearray()
+        for y in range(h):
+            raw.append(0)
+            for x in range(w):
+                r, g, b = px[y * w + x]
+                raw += bytes((r, g, b))
+        ihdr = struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)
+        def chunk(ct, data):
+            body = ct + data
+            return struct.pack(">I", len(data)) + body + struct.pack(
+                ">I", zlib.crc32(body) & 0xffffffff)
+        blob = (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr)
+                + chunk(b"IDAT", zlib.compress(bytes(raw))) + chunk(b"IEND", b""))
+        path.write_bytes(blob)
+
+    def test_a_blank_screenshot_is_rejected_and_a_real_one_passes(self):
+        # #786: the screenshot gate only asserted -s (non-empty) per label, so a
+        # solid-black capture of a few kilobytes passed the gate and was
+        # published as proof a session started. The blank-frame check must fail
+        # such a frame. Drive the real helper against generated PNGs.
+        script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
+        func = "screenshot_not_blank() {" + script.split(
+            "screenshot_not_blank() {", 1)[1].split("\n}\n", 1)[0] + "\n}\n"
+
+        def drive(path):
+            harness = "fail() { echo FAIL: $* >&2; exit 1; }\n" + func + "screenshot_not_blank \"$1\"\n"
+            return subprocess.run(["bash", "-eu", "-c", harness, "x", str(path)],
+                                  capture_output=True, text=True)
+
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td)
+            blank = td / "blank.png"
+            real = td / "real.png"
+            garbage = td / "garbage.png"
+            self._make_png(blank, True)
+            self._make_png(real, False)
+            garbage.write_bytes(b"not an image at all")
+            self.assertEqual(drive(real).returncode, 0, drive(real).stderr)
+            self.assertNotEqual(drive(blank).returncode, 0)
+            self.assertIn("blank frame", drive(blank).stderr)
+            self.assertNotEqual(drive(garbage).returncode, 0)
 
     def test_installed_system_asserts_the_booted_image_is_the_offline_payload(self):
         script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
