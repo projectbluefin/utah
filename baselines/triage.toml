@@ -194,32 +194,7 @@ status = "planned"
 area = "hardware-power"
 issue = "#263"
 
-[package.orca]
-status = "planned"
-area = "accessibility-input"
-issue = "#263"
-
-[package.speech-dispatcher]
-status = "planned"
-area = "accessibility-input"
-issue = "#263"
-
-[package.speech-dispatcher-utils]
-status = "planned"
-area = "accessibility-input"
-issue = "#263"
-
-[package.espeak-ng]
-status = "planned"
-area = "accessibility-input"
-issue = "#263"
-
 [package.brltty]
-status = "planned"
-area = "accessibility-input"
-issue = "#263"
-
-[package.brlapi]
 status = "planned"
 area = "accessibility-input"
 issue = "#263"
@@ -430,11 +405,6 @@ area = "auth-security"
 issue = "#263"
 
 [package.openpace]
-status = "planned"
-area = "auth-security"
-issue = "#263"
-
-[package.tpm2-tools]
 status = "planned"
 area = "auth-security"
 issue = "#263"
