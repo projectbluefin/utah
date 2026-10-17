@@ -29,6 +29,12 @@ promotion prerequisite, so a failed production build cannot advance testing
 tags. Debug ISOs and guest disks are never uploaded because they contain test
 credentials.
 
+`testsuite` also runs each flavor's configured scenarios against the same
+immutable image digest. `promote-to-testing` waits for the full LUKS,
+production-ISO, and testsuite matrices; no `:testing` tag moves after a failed
+suite. The testsuite uses the mappings in `config/flavors.json`, including
+smoke/common for every flavor and the NVIDIA suite for NVIDIA flavors.
+
 **"Production" names the `DEBUG=0` build, not shippable media.** `DEBUG=0`
 does exclude the test credentials and sshd path (`iso/live/src/configure-live.sh`),
 so the retained artifact carries no secrets — but `iso/scripts/build-iso.sh`
@@ -60,10 +66,18 @@ failure still blocks that acceptance and tag promotion.
 Every matrix job preserves build/test logs, serial logs, and screenshots,
 including on failure. Only passing jobs upload `docs/verification` with the
 source commit, original build run, E2E run, image digest and ISO checksum.
-The promotion job depends on the LUKS and production-ISO matrices; a
-superseded testing commit cannot move tags. Registry tag copies are sequential,
-not an atomic multi-tag transaction: a registry failure can interrupt promotion
-after a partial copy.
+The promotion job depends on the LUKS, production-ISO, and exact-digest
+testsuite matrices; a superseded testing commit cannot move tags. Registry
+tag copies are sequential, not an atomic multi-tag transaction: a registry
+failure can interrupt promotion after a partial copy.
+
+After the gate completes, the workflow publishes the trusted `e2e/post-testing`
+commit status on the source SHA. A superseded build reports that exact-digest
+tests passed but tags were left unchanged; it does not advance moving tags. A
+failed suite publishes a failure status and prevents both testing-tag
+advancement and branch promotion. `promote-testing-to-main.yml` sets
+`run_e2e: true`; the reusable release gate requires this status before it can
+enqueue or auto-merge the promotion PR.
 
 A separate least-privilege job proposes the main desktop's screenshots in
 `automation/iso-verification`, a documentation PR. It also depends on
@@ -117,13 +131,17 @@ a mutable tag before running the container. Updating only the builder default
 leaves verification executing unrelated code with root privileges; keep both
 consumers on this same file.
 
-## Testsuite reporting (exact-digest VM suites)
+## Testsuite promotion gate (exact-digest VM suites)
 
-`post-testing-e2e.yml` runs the `testsuite` job asynchronously against each
-flavor's exact `@digest` in the `projectbluefin/testsuite` QEMU VM. The digests
-come from `needs.resolve.outputs.digests` and the suite mappings from
-`scripts/flavors.py suites`.
+`post-testing-e2e.yml` runs the `testsuite` job against each flavor's exact
+`@digest` in the `projectbluefin/testsuite` QEMU VM. The digests come from
+`needs.resolve.outputs.digests`; suite mappings come from
+`scripts/flavors.py suites`. The suite matrix is a required dependency of
+`:testing` tag promotion, not asynchronous quality reporting.
 
-This job surfaces scenario results, fastfetch OCR logs, and screenshots directly
-in GitHub Actions without gating `:testing` tag promotion, keeping deployments
-unblocked while maintaining visible QA signal across flavors.
+The LUKS matrix also passes each flavor name to
+`iso/scripts/verify-installed-flavor.py`, which checks the booted flavor,
+OGC/base-kernel selection, TUN device for gaming, NVIDIA module vermagic/path,
+and `nvidia-smi` for NVIDIA flavors. QEMU does not provide NVIDIA hardware
+passthrough; the runtime record explicitly marks physical GPU validation
+unavailable.

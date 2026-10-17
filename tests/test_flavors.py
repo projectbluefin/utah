@@ -66,10 +66,10 @@ class QueryTests(unittest.TestCase):
         cli = build_tree({"flavors": ALL_FLAVORS, "retired": {}})
         result = run(cli, "images")
         self.assertEqual(json.loads(result.stdout), [
-            {"image": "utah"},
-            {"image": "utah-nvidia"},
-            {"image": "utah-gaming"},
-            {"image": "utah-nvidia-gaming"},
+            {"image": "utah", "flavor": "main"},
+            {"image": "utah-nvidia", "flavor": "nvidia"},
+            {"image": "utah-gaming", "flavor": "gaming"},
+            {"image": "utah-nvidia-gaming", "flavor": "nvidia-gaming"},
         ])
 
     def test_image_maps_every_flavor_to_its_image_name(self):
@@ -193,6 +193,7 @@ class ShippedConfigTests(unittest.TestCase):
         kernel = json.loads(run(SCRIPT, "list-kernel").stdout)
 
         self.assertEqual(len(images), len(flavors))
+        self.assertEqual([i["flavor"] for i in images], flavors)
         self.assertEqual([r["image"] for r in releases], [i["image"] for i in images])
         self.assertEqual(main + kernel, flavors)
         self.assertEqual(

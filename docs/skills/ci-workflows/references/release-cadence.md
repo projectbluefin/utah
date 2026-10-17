@@ -12,11 +12,14 @@ The cadence is RFC'd in #336. What runs today:
   workflow. `sync-main-to-testing.yml`'s `build` job therefore dispatches the
   build explicitly (`gh workflow run build.yml --ref testing`) once the sync
   job returns, which is the path that actually produces the images.
-- `:testing` advances per green build, not on a clock: the tags move in
-  `post-testing-e2e.yml`, after the LUKS ISO matrix and the production-ISO
-  composition both pass. `promote-testing-to-main.yml` is the daily 04:00 UTC
-  heartbeat, so `:testing` is at most a day behind `main` and `main` is at
-  most a day behind the newest validated `testing` image.
+- `:testing` advances only after the exact-digest LUKS ISO matrix,
+  production-ISO composition, and every configured testsuite flavor matrix
+  pass. `post-testing-e2e.yml` moves the entire validated digest set from one
+  successful build and records `e2e/post-testing` on its source SHA;
+  `promote-testing-to-main.yml` requires that status. Pushes to `testing` and
+  the daily schedule run promotion; a manual dispatch is accepted only from
+  trusted `main`. The daily 04:00 UTC schedule means `:testing` is at most a
+  day behind `main`, and `main` at most a day behind the newest validated image.
 - `:stable` moves in `execute-release.yml` on every promotion push to `main`,
   gated by `run_release_gate: true` over `smoke,common` against the exact
   candidate digests, with no scenarios excluded. `gate_test_ref` pins the

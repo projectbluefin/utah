@@ -90,9 +90,16 @@ A `variants` job reads the same `scripts/flavors.py images` list the build
 matrix does -- promoting an image the build no longer produces fails late
 and confusingly, so this reads the same list (comment,
 `.github/workflows/promote-testing-to-main.yml`). The `promote` job calls
-`reusable-promote-squash.yml@v1` (same SHA pin) against
-`ghcr.io/<owner>`, with a cosign identity regexp pinned to
-`build.yml@refs/heads/testing` and `run_e2e: false`.
+`reusable-promote-squash.yml` at the caller's pinned commit against
+`ghcr.io/<owner>`, with a cosign identity regexp matching the pinned
+`projectbluefin/actions/.github/workflows/reusable-build.yml` path at an
+immutable 40-hex commit SHA and `run_e2e: true`, with
+`e2e_suites: smoke,common,nvidia`. Push-to-`testing` and scheduled runs remain
+enabled; a manually dispatched run may promote only from the trusted `main`
+ref. A source commit is eligible for branch promotion only after
+`post-testing-e2e.yml` publishes trusted `e2e/post-testing` status on that
+exact SHA; the status follows the LUKS, production-ISO, full flavor testsuite,
+and testing-tag promotion gates.
 
 ## sync-main-to-testing
 

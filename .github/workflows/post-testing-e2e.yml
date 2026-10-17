@@ -38,6 +38,10 @@ jobs:
           BUILD_RUN: ${{ inputs.build_run_id }}
         run: |
           set -euo pipefail
+          if [[ "$GITHUB_REF" != refs/heads/main ]]; then
+            echo "::error::Post-Testing E2E must run from the trusted main workflow ref." >&2
+            exit 1
+          fi
           [[ "$BUILD_RUN" =~ ^[0-9]+$ ]]
           # The dispatch job is the source run's last job. Wait for its final
           # conclusion before accepting artifacts; never resolve a partial run.
@@ -122,6 +126,7 @@ jobs:
           UTAH_E2E_REQUIRE_FASTFETCH: "1"
           UTAH_E2E_RAM: "6144"
           UTAH_E2E_CPUS: "2"
+          UTAH_E2E_EXPECT_FLAVOR: ${{ matrix.flavor }}
         run: |
           set -euo pipefail
           bash iso/scripts/luks-e2e.sh "$PWD/output/utah-live.iso" "$IMAGE_REF" \
@@ -298,9 +303,9 @@ jobs:
             output/utah-live.iso
             output/utah-live.iso.sha256
 
-  # Run the testsuite against each exact built digest asynchronously.
-  # This surfaces scenario results and desktop screenshots for every flavor
-  # directly in the workflow run without blocking :testing promotion.
+  # Run the testsuite against each exact built digest. Every configured
+  # flavor's smoke/common (and NVIDIA, where applicable) suites are promotion
+  # gates, not merely asynchronous reporting.
   testsuite:
     needs: resolve
     permissions:
@@ -320,13 +325,16 @@ jobs:
       test_ref: f690d22e4dfb8f71a3cdb7e56c20fb1f9e88066a
 
   promote-to-testing:
-    needs: [resolve, luks, production-iso]
+    needs: [resolve, luks, production-iso, testsuite]
     runs-on: ubuntu-26.04
     permissions:
       contents: read
       packages: write
+    outputs:
+      superseded: ${{ steps.promote.outputs.superseded }}
     steps:
       - name: Promote only the tested digests if still current
+        id: promote
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
@@ -334,8 +342,10 @@ jobs:
           MATRIX: ${{ needs.resolve.outputs.matrix }}
         run: |
           set -euo pipefail
+          echo "superseded=false" >> "$GITHUB_OUTPUT"
           current=$(gh api "repos/$REPOSITORY/commits/testing" --jq .sha)
           if [[ "$current" != "$SOURCE_SHA" ]]; then
+            echo "superseded=true" >> "$GITHUB_OUTPUT"
             echo "Superseded build: retaining evidence without moving tags."
             exit 0
           fi
@@ -344,6 +354,41 @@ jobs:
           while IFS= read -r ref; do
             skopeo copy --all --preserve-digests "docker://$ref" "docker://${ref%@*}:testing"
           done < <(jq -r '.include[].ref' <<< "$MATRIX")
+
+  publish-e2e-status:
+    needs: [resolve, luks, production-iso, testsuite, promote-to-testing]
+    if: always() && needs.resolve.result == 'success'
+    runs-on: ubuntu-26.04
+    permissions:
+      statuses: write
+    steps:
+      - name: Publish source-bound exact-digest gate result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          SOURCE_SHA: ${{ needs.resolve.outputs.sha }}
+          LUKS_RESULT: ${{ needs.luks.result }}
+          ISO_RESULT: ${{ needs.production-iso.result }}
+          TESTSUITE_RESULT: ${{ needs.testsuite.result }}
+          PROMOTION_RESULT: ${{ needs.promote-to-testing.result }}
+          SUPERSEDED: ${{ needs.promote-to-testing.outputs.superseded }}
+        run: |
+          set -euo pipefail
+          state=success
+          description="Exact-digest LUKS, ISO, testsuite, and tag promotion passed"
+          if [[ "$LUKS_RESULT" != success || "$ISO_RESULT" != success ||
+                "$TESTSUITE_RESULT" != success || "$PROMOTION_RESULT" != success ]]; then
+            state=failure
+            description="Exact-digest gate blocked: LUKS=$LUKS_RESULT ISO=$ISO_RESULT suites=$TESTSUITE_RESULT tags=$PROMOTION_RESULT"
+          elif [[ "$SUPERSEDED" == "true" ]]; then
+            description="Exact-digest gates passed; source superseded, tags unchanged"
+          fi
+          gh api "repos/$REPOSITORY/statuses/$SOURCE_SHA" -X POST \
+            --field state="$state" \
+            --field context=e2e/post-testing \
+            --field description="$description" \
+            --field target_url="$GITHUB_SERVER_URL/$REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
 
   documentation:
     needs: [resolve, luks, production-iso]

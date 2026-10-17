@@ -21,6 +21,14 @@ spec.loader.exec_module(gate)
 REPO = "projectbluefin/utah"
 DIGEST = "sha256:" + "a" * 64
 
+IMAGE_MATRIX = json.loads(subprocess.check_output(
+    [sys.executable, "scripts/flavors.py", "images"], text=True, cwd=ROOT))
+IMAGE_BY_NAME = {item["image"]: item for item in IMAGE_MATRIX}
+
+
+def expected_images(*names):
+    return [IMAGE_BY_NAME[name] for name in names]
+
 
 def good_run(**overrides):
     run = {
@@ -47,10 +55,10 @@ class ResolveE2EInputsTests(unittest.TestCase):
     def test_happy_path_returns_pinned_refs(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = gate.resolve(
-                good_run(), ["utah"],
+                good_run(), expected_images("utah"),
                 artifact_dir(tmp, [f"utah|amd64|{DIGEST}"]), REPO)
         self.assertEqual(out, {"include": [{
-            "image": "utah", "digest": DIGEST,
+            "image": "utah", "flavor": "main", "digest": DIGEST,
             "ref": f"ghcr.io/projectbluefin/utah@{DIGEST}",
         }]})
 
@@ -69,11 +77,11 @@ class ResolveE2EInputsTests(unittest.TestCase):
             (root / "image-digest-testing-utah" / "all.txt").write_text(
                 f"utah={DIGEST}\nutah|amd64|{DIGEST}\n")
             out = gate.resolve(
-                good_run(), ["utah", "utah-nvidia"], str(root), REPO)
+                good_run(), expected_images("utah", "utah-nvidia"), str(root), REPO)
         self.assertEqual(out, {"include": [
-            {"image": "utah", "digest": DIGEST,
+            {"image": "utah", "flavor": "main", "digest": DIGEST,
              "ref": f"ghcr.io/projectbluefin/utah@{DIGEST}"},
-            {"image": "utah-nvidia", "digest": nvidia,
+            {"image": "utah-nvidia", "flavor": "nvidia", "digest": nvidia,
              "ref": f"ghcr.io/projectbluefin/utah-nvidia@{nvidia}"},
         ]})
 
@@ -81,7 +89,7 @@ class ResolveE2EInputsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaisesRegex(ValueError, "not a successful trusted"):
                 gate.resolve(
-                    good_run(conclusion="failure"), ["utah"],
+                    good_run(conclusion="failure"), expected_images("utah"),
                     artifact_dir(tmp, [f"utah|amd64|{DIGEST}"]), REPO)
 
     def test_rejects_wrong_branch_and_event(self):
@@ -89,7 +97,7 @@ class ResolveE2EInputsTests(unittest.TestCase):
             d = artifact_dir(tmp, [f"utah|amd64|{DIGEST}"])
             for bad in ({"head_branch": "main"}, {"event": "pull_request"}):
                 with self.assertRaisesRegex(ValueError, "not a successful trusted"):
-                    gate.resolve(good_run(**bad), ["utah"], d, REPO)
+                    gate.resolve(good_run(**bad), expected_images("utah"), d, REPO)
 
     def test_rejects_fork_and_foreign_workflow(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -99,24 +107,24 @@ class ResolveE2EInputsTests(unittest.TestCase):
                         {"path": ".github/workflows/other.yml"},
                         {"head_sha": "not-a-sha"}):
                 with self.assertRaisesRegex(ValueError, "not a successful trusted"):
-                    gate.resolve(good_run(**bad), ["utah"], d, REPO)
+                    gate.resolve(good_run(**bad), expected_images("utah"), d, REPO)
 
     def test_rejects_unexpected_arch(self):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaisesRegex(ValueError, "unexpected architecture"):
                 gate.resolve(
-                    good_run(), ["utah"],
+                    good_run(), expected_images("utah"),
                     artifact_dir(tmp, [f"utah|arm64|{DIGEST}"]), REPO)
 
     def test_rejects_unknown_image_and_bad_digest(self):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaisesRegex(ValueError, "unexpected image name or digest"):
                 gate.resolve(
-                    good_run(), ["utah"],
+                    good_run(), expected_images("utah"),
                     artifact_dir(tmp, [f"other|amd64|{DIGEST}"]), REPO)
             with self.assertRaisesRegex(ValueError, "unexpected image name or digest"):
                 gate.resolve(
-                    good_run(), ["utah"],
+                    good_run(), expected_images("utah"),
                     artifact_dir(tmp, ["utah=not-a-digest"]), REPO)
 
     def test_rejects_conflicting_digests(self):
@@ -124,7 +132,7 @@ class ResolveE2EInputsTests(unittest.TestCase):
             other = "sha256:" + "c" * 64
             with self.assertRaisesRegex(ValueError, "conflicting image digests"):
                 gate.resolve(
-                    good_run(), ["utah"], artifact_dir(tmp, [
+                    good_run(), expected_images("utah"), artifact_dir(tmp, [
                         f"utah|amd64|{DIGEST}",
                         f"utah|amd64|{other}",
                     ]), REPO)
@@ -149,12 +157,16 @@ class ResolveE2EInputsTests(unittest.TestCase):
         out = json.loads(proc.stdout)
         self.assertEqual(
             {item["image"] for item in out["include"]}, set(expected))
+        self.assertEqual(
+            {item["flavor"]: item["image"] for item in out["include"]},
+            {item["flavor"]: item["image"] for item in images},
+        )
 
     def test_rejects_incomplete_flavor_set(self):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaisesRegex(ValueError, "do not cover"):
                 gate.resolve(
-                    good_run(), ["utah", "utah-nvidia"],
+                    good_run(), expected_images("utah", "utah-nvidia"),
                     artifact_dir(tmp, [f"utah|amd64|{DIGEST}"]), REPO)
 
 
@@ -184,8 +196,8 @@ class ResolveE2EInputsEdgeTests(unittest.TestCase):
                                        f"utah-nvidia|amd64|{self.nvidia}"])
 
     def resolve(self, run=None, expected=("utah", "utah-nvidia"), repository=REPO):
-        return gate.resolve(run or good_run(), list(expected), str(self.root),
-                            repository)
+        return gate.resolve(run or good_run(), expected_images(*expected),
+                            str(self.root), repository)
 
     def assert_refused(self, message, **kwargs):
         with self.assertRaisesRegex(ValueError, message):
@@ -196,6 +208,8 @@ class ResolveE2EInputsEdgeTests(unittest.TestCase):
         out = self.resolve(expected=("utah-nvidia", "utah"))
         self.assertEqual([i["image"] for i in out["include"]],
                          ["utah-nvidia", "utah"])
+        self.assertEqual([i["flavor"] for i in out["include"]],
+                         ["nvidia", "main"])
 
     def test_dispatch_and_schedule_events_are_accepted(self):
         self.write_both()

@@ -32,7 +32,8 @@ class InputsTests(unittest.TestCase):
 
     def resolve(self, expected=None):
         return load("resolve-e2e-inputs").resolve(
-            self.run, expected or ["utah"], self.tmp.name, "projectbluefin/utah")
+            self.run, expected or [{"image": "utah", "flavor": "main"}],
+            self.tmp.name, "projectbluefin/utah")
 
     def test_dual_artifact_formats_agree(self):
         self.assertEqual(self.resolve()["include"][0]["ref"],
@@ -52,7 +53,10 @@ class InputsTests(unittest.TestCase):
 
     def test_missing_flavor_is_fatal(self):
         with self.assertRaises(ValueError):
-            self.resolve(["utah", "second-image"])
+            self.resolve([
+                {"image": "utah", "flavor": "main"},
+                {"image": "second-image", "flavor": "second"},
+            ])
 
     def test_rejects_conflicts_tags_unknown_names_and_architectures(self):
         for line in ["utah=latest", "intruder=" + self.digest,

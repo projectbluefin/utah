@@ -97,7 +97,10 @@ post-build verification workflows, not the complete workflow inventory:
   A trusted full image build remains necessary before merge. No automated
   merge is enabled.
 - `.github/workflows/post-testing-e2e.yml` -- successful non-PR testing builds
-  explicitly dispatch this, or manually supply a successful testing build run ID.
+  explicitly dispatch it from `main`, or manually supply a successful testing
+  build run ID. It gates `:testing` on the exact-digest LUKS, production-ISO,
+  and per-flavor smoke/common (plus NVIDIA) testsuite matrix, then publishes
+  the trusted commit status required by branch promotion.
 - `.github/workflows/prow.yml` -- slash commands on issues and pull requests,
   roster authorization via `projectbluefin/.project/.github/workflows/prow-authorize.yml`,
   issue transfers via `prow-transfer.yml`, and label syncing via

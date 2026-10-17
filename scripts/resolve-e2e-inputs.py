@@ -15,6 +15,8 @@ def resolve(run, expected, artifact_dir, repository):
             or run.get("path") != ".github/workflows/build.yml"
             or not re.fullmatch(r"[0-9a-f]{40}", run.get("head_sha", ""))):
         raise ValueError("not a successful trusted testing image build")
+    flavor_by_image = {item["image"]: item["flavor"] for item in expected}
+    expected_images = list(flavor_by_image)
     images = {}
     for path in Path(artifact_dir).rglob("*.txt"):
         for line in path.read_text().splitlines():
@@ -26,17 +28,18 @@ def resolve(run, expected, artifact_dir, repository):
                     raise ValueError("unexpected architecture")
             else:
                 name, digest = line.split("=")
-            if name not in expected or not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
+            if name not in flavor_by_image or not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
                 raise ValueError("unexpected image name or digest")
             if name in images and images[name] != digest:
                 raise ValueError("conflicting image digests")
             images[name] = digest
-    if set(images) != set(expected):
+    if set(images) != set(expected_images):
         raise ValueError("build artifacts do not cover the configured flavor set")
     owner = repository.split("/")[0].lower()
-    return {"include": [{"image": name, "digest": images[name],
+    return {"include": [{"image": name, "flavor": flavor_by_image[name],
+                         "digest": images[name],
                          "ref": f"ghcr.io/{owner}/{name}@{images[name]}"}
-                        for name in expected]}
+                        for name in expected_images]}
 
 
 if __name__ == "__main__":
@@ -45,7 +48,7 @@ if __name__ == "__main__":
     parser.add_argument("artifacts")
     parser.add_argument("repository")
     args = parser.parse_args()
-    expected = [item["image"] for item in json.loads(subprocess.check_output(
-        ["python3", "scripts/flavors.py", "images"], text=True))]
+    expected = json.loads(subprocess.check_output(
+        ["python3", "scripts/flavors.py", "images"], text=True))
     print(json.dumps(resolve(json.loads(Path(args.run).read_text()), expected,
                              args.artifacts, args.repository)))

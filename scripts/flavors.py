@@ -11,7 +11,7 @@ what a flavor moves to when it is switched off, so the reason it is off stays
 next to the list rather than in a commit message.
 
     flavors.py list       ["main"]
-    flavors.py images     [{"image": "utah"}, ...]         promote
+    flavors.py images     [{"image": "utah", "flavor": "main"}, ...]  promote and exact-digest E2E
     flavors.py releases   [{"image": "utah", "source_tag": ...}, ...]  release
     flavors.py needs-kernel   true / false
     flavors.py list-main      ["main"]            flavors that build on the pristine base
@@ -41,7 +41,7 @@ what = sys.argv[1] if len(sys.argv) > 1 else "list"
 if what == "list":
     print(json.dumps(flavors))
 elif what == "images":
-    print(json.dumps([{"image": IMAGE[f]} for f in flavors]))
+    print(json.dumps([{"image": IMAGE[f], "flavor": f} for f in flavors]))
 elif what == "releases":
     print(json.dumps([{"image": IMAGE[f], "source_tag": "testing", "target_tag": "stable"}
                       for f in flavors]))
@@ -58,9 +58,9 @@ elif what == "list-main":
 elif what == "list-kernel":
     print(json.dumps([f for f in flavors if f != "main"]))
 elif what == "suites":
-    # The testsuite suites run against each flavor's exact digest for
-    # asynchronous quality reporting. They live beside the flavor list so
-    # adding a flavor is one config edit, not a code edit here.
+    # The testsuite suites run against each flavor's exact digest for the
+    # promotion gate. They live beside the flavor list so adding a flavor
+    # requires its suite contract in one config edit.
     suites = config.get("suites", {})
     missing = [f for f in flavors if f not in suites]
     if missing:
