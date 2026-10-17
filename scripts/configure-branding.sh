@@ -5,7 +5,7 @@
 
 set -eoux pipefail
 
-IMAGE_PRETTY_NAME="Utah"
+IMAGE_PRETTY_NAME="Bluefin Utah"
 IMAGE_LIKE="fedora"
 IMAGE_NAME="${IMAGE_NAME:-utah}"
 # Canonical OS identity is always "utah", regardless of which image repository
@@ -22,6 +22,7 @@ BASE_IMAGE_NAME="${BASE_IMAGE_NAME:-hummingbird}"
 FEDORA_MAJOR_VERSION="${FEDORA_MAJOR_VERSION:-$(rpm -E %fedora)}"
 UBLUE_IMAGE_TAG="${UBLUE_IMAGE_TAG:-${VERSION}}"
 IMAGE_INFO="/usr/share/ublue-os/image-info.json"
+CODENAME="Utahraptor"
 
 install -d -m0755 /usr/share/ublue-os
 
@@ -47,12 +48,12 @@ EOF
 # The cosmetic/branding fields below are what show up in boot entries and are
 # safe to set. os-release keys are rewritten without assuming an ordering.
 set_os_release() {
-    local key="$1" value="$2"
-    if grep -q "^${key}=" /usr/lib/os-release; then
-        sed -i "s|^${key}=.*|${key}=\"${value}\"|" /usr/lib/os-release
-    else
-        printf '%s="%s"\n' "${key}" "${value}" >> /usr/lib/os-release
-    fi
+	local key="$1" value="$2"
+	if grep -q "^${key}=" /usr/lib/os-release; then
+		sed -i "s|^${key}=.*|${key}=\"${value}\"|" /usr/lib/os-release
+	else
+		printf '%s="%s"\n' "${key}" "${value}" >>/usr/lib/os-release
+	fi
 }
 
 set_os_release NAME "${IMAGE_PRETTY_NAME}"
@@ -63,8 +64,8 @@ set_os_release HOME_URL "https://projectbluefin.io"
 set_os_release DOCUMENTATION_URL "https://docs.projectbluefin.io"
 set_os_release SUPPORT_URL "https://github.com/projectbluefin/utah/issues/"
 set_os_release BUG_REPORT_URL "https://github.com/projectbluefin/utah/issues/"
-set_os_release DEFAULT_HOSTNAME "${IMAGE_PRETTY_NAME,,}"
-set_os_release VERSION_CODENAME "Utahraptor"
+set_os_release DEFAULT_HOSTNAME "${CODENAME,,}"
+set_os_release VERSION_CODENAME "${CODENAME}"
 set_os_release VERSION "${VERSION} (${BASE_IMAGE_NAME^})"
 set_os_release OSTREE_VERSION "${VERSION}"
 set_os_release IMAGE_ID "${IMAGE_ID}"
@@ -80,7 +81,7 @@ set_os_release LOGO "fedora-logo-icon"
 # Fedora's bootloader helper still keys its vendor directory off EFIDIR after
 # the distribution ID changes.
 if [ -f /usr/sbin/grub2-switch-to-blscfg ]; then
-    sed -i 's|^EFIDIR=.*|EFIDIR="fedora"|' /usr/sbin/grub2-switch-to-blscfg
+	sed -i 's|^EFIDIR=.*|EFIDIR="fedora"|' /usr/sbin/grub2-switch-to-blscfg
 fi
 
 # These files are intentionally placeholders. The common Bluefin stats timer
@@ -95,14 +96,13 @@ printf '…\n' >/usr/share/ublue-os/bazaar-install-count
 # install-packages.py checks FEDORA_LOGO_FILES before this restore; identical
 # paths here contain Bluefin artwork and are checked by the desktop contract.
 for logo in fedora_logo_med.png fedora_whitelogo_med.png fedora-logo.png system-logo-white.png; do
-    install -Dm0644 "/tmp/utah-bluefin-pixmaps/${logo}" "/usr/share/pixmaps/${logo}"
+	install -Dm0644 "/tmp/utah-bluefin-pixmaps/${logo}" "/usr/share/pixmaps/${logo}"
 done
 
 # St.Icon in custom-command-menu resolves menuicon-setting through the theme.
 # Keep Bluefin's icon name and menu behavior; rebuild the index after every
 # overlay and logos-RPM operation so it includes our shipped symbolic SVG.
 gtk-update-icon-cache --force /usr/share/icons/hicolor
-
 
 # Compile the system dconf databases now so the GDM greeter picks up the
 # org.gnome.login-screen logo override (etc/dconf/db/gdm.d/01-bluefin-gdm-logo)
@@ -117,7 +117,7 @@ gtk-update-icon-cache --force /usr/share/icons/hicolor
 # dconf installed (e.g. CI without gnome-desktop), so guard with the binary
 # rather than skip outright.
 if [ -x /usr/bin/dconf ]; then
-    /usr/bin/dconf update
+	/usr/bin/dconf update
 fi
 
 printf 'Utah branding configured for %s (flavor %s)\n' "${IMAGE_NAME}" "${IMAGE_FLAVOR}"

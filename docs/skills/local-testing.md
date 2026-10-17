@@ -460,7 +460,7 @@ login and digest checks then prove the new deployment actually booted; never
 hard-reset a staged deployment. QEMU runs without `-no-reboot` and uses its
 normal guest-reboot reset action, retaining the same disk and firmware state.
 Every desktop milestone also requires `/etc/os-release` to identify
-`ID=hummingbird`, `NAME=Utah`, and `PRETTY_NAME=Utah (Version: ...)`, matching
+`ID=hummingbird`, `NAME=Bluefin Utah`, and `PRETTY_NAME=Bluefin Utah (Version: ...)`, matching
 the desktop contract. A readable os-release file is not identity proof.
 
 After each baseline, upgraded and rollback boot, the harness enters the

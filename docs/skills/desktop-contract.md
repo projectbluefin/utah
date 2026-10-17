@@ -36,14 +36,14 @@ The TOML's sections are the contract's table of contents:
 - **`[branding]`** — files that must exist (Bluefin logos, backgrounds, the
   `zz0-bluefin-modifications` gschema override, fastfetch and Bazaar count
   files) plus the os-release identity. The identity fields are exact values:
-  `NAME=Utah`, `ID=hummingbird`, `ID_LIKE=fedora`, `VERSION_CODENAME=Utahraptor`,
-  `DEFAULT_HOSTNAME=utah`, `IMAGE_ID=utah`, and the projectbluefin.io URLs.
+  `NAME=Bluefin Utah`, `ID=hummingbird`, `ID_LIKE=fedora`, `VERSION_CODENAME=Utahraptor`,
+  `DEFAULT_HOSTNAME=utahraptor`, `IMAGE_ID=utah`, and the projectbluefin.io URLs.
   `ID`, `VERSION_ID` and `CPE_NAME` are left at the Hummingbird base values
   (issue #377) so CVE scanners still recognise the image as Hummingbird-based;
   `CPE_NAME` is asserted as a base-identity pattern
   (`^cpe:/a:redhat:hummingbird:\d+$`) rather than a utah-branded exact value.
   `[branding.os_release_patterns]` shapes the fields the build generates:
-  `PRETTY_NAME` is `Utah (Version: ...)`, `VERSION` carries `(Hummingbird)`,
+  `PRETTY_NAME` is `Bluefin Utah (Version: ...)`, `VERSION` carries `(Hummingbird)`,
   `VARIANT_ID` starts with `utah`. The verifier checks both `/usr/lib/os-release` and
   `/etc/os-release` (the file the GNOME About panel reads, which is a regular
   file rather than a symlink on some bases), and fails if either is missing or
@@ -165,6 +165,7 @@ known case (#443): it exited 255 every start, so mDNS never worked.
 daemon still runs confined as `avahi_t`. Spot others on a booted VM with
 `journalctl -b | grep nnp_transition` and `ps -eZ` (a daemon showing
 `init_t` is the symptom).
+
 ## First-boot work must not gate graphical.target
 
 `systemd-analyze critical-chain graphical.target` on a fresh VM is the check.
@@ -179,6 +180,7 @@ Do not wrap `bootc` in `sh -c` to sequence it: the bare binary's
 `install_exec_t` label is its SELinux entrypoint, and wrapped it ran as
 `initrc_t` with its `chcon` calls denied `mac_admin`. Pinned by
 `tests/test_unified_storage_unit.py`.
+
 ## Boot-error noise is a bug (#444)
 
 `ujust report` attaches the current boot's error-priority journal, and on a
