@@ -832,7 +832,7 @@ issue = "#263"
 
 [package.hfsplus-tools]
 status = "planned"
-area = "files-and-devices"
+area = "files-devices"
 issue = "#263"
 
 [package.ipset]
@@ -897,12 +897,12 @@ issue = "#263"
 
 [package.mcelog]
 status = "planned"
-area = "hardware-and-power"
+area = "hardware-power"
 issue = "#263"
 
 [package.memstrack]
 status = "planned"
-area = "hardware-and-power"
+area = "hardware-power"
 issue = "#263"
 
 [package.mkpasswd]
@@ -912,7 +912,7 @@ issue = "#263"
 
 [package.nilfs-utils]
 status = "planned"
-area = "files-and-devices"
+area = "files-devices"
 issue = "#263"
 
 [package.openal-soft]
@@ -927,7 +927,7 @@ issue = "#263"
 
 [package.powerstat]
 status = "planned"
-area = "hardware-and-power"
+area = "hardware-power"
 issue = "#263"
 
 [package.python-unversioned-command]
@@ -1007,7 +1007,7 @@ issue = "#263"
 
 [package.sos]
 status = "planned"
-area = "hardware-and-power"
+area = "hardware-power"
 issue = "#263"
 
 [package.soundtouch]
@@ -1042,7 +1042,7 @@ issue = "#263"
 
 [package.uresourced]
 status = "planned"
-area = "cli-tools"
+area = "system-daemons"
 issue = "#263"
 
 [package.uriparser]
@@ -1061,9 +1061,8 @@ area = "cli-tools"
 issue = "#263"
 
 [package.uupd]
-status = "planned"
-area = "system-daemons"
-issue = "#263"
+status = "waived"
+reason = "Utah installs uupd from the pinned upstream release (Containerfile); only Bluefin's uupd-manual.service differs"
 
 [package.virt-what]
 status = "planned"
