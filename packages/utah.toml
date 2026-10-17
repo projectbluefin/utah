@@ -310,6 +310,14 @@ packages = [
     "uriparser",
     "xmlsec1",
     "avahi-tools",
+    # Slice 2 base system parity additions (baselines/GAP.md, #263):
+    # Security/smartcard daemon: gnupg2-scdaemon.
+    # Diagnostics & system services: dnf5daemon-server, capstone, tcl, unbound-anchor.
+    "gnupg2-scdaemon",
+    "dnf5daemon-server",
+    "capstone",
+    "tcl",
+    "unbound-anchor",
 ]
 
 [hardware]

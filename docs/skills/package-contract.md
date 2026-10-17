@@ -363,7 +363,7 @@ Raise the overlay change as its own pull request against `main`; the bump PR
 then picks the fix up on its next rebuild.
 
 Current counts, per the README "Package parity" section: 61 Bluefin contract
-packages installed, 133 Utah additions (GNOME 51, base-image parity, device
+packages installed, 138 Utah additions (GNOME 51, base-image parity, device
 firmware, desktop services), 7 genuinely unavailable. `scripts/check-doc-counts.py` (part of
 `just check`) recomputes these from the manifests and fails if either
 document drifts from `site/data/packages.json`.

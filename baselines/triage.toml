@@ -779,10 +779,14 @@ status = "untriaged"
 status = "untriaged"
 
 [package.capstone]
-status = "untriaged"
+status = "planned"
+area = "system-tools"
+issue = "#263"
 
 [package.dnf5daemon-server]
-status = "untriaged"
+status = "planned"
+area = "system-tools"
+issue = "#263"
 
 [package.dnsmasq]
 status = "untriaged"
@@ -923,7 +927,9 @@ status = "untriaged"
 status = "untriaged"
 
 [package.tcl]
-status = "untriaged"
+status = "planned"
+area = "system-tools"
+issue = "#263"
 
 [package.tslib]
 status = "untriaged"
@@ -932,7 +938,9 @@ status = "untriaged"
 status = "untriaged"
 
 [package.unbound-anchor]
-status = "untriaged"
+status = "planned"
+area = "system-tools"
+issue = "#263"
 
 [package.uresourced]
 status = "untriaged"
