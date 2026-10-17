@@ -92,7 +92,7 @@ and confusingly, so this reads the same list (comment,
 `.github/workflows/promote-testing-to-main.yml`). The `promote` job calls
 `reusable-promote-squash.yml@v1` (same SHA pin) against
 `ghcr.io/<owner>`, with a cosign identity regexp pinned to
-`build.yml@refs/heads/testing` and `run_e2e: false`.
+`reusable-build.yml@[0-9a-f]{40}` and `run_e2e: false`.
 
 ## sync-main-to-testing
 
