@@ -40,7 +40,7 @@
     {
       "id": "desktop-contract",
       "name": "desktop-contract",
-      "one_line_purpose": "Maintain Utah identity, Bluefin desktop defaults, and first-boot Flatpak policy.",
+      "one_line_purpose": "Maintain Bluefin Utah identity, Bluefin desktop defaults, and first-boot Flatpak policy.",
       "entry_point": "docs/skills/desktop-contract.md",
       "category": "contracts",
       "status": "active",
