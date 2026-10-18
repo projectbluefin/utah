@@ -387,11 +387,11 @@ verify_desktop_and_identity() {
     fi
     echo "  desktop: gdm.service and gnome-shell active"
 
-    # 3. Enforce the Utah os-release identity, not just a readable file.
+    # 3. Enforce the Bluefin Utah os-release identity, not just a readable file.
     # Keep these values aligned with contracts/bluefin-desktop.toml.
-    ssh_target '. /etc/os-release; test "${ID:-}" = hummingbird && test "${NAME:-}" = Utah && printf "%s\n" "${PRETTY_NAME:-}" | grep -Eq "^Utah \\(Version: .+\\)$"' \
-        || diagnose_failure "os-release does not identify Utah during ${label}"
-    echo "  identity: Utah on Hummingbird"
+    ssh_target '. /etc/os-release; test "${ID:-}" = hummingbird && test "${NAME:-}" = Bluefin && printf "%s\n" "${PRETTY_NAME:-}" | grep -Eq "^Bluefin \\(Version: .+\\)$"' \
+        || diagnose_failure "os-release does not identify Bluefin Utah during ${label}"
+    echo "  identity: Bluefin Utah on Hummingbird"
 
     # 4. Check for failed units
     local failed_units
