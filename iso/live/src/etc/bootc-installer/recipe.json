@@ -26,19 +26,9 @@
     }
   },
   "steps": {
-    "welcome": {
-      "template": "welcome",
-      "protected": true
-    },
-    "image": {
-      "template": "image",
-      "protected": true
-    },
-    "disk": {
-      "template": "disk"
-    },
-    "encryption": {
-      "template": "encryption"
-    }
+    "welcome": {"template": "welcome","protected": true},
+    "image": {"template": "image","protected": true},
+    "disk": {"template": "disk"},
+    "encryption": {"template": "encryption"}
   }
 }
