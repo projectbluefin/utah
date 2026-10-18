@@ -1,5 +1,5 @@
 #!/usr/bin/bash
-# Apply Utah's OS identity to the Hummingbird base after all packages and
+# Apply Bluefin Utah's identity to the Hummingbird base after all packages and
 # system-files overlays are present. Utah consumes Bluefin's desktop assets and
 # defaults, but remains a distinct, supportable Project Bluefin variant.
 
