@@ -47,12 +47,12 @@ EOF
 # The cosmetic/branding fields below are what show up in boot entries and are
 # safe to set. os-release keys are rewritten without assuming an ordering.
 set_os_release() {
-	local key="$1" value="$2"
-	if grep -q "^${key}=" /usr/lib/os-release; then
-		sed -i "s|^${key}=.*|${key}=\"${value}\"|" /usr/lib/os-release
-	else
-		printf '%s="%s"\n' "${key}" "${value}" >>/usr/lib/os-release
-	fi
+    local key="$1" value="$2"
+    if grep -q "^${key}=" /usr/lib/os-release; then
+        sed -i "s|^${key}=.*|${key}=\"${value}\"|" /usr/lib/os-release
+    else
+        printf '%s="%s"\n' "${key}" "${value}" >>/usr/lib/os-release
+    fi
 }
 
 set_os_release NAME "${IMAGE_PRETTY_NAME}"
@@ -80,7 +80,7 @@ set_os_release LOGO "fedora-logo-icon"
 # Fedora's bootloader helper still keys its vendor directory off EFIDIR after
 # the distribution ID changes.
 if [ -f /usr/sbin/grub2-switch-to-blscfg ]; then
-	sed -i 's|^EFIDIR=.*|EFIDIR="fedora"|' /usr/sbin/grub2-switch-to-blscfg
+    sed -i 's|^EFIDIR=.*|EFIDIR="fedora"|' /usr/sbin/grub2-switch-to-blscfg
 fi
 
 # These files are intentionally placeholders. The common Bluefin stats timer
@@ -95,7 +95,7 @@ printf '…\n' >/usr/share/ublue-os/bazaar-install-count
 # install-packages.py checks FEDORA_LOGO_FILES before this restore; identical
 # paths here contain Bluefin artwork and are checked by the desktop contract.
 for logo in fedora_logo_med.png fedora_whitelogo_med.png fedora-logo.png system-logo-white.png; do
-	install -Dm0644 "/tmp/utah-bluefin-pixmaps/${logo}" "/usr/share/pixmaps/${logo}"
+    install -Dm0644 "/tmp/utah-bluefin-pixmaps/${logo}" "/usr/share/pixmaps/${logo}"
 done
 
 # St.Icon in custom-command-menu resolves menuicon-setting through the theme.
@@ -116,7 +116,7 @@ gtk-update-icon-cache --force /usr/share/icons/hicolor
 # dconf installed (e.g. CI without gnome-desktop), so guard with the binary
 # rather than skip outright.
 if [ -x /usr/bin/dconf ]; then
-	/usr/bin/dconf update
+    /usr/bin/dconf update
 fi
 
 printf 'Utah branding configured for %s (flavor %s)\n' "${IMAGE_NAME}" "${IMAGE_FLAVOR}"
