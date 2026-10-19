@@ -3,7 +3,9 @@
 # packages/bluefin.toml is a byte-for-byte copy of projectbluefin/bluefin's
 # build_files/packages/base.toml and must stay that way -- it is the parity
 # contract, and any drift there is a parity bug.  Everything Utah needs *in
-# addition to* (or *instead of*) that contract lives here.
+# addition to* (or *instead of*) that contract lives here.  Flatpak-first:
+# never add an RPM for an end-user app Utah ships as a Flatpak (see
+# contracts/bluefin-desktop.toml [flatpak]); drop conditions ride inline.
 #
 # Sections:
 #   [gnome]        GNOME 51 desktop contract Hummingbird does not ship

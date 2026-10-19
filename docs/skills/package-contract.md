@@ -63,10 +63,11 @@ Flatpak-first (standing policy): never request an RPM for an end-user
 application Utah ships as a Flatpak (see the `[flatpak]` app list in
 `contracts/bluefin-desktop.toml`). The overlay carries system components,
 drivers, thumbnailers, CLI tools, and libraries — not app duplicates.
-Transitional native payloads with no Flatpak-provided equivalent
-(e.g. `totem-video-thumbnailer`) are allowed only with a recorded drop
-condition, and the factory side follows the same rule when importing
-recipes.
+Transitional native payloads with no Flatpak-provided equivalent are
+allowed only with a recorded drop condition — an inline comment beside the
+entry in `packages/utah.toml` naming what lets it go (see the existing
+drop notes there) — and the factory side follows the same rule when
+importing recipes.
 
 ## Wi-Fi documentation currency
 
