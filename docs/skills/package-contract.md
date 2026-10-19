@@ -59,15 +59,10 @@ policy for changing them.
     from the published Bluefin image snapshot
     (`baselines/bluefin/rpms.tsv`).
 
-Flatpak-first (standing policy): never request an RPM for an end-user
-application Utah ships as a Flatpak (see the `[flatpak]` app list in
-`contracts/bluefin-desktop.toml`). The overlay carries system components,
-drivers, thumbnailers, CLI tools, and libraries — not app duplicates.
-Transitional native payloads with no Flatpak-provided equivalent are
-allowed only with a recorded drop condition — an inline comment beside the
-entry in `packages/utah.toml` naming what lets it go (see the existing
-drop notes there) — and the factory side follows the same rule when
-importing recipes.
+Flatpak-first (standing policy): no RPM for an end-user app Utah ships as a
+Flatpak (`contracts/bluefin-desktop.toml` `[flatpak]`). Transitional native
+payloads need an inline drop condition in `packages/utah.toml`; the factory
+follows the same rule when importing recipes.
 
 ## Wi-Fi documentation currency
 
@@ -111,16 +106,11 @@ The four requested overrides and `ffmpegthumbnailer` are in `[factory].parity`;
 their installed releases must carry `.bfin` to prevent base substitution.
 Check new names with `just check-repos` and the image's `package-origins.txt`.
 
-`gstreamer1-plugins-bad-free` and `totem-pl-parser` are published package
-names but are omitted from the install request because their dependency
-closures are unsatisfied in the pinned factory inputs: bad-free needs
-`libSoundTouch.so.2`, `libfaad.so.2`, `libopenal.so.1`, and `libsrtp2.so.1`,
-and Totem needs `libuchardet.so.0`. Factory builds of `soundtouch`, `faad2`,
-`openal-soft`, `libsrtp`, and `uchardet` are prerequisites, tracked by #383.
-These are not absent package names or flaky repository failures; do not add
-them to `[unavailable]` or count them as installed. The pin stays unchanged.
-After closure publication, require `just check-repos` against the reviewed
-pinned inputs before restoring either request.
+`gstreamer1-plugins-bad-free` and `totem-pl-parser` stay out of the install
+request until their dependency closures publish (`soundtouch`, `faad2`,
+`openal-soft`, `libsrtp`, `uchardet` — tracked by #383). Do not list them
+under `[unavailable]`; after publication, re-verify with `just check-repos`
+against the reviewed pinned inputs before restoring either request.
 
 Package installation does not prove codec functionality. On Intel hardware,
 run `vainfo` against the render device and confirm the iHD driver loads and
@@ -129,13 +119,12 @@ and `vah264dec` with `gst-inspect-1.0`, then test a known H.264 sample.
 The audit pin published `gstreamer1-plugin-openh264` but only `noopenh264`;
 resolving that library dependency is not proof of a working decoder.
 
-Remaining #383 gaps at the audit: `gstreamer1-plugin-libav`,
-`gstreamer1-plugins-ugly-free`, `gstreamer1-plugin-dav1d`,
-`papers-thumbnailer`, `gnome-epub-thumbnailer`, and `gst-thumbnailers`.
-`ffmpegthumbnailer` is now consumed. Consume the rest only after factory builds
-and dependency closures resolve against Utah's pinned inputs. `totem-pl-parser` is not a
-replacement for those thumbnailers. Full FFmpeg versus `ffmpeg-free` remains
-a maintainer policy decision; keep #383 open for hardware and codec proof.
+Remaining #383 gaps: `gstreamer1-plugin-libav` (blocked on the gstreamer1
+family bump), `papers-thumbnailer` (needs published `libspelling` or another
+native PDF provider), and `gst-thumbnailers` (needs the Rust crate stack,
+see factory #527). `ffmpegthumbnailer`, ugly-free, plugin-dav1d, and the
+epub thumbnailer are consumed. Full FFmpeg (not `-free`) is the decided
+direction; keep #383 open for hardware and codec proof.
 
 ## Repository policy
 
