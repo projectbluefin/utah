@@ -122,8 +122,9 @@ resolving that library dependency is not proof of a working decoder.
 Remaining #383 gaps: `gstreamer1-plugin-libav` (blocked on the gstreamer1
 family bump), `papers-thumbnailer` (needs published `libspelling` or another
 native PDF provider), and `gst-thumbnailers` (needs the Rust crate stack,
-see factory #527). `ffmpegthumbnailer`, ugly-free, plugin-dav1d, and the
-epub thumbnailer are consumed. Full FFmpeg (not `-free`) is the decided
+see factory #527). `ffmpegthumbnailer` is consumed; ugly-free, plugin-dav1d, and the
+epub thumbnailer are still not in the factory and stay out until
+utah-packages publishes them (#383). Full FFmpeg (not `-free`) is the decided
 direction; keep #383 open for hardware and codec proof.
 
 ## Repository policy
