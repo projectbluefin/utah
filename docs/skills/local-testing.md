@@ -235,6 +235,14 @@ so there is no tag-name continuity to lean on when bumping it.
 take the digest from that release's `org.bootcinstaller.Installer.flatpak`
 asset (`digest` field of `gh api repos/tuna-os/bootc-installer/releases/tags/<tag>`,
 or download and `sha256sum` it) rather than guessing or reusing an old value.
+`install-flatpaks.sh` also shims the container-build environment, which lacks
+things a booted system provides: a machine id (D-Bus refuses to start without
+one), a session bus (only OCI remotes reach for it), and `/var/tmp`
+(flatpak's OCI token cache lives there, hardcoded, ignoring `$TMPDIR`;
+systemd-tmpfiles creates it on boot, but an image build never boots). All
+three only bite on the OCI `tuna-os` remote -- ostree remotes like Flathub
+never take those paths, so failures that strike only `tuna-os` installs are
+almost certainly a missing build-time shim, not a bad remote.
 
 ## Tacklebox ISOs (unpublished variants)
 
