@@ -1,11 +1,13 @@
 #!/usr/bin/bash
 # Refresh Bluefin community stats used by fastfetch.
-# Writes to /var/cache/bluefin/ so updates survive across reboots
-# without requiring changes to the immutable /usr layer.
+# Writes to /var/cache/bluefin-stats/ so updates survive across reboots
+# without requiring changes to the immutable /usr layer. fastfetch.jsonc reads
+# these files first and falls back to the /usr/share/ublue-os placeholders
+# (configure-services.sh patches it, #860).
 
 set -euo pipefail
 
-CACHE_DIR=/var/cache/bluefin
+CACHE_DIR="${CACHE_DIRECTORY:-/var/cache/bluefin-stats}"
 mkdir -p "${CACHE_DIR}"
 
 # These values end up rendered verbatim in user terminals by fastfetch, so
@@ -17,11 +19,21 @@ valid_stat() {
     [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9.,+\ ]{0,31}$ ]]
 }
 
+# Replace a stat file atomically so a concurrent fastfetch never reads it
+# half-written.
+write_stat() {
+    local tmp
+    tmp="$(mktemp "${CACHE_DIR}/.$1.XXXXXX")"
+    printf '%s\n' "$2" > "${tmp}"
+    chmod 0644 "${tmp}"
+    mv -f "${tmp}" "${CACHE_DIR}/$1"
+}
+
 # User count from ublue-os/countme
 if count=$(curl -sf --retry 3 --max-time 10 \
     https://raw.githubusercontent.com/ublue-os/countme/main/badge-endpoints/bluefin.json \
     | jq -r '.message') && valid_stat "${count}"; then
-    echo "${count}" > "${CACHE_DIR}/fastfetch-user-count"
+    write_stat fastfetch-user-count "${count}"
 fi
 
 # Bazaar weekly downloads from Flathub
@@ -29,5 +41,5 @@ if installs=$(curl -sf --retry 3 --max-time 10 \
     'https://flathub.org/api/v2/stats/io.github.kolunmi.Bazaar?all=false&days=1' \
     | jq -r '.installs_last_7_days' \
     | numfmt --to=si --round=nearest) && valid_stat "${installs}"; then
-    echo "${installs}" > "${CACHE_DIR}/bazaar-install-count"
+    write_stat bazaar-install-count "${installs}"
 fi
