@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-17",
+  "generated_at": "2026-10-23",
   "generator": "scripts/generate-site-data.py",
   "groups": [
     {
@@ -76,12 +76,21 @@
       "id": "gnome",
       "packages": [
         "glibc-all-langpacks",
+        "gnome-app-list",
+        "gnome-backgrounds",
+        "gnome-browser-connector",
+        "gnome-color-manager",
         "gnome-control-center",
         "gnome-initial-setup",
+        "gnome-menus",
+        "gnome-remote-desktop",
         "gnome-rounded-blur",
         "gnome-session",
         "gnome-settings-daemon",
         "gnome-shell",
+        "gnome-tour",
+        "gnome-user-docs",
+        "gnome-user-share",
         "gsettings-desktop-schemas",
         "gtk4",
         "gvfs-afc",
@@ -92,7 +101,9 @@
         "mutter",
         "nautilus",
         "xdg-desktop-portal",
-        "xdg-desktop-portal-gnome"
+        "xdg-desktop-portal-gnome",
+        "yelp-libs",
+        "yelp-xsl"
       ],
       "title": "GNOME 51 desktop",
       "transient": false
@@ -259,7 +270,7 @@
     }
   ],
   "totals": {
-    "installed": 202,
+    "installed": 213,
     "unavailable": 7
   },
   "unavailable": [

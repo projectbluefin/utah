@@ -58,15 +58,14 @@ The TOML's sections are the contract's table of contents:
   ships that profile (including the `local` and `site` admin layers), so Utah
   must not overlay its own copy — a shorter file would silently drop the admin
   override layers even though the distro keyfiles keep working (#732 review).
-  The GDM keyfile under
-  `/etc/dconf/db/gdm.d/01-bluefin-gdm-logo` overrides
+  The GDM keyfile under `/etc/dconf/db/gdm.d/01-bluefin-gdm-logo` overrides
   `org.gnome.login-screen.logo` to point at the Bluefin mark; otherwise
   gnome-shell falls back to `fedora-logos`' Fedora wordmark at the greeter
   (#378). `file_contains` pins the live configuration: the gschema override
   references Bazaar and the Bluefin background path, the custom command menu
-  points at `docs.projectbluefin.io`, the keybindings set
-  `xdg-terminal-exec`, the GDM keyfile declares the login-screen schema and
-  the Bluefin asset path. Common's container signature policy names
+  points at `docs.projectbluefin.io`, the keybindings set `xdg-terminal-exec`,
+  the GDM keyfile declares the login-screen schema and the Bluefin asset path.
+  Common's container signature policy names
   `/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release`; the pinned Hummingbird base
   supplies that key (fingerprint `567E…1D51`) alongside Utah's
   `RPM-GPG-KEY-redhat-release-2`, so no policy weakening or alias is needed.
@@ -217,10 +216,9 @@ one is pending a composefs boot check (see below):
   deployment), so the unit is skipped there too. The skip covers the
   whole unit, not just `/`: other fstab entries systemd-remount-fs would
   remount (`/usr`, API VFS such as a `/tmp` tmpfs or `/proc` `hidepid=`)
-  are also left alone. Utah ships no such entries, so only
-  operator-added fstab lines are affected; removing the drop-in restores
-  the unit. The verifier in `tests/test_boot_noise.py` keeps the
-  drop-in in sync with the contract.
+  are also left alone. Utah ships no such entries, so only operator-added fstab
+  lines are affected; removing the drop-in restores the unit. The verifier in
+  `tests/test_boot_noise.py` keeps the drop-in in sync with the contract.
   Not yet boot-verified: on a composefs VM, confirm
   `systemctl show -p ActiveState,ConditionResult systemd-remount-fs` reports
   `inactive`/`no` and `systemctl is-system-running` reports `running`.

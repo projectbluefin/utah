@@ -68,6 +68,27 @@ packages = [
     # installer's user step stays until an install is verified to boot into
     # it; tests/test_installer_recipe.py allows dropping it after that.
     "gnome-initial-setup",
+    # GNOME apps and integration from the factory (#263, #391). Flatpak-first:
+    # gnome-system-monitor is deliberately absent because Mission Center is
+    # the shipped Flatpak (contracts/bluefin-desktop.toml).
+    # Help content: Bluefin's [excluded] removes the yelp viewer itself but its
+    # image keeps the libraries, stylesheets and gnome-user-docs.
+    "yelp-libs",
+    "yelp-xsl",
+    "gnome-user-docs",
+    "gnome-tour",
+    # Settings integration: RDP screen sharing, colour profiles, and the
+    # extensions-site browser connector.
+    "gnome-remote-desktop",
+    "gnome-color-manager",
+    "gnome-browser-connector",
+    # Session data: wallpapers, menu definitions and the app grid layout.
+    "gnome-backgrounds",
+    "gnome-menus",
+    "gnome-app-list",
+    # Public-folder sharing (WebDAV via httpd + mod_dnssd, both from the
+    # factory/Hummingbird) behind Settings > Sharing > File Sharing.
+    "gnome-user-share",
 ]
 
 # Required major versions for the GNOME desktop contract packages above. The
@@ -661,6 +682,19 @@ packages = [
     "gnome-settings-daemon",
     "gnome-control-center",
     "gsettings-desktop-schemas",
+    # GNOME apps and Help stack consumed from the pinned factory (#263, #391).
+    # Fail the image build if a base package silently replaces one of them.
+    "gnome-app-list",
+    "gnome-backgrounds",
+    "gnome-browser-connector",
+    "gnome-color-manager",
+    "gnome-menus",
+    "gnome-remote-desktop",
+    "gnome-tour",
+    "gnome-user-docs",
+    "gnome-user-share",
+    "yelp-libs",
+    "yelp-xsl",
 ]
 parity = [
     "wpa_supplicant",

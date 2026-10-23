@@ -260,9 +260,8 @@ area = "desktop-apps"
 issue = "#263"
 
 [package.gnome-system-monitor]
-status = "planned"
-area = "desktop-apps"
-issue = "#263"
+status = "waived"
+reason = "Flatpak-first: Utah ships Mission Center (io.missioncenter.MissionCenter) in contracts/bluefin-desktop.toml; the factory builds gnome-system-monitor (utah-packages#542) but Utah does not install a duplicate"
 
 [package.gnome-color-manager]
 status = "planned"

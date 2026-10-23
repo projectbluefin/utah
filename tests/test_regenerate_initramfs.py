@@ -96,7 +96,7 @@ class RegenerateInitramfsTests(unittest.TestCase):
         self.assertEqual(self.run_script().returncode, 0)
         self.assertEqual(self.called(), [
             "utah-live-kernel / --select-bootc --promote-ogc",
-            f"dracut --no-hostonly --reproducible --kver {KVER} --force {IMAGE}",
+            f"dracut --no-hostonly --reproducible --zstd --kver {KVER} --force {IMAGE}",
             f"lsinitrd {IMAGE}",
             f"lsinitrd -m {IMAGE}",
         ])
