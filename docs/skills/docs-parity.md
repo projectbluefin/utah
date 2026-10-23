@@ -42,9 +42,11 @@ Everything that is **true of the source repository right now**:
 
 - Identity, architecture, and the two-repository composition with
   `projectbluefin/utah-packages`.
-- The honest pre-alpha status, including which artifacts are published (the
-  testing live ISO, and the `:testing` consumer tag after `post-testing-e2e`
-  validates a digest) and which are not (no `:stable` promotion yet).
+- The honest pre-alpha status, including which artifacts are published: the
+  testing live ISO, the `:testing` consumer tag after `post-testing-e2e`
+  validates a digest, and the rolling `:stable` tag that `execute-release.yml`
+  moves on each testing-to-main promotion behind the release gate (kept as the
+  interface by the #336 ruling).
 - The concise Known gaps list (Secure Boot and live-media boot paths, bootc
   update timers, ESP maintenance via `bootctl`, hardware/codec/driver
   validation, CUDA exclusion) — one bullet per gap; the docs page never
@@ -84,7 +86,7 @@ page as follows:
 |---|---|---|---|
 | Identity | "Utah is Bluefin built on Fedora Hummingbird … Utah adds the desktop layer" | Same identity, plus the Fedora Hummingbird Magazine link | README "What it is" |
 | Two-repo composition | "Utah is composed across two coordinated repositories" with `projectbluefin/utah-packages` | Same two-repo table | README "What it is" |
-| Pre-alpha status | "Utah is an alpha build … its `:testing` container image is published on GHCR" | Testing container images and live ISOs are available for hardware testing; the `:testing` consumer tag is published on `ghcr.io/projectbluefin/utah:testing` once `post-testing-e2e` validates a digest; `:stable` is planned, not yet promoted | README header + "Download and image streams" |
+| Pre-alpha status | "Utah is an alpha build … its `:testing` container image is published on GHCR" | Testing container images and live ISOs are available for hardware testing; the `:testing` consumer tag is published on `ghcr.io/projectbluefin/utah:testing` once `post-testing-e2e` validates a digest; the rolling `:stable` tag moves on each testing-to-main promotion behind the release gate | README header + "Download and image streams" |
 | Download | `https://projectbluefin.dev/utah-live-latest.iso` | Same testing ISO URL plus its `-CHECKSUM` link, and a pointer to the docs page for live versions and downloads | README "Download and image streams" |
 | Image streams | `utah`, `utah-nvidia`, `utah-gaming`, `utah-nvidia-gaming` on stable/testing | Same set; canonical source is `config/flavors.json` | README "Download and image streams" |
 | Features / stack | Kernel options + OGC + Gaming mode; NVIDIA and Gaming flavors; GNOME 51 from source | Same explanations, with the precise kernel/NVIDIA/Secure Boot caveats | README "Known gaps" |
