@@ -36,6 +36,10 @@ enable flatpak-preinstall.service
 enable flatpak-nuke-fedora.service
 enable input-remapper.service
 enable ModemManager.service
+# Laptop thermal management (#388). Fedora's 90-default.preset enables both for
+# desktops; Hummingbird's 99-default-disable would leave them off.
+enable thermald.service
+enable intel_lpmd.service
 # Printing on demand, as Fedora's preset enables it for Bluefin.
 enable cups.socket
 enable cups.path

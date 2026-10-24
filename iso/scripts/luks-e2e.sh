@@ -986,6 +986,20 @@ echo "  session type: ${session_type:-unknown}"
 sleep 10   # let the shell finish drawing before the screenshot
 shot installed-desktop "${MONITOR_INSTALLED}"
 
+# GNOME Shell shows its own "Welcome to Bluefin / Skip / Take Tour" dialog on
+# first login whenever gnome-tour is installed (it launches org.gnome.Tour from
+# "Take Tour"). It is a Shell modal, not a process, and it appears at a variable
+# delay after login. The clean desktop shot above documents it when it is
+# already up. When OCR of a later screenshot reads it, press Skip (the focused
+# button) so it stops covering the terminal, as a user would.
+skip_welcome_dialog() {
+    if grep -qi "take tour" "$1" 2>/dev/null; then
+        echo "  GNOME Shell welcome dialog is showing; pressing Skip"
+        monitor "${MONITOR_INSTALLED}" "sendkey ret" || true
+        sleep 3
+    fi
+}
+
 # Open a terminal on the desktop and leave fastfetch on screen. This is the
 # shot a human actually reads: it names the OS, the kernel and the desktop
 # from inside the installed system, so one image carries what half a dozen
@@ -1010,6 +1024,7 @@ if [[ "${UTAH_E2E_REQUIRE_FASTFETCH:-0}" == 1 ]]; then
                     break 2
                 fi
             done
+            skip_welcome_dialog "${WORK}/fastfetch-ocr.txt"
         fi
         sleep 5
     done

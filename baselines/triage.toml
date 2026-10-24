@@ -83,6 +83,7 @@ issue = "#263"
 status = "planned"
 area = "printing"
 issue = "#263"
+reason = "Published by the factory (#390) but uninstallable: Requires python3-pillow, usbutils and libnetsnmp.so.45, none published (sha256:194f1001)"
 
 [package.gutenprint]
 status = "planned"
@@ -103,11 +104,13 @@ issue = "#263"
 status = "planned"
 area = "printing"
 issue = "#263"
+reason = "Published by the factory (#390) but uninstallable: Requires python3-cups, not yet published"
 
 [package.system-config-printer-udev]
 status = "planned"
 area = "printing"
 issue = "#263"
+reason = "Published by the factory (#390) but uninstallable: needs system-config-printer-libs (python3-cups)"
 
 [package.sane-backends]
 status = "planned"
@@ -143,11 +146,13 @@ issue = "#263"
 status = "planned"
 area = "hardware-power"
 issue = "#263"
+reason = "Published by the factory (#388) but uninstallable: Requires python3-pyudev, python3-inotify, python3-linux-procfs and virt-what, not yet published (ethtool and hdparm now resolve)"
 
 [package.tuned-ppd]
 status = "planned"
 area = "hardware-power"
 issue = "#263"
+reason = "Published by the factory (#388) but uninstallable: needs tuned (python3-pyudev, python3-inotify, python3-linux-procfs, virt-what)"
 
 [package.thermald]
 status = "planned"
@@ -163,11 +168,13 @@ issue = "#263"
 status = "planned"
 area = "hardware-power"
 issue = "#263"
+reason = "Published by the factory but uninstallable: Requires libtraceevent and libtracefs, not yet published"
 
 [package.smartmontools]
 status = "planned"
 area = "hardware-power"
 issue = "#263"
+reason = "Not published: the factory run behind sha256:194f1001 lists smartmontools under its failed builds (libblockdev-smartmontools is published, the daemon is not)"
 
 [package.nvme-cli]
 status = "planned"
@@ -258,11 +265,11 @@ issue = "#263"
 status = "planned"
 area = "desktop-apps"
 issue = "#263"
+reason = "Published by the factory but uninstallable: Requires libhandy, not yet published"
 
 [package.gnome-system-monitor]
-status = "planned"
-area = "desktop-apps"
-issue = "#263"
+status = "waived"
+reason = "Flatpak-first: Utah ships Mission Center (io.missioncenter.MissionCenter) in contracts/bluefin-desktop.toml; the factory builds gnome-system-monitor (utah-packages#542) but Utah does not install a duplicate"
 
 [package.gnome-color-manager]
 status = "planned"
@@ -288,11 +295,13 @@ issue = "#263"
 status = "planned"
 area = "desktop-apps"
 issue = "#263"
+reason = "Published by the factory but uninstallable: papers-libs Requires libgtksourceview-5 and libdjvulibre, not yet published"
 
 [package.papers-thumbnailer]
 status = "planned"
 area = "desktop-apps"
 issue = "#263"
+reason = "Published by the factory but uninstallable: papers-libs Requires libgtksourceview-5 and libdjvulibre, not yet published"
 
 [package.gst-thumbnailers]
 status = "planned"
@@ -463,6 +472,7 @@ issue = "#263"
 status = "planned"
 area = "network-fs"
 issue = "#263"
+reason = "Published by the factory but uninstallable: Requires gssproxy and quota, not yet published"
 
 [package.nfs-common-utils]
 status = "planned"
@@ -503,6 +513,7 @@ issue = "#263"
 status = "planned"
 area = "cli-tools"
 issue = "#263"
+reason = "Published by the factory (#392) but uninstallable: Requires libutempter, not yet published"
 
 [package.nano]
 status = "planned"
@@ -543,6 +554,7 @@ issue = "#263"
 status = "planned"
 area = "cli-tools"
 issue = "#263"
+reason = "Not published: the factory run behind sha256:194f1001 lists traceroute under its failed builds"
 
 [package.mtr]
 status = "planned"
@@ -706,8 +718,9 @@ status = "waived"
 reason = "Legacy SysV service shim"
 
 [package.ptyxis]
-status = "waived"
-reason = "Utah's terminal is the Ghostty Flatpak (Hummingbird packages no ptyxis/vte291)"
+status = "planned"
+area = "desktop"
+issue = "#263"
 
 [package.qemu-user-static-aarch64]
 status = "waived"
@@ -799,6 +812,7 @@ issue = "#263"
 status = "planned"
 area = "media"
 issue = "#263"
+reason = "Published by the factory but uninstallable: Requires libsrtp2.so.1, not yet published"
 
 [package.hfsplus-tools]
 status = "planned"
@@ -989,6 +1003,7 @@ issue = "#263"
 status = "planned"
 area = "cli-tools"
 issue = "#263"
+reason = "Published by the factory but uninstallable: Requires libpcp, not yet published"
 
 [package.tcl]
 status = "planned"

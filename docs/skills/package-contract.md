@@ -249,19 +249,19 @@ a separate Bluetooth printer backend, and installing CUPS alone does not
 request it. It requires the matching `bluez` build, so validate the full
 transaction with `just check-repos` when changing this entry.
 
-The factory pin inspected for #390's audit had no packages for the remaining
-families: `system-config-printer`, `hplip`, `sane-backends`,
-`sane-airscan`/`libsane-airscan`, `libsane-hpaio`, `ipp-usb`, `gutenprint`,
-`foo2zjs`, `c2esp`, `dymo-cups-drivers`, `printer-driver-brlaser`,
-`ptouch-driver`, `splix`, `braille-printer-app`, `paps`, and `mpage`.
-Recheck the current Containerfile pin before adding them: they need factory
-publication and dependency closure, not Fedora runtime repositories.
-Prioritize the printer configuration tool, HP support and AirScan as
-requested in #390, then resolve the published RPM names and their
-dependencies against the pinned inputs. A metadata name match is only a
-preflight: require transaction resolution, then verify printer
-discovery/setup and scanning on hardware before claiming the cluster works.
-Keep #390 open until the remaining work is covered.
+`[parity]` now requests the scanner and driver families the factory publishes
+(`sane-backends*`, `sane-airscan`, `ipp-usb`, `gutenprint*`, `foo2zjs`, `c2esp`,
+`dymo-cups-drivers`, `printer-driver-brlaser`, `ptouch-driver`, `splix`,
+`mpage`, `libieee1284`). Still blocked on a `Requires` neither the factory nor
+Hummingbird carries: `hplip`/`libsane-hpaio` (`python3-pillow`, `usbutils`,
+`libnetsnmp`) and `system-config-printer-{libs,udev}` (`python3-cups`);
+`braille-printer-app` and `paps` are unpublished. The `[parity]` "Left out"
+comment in `packages/utah.toml` is the list; Bluefin ships no
+`system-config-printer` UI (GNOME Settings is it). Method:
+[`references/factory-consumption.md`](package-contract/references/factory-consumption.md).
+A metadata name match is only a preflight: require transaction resolution, then
+verify printer discovery/setup and scanning on hardware before claiming the
+cluster works. Keep #390 open until the remaining work is covered.
 
 ## Supply-chain download verification
 
@@ -363,7 +363,7 @@ Raise the overlay change as its own pull request against `main`; the bump PR
 then picks the fix up on its next rebuild.
 
 Current counts, per the README "Package parity" section: 61 Bluefin contract
-packages installed, 141 Utah additions (GNOME 51, base-image parity, device
+packages installed, 228 Utah additions (GNOME 51, base-image parity, device
 firmware, desktop services), 7 genuinely unavailable. `scripts/check-doc-counts.py` (part of
 `just check`) recomputes these from the manifests and fails if either
 document drifts from `site/data/packages.json`.
