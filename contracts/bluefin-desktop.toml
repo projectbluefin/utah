@@ -290,7 +290,6 @@ enabled = [
   "sysstat.service",
   "sysstat-collect.timer",
   "sysstat-summary.timer",
-  "nfs-client.target",
   "projectbluefin-countme.timer",
   "switcheroo-control.service",
   "ublue-system-setup.service",

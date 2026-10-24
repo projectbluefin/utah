@@ -460,8 +460,9 @@ packages = [
     # (libutempter, libhandy, gssproxy, quota, python3-pillow, python3-cups,
     # usbutils, net-snmp, libtraceevent/libtracefs, libsrtp, gtksourceview5,
     # djvulibre, liba52, libmpeg2) are published, so the names they gated resolve.
-    # sysstat and nfs-client.target are the units Fedora's preset enables
-    # (85-utah-desktop.preset, configure-services.sh, desktop contract).
+    # sysstat's units are the ones Fedora's preset enables and Utah wires
+    # (85-utah-desktop.preset, configure-services.sh, desktop contract);
+    # nfs-client.target is not, see 85-utah-desktop.preset.
     "tmux",
     "powertop",
     "sysstat",

@@ -157,12 +157,11 @@ enable_unit ModemManager.service
 # Thermal management, as Fedora's preset enables it for Bluefin (#388).
 enable_unit thermald.service
 enable_unit intel_lpmd.service
-# sysstat accounting and the NFS client target, as Fedora's preset enables them
-# for Bluefin (#263).
+# sysstat accounting, as Fedora's preset enables it for Bluefin (#263).
+# nfs-client.target is left off: see 85-utah-desktop.preset.
 enable_unit sysstat.service
 enable_unit sysstat-collect.timer
 enable_unit sysstat-summary.timer
-enable_unit nfs-client.target
 # Printing on demand, as Fedora's preset enables it for Bluefin; Hummingbird's
 # 99-default-disable would leave it off.
 enable_unit cups.socket

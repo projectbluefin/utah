@@ -40,12 +40,15 @@ enable ModemManager.service
 # desktops; Hummingbird's 99-default-disable would leave them off.
 enable thermald.service
 enable intel_lpmd.service
-# System activity accounting and the NFS client target, both enabled by
-# Fedora's 90-default.preset for Bluefin (#263).
+# System activity accounting, enabled by Fedora's 90-default.preset for Bluefin
+# (#263). nfs-client.target is enabled there too but deliberately not here: it
+# Wants auth-rpcgss-module.service, which Wants gssproxy.service, and gssproxy
+# failed every boot in the review VM (status=238/STATE_DIRECTORY, Permission
+# denied creating /var/lib/gssproxy). Without the target nothing pulls it in;
+# mount.nfs starts rpc-statd on demand.
 enable sysstat.service
 enable sysstat-collect.timer
 enable sysstat-summary.timer
-enable nfs-client.target
 # Printing on demand, as Fedora's preset enables it for Bluefin.
 enable cups.socket
 enable cups.path
