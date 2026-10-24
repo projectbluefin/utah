@@ -986,6 +986,21 @@ echo "  session type: ${session_type:-unknown}"
 sleep 10   # let the shell finish drawing before the screenshot
 shot installed-desktop "${MONITOR_INSTALLED}"
 
+# gnome-tour is Bluefin's first-login welcome window. It opens over the desktop,
+# and the clean desktop shot above is what documents that it did. Press Skip
+# (the focused button) before the terminal opens, or the dialog covers the
+# terminal and fastfetch is unreadable to OCR, as a user would see it too.
+if ssh_target 'pgrep -u "$(id -u)" -x gnome-tour >/dev/null'; then
+    echo "  gnome-tour is showing over the desktop; pressing Skip"
+    monitor "${MONITOR_INSTALLED}" "sendkey ret" || true
+    sleep 3
+    if ssh_target 'pgrep -u "$(id -u)" -x gnome-tour >/dev/null'; then
+        fail "gnome-tour is still running after Skip"
+    fi
+else
+    echo "  gnome-tour is not running; nothing to skip"
+fi
+
 # Open a terminal on the desktop and leave fastfetch on screen. This is the
 # shot a human actually reads: it names the OS, the kernel and the desktop
 # from inside the installed system, so one image carries what half a dozen
