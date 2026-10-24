@@ -285,6 +285,8 @@ enabled = [
   "gdm.service",
   "input-remapper.service",
   "ModemManager.service",
+  "thermald.service",
+  "intel_lpmd.service",
   "projectbluefin-countme.timer",
   "switcheroo-control.service",
   "ublue-system-setup.service",

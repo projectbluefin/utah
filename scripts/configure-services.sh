@@ -154,6 +154,9 @@ fi
 # root credentials on launch. Enable it next to the desktop units; see #99.
 enable_unit input-remapper.service
 enable_unit ModemManager.service
+# Thermal management, as Fedora's preset enables it for Bluefin (#388).
+enable_unit thermald.service
+enable_unit intel_lpmd.service
 # Printing on demand, as Fedora's preset enables it for Bluefin; Hummingbird's
 # 99-default-disable would leave it off.
 enable_unit cups.socket

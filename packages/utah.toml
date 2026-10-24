@@ -346,6 +346,60 @@ packages = [
     "qt6-qtbase",
     "python3-charset-normalizer",
     "python3-idna",
+    # Factory-published Bluefin tools consumed from the pinned image (#263).
+    # Everything below is built by utah-packages and is asserted in
+    # [factory].parity. Flatpak-first applies: no RPM here duplicates a
+    # shipped app (contracts/bluefin-desktop.toml [flatpak]), and nothing is
+    # in Bluefin's [excluded] list. Each name was resolved against the pinned
+    # image by CI's package availability step.
+    #
+    # Power and thermal policy (#388). Fedora's preset (redhat-systemd-presets
+    # 90-default.preset, which Bluefin inherits) enables thermald and
+    # intel_lpmd; the matching enablements are in 85-utah-desktop.preset and
+    # configure-services.sh.
+    "thermald",
+    "intel-lpmd",
+    "powerstat",
+    # Everyday command-line tools (#392). xdg-utils supplies xdg-open, which
+    # nothing else in the image provides. nano-default-editor sets EDITOR.
+    "xdg-utils",
+    "rsync",
+    "nano",
+    "nano-default-editor",
+    "htop",
+    "pv",
+    "fpaste",
+    # GPG/smartcard pin entry, braille display daemon, and Bluefin's default
+    # terminal. Ghostty stays as the TunaOS Flatpak terminal; ptyxis is a
+    # different app, so Flatpak-first does not apply.
+    "pinentry",
+    "pinentry-gnome3",
+    "brltty",
+    "ptyxis",
+    # Network file systems and Windows domain clients. nfs-utils and the
+    # printing/VPN/tuned families are not requested yet: see "Left out".
+    "cifs-utils",
+    "rpcbind",
+    "autofs",
+    "samba-winbind",
+    "samba-winbind-clients",
+    #
+    # Left out: published by the factory but not installable from the pinned
+    # inputs, because a Requires is in neither the factory nor Hummingbird.
+    # The availability step is the gate, so re-request each one the day its
+    # dependency lands:
+    #   tuned, tuned-ppd (#388)     ethtool, hdparm, virt-what,
+    #                               python3-pyudev, python3-inotify,
+    #                               python3-linux-procfs
+    #   powertop                    libtraceevent, libtracefs
+    #   openvpn, NetworkManager-openvpn{,-gnome} (#389)
+    #                               libpkcs11-helper
+    #   hplip (#390)                python3-pillow, usbutils
+    #   system-config-printer-libs/-udev (#390)
+    #                               python3-cups
+    #   tmux, gnome-disk-utility, nfs-utils, sysstat
+    #                               libutempter; libhandy; gssproxy and
+    #                               quota; libpcp
 ]
 
 [hardware]
@@ -710,4 +764,24 @@ parity = [
     "intel-mediasdk",
     "intel-vpl-gpu-rt",
     "ffmpegthumbnailer",
+    # Bluefin tools consumed from the pinned factory (#263, #388, #392).
+    "thermald",
+    "intel-lpmd",
+    "powerstat",
+    "xdg-utils",
+    "rsync",
+    "nano",
+    "nano-default-editor",
+    "htop",
+    "pv",
+    "fpaste",
+    "pinentry",
+    "pinentry-gnome3",
+    "brltty",
+    "ptyxis",
+    "cifs-utils",
+    "rpcbind",
+    "autofs",
+    "samba-winbind",
+    "samba-winbind-clients",
 ]
