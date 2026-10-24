@@ -158,7 +158,8 @@ enable_unit ModemManager.service
 enable_unit thermald.service
 enable_unit intel_lpmd.service
 # sysstat accounting, as Fedora's preset enables it for Bluefin (#263).
-# nfs-client.target is left off: see 85-utah-desktop.preset.
+# nfs-client.target is turned off: see 85-utah-desktop.preset.
+disable_unit nfs-client.target
 enable_unit sysstat.service
 enable_unit sysstat-collect.timer
 enable_unit sysstat-summary.timer

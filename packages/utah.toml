@@ -462,7 +462,7 @@ packages = [
     # djvulibre, liba52, libmpeg2) are published, so the names they gated resolve.
     # sysstat's units are the ones Fedora's preset enables and Utah wires
     # (85-utah-desktop.preset, configure-services.sh, desktop contract);
-    # nfs-client.target is not, see 85-utah-desktop.preset.
+    # nfs-client.target is disabled, see 85-utah-desktop.preset.
     "tmux",
     "powertop",
     "sysstat",
