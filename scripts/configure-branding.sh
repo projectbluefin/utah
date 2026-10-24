@@ -83,9 +83,11 @@ if [ -f /usr/sbin/grub2-switch-to-blscfg ]; then
     sed -i 's|^EFIDIR=.*|EFIDIR="fedora"|' /usr/sbin/grub2-switch-to-blscfg
 fi
 
-# These files are intentionally placeholders. The common Bluefin stats timer
-# refreshes them after first boot; keeping them present avoids a blank fastfetch
-# and matches the files shipped by Bluefin.
+# These files are intentionally placeholders: /usr is read-only at runtime, so
+# bluefin-stats-refresh.service writes the live values to
+# /var/cache/bluefin-stats instead, and configure-services.sh points fastfetch
+# there first with these as the fallback (#860). Keeping them present avoids a
+# blank fastfetch before the first refresh and matches the files Bluefin ships.
 printf '…\n' >/usr/share/ublue-os/fastfetch-user-count
 printf '…\n' >/usr/share/ublue-os/bazaar-install-count
 # GNOME Control Center's distro builds use these compile-time PNG paths, not
