@@ -83,11 +83,6 @@ if [ -f /usr/sbin/grub2-switch-to-blscfg ]; then
     sed -i 's|^EFIDIR=.*|EFIDIR="fedora"|' /usr/sbin/grub2-switch-to-blscfg
 fi
 
-# These files are intentionally placeholders. The common Bluefin stats timer
-# refreshes them after first boot; keeping them present avoids a blank fastfetch
-# and matches the files shipped by Bluefin.
-printf '…\n' >/usr/share/ublue-os/fastfetch-user-count
-printf '…\n' >/usr/share/ublue-os/bazaar-install-count
 # GNOME Control Center's distro builds use these compile-time PNG paths, not
 # os-release NAME/LOGO. The RPM transaction erased Common's earlier overlay
 # while swapping distro logos. Restore Bluefin's matching light/dark artwork
