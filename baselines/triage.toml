@@ -23,6 +23,7 @@ issue = "#262"
 status = "planned"
 area = "wifi"
 issue = "#262"
+reason = "Published by the factory (#389) but uninstallable: Requires libpkcs11-helper, not yet published"
 
 [package.openconnect]
 status = "planned"
@@ -83,6 +84,7 @@ issue = "#263"
 status = "planned"
 area = "printing"
 issue = "#263"
+reason = "Published by the factory (#390) but uninstallable: Requires python3-pillow and usbutils, not yet published"
 
 [package.gutenprint]
 status = "planned"
@@ -103,11 +105,13 @@ issue = "#263"
 status = "planned"
 area = "printing"
 issue = "#263"
+reason = "Published by the factory (#390) but uninstallable: Requires python3-cups, not yet published"
 
 [package.system-config-printer-udev]
 status = "planned"
 area = "printing"
 issue = "#263"
+reason = "Published by the factory (#390) but uninstallable: needs system-config-printer-libs (python3-cups)"
 
 [package.sane-backends]
 status = "planned"
@@ -143,11 +147,13 @@ issue = "#263"
 status = "planned"
 area = "hardware-power"
 issue = "#263"
+reason = "Published by the factory (#388) but uninstallable: Requires ethtool, hdparm, virt-what, python3-pyudev, python3-inotify, python3-linux-procfs, not yet published"
 
 [package.tuned-ppd]
 status = "planned"
 area = "hardware-power"
 issue = "#263"
+reason = "Published by the factory (#388) but uninstallable: needs tuned"
 
 [package.thermald]
 status = "planned"
@@ -163,6 +169,7 @@ issue = "#263"
 status = "planned"
 area = "hardware-power"
 issue = "#263"
+reason = "Published by the factory but uninstallable: Requires libtraceevent and libtracefs, not yet published"
 
 [package.smartmontools]
 status = "planned"
@@ -258,6 +265,7 @@ issue = "#263"
 status = "planned"
 area = "desktop-apps"
 issue = "#263"
+reason = "Published by the factory but uninstallable: Requires libhandy, not yet published"
 
 [package.gnome-system-monitor]
 status = "waived"
@@ -462,6 +470,7 @@ issue = "#263"
 status = "planned"
 area = "network-fs"
 issue = "#263"
+reason = "Published by the factory but uninstallable: Requires gssproxy and quota, not yet published"
 
 [package.nfs-common-utils]
 status = "planned"
@@ -502,6 +511,7 @@ issue = "#263"
 status = "planned"
 area = "cli-tools"
 issue = "#263"
+reason = "Published by the factory (#392) but uninstallable: Requires libutempter, not yet published"
 
 [package.nano]
 status = "planned"
@@ -705,8 +715,9 @@ status = "waived"
 reason = "Legacy SysV service shim"
 
 [package.ptyxis]
-status = "waived"
-reason = "Utah's terminal is the Ghostty Flatpak (Hummingbird packages no ptyxis/vte291)"
+status = "planned"
+area = "desktop"
+issue = "#263"
 
 [package.qemu-user-static-aarch64]
 status = "waived"
@@ -988,6 +999,7 @@ issue = "#263"
 status = "planned"
 area = "cli-tools"
 issue = "#263"
+reason = "Published by the factory but uninstallable: Requires libpcp, not yet published"
 
 [package.tcl]
 status = "planned"
