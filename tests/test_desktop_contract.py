@@ -419,6 +419,7 @@ class ServiceMaskParityTests(unittest.TestCase):
         for path in (
             "/usr/share/ublue-os/fastfetch.jsonc",
             "/usr/bin/ublue-image-info.sh",
+            "/usr/libexec/ublue-booted-image",
             "/etc/profile.d/uwelcome.sh",
         ):
             with self.subTest(path=path):
