@@ -194,6 +194,8 @@ def png(d):
     w = struct.unpack(">I", d[16:20])[0]
     h = struct.unpack(">I", d[20:24])[0]
     ct = d[25]
+    if d[24] != 8 or d[28] != 0:
+        raise ValueError("unsupported PNG: bit depth %d, interlace %d" % (d[24], d[28]))
     idat = bytearray()
     pos = 8
     while pos < len(d):
@@ -213,6 +215,8 @@ def png(d):
     idx = 0
     for y in range(h):
         ft = dec[idx]; idx += 1
+        if ft > 4:
+            raise ValueError("invalid PNG filter type %d" % ft)
         line = bytearray(dec[idx:idx + stride]); idx += stride
         for x in range(stride):
             a = line[x - bpp] if x >= bpp else 0

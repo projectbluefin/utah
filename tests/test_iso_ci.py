@@ -388,23 +388,22 @@ class EvidenceTests(unittest.TestCase):
     def _decode_via_helper(self, png_bytes):
         # Run the PNG decoder embedded in the real screenshot_not_blank helper
         # (the exact code under test) and return its decoded pixels.
-        import sys
+        import json, sys
         script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
         start = script.index("python3 -c '") + len("python3 -c '")
         end = script.index("'", start)
         body = script[start:end]
+        # Keep only the decoder definitions (drop the gate logic that exits),
+        # then print the decoded pixels for the given file.
+        defs = body.split("\nif data[:2] == b\"P6\":", 1)[0]
+        program = defs + "\nimport json\nprint(json.dumps(png(data)[2]))\n"
         with tempfile.TemporaryDirectory() as td:
             png = Path(td) / "decode.png"
             png.write_bytes(png_bytes)
-            old_argv = sys.argv
-            sys.argv = ["x", str(png)]
-            try:
-                ns = {}
-                exec(body, ns)  # the helper reads argv[1] and exits; that is fine
-                _, _, pixels = ns["png"](png_bytes)
-                return pixels
-            finally:
-                sys.argv = old_argv
+            result = subprocess.run([sys.executable, "-c", program, str(png)],
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            return [tuple(px) for px in json.loads(result.stdout)]
 
     def test_png_filters_0_through_4_round_trip_exact_pixels(self):
         # #796 / hanthor's review: screenshot_not_blank decoded PNG filter type 4

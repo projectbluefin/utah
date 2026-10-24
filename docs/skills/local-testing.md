@@ -330,12 +330,8 @@ captures a clean desktop state before `installed-fastfetch.png` captures the
 terminal overlay, preventing duplicate verification evidence (#240). CI sets
 `UTAH_E2E_REQUIRE_FASTFETCH=1` to require OCR of its completion marker and
 kernel output, and `UTAH_E2E_REQUIRE_SCREENSHOTS=1` to reject missing PNGs and
-blank or flat-colour frames. The blank-frame guard rejects a capture whose pixels
-are essentially one colour -- a solid-black or frozen screen of a few
-kilobytes would otherwise pass the plain non-empty check and be published as
-proof a session started (#786). It reads the PNG with the Python standard
-library, since ffmpeg and ImageMagick are not guaranteed where the gate runs.
-CI retains the tested commit/image digest and proposes evidence updates in a
+blank or flat-colour frames: a solid-black or frozen screen would otherwise pass
+the non-empty check and be published as proof a session started (#786). CI retains the tested commit/image digest and proposes evidence updates in a
 documentation PR only after all flavors pass. See [ci-workflows.md](ci-workflows.md).
 
 Ghostty is the only terminal the harness's fastfetch capture can show, and
