@@ -33,9 +33,11 @@ Rules applied while choosing names:
   `[services].enabled`. Bluefin has no preset of its own for these: it inherits
   Fedora's `90-default.preset` from `redhat-systemd-presets`, which is where
   to read whether a unit is enabled. It enables `thermald.service`,
-  `intel_lpmd.service`, `tuned.service`, `tuned-ppd.service`,
+  `intel_lpmd.service`, `tuned.service`, `tuned-ppd.service`, `smartd.service`,
   `nfs-client.target`, `sysstat.service` and its two timers, but not
-  `rpcbind`, `autofs` or `brltty`.
+  `rpcbind`, `autofs`, `brltty`, `dnsmasq`, `saned` or `ipp-usb`. `tuned`,
+  `smartmontools`, `nfs-utils` and `sysstat` are not installable yet, so their
+  units stay unwired until the packages land.
 - A `planned` triage entry for a name Utah now installs closes when
   `just baselines` refreshes the Utah snapshot; do not hand-edit the generated
   snapshot.

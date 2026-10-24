@@ -23,7 +23,6 @@ issue = "#262"
 status = "planned"
 area = "wifi"
 issue = "#262"
-reason = "Published by the factory (#389) but uninstallable: Requires libpkcs11-helper, not yet published"
 
 [package.openconnect]
 status = "planned"
@@ -84,7 +83,7 @@ issue = "#263"
 status = "planned"
 area = "printing"
 issue = "#263"
-reason = "Published by the factory (#390) but uninstallable: Requires python3-pillow and usbutils, not yet published"
+reason = "Published by the factory (#390) but uninstallable: Requires python3-pillow, usbutils and libnetsnmp.so.45, none published (sha256:194f1001)"
 
 [package.gutenprint]
 status = "planned"
@@ -147,13 +146,13 @@ issue = "#263"
 status = "planned"
 area = "hardware-power"
 issue = "#263"
-reason = "Published by the factory (#388) but uninstallable: Requires ethtool, hdparm, virt-what, python3-pyudev, python3-inotify, python3-linux-procfs, not yet published"
+reason = "Published by the factory (#388) but uninstallable: Requires python3-pyudev, python3-inotify, python3-linux-procfs and virt-what, not yet published (ethtool and hdparm now resolve)"
 
 [package.tuned-ppd]
 status = "planned"
 area = "hardware-power"
 issue = "#263"
-reason = "Published by the factory (#388) but uninstallable: needs tuned"
+reason = "Published by the factory (#388) but uninstallable: needs tuned (python3-pyudev, python3-inotify, python3-linux-procfs, virt-what)"
 
 [package.thermald]
 status = "planned"
@@ -175,6 +174,7 @@ reason = "Published by the factory but uninstallable: Requires libtraceevent and
 status = "planned"
 area = "hardware-power"
 issue = "#263"
+reason = "Not published: the factory run behind sha256:194f1001 lists smartmontools under its failed builds (libblockdev-smartmontools is published, the daemon is not)"
 
 [package.nvme-cli]
 status = "planned"
@@ -295,11 +295,13 @@ issue = "#263"
 status = "planned"
 area = "desktop-apps"
 issue = "#263"
+reason = "Published by the factory but uninstallable: papers-libs Requires libgtksourceview-5 and libdjvulibre, not yet published"
 
 [package.papers-thumbnailer]
 status = "planned"
 area = "desktop-apps"
 issue = "#263"
+reason = "Published by the factory but uninstallable: papers-libs Requires libgtksourceview-5 and libdjvulibre, not yet published"
 
 [package.gst-thumbnailers]
 status = "planned"
@@ -552,6 +554,7 @@ issue = "#263"
 status = "planned"
 area = "cli-tools"
 issue = "#263"
+reason = "Not published: the factory run behind sha256:194f1001 lists traceroute under its failed builds"
 
 [package.mtr]
 status = "planned"
@@ -809,6 +812,7 @@ issue = "#263"
 status = "planned"
 area = "media"
 issue = "#263"
+reason = "Published by the factory but uninstallable: Requires libsrtp2.so.1, not yet published"
 
 [package.hfsplus-tools]
 status = "planned"
