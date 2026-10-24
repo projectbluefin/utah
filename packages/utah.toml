@@ -187,8 +187,7 @@ packages = [
     "intel-mediasdk",
     "intel-vpl-gpu-rt",
     "libvpl",
-    # GStreamer bad-free stays omitted (libsrtp2 is unpublished, see "Left
-    # out") and so does Totem (uchardet); tracked by #383.
+    # Totem stays omitted: uchardet is unpublished (#383).
     # Locale and fonts
     "langpacks-en",
     "langpacks-fonts-en",
@@ -269,11 +268,10 @@ packages = [
     # links (libavcodec/libavformat/libavutil/libavfilter) come from the
     # factory, plus libjpeg-turbo/libpng from Hummingbird. libavformat-free and
     # libavfilter-free are new to the image and pull zeromq, libssh, and
-    # libvmaf from Hummingbird, so expect image growth. The remaining
-    # gnome-epub-thumbnailer, gstreamer1-plugin-libav and
-    # gstreamer1-plugin-dav1d are requested in the parity block below;
-    # papers-thumbnailer and gstreamer1-plugins-ugly-free are published but
-    # blocked on missing dependencies (see "Left out", #383).
+    # libvmaf from Hummingbird, so expect image growth. The other thumbnailers
+    # and GStreamer plugins (gnome-epub-thumbnailer, papers-thumbnailer,
+    # gstreamer1-plugin-libav, -dav1d, -bad-free, -ugly-free) are requested in
+    # the parity block below (#383).
     "ffmpegthumbnailer",
     "samba-client",
     "samba-common-tools",
@@ -376,8 +374,8 @@ packages = [
     "pinentry-gnome3",
     "brltty",
     "ptyxis",
-    # Network file systems and Windows domain clients. nfs-utils is not
-    # requested yet: see "Left out".
+    # Network file systems and Windows domain clients (the NFS family follows
+    # in the second-wave block below).
     "cifs-utils",
     "cifs-utils-info",
     "rpcbind",
@@ -429,7 +427,7 @@ packages = [
     # Everyday command-line and hardware tools (#263, #392). Fedora's preset
     # has no enable line for any unit these ship (bolt, dnsmasq, gamemode);
     # smartd.service is in the preset but smartmontools is not published (see
-    # "Left out").
+    # "Left out" below).
     "bc",
     "bolt",
     "borgbackup",
@@ -458,37 +456,62 @@ packages = [
     "lcms",
     "openal-soft",
     "soundtouch",
+    # Second publish wave (#263): the providers the first wave was blocked on
+    # (libutempter, libhandy, gssproxy, quota, python3-pillow, python3-cups,
+    # usbutils, net-snmp, libtraceevent/libtracefs, libsrtp, gtksourceview5,
+    # djvulibre, liba52, libmpeg2) are published, so the names they gated resolve.
+    # sysstat and nfs-client.target are the units Fedora's preset enables
+    # (85-utah-desktop.preset, configure-services.sh, desktop contract).
+    "tmux",
+    "powertop",
+    "sysstat",
+    "gnome-disk-utility",
+    "nfs-utils",
+    "nfs-common-utils",
+    "nfs-client-utils",
+    "nfsv3-client-utils",
+    "nfsv4-client-utils",
+    "gssproxy",
+    "quota",
+    # Printer and scanner support left from #390. Bluefin ships the
+    # system-config-printer libraries and udev rules (not the UI: GNOME
+    # Settings is the printer UI).
+    "hplip",
+    "hplip-common",
+    "hplip-libs",
+    "libsane-hpaio",
+    "system-config-printer-libs",
+    "system-config-printer-udev",
+    # GStreamer plugin sets Bluefin carries. -good-qt is not requested: see
+    # "Left out".
+    "gstreamer1-plugins-bad-free",
+    "gstreamer1-plugins-bad-free-libs",
+    "gstreamer1-plugins-ugly-free",
+    # Papers integration the sandboxed Flatpak cannot provide: the thumbnailer
+    # and Files property page run in the host's Nautilus. The Papers app itself
+    # stays the org.gnome.Papers Flatpak (Bluefin has no `papers` RPM), and
+    # papers-previewer is waived (triage.toml).
+    "papers-libs",
+    "papers-thumbnailer",
+    "papers-nautilus",
     #
-    # Left out: published by the factory but not installable from the pinned
-    # inputs, because a Requires is in neither the factory nor Hummingbird.
-    # The availability step is the gate, so re-request each one the day its
-    # provider lands (resolved against sha256:194f1001):
-    #   tuned, tuned-ppd (#388)     python3-pyudev, python3-inotify,
-    #                               python3-linux-procfs, virt-what
-    #                               (ethtool and hdparm now resolve)
-    #   powertop                    libtraceevent, libtracefs
-    #   tmux                        libutempter
-    #   sysstat                     libpcp
-    #   gnome-disk-utility          libhandy
-    #   nfs-utils, nfs-common-utils, nfsv3/4-client-utils
-    #                               gssproxy; quota
-    #   hplip, hplip-libs, libsane-hpaio (#390)
-    #                               python3-pillow, usbutils, libnetsnmp
-    #   system-config-printer-libs/-udev (#390)
-    #                               python3-cups
-    #   gstreamer1-plugins-bad-free libsrtp2
-    #   gstreamer1-plugins-ugly-free
-    #                               liba52, libmpeg2
-    #   gstreamer1-plugins-good-qt  Qt5 (libQt5Qml, libQuick, WaylandClient,
-    #                               X11Extras)
-    #   papers-libs/-thumbnailer/-previewer/-nautilus
-    #                               gtksourceview5, djvulibre
-    #   smartmontools, traceroute   not published: the factory run that
-    #                               produced sha256:194f1001 lists both under
-    #                               its failed builds
+    # Left out (resolved against sha256:d3b5bac2):
+    #   tuned, tuned-ppd (#388)     Requires (rpm-ostree if bootc). bootc is in
+    #                               the image, rpm-ostree is waived (Utah updates
+    #                               with bootc) and published nowhere. Bluefin
+    #                               runs tuned-ppd instead of
+    #                               power-profiles-daemon, so the latter is not
+    #                               installed as a stand-in.
+    #   gstreamer1-plugins-good-qt  Qt5 (libQt5Qml, libQt5Quick,
+    #                               libQt5WaylandClient, libQt5X11Extras);
+    #                               Bluefin also ships the -qt6 split, which is
+    #                               not published
+    #   smartmontools, traceroute   not published: both are in the factory run's
+    #                               `failed` list (as is foo2zjs, whose last
+    #                               good build is still in the repository)
     #   foomatic-db, foomatic-db-ppds
     #                               published, but Bluefin does not ship them
-    #                               (only foomatic-db-filesystem), so not requested
+    #                               (only foomatic-db-filesystem)
 ]
 
 [hardware]
@@ -931,4 +954,28 @@ parity = [
     "lcms",
     "openal-soft",
     "soundtouch",
+    # Second publish wave (#263).
+    "tmux",
+    "powertop",
+    "sysstat",
+    "gnome-disk-utility",
+    "nfs-utils",
+    "nfs-common-utils",
+    "nfs-client-utils",
+    "nfsv3-client-utils",
+    "nfsv4-client-utils",
+    "gssproxy",
+    "quota",
+    "hplip",
+    "hplip-common",
+    "hplip-libs",
+    "libsane-hpaio",
+    "system-config-printer-libs",
+    "system-config-printer-udev",
+    "gstreamer1-plugins-bad-free",
+    "gstreamer1-plugins-bad-free-libs",
+    "gstreamer1-plugins-ugly-free",
+    "papers-libs",
+    "papers-thumbnailer",
+    "papers-nautilus",
 ]

@@ -72,20 +72,19 @@ The TOML's sections are the contract's table of contents:
 - **`[flatpak]`** — first-boot policy: the Flathub and TunaOS remotes,
   the Bazaar and Ghostty preinstalls, the `99-flatpaks.sh` hook, and the
   system-flatpaks Brewfile whose app list the contract enumerates.
-- **`[services]`** — systemd units the preset must enable: `gdm.service`,
-  `avahi-daemon.service`, `avahi-daemon.socket`, `switcheroo-control.service`,
-  `bluetooth.service`, `ublue-system-setup.service`, `flatpak-preinstall.service`,
-  `flatpak-nuke-fedora.service`, `brew-setup.service`, `dconf-update.service`,
-  `bootc-unified-storage.service`, `input-remapper.service`,
-  `ModemManager.service`, `thermald.service`, `intel_lpmd.service`, `projectbluefin-countme.timer`,
-  `cups.socket`, `systemd-boot-update.service`, `uupd.timer`, `bluefin-stats-refresh.timer`,
-  `ublue-firstboot-date.service`, `ublue-booted-image.service`. Update policy delegates
-  background updates to `uupd.timer`; `bootc-fetch-apply-updates.timer` and
-  `bootc-fetch-apply-updates.service` are masked in `/etc` and `/usr/lib` (and
-  disabled in `85-utah-desktop.preset`) so cross-vendor `/etc` 3-way merges
-  (e.g. switching from Bluefin) do not carry active `timers.target.wants`
-  symlinks that bypass uupd staging or undo manual rollbacks. Switchers can
-  also manually verify or mask them if a local `/etc` symlink was preserved.
+- **`[services]`** — systemd units the preset must enable: `gdm.service`, `avahi-daemon.service`,
+  `avahi-daemon.socket`, `switcheroo-control.service`, `bluetooth.service`,
+  `ublue-system-setup.service`, `flatpak-preinstall.service`, `flatpak-nuke-fedora.service`,
+  `brew-setup.service`, `dconf-update.service`, `bootc-unified-storage.service`,
+  `input-remapper.service`, `ModemManager.service`, `thermald.service`, `intel_lpmd.service`,
+  `sysstat.service`, `sysstat-collect.timer`, `sysstat-summary.timer`, `nfs-client.target`,
+  `projectbluefin-countme.timer`, `cups.socket`, `systemd-boot-update.service`, `uupd.timer`,
+  `bluefin-stats-refresh.timer`, `ublue-firstboot-date.service`, `ublue-booted-image.service`.
+  Update policy delegates background updates to `uupd.timer`; `bootc-fetch-apply-updates.timer` and
+  `bootc-fetch-apply-updates.service` are masked in `/etc` and `/usr/lib` (and disabled in
+  `85-utah-desktop.preset`) so cross-vendor `/etc` 3-way merges (e.g. switching from Bluefin) do not
+  carry active `timers.target.wants` symlinks that bypass uupd staging or undo manual rollbacks.
+  Switchers can also manually verify or mask them if a local `/etc` symlink was preserved.
 
   The last two units are Dakota parity (#675): install-date stamping and the
   booted-image snapshot fastfetch reads. `configure-services.sh` enables them
@@ -93,7 +92,7 @@ The TOML's sections are the contract's table of contents:
   non-interactive shells skip the welcome greeting. Wallpaper rotation is
   deliberately NOT Dakota parity: Common's per-user `bluefin-dynamic-wallpaper`
   timer is hemisphere-aware and rotates live at month boundaries, while
-  Dakota's boot-time month symlink is northern-only and stale until reboot —
+  Dakota's boot-time month symlink is northern-only and stale until reboot, so
   repointing the default would stand the better rotator down (#675 decision).
 
   A unit being enabled in the built image is not the same as it being enabled

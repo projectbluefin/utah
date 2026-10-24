@@ -40,6 +40,12 @@ enable ModemManager.service
 # desktops; Hummingbird's 99-default-disable would leave them off.
 enable thermald.service
 enable intel_lpmd.service
+# System activity accounting and the NFS client target, both enabled by
+# Fedora's 90-default.preset for Bluefin (#263).
+enable sysstat.service
+enable sysstat-collect.timer
+enable sysstat-summary.timer
+enable nfs-client.target
 # Printing on demand, as Fedora's preset enables it for Bluefin.
 enable cups.socket
 enable cups.path

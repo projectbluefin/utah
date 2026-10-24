@@ -35,9 +35,11 @@ Rules applied while choosing names:
   to read whether a unit is enabled. It enables `thermald.service`,
   `intel_lpmd.service`, `tuned.service`, `tuned-ppd.service`, `smartd.service`,
   `nfs-client.target`, `sysstat.service` and its two timers, but not
-  `rpcbind`, `autofs`, `brltty`, `dnsmasq`, `saned` or `ipp-usb`. `tuned`,
-  `smartmontools`, `nfs-utils` and `sysstat` are not installable yet, so their
-  units stay unwired until the packages land.
+  `rpcbind`, `autofs`, `brltty`, `dnsmasq`, `saned` or `ipp-usb`. Utah wires
+  `sysstat*` and `nfs-client.target`. `tuned` (Requires `rpm-ostree if bootc`,
+  and rpm-ostree is waived and unpublished) and `smartmontools` are not
+  installable, so their units stay unwired. Bluefin ships `tuned-ppd` rather
+  than `power-profiles-daemon`; never install both.
 - A `planned` triage entry for a name Utah now installs closes when
   `just baselines` refreshes the Utah snapshot; do not hand-edit the generated
   snapshot.
