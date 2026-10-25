@@ -284,10 +284,9 @@ its `metadata.json`. It runs in two modes from the same script:
   metadata, so gnome-shell hit "Permission denied". The build script
   normalizes the tree with `chmod -R u+rwX,go+rX,go-w`.
 
-Building GSConnect runs meson install; `scripts/build-gnome-extensions.sh`
-disables GSConnect's `update_desktop_database` hook because `desktop-file-utils`
-is not published by Hummingbird or Utah's repository. MIME and schema databases
-are handled by the system and glib-compile-schemas.
+Building GSConnect runs meson install; `scripts/build-gnome-extensions.sh` disables GSConnect's
+`update_desktop_database` hook because `desktop-file-utils` is not published by Hummingbird or
+Utah's repository. MIME and schema databases are handled by the system and glib-compile-schemas.
 
 Declaring GNOME 51 in `metadata.json` is necessary, not sufficient: both
 failures below passed the metadata check, built cleanly, and only showed up
