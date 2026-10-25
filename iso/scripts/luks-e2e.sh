@@ -165,13 +165,15 @@ shot() {
 # the moment pgrep succeeds can be flat black. The end-of-run blank-frame gate
 # (#786) would then fail a healthy boot on a timing accident. Retake until the
 # frame has content (up to ~60s); the gate still fails the run if it never does.
+# A frame holding only the GNOME top bar is not a drawn desktop either, so the
+# retake check also requires content below the top-bar strip.
 # shot() keeps the PPM when no encoder is available, so check whichever exists.
 shot_until_drawn() {
     local label="$1" sock="$2" attempt f
     for attempt in $(seq 1 12); do
         shot "${label}" "${sock}"
         for f in "${SHOTS}/${label}.png" "${SHOTS}/${label}.ppm"; do
-            if [[ -s "${f}" ]] && ( screenshot_not_blank "${f}" ) >/dev/null 2>&1; then
+            if [[ -s "${f}" ]] && ( screenshot_not_blank "${f}" body ) >/dev/null 2>&1; then
                 return 0
             fi
         done
@@ -187,9 +189,10 @@ shot_until_drawn() {
 # flat-colour frame. A truncated or corrupt file is rejected separately, when the
 # decoder below fails to open it. It reads the PNG with the Python standard
 # library only, because ffmpeg and ImageMagick are not guaranteed to be
-# installed where this gate runs.
+# installed where this gate runs. With a second argument "body" it also rejects
+# a frame whose area below the top-bar strip (top tenth of the rows) is flat.
 screenshot_not_blank() {
-    local png="$1" msg=""
+    local png="$1" mode="${2:-}" msg=""
     if ! msg="$(python3 -c '
 import sys, zlib, struct
 data = open(sys.argv[1], "rb").read()
@@ -283,7 +286,12 @@ colors = len(set(px))
 if colors <= 4:
     sys.stderr.write("blank frame: only " + str(colors) + " distinct colours in a " + str(w) + "x" + str(h) + " shot\n")
     sys.exit(3)
-' "${png}" 2>&1)"; then
+if len(sys.argv) > 2 and sys.argv[2] == "body":
+    below = len(set(px[(h // 10) * w:]))
+    if below <= 4:
+        sys.stderr.write("top-bar-only frame: only " + str(below) + " distinct colours below the top bar in a " + str(w) + "x" + str(h) + " shot\n")
+        sys.exit(4)
+' "${png}" "${mode}" 2>&1)"; then
         fail "screenshot ${png} shows a blank or flat-colour frame rather than the desktop: ${msg}"
     fi
 }
