@@ -1186,7 +1186,12 @@ fi
 if [[ "${UTAH_E2E_REQUIRE_SCREENSHOTS:-0}" == 1 ]]; then
     for label in live-desktop installed-greeter installed-desktop installed-fastfetch; do
         [[ -s "${SHOTS}/${label}.png" ]] || fail "missing required screenshot: ${label}"
-        screenshot_not_blank "${SHOTS}/${label}.png"
+        # live-desktop is retaken until content shows below the top bar, so
+        # the gate must hold it to the same standard or a top-bar-only frame
+        # left after the last retake would be published as live evidence.
+        mode=""
+        if [[ "${label}" == live-desktop ]]; then mode=body; fi
+        screenshot_not_blank "${SHOTS}/${label}.png" "${mode}"
     done
 fi
 if [[ -s "${SHOTS}/installed-desktop.png" && -s "${SHOTS}/installed-fastfetch.png" ]]; then
