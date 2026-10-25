@@ -15,10 +15,13 @@ PUBLISHED_IMAGE="${5:-ghcr.io/projectbluefin/utah:testing}"
 # 35469913325 (2026-09-19) measured 3.9G (utah), 4.6G (gaming), 5.2G (nvidia),
 # and 5.3G (nvidia-gaming). Diagnostic run 38175242606 (2026-10-11), at the
 # default zstd level 3, measured 4.7G, 5.5G, 6.0G, and 6.1G respectively; the
-# nvidia-gaming overage is tracked in #684. Keep the 6 GiB guard as a regression
-# detector; the review-VM workflow uses a test-only compression override.
+# nvidia-gaming overage is tracked in #684. Run 40107791411 (2026-10-24) measured
+# the main tacklebox ISO at 7,288,455,168 bytes (6.79 GiB) after the GNOME apps
+# and parity packages landed, so the guard is 8 GiB while size reduction
+# strategies are evaluated (#875). Keep the guard as a regression detector; the
+# review-VM workflow uses a test-only compression override.
 # Override per-run with UTAH_ISO_MAX_GB (GB) without editing this script.
-ISO_MAX_GB="${UTAH_ISO_MAX_GB:-6}"
+ISO_MAX_GB="${UTAH_ISO_MAX_GB:-8}"
 # Production/local callers keep the measured default; review VM can override
 # this to reach the all-flavor install/boot checks while #684 tracks size.
 ISO_COMPRESSION_LEVEL="${UTAH_ISO_COMPRESSION_LEVEL:-3}"

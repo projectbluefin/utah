@@ -35,6 +35,7 @@ WORK="${UTAH_E2E_WORK:-/var/tmp/utah-luks-e2e}"
 VM_RAM="${UTAH_E2E_RAM:-8192}"
 VM_CPUS="${UTAH_E2E_CPUS:-4}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "${ROOT}/iso/scripts/extension-state.sh"
 
 # The account the installer creates, and the one phase 6 logs in as.
 TEST_USER="${UTAH_E2E_USER:-utahtest}"
@@ -119,6 +120,10 @@ ssh_target() {
     sshpass -p "${TEST_PASSWORD}" ssh "${SSH_OPTS[@]}" \
         -p "${SSH_PORT_INSTALLED}" "${TEST_USER}@127.0.0.1" "$@"
 }
+gnome_extension_info() {
+    local uuid="$1"
+    ssh_target "uid=\$(id -u); env BASH_ENV=/dev/null XDG_RUNTIME_DIR=/run/user/\$uid DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/\$uid/bus bash --noprofile --norc -c \"gnome-extensions info '${uuid}'\""
+}
 scp_target() {
     sshpass -p "${TEST_PASSWORD}" scp "${SSH_OPTS[@]}" \
         -P "${SSH_PORT_INSTALLED}" "$@"
@@ -156,6 +161,114 @@ shot() {
     echo "  screenshot: ${ppm}"
 }
 
+# A screenshot that is one flat colour is not evidence the desktop rendered:
+# a solid-black or frozen frame of a few kilobytes still passes the -s (non-
+# empty) gate above and would be published as proof a session started. This
+# rejects a capture whose pixels are essentially a single colour -- a blank or
+# flat-colour frame. A truncated or corrupt file is rejected separately, when the
+# decoder below fails to open it. It reads the PNG with the Python standard
+# library only, because ffmpeg and ImageMagick are not guaranteed to be
+# installed where this gate runs.
+screenshot_not_blank() {
+    local png="$1" msg=""
+    if ! msg="$(python3 -c '
+import sys, zlib, struct
+data = open(sys.argv[1], "rb").read()
+def ppm(d):
+    i = 2
+    def tok():
+        nonlocal i
+        while d[i:i+1] in b" \t\n\r":
+            i += 1
+        s = i
+        while d[i:i+1] not in b" \t\n\r":
+            i += 1
+        return int(d[s:i])
+    w = tok(); h = tok(); tok()
+    while d[i:i+1] in b" \t\n\r":
+        i += 1
+    body = d[i:i + w*h*3]
+    px = [(body[k], body[k+1], body[k+2]) for k in range(0, len(body) - 2, 3)]
+    return w, h, px
+def png(d):
+    w = struct.unpack(">I", d[16:20])[0]
+    h = struct.unpack(">I", d[20:24])[0]
+    ct = d[25]
+    if d[24] != 8 or d[28] != 0:
+        raise ValueError("unsupported PNG: bit depth %d, interlace %d" % (d[24], d[28]))
+    idat = bytearray()
+    pos = 8
+    while pos < len(d):
+        ln = struct.unpack(">I", d[pos:pos+4])[0]
+        k = d[pos+4:pos+8]
+        cp = pos + 8
+        if k == b"IDAT":
+            idat += d[cp:cp+ln]
+        elif k == b"IEND":
+            break
+        pos = cp + ln + 4
+    bpp = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[ct]
+    stride = w * bpp
+    dec = zlib.decompress(bytes(idat))
+    unf = bytearray()
+    prev = bytearray(stride)
+    idx = 0
+    for y in range(h):
+        ft = dec[idx]; idx += 1
+        if ft > 4:
+            raise ValueError("invalid PNG filter type %d" % ft)
+        line = bytearray(dec[idx:idx + stride]); idx += stride
+        for x in range(stride):
+            a = line[x - bpp] if x >= bpp else 0
+            b = prev[x]
+            c = prev[x - bpp] if x >= bpp else 0
+            v = line[x]
+            if ft == 1:
+                line[x] = (v + a) & 255
+            elif ft == 2:
+                line[x] = (v + b) & 255
+            elif ft == 3:
+                line[x] = (v + ((a + b) >> 1)) & 255
+            elif ft == 4:
+                # Paeth predictor (RFC 2083 §6.6): p = a + b - c, then take
+                # whichever of a, b, c is nearest to p, ties broken a, b, c.
+                p = a + b - c
+                pr = a if abs(p - a) <= abs(p - b) and abs(p - a) <= abs(p - c) else (b if abs(p - b) <= abs(p - c) else c)
+                line[x] = (v + pr) & 255
+            unf += bytes([line[x]])
+        prev = line
+    grey = ct == 0
+    out = []
+    off = 0
+    for y in range(h):
+        row = unf[off:off + stride]; off += stride
+        for k in range(w):
+            b0 = k * bpp
+            if grey or ct == 3:
+                val = row[b0]
+                out.append((val, val, val))
+            else:
+                out.append((row[b0], row[b0 + 1], row[b0 + 2] if bpp >= 3 else row[b0]))
+    return w, h, out
+if data[:2] == b"P6":
+    w, h, px = ppm(data)
+elif data[:8] == b"\x89PNG\r\n\x1a\n":
+    w, h, px = png(data)
+else:
+    sys.stderr.write("not a PNG or PPM file\n")
+    sys.exit(2)
+if not px:
+    sys.stderr.write("empty screenshot\n")
+    sys.exit(2)
+colors = len(set(px))
+if colors <= 4:
+    sys.stderr.write("blank frame: only " + str(colors) + " distinct colours in a " + str(w) + "x" + str(h) + " shot\n")
+    sys.exit(3)
+' "${png}" 2>&1)"; then
+        fail "screenshot ${png} shows a blank or flat-colour frame rather than the desktop: ${msg}"
+    fi
+}
+
 # Type a string at whatever has focus, then Enter. Same mechanism the LUKS
 # unlock uses, because the GDM greeter is equally invisible to the serial port.
 send_keys() {
@@ -178,6 +291,7 @@ send_keys() {
 }
 
 qemu_pids=()
+serial_follow_pid=""
 # Never the disk itself: post-testing-e2e.yml explicitly never uploads
 # install.qcow2 because it carries the test LUKS passphrase, the test
 # account password, and host keys. qemu-img's own metadata is not guest
@@ -207,6 +321,10 @@ cleanup() {
     # trap that always runs, not only in the helper that sometimes does.
     local status=$?
     (( status != 0 )) && preserve_failed_disk_diagnostics
+    if [[ -n "${serial_follow_pid}" ]]; then
+        kill "${serial_follow_pid}" 2>/dev/null || true
+        wait "${serial_follow_pid}" 2>/dev/null || true
+    fi
     for pid in "${qemu_pids[@]:-}"; do
         [[ -n "${pid}" ]] && kill "${pid}" 2>/dev/null || true
     done
@@ -214,6 +332,191 @@ cleanup() {
 trap cleanup EXIT
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
+
+check_system_unit_state() {
+    local unit="$1" required_enabled="${2:-false}" required_run="${3:-false}" boot_pass="${4:-first}"
+    local state load_state="" active_state="" result="" start_time="" key value
+    state="$(ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' systemctl show --property=LoadState --property=ActiveState --property=Result --property=ExecMainStartTimestamp '${unit}'" 2>/dev/null || true)"
+    while IFS='=' read -r key value; do
+        case "${key}" in
+            LoadState) load_state="${value}" ;;
+            ActiveState) active_state="${value}" ;;
+            Result) result="${value}" ;;
+            ExecMainStartTimestamp) start_time="${value}" ;;
+        esac
+    done <<< "${state}"
+    [[ "${load_state}" == loaded ]] || fail "required system unit ${unit} is ${load_state:-unavailable}"
+    # Result= is success/exit-code/signal/timeout/...; it is never "failed".
+    [[ "${active_state}" != failed && "${result}" == success ]] \
+        || fail "system unit ${unit} failed during ${boot_pass} boot (ActiveState=${active_state:-unknown} Result=${result:-unknown})"
+    if [[ "${required_run}" == true && ( -z "${start_time}" || "${start_time}" == "n/a" ) ]]; then
+        fail "required system unit ${unit} did not execute during ${boot_pass} boot"
+    fi
+    if [[ "${required_enabled}" == true ]]; then
+        state="$(ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' systemctl is-enabled '${unit}'" 2>/dev/null || true)"
+        [[ "${state}" == enabled ]] || fail "required system unit ${unit} is ${state:-not enabled}"
+    fi
+    echo "  ${unit}: ${result:-unknown}"
+}
+
+check_user_setup_unit() {
+    local boot_pass="${1:-first}"
+    local unit="ublue-user-setup.service" state load_state="" active_state="" result="" start_time="" enabled="" key value
+    state="$(ssh_target "systemctl --user show --property=LoadState --property=ActiveState --property=Result --property=ExecMainStartTimestamp '${unit}'" 2>/dev/null || true)"
+    while IFS='=' read -r key value; do
+        case "${key}" in
+            LoadState) load_state="${value}" ;;
+            ActiveState) active_state="${value}" ;;
+            Result) result="${value}" ;;
+            ExecMainStartTimestamp) start_time="${value}" ;;
+        esac
+    done <<< "${state}"
+    [[ "${load_state}" == loaded ]] || fail "user unit ${unit} is ${load_state:-unavailable}"
+    # Result= is success/exit-code/signal/timeout/...; it is never "failed".
+    [[ "${active_state}" != failed && "${result}" == success ]] \
+        || fail "user unit ${unit} failed during ${boot_pass} boot (ActiveState=${active_state:-unknown} Result=${result:-unknown})"
+    [[ -n "${start_time}" && "${start_time}" != "n/a" ]] \
+        || fail "user unit ${unit} did not execute during ${boot_pass} boot"
+    enabled="$(ssh_target "systemctl --user is-enabled '${unit}'" 2>/dev/null || true)"
+    [[ "${enabled}" == enabled ]] || fail "user unit ${unit} is ${enabled:-not enabled}"
+    echo "  ${unit}: ${result:-unknown}; enabled"
+}
+
+verify_setup_state() {
+    local boot_pass="${1:-first}"
+    echo "Checking ${boot_pass}-boot setup units and desktop enablement..."
+    # Exclude network-bound update jobs and optional Tailscale: this VM has no
+    # network, so neither boot's setup checks should fail on those units.
+    check_system_unit_state flatpak-nuke-fedora.service true false "${boot_pass}"
+    check_system_unit_state flatpak-preinstall.service true true "${boot_pass}"
+    check_system_unit_state ublue-system-setup.service true true "${boot_pass}"
+    check_system_unit_state brew-setup.service true false "${boot_pass}"
+    for unit in input-remapper.service bluefin-stats-refresh.timer uupd.timer; do
+        check_system_unit_state "${unit}" true false "${boot_pass}"
+    done
+    check_user_setup_unit "${boot_pass}"
+}
+
+verify_flathub_remote() {
+    local remotes
+    remotes="$(ssh_target 'flatpak remotes --system --columns=name' 2>/dev/null || true)"
+    grep -qxF flathub <<< "${remotes}" || fail "system Flathub remote is not configured"
+    echo "  system Flathub remote present"
+}
+
+dump_flatpak_preinstall_diagnostics() {
+    local boot_pass="$1"
+    echo "Flatpak preinstall service diagnostics (${boot_pass}):" >&2
+    [[ -n "${TEST_PASSWORD:-}" ]] || return 0
+    ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' systemctl --no-pager status flatpak-preinstall.service" >&2 2>/dev/null || true
+    ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' journalctl -b -u flatpak-preinstall.service --no-pager -n 80" >&2 2>/dev/null || true
+}
+
+verify_flatpaks_after_repeat() {
+    local expected="$1" installed app
+    local -a missing=()
+    installed="$(ssh_target 'flatpak list --system --columns=application' 2>/dev/null || true)"
+    [[ -n "${installed}" ]] || fail "'flatpak list --system' returned nothing after the repeat boot"
+    while IFS= read -r app; do
+        [[ -n "${app}" ]] || continue
+        grep -qxF "${app}" <<< "${installed}" || missing+=("${app}")
+    done <<< "${expected}"
+    if (( ${#missing[@]} > 0 )); then
+        dump_flatpak_preinstall_diagnostics "repeat boot"
+        fail "default Flatpak(s) missing after the repeat boot: ${missing[*]}"
+    fi
+    echo "  default Flatpaks remain present after the repeat boot"
+}
+
+# luks-unlock.py returns on the sshd banner, which can precede GDM. Without
+# this gate the repeat-boot password can be typed before the greeter exists and
+# the dropped keystrokes would read as an idempotence failure.
+wait_for_repeat_greeter() {
+    local gdm_active=0 greeter_up=0
+    for _ in $(seq 1 24); do
+        if ssh_target 'systemctl is-active gdm.service' 2>/dev/null | grep -qx active; then
+            gdm_active=1
+            break
+        fi
+        sleep 5
+    done
+    (( gdm_active == 1 )) || fail "gdm is not running after the repeat boot"
+    echo "  repeat boot: gdm.service active"
+    # Before login the only gnome-shell is the greeter's own.
+    for _ in $(seq 1 24); do
+        if ssh_target 'pgrep -x gnome-shell >/dev/null' 2>/dev/null; then
+            greeter_up=1
+            break
+        fi
+        sleep 5
+    done
+    if (( greeter_up == 0 )); then
+        shot installed-repeat-no-greeter "${MONITOR_INSTALLED}" || true
+        fail "GDM greeter shell did not start after the repeat boot"
+    fi
+    sleep 5
+    shot installed-repeat-greeter "${MONITOR_INSTALLED}" || true
+}
+
+repeat_installed_boot() {
+    local serial_repeat="${WORK}/installed-repeat-boot.log"
+    local unlock_output="${WORK}/repeat-boot-unlock.log"
+    local disconnected=0 restart_seen=0 status=0 ssh_ready=0 graphical_ready=0
+    : > "${serial_repeat}"
+    echo "Starting serial capture and requesting a graceful reboot..."
+    tail -n 0 -F "${SERIAL_INSTALLED}" > "${serial_repeat}" &
+    serial_follow_pid=$!
+    sleep 1
+    ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' systemctl reboot" \
+        >/dev/null 2>&1 || true
+    for _ in $(seq 1 60); do
+        if ! ssh_target true 2>/dev/null; then
+            disconnected=1
+            break
+        fi
+        sleep 1
+    done
+    (( disconnected == 1 )) || fail "installed system did not disconnect for the requested reboot"
+
+    # SSH can disappear before QEMU has reset; until serial records shutdown,
+    # the framebuffer may still be the static desktop and resemble Plymouth.
+    for _ in $(seq 1 60); do
+        if grep -qaF 'reboot: Restarting system' "${serial_repeat}"; then
+            restart_seen=1
+            break
+        fi
+        sleep 1
+    done
+    (( restart_seen == 1 )) || fail "serial console did not confirm shutdown before repeat-boot unlock"
+
+    python3 "${ROOT}/iso/scripts/luks-unlock.py" qemu \
+        "${MONITOR_INSTALLED}" "${PASSPHRASE}" "${serial_repeat}" "${SSH_PORT_INSTALLED}" \
+        > "${unlock_output}" 2>&1 || status=$?
+    if (( status != 0 )); then
+        cat "${unlock_output}" >&2
+        tail -80 "${serial_repeat}" >&2 || true
+        fail "repeat-boot LUKS unlock or post-unlock boot failed (exit ${status})"
+    fi
+    for _ in $(seq 1 120); do
+        if ssh_target true 2>/dev/null; then
+            ssh_ready=1
+        fi
+        if grep -qaE 'Reached target.*Graphical' "${serial_repeat}"; then
+            graphical_ready=1
+        fi
+        (( ssh_ready == 1 && graphical_ready == 1 )) && break
+        sleep 5
+    done
+    kill "${serial_follow_pid}" 2>/dev/null || true
+    wait "${serial_follow_pid}" 2>/dev/null || true
+    serial_follow_pid=""
+    (( ssh_ready == 1 )) || fail "SSH did not return after the repeat boot"
+    (( graphical_ready == 1 )) || fail "repeat boot did not reach the graphical target"
+    wait_for_repeat_greeter
+    login_installed_user "repeat boot"
+    echo "  repeat boot: LUKS unlocked, SSH returned, and graphical target reached"
+}
+
 
 # A failed boot is diagnosed from the units that failed, not from whatever
 # happened to scroll past last. The console keeps printing after a unit fails
@@ -595,6 +898,16 @@ if [[ -n "${UTAH_E2E_EXPECT_FLAVOR:-}" ]]; then
     scp_target "${ROOT}/iso/scripts/verify-installed-flavor.py" "${TEST_USER}@127.0.0.1:/tmp/utah-verify-installed-flavor.py" >/dev/null
     ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' python3 /tmp/utah-verify-installed-flavor.py --flavor '$UTAH_E2E_EXPECT_FLAVOR'" > "${WORK}/flavor-checks.json" \
         || fail "installed flavor probe failed"
+    ssh_target 'rpm -q gnome-rounded-blur' \
+        || fail "installed image lacks the gnome-rounded-blur runtime package"
+    if ssh_target 'rpm -q --quiet gnome-rounded-blur-devel'; then
+        fail "build-only gnome-rounded-blur-devel leaked into the installed image"
+    else
+        devel_query_status=$?
+        [[ "${devel_query_status}" -eq 1 ]] \
+            || fail "could not verify gnome-rounded-blur-devel is absent"
+    fi
+    echo "  rounded-blur runtime/devel split: passed"
     ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' bootc status --json" > "${WORK}/bootc-status.json"
 fi
 
@@ -676,26 +989,38 @@ EOF
 
 # Type the password at the greeter. GDM offers the single account already
 # selected, so Enter opens the password field and the password submits it.
-echo "Logging in at the greeter as ${TEST_USER}..."
-monitor "${MONITOR_INSTALLED}" "sendkey ret" || true
-sleep 3
-send_keys "${MONITOR_INSTALLED}" "${TEST_PASSWORD}"
+login_installed_user() {
+    local boot_pass="$1" logged_in=0
+    echo "Logging in at the greeter as ${TEST_USER} (${boot_pass})..."
+    monitor "${MONITOR_INSTALLED}" "sendkey ret" || true
+    sleep 3
+    send_keys "${MONITOR_INSTALLED}" "${TEST_PASSWORD}"
 
-echo "Waiting for a GNOME session..."
-logged_in=0
-for i in $(seq 1 48); do
-    if ssh_target "pgrep -u ${TEST_USER} -x gnome-shell >/dev/null" 2>/dev/null; then
-        logged_in=1; break
+    echo "Waiting for a GNOME session after ${boot_pass}..."
+    for i in $(seq 1 48); do
+        if ssh_target "pgrep -u ${TEST_USER} -x gnome-shell >/dev/null" 2>/dev/null; then
+            logged_in=1
+            break
+        fi
+        sleep 5
+    done
+    if (( ! logged_in )); then
+        shot installed-login-failed "${MONITOR_INSTALLED}" || true
+        echo "--- sessions ---" >&2
+        ssh_target 'loginctl list-sessions --no-legend' >&2 2>/dev/null || true
+        fail "no gnome-shell for ${TEST_USER} after ${boot_pass} login"
     fi
-    sleep 5
-done
-if (( ! logged_in )); then
-    shot installed-login-failed "${MONITOR_INSTALLED}" || true
-    echo "--- sessions ---" >&2
-    ssh_target 'loginctl list-sessions --no-legend' >&2 2>/dev/null || true
-    fail "no gnome-shell for ${TEST_USER} after logging in at the greeter"
+    echo "  gnome-shell: running as ${TEST_USER}"
+}
+login_installed_user "first boot"
+if [[ -n "${UTAH_E2E_EXPECT_FLAVOR:-}" ]]; then
+    echo "Verifying the shared CountMe timer, report identity, and opt-out..."
+    scp_target "${ROOT}/iso/scripts/verify-countme-runtime.sh" \
+        "${TEST_USER}@127.0.0.1:/tmp/utah-verify-countme-runtime.sh" >/dev/null \
+        || fail "could not copy the CountMe runtime verifier"
+    ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' bash /tmp/utah-verify-countme-runtime.sh '${UTAH_E2E_EXPECT_FLAVOR}'" \
+        || fail "shared CountMe runtime verification failed"
 fi
-echo "  gnome-shell: running as ${TEST_USER}"
 
 # A shell session that started is not the same as one whose extensions loaded.
 # Assert the enabled extensions raised no load-time error this boot -- the
@@ -726,7 +1051,7 @@ if [[ -n "${EXT_CHECK}" ]]; then
         # reading once is the difference between a real verdict and a blank.
         state=""
         for _ in $(seq 1 24); do
-            state="$(ssh_target "env BASH_ENV=/dev/null bash --noprofile --norc -c \"gnome-extensions info '${uuid}' 2>/dev/null\"" 2>/dev/null | grep -aE '^[[:space:]]*State:' | tail -1 | awk '{print $NF}' | tr -d '[:space:]' || true)"
+            state="$(gnome_extension_info "${uuid}" 2>/dev/null | extension_state_from_info || true)"
             [[ -n "${state}" ]] && break
             sleep 5
         done
@@ -738,12 +1063,12 @@ if [[ -n "${EXT_CHECK}" ]]; then
             # `\$NF' to awk, every read came back empty, and the check passed
             # while asserting nothing.) Fail, and print the raw output.
             echo "  extension ${uuid}: state could not be read" >&2
-            ssh_target "env BASH_ENV=/dev/null bash --noprofile --norc -c \"gnome-extensions info '${uuid}' 2>&1 | head -20\"" >&2 2>/dev/null || true
+            gnome_extension_info "${uuid}" 2>&1 | head -20 >&2 || true
             shot "installed-ext-unreadable-${uuid%%@*}" "${MONITOR_INSTALLED}" || true
             ext_failures+=("${uuid}: state could not be read")
             continue
         fi
-        if [[ "${state}" != "ACTIVE" && "${state}" != "ENABLED" ]]; then
+        if ! extension_state_is_active "${state}"; then
             echo "  extension ${uuid}: state=${state}" >&2
             ssh_target "env BASH_ENV=/dev/null bash --noprofile --norc -c \"journalctl --user -b --no-pager 2>/dev/null | grep -F '${uuid}' | grep -iE 'Error|TypeError|Exception|not a function' | tail -5\"" >&2 2>/dev/null || true
             shot "installed-ext-error-${uuid%%@*}" "${MONITOR_INSTALLED}" || true
@@ -769,6 +1094,20 @@ echo "  session type: ${session_type:-unknown}"
 sleep 10   # let the shell finish drawing before the screenshot
 shot installed-desktop "${MONITOR_INSTALLED}"
 
+# GNOME Shell shows its own "Welcome to Bluefin / Skip / Take Tour" dialog on
+# first login whenever gnome-tour is installed (it launches org.gnome.Tour from
+# "Take Tour"). It is a Shell modal, not a process, and it appears at a variable
+# delay after login. The clean desktop shot above documents it when it is
+# already up. When OCR of a later screenshot reads it, press Skip (the focused
+# button) so it stops covering the terminal, as a user would.
+skip_welcome_dialog() {
+    if grep -qi "take tour" "$1" 2>/dev/null; then
+        echo "  GNOME Shell welcome dialog is showing; pressing Skip"
+        monitor "${MONITOR_INSTALLED}" "sendkey ret" || true
+        sleep 3
+    fi
+}
+
 # Open a terminal on the desktop and leave fastfetch on screen. This is the
 # shot a human actually reads: it names the OS, the kernel and the desktop
 # from inside the installed system, so one image carries what half a dozen
@@ -793,6 +1132,7 @@ if [[ "${UTAH_E2E_REQUIRE_FASTFETCH:-0}" == 1 ]]; then
                     break 2
                 fi
             done
+            skip_welcome_dialog "${WORK}/fastfetch-ocr.txt"
         fi
         sleep 5
     done
@@ -819,6 +1159,7 @@ fi
 if [[ "${UTAH_E2E_REQUIRE_SCREENSHOTS:-0}" == 1 ]]; then
     for label in live-desktop installed-greeter installed-desktop installed-fastfetch; do
         [[ -s "${SHOTS}/${label}.png" ]] || fail "missing required screenshot: ${label}"
+        screenshot_not_blank "${SHOTS}/${label}.png"
     done
 fi
 if [[ -s "${SHOTS}/installed-desktop.png" && -s "${SHOTS}/installed-fastfetch.png" ]]; then
@@ -876,9 +1217,21 @@ if [[ -n "${UTAH_E2E_FLATPAKS-x}" ]]; then
     [[ -n "${installed_flatpaks}" ]] \
         || fail "'flatpak list --system' returned nothing on the installed system"
     if (( ${#missing_flatpaks[@]} > 0 )); then
+        dump_flatpak_preinstall_diagnostics "first boot"
         fail "default Flatpak(s) missing on the installed, network-isolated system: ${missing_flatpaks[*]}"
     fi
     echo "  default Flatpaks present offline: ${expected_flatpaks//$'\n'/, }"
+fi
+
+if [[ -n "${UTAH_E2E_EXPECT_FLAVOR:-}" ]]; then
+    verify_flathub_remote
+    verify_setup_state first
+    repeat_installed_boot
+    verify_setup_state repeat
+    verify_flathub_remote
+    if [[ -n "${UTAH_E2E_FLATPAKS-x}" ]]; then
+        verify_flatpaks_after_repeat "${expected_flatpaks}"
+    fi
 fi
 
 echo

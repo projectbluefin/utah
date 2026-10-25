@@ -82,13 +82,43 @@ build: PRs do not publish immutable images. This matrix validates emulated
 UEFI desktop installation, not Secure Boot, TPM unlock, or physical GPUs.
 
 The ISO size is bounded in `iso/scripts/build-iso.sh`: it fails closed above
-the 6 GiB `ISO_MAX_GB` default (override per-run with `UTAH_ISO_MAX_GB`) once
+the 8 GiB `ISO_MAX_GB` default (override per-run with `UTAH_ISO_MAX_GB`) once
 the ISO is written. Historical post-fix E2E run `35469913325` measured 3.9G
 (utah), 4.6G (gaming), 5.2G (nvidia), and 5.3G (nvidia-gaming). Diagnostic
 run `38175242606` measured 4.7G, 5.5G, 6.0G, and 6.1G at the production zstd
-level 3; the nvidia-gaming overage is tracked in #684. The opt-in review VM
-matrix sets `UTAH_ISO_COMPRESSION_LEVEL=15` only to reach install/boot checks;
-local `just iso` and production callers retain level 3 and the 6 GiB guard.
+level 3; the nvidia-gaming overage (98.8 MiB over) is #684. The opt-in review
+VM matrix sets `UTAH_ISO_COMPRESSION_LEVEL=15` only to reach install/boot
+checks; local `just iso` and production callers retain level 3 and the 8 GiB
+guard. The guard was raised from 6 GiB after run `40107791411` measured the
+main tacklebox ISO at 7,288,455,168 bytes (6.79 GiB; the budget had already
+been exceeded, 6,928,269,312 bytes, before the GNOME app and parity packages
+landed). The post-testing E2E applies the same limit to that ISO. Size
+reduction strategies are tracked in #875; move the guard down again only with
+a measured reduction.
+
+When the guard trips, measure before trimming. The kernel cache image's last
+layer is only `/utah-cache`, so its archives can be inventoried without a
+build: fetch that one blob from GHCR and `tar -tvf` the archives inside it.
+That is how #684 was located: `ogc.tar` carried a 286 MiB
+`/usr/src/linux-<ogc>` external-module build tree (228 MiB of it `arch/x86`
+built objects and boot images) that gaming images unpacked and never removed.
+To estimate the ISO effect, compress the candidate files in independent
+128 KiB blocks with zstd level 3 -- `mksquashfs -b 131072 -comp zstd
+-Xcompression-level 3` is what the ISO does -- rather than streaming them;
+the tree came out at about 150 MiB that way, against the 98.8 MiB overage.
+
+For plain `nvidia` (#740, measuring 6,640,365,568 B / ~6.18 GiB in diagnostic
+run 38429837410 against the 6 GiB ceiling), the overage was driven by the
+generic (`--no-hostonly`) initramfs for distribution kernel `7.2.9`. Because
+neither `regenerate-initramfs.sh` nor `iso/live/Containerfile` specified a
+compression algorithm, dracut defaulted to gzip, producing a ~240 MiB
+initramfs. This ~240 MiB archive was duplicated four times across the offline
+ISO media (inside `efi.img` ESP, in `images/pxeboot`, in the live squashfs root,
+and in the embedded `/usr/lib/containers/storage` layer). Switching both
+dracut invocations to `--zstd --reproducible` shrinks each archive from
+~240 MiB to under ~60 MiB, saving ~360 MiB outside squashfs and over 100 MiB
+inside squashfs, bringing plain `nvidia` comfortably below the 6 GiB budget
+without modifying the kernel cache tag.
 
 ### Tacklebox image pin
 

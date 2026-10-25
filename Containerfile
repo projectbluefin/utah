@@ -1,16 +1,16 @@
-ARG BASE_IMAGE=quay.io/hummingbird-community/os-minimal:latest@sha256:13464c0d15a7ed8ac155bb58caf9287bfa0b589f21fc35732eddabc06313575c
+ARG BASE_IMAGE=quay.io/hummingbird-community/os-minimal:latest@sha256:490380d6bea3e58edde1e2927214080337804378c80d1c1668f10a63d987359e
 # The package factory publishes a complete, digest-addressable RPM repository.
 # Keep this pin in Utah so an image build is reproducible and can be reviewed
 # against the exact package set it consumes.
 ARG PACKAGE_IMAGE=ghcr.io/projectbluefin/utah-packages
-ARG PACKAGE_IMAGE_SHA=sha256:bda6bc26a5d956066c3480496a9c622475172b919adfc26a2ec739c45193f9d8
+ARG PACKAGE_IMAGE_SHA=sha256:d51bb860fad405517f74eecb5791791a1b586e2f6e44b914e477e1c17e87e840
 # CI keeps PACKAGE_IMAGE_SHA pinned. PACKAGE_IMAGE_REF supports a local image
 # in containers-storage, where no registry digest is available.
 ARG PACKAGE_IMAGE_REF=${PACKAGE_IMAGE}@${PACKAGE_IMAGE_SHA}
 ARG COMMON_IMAGE=ghcr.io/projectbluefin/common
-ARG COMMON_IMAGE_SHA=sha256:31054b70cd60d8c45532ea7d624deaf0ba4fef84858b09a3d633f6dec31df975
+ARG COMMON_IMAGE_SHA=sha256:73b8cde850d707964a6db95de30a97c9513054c478631b4fb73ffcd6860fcdf8
 ARG BREW_IMAGE=ghcr.io/ublue-os/brew
-ARG BREW_IMAGE_SHA=sha256:5bdf54dc7c21c22db29df6550e3711788719c5123549ea6dc5645d5af47795e3
+ARG BREW_IMAGE_SHA=sha256:393b567da078f0f0638450c388e229011dae06f94a90017cb7525b57d9faa46e
 
 FROM ${COMMON_IMAGE}@${COMMON_IMAGE_SHA} AS common
 FROM ${BREW_IMAGE}@${BREW_IMAGE_SHA} AS brew
@@ -328,7 +328,10 @@ RUN --mount=type=bind,from=common,source=/system_files/bluefin/usr/share/pixmaps
 # NVIDIA path can bind its module to the exact kernel tree it will boot.
 # v4l2loopback comes last, after the NVIDIA installer, which may remove modules
 # it takes for an earlier driver's: the base module staged by the builder stage
-# is registered and asserted, and the gaming flavors compile one for OGC.
+# is registered and asserted, and the gaming flavors compile one for OGC. Being
+# last also makes the OGC v4l2loopback run the point where the OGC build tree
+# under /usr/src is retired: install-v4l2loopback removes it once its module is
+# verified, in this same layer, so the ~286 MiB tree never ships (#684).
 RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages,ro \
     case "${IMAGE_FLAVOR}" in \
       gaming|nvidia-gaming) /usr/local/libexec/utah-install-ogc-kernel ;; \
@@ -351,8 +354,23 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
     # the committed image. Flip it disabled here -- the last step that installs
     # anything -- so later dnf calls on the image (the live ISO build's included)
     # do not fail on a file:// baseurl that no longer exists.
-    sed -i 's/^enabled=1$/enabled=0/' /etc/yum.repos.d/utah-packages.repo \
-      && grep -q '^enabled=0$' /etc/yum.repos.d/utah-packages.repo && \
+    #
+    # The flip must change the file's size, not only its bytes (#735). The
+    # pin below stamps the rewritten file with the same epoch the earlier
+    # layer's copy already carries, and `enabled=1` -> `enabled=0` keeps the
+    # length. containers/storage's naive layer diff -- what buildah uses on
+    # kernels with CONFIG_OVERLAY_FS_REDIRECT_DIR, the hosted runners among
+    # them -- decides "modified" from mode, owner, mtime and size alone, never
+    # content. Equal on all four, the flipped file was dropped from the layer
+    # and the published image shipped enabled=1 with a dangling baseurl, and
+    # every dnf call on it failed. Appending the comment adds bytes, so the
+    # diff cannot miss it; the second grep proves the bytes were added.
+    sed -i \
+      -e 's/^enabled=1$/enabled=0/' \
+      -e '/^enabled=0$/a # Disabled by the image build: the baseurl above is mounted only while the image is built.' \
+      /etc/yum.repos.d/utah-packages.repo \
+      && grep -q '^enabled=0$' /etc/yum.repos.d/utah-packages.repo \
+      && grep -q '^# Disabled by the image build:' /etc/yum.repos.d/utah-packages.repo && \
     /usr/local/libexec/utah-pin-build-mtimes
 
 # Everything above writes build-time residue that bootc lint rejects: dnf logs

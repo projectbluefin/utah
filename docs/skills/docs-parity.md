@@ -1,7 +1,7 @@
 ---
 name: docs-parity
 version: "1.0"
-last_updated: "2026-10-03"
+last_updated: "2026-10-15"
 id: docs-parity
 one_line_purpose: Reconcile Utah's README with the docs.projectbluefin.io/utah page before deleting duplicate prose.
 entry_point: docs/skills/docs-parity.md
@@ -42,19 +42,21 @@ Everything that is **true of the source repository right now**:
 
 - Identity, architecture, and the two-repository composition with
   `projectbluefin/utah-packages`.
-- The honest pre-alpha status, including which artifacts are published (the
-  `:testing` consumer tag, after `post-testing-e2e` validates a digest) and
-  which are not (no ISO, no installer, no `:stable` promotion yet).
-- The complete Known gaps list (live-media boot, Secure Boot, bootc timers,
-  ESP maintenance, Wi-Fi coverage, NVIDIA/gaming readiness, codec support,
-  CUDA exclusion) — the docs page never carries the long form.
+- The honest pre-alpha status, including which artifacts are published: the
+  testing live ISO, the `:testing` consumer tag after `post-testing-e2e`
+  validates a digest, and the rolling `:stable` tag that `execute-release.yml`
+  moves on each testing-to-main promotion behind the release gate (kept as the
+  interface by the #336 ruling).
+- The concise Known gaps list (Secure Boot and live-media boot paths, bootc
+  update timers, ESP maintenance via `bootctl`, hardware/codec/driver
+  validation, CUDA exclusion) — one bullet per gap; the docs page never
+  carries a long form.
 - The Package parity table — both numbers and the byte-for-byte contract.
 - Verification record and provenance links (CI runs, screenshots).
-- The Download section. The link is intentionally absent while no artifact is
-  published; the section explains where the publication gate is tracked and
-  points to the docs page as the place a download URL will first show up.
-- The Documentation pointer to `docs.projectbluefin.io/utah` and the rule
-  that the catalog lives there, not in the README.
+- The "Download and image streams" section: the testing ISO link and its
+  SHA-256 checksum link, the pointer to `docs.projectbluefin.io/utah` for live
+  versions and downloads (the catalog lives there, not in the README), the
+  canonical flavor set from `config/flavors.json`, and the stream table.
 
 ## What the docs page owns
 
@@ -84,14 +86,14 @@ page as follows:
 |---|---|---|---|
 | Identity | "Utah is Bluefin built on Fedora Hummingbird … Utah adds the desktop layer" | Same identity, plus the Fedora Hummingbird Magazine link | README "What it is" |
 | Two-repo composition | "Utah is composed across two coordinated repositories" with `projectbluefin/utah-packages` | Same two-repo table | README "What it is" |
-| Pre-alpha status | "Utah is an alpha build … its `:testing` container image is published on GHCR" | Refined: the `:testing` consumer tag **is** published on `ghcr.io/projectbluefin/utah:testing` once `post-testing-e2e` validates a digest (`.github/workflows/post-testing-e2e.yml:286-309`); `publish_stream_tag: "false"` defers the floating `:testing` tag, not blocks it. No ISO has been released, no installer is published, and `:stable` is not yet promoted — the corrected README names each gap separately and links the `enhancement` label on the issue tracker | README "What it is" + "Download" |
-| Download | `https://projectbluefin.dev/utah-live-latest.iso` | No ISO has been released; the section explains what is and is not published (the `:testing` consumer tag is, after `post-testing-e2e` validation) and points at the tracker | README "Download" |
-| Image streams | `utah`, `utah-nvidia`, `utah-gaming`, `utah-nvidia-gaming` on stable/testing | Same set; canonical source is `config/flavors.json` | README "Image streams" |
+| Pre-alpha status | "Utah is an alpha build … its `:testing` container image is published on GHCR" | Testing container images and live ISOs are available for hardware testing; the `:testing` consumer tag is published on `ghcr.io/projectbluefin/utah:testing` once `post-testing-e2e` validates a digest; the rolling `:stable` tag moves on each testing-to-main promotion behind the release gate | README header + "Download and image streams" |
+| Download | `https://projectbluefin.dev/utah-live-latest.iso` | Same testing ISO URL plus its `-CHECKSUM` link, and a pointer to the docs page for live versions and downloads | README "Download and image streams" |
+| Image streams | `utah`, `utah-nvidia`, `utah-gaming`, `utah-nvidia-gaming` on stable/testing | Same set; canonical source is `config/flavors.json` | README "Download and image streams" |
 | Features / stack | Kernel options + OGC + Gaming mode; NVIDIA and Gaming flavors; GNOME 51 from source | Same explanations, with the precise kernel/NVIDIA/Secure Boot caveats | README "Known gaps" |
 | Current Versions | `<DriverVersionsCatalog streamId="utah-testing" />` (live, empty today) | Component kept; README does not duplicate it | docs page only |
 | Further reading | Repo + utah-packages + Fedora Hummingbird Magazine | Same three links | README "What it is" + docs page |
 | Verification, screenshots, CI runs | n/a (docs page) | Screenshots, CI run link, package counts | README (top + "Package parity with Bluefin") |
-| Detailed gaps | n/a (docs page) | Long-form list | README "Known gaps" |
+| Detailed gaps | n/a (docs page) | Concise one-bullet-per-gap list | README "Known gaps" |
 
 Items duplicated by the previous docs page that the docs wrapper drops after
 this PR lands:
@@ -102,8 +104,9 @@ this PR lands:
   that the catalog will eventually drive.
 - The hand-maintained GNOME-version statement. The `DriverVersionsCatalog`
   is the live source.
-- The hand-written download URL. Until an artifact is published, the URL is
-  a lie.
+- Any hand-written download URL in the wrapper. The README carries the
+  testing ISO and checksum links; duplicating them in the wrapper invites
+  drift.
 
 ## Editing protocol
 
@@ -129,8 +132,9 @@ switch-command widget, a download-button):
 
 1. Land the change in `projectbluefin/documentation` first; the renderer
    must be able to fetch the new README without breaking the existing page.
-2. Reference the new component from the README's "Documentation" section
-   so users can find it from the upstream source.
+2. Reference the new component from the README's "Download and image
+   streams" section (which links `docs.projectbluefin.io/utah`) so users can
+   find it from the upstream source.
 3. If the new component replaces prose the README is currently carrying,
    delete the prose **after** the docs-side change has rendered and the
    empty state has been visually confirmed.

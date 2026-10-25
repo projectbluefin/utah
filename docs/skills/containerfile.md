@@ -49,6 +49,8 @@ In summary:
   step, the last one that installs anything, flips it to `enabled=0` so a later
   dnf call on the finished image -- the live ISO build among them -- does not
   fail on a baseurl that is no longer mounted (comment, the repo file itself).
+  The flip also appends a comment line so the file's size changes; see
+  "Same-size edits after an mtime pin" below for why (#735).
 - `ARG PACKAGE_IMAGE_REF=${PACKAGE_IMAGE}@${PACKAGE_IMAGE_SHA}` defaults to
   the digest-pinned OCI package repository for reproducible CI builds, while
   allowing local composition to inject a local image from containers-storage
@@ -197,7 +199,17 @@ layer is added. The builder never runs `depmod` against `/out`: a partial
 runs again in the flavor step, finds the staged module, and only registers and
 asserts it; `utah-install-v4l2loopback ogc` compiles against the OGC tree that
 `install-ogc-kernel.sh` preserves, which needs `CONFIG_VIDEO_DEV` in that
-kernel (enforced by its `required_config`).
+kernel (enforced by its `required_config`). That `ogc` run is the tree's last
+consumer, so once its module is verified it removes `/usr/src/linux-<ogc>` and
+the `modules/<ogc>/build` symlink (#684). The tree is 286 MiB uncompressed --
+`cp -a arch/x86` carries the built objects and boot images -- and cost about
+150 MiB of the live ISO's zstd-3 squashfs on every gaming flavor. The removal
+lives in `install-v4l2loopback.sh` and not in `install-ogc-kernel.sh` for two
+reasons: that script is in the kernel cache tag, and the cache tarball still
+has to carry the tree for the NVIDIA and v4l2loopback compiles; and it lands
+in the same RUN layer that unpacked the tree, where a deletion actually
+shrinks the layer. A later layer's whiteout only helps after chunkah
+rechunks, and a local `just iso` embeds the un-rechunked layers as they are.
 
 After the final NVIDIA, OGC, and v4l2loopback package steps, the flavor layer
 runs `utah-regenerate-initramfs`. The helper selects the exact bootc kernel,
@@ -324,3 +336,26 @@ Run `just check-reproducible main` to compare two uncached builds with fixed
 arguments and every ordered native layer. The combined review candidate at
 e44e438 matched all 37 layers and image IDs in run 37576445666. Published
 chunkah ordering and non-main flavor acceptance need separate evidence.
+
+### Same-size edits after an mtime pin
+
+A file rewritten in a later layer must differ from the earlier layer's copy
+in size or mtime, not only in content. Every runtime layer ends with
+`utah-pin-build-mtimes`, which stamps each path RPM does not own with
+`SOURCE_DATE_EPOCH` -- the same value the earlier layer's copy already
+carries. containers/storage's naive layer diff, which buildah uses on kernels
+with `CONFIG_OVERLAY_FS_REDIRECT_DIR` (the hosted runners among them),
+decides "modified" from mode, owner, mtime and size alone and never reads
+content. An in-place edit that keeps the byte count is therefore dropped from
+the layer, and the merged image -- and so chunkah's rechunked output -- keeps
+the old bytes while the RUN's own assertions passed.
+
+That is how #735 shipped: the flavor step's `sed` from `enabled=1` to
+`enabled=0` in `utah-packages.repo` keeps the length, the pin followed it, and
+the published image carried the repository enabled with a `file://` baseurl
+that exists only during the build; the live ISO build's first `dnf5 install`
+failed on it. The flip now appends a comment line to the file and greps for
+it, so the diff cannot miss the change and the build fails closed if the
+added bytes go missing (`tests/test_package_resolution.py`). Apply the same
+rule to any future `sed -i` on a file an earlier layer already committed:
+add or remove bytes, or do the edit in the layer that first writes the file.

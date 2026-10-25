@@ -75,17 +75,112 @@ enable_unit fwupd-refresh.timer
 enable_unit dconf-update.service
 enable_unit tailscaled.service
 enable_unit uupd.timer
+enable_unit projectbluefin-countme.timer
 enable_unit bluefin-stats-refresh.timer
 enable_unit ublue-system-setup.service
 enable_unit systemd-resolved.service
 # See the preset: gated on systemd-boot by drop-in, skipped elsewhere (#363).
 enable_unit systemd-boot-update.service
 enable_unit bootc-unified-storage.service
+# Dakota desktop parity (#675). The units ship in
+# system_files/shared/usr/lib/systemd/system/; the preset agrees so bootc's
+# first-boot preset application keeps them enabled (see #98).
+enable_unit ublue-firstboot-date.service
+enable_unit ublue-booted-image.service
+# Apply Dakota's runtime desktop integrations onto common's files. Each patch
+# is guarded: already-patched is a no-op, an unrecognized upstream file fails
+# the build loudly instead of silently shipping unpatched behavior.
+# Wallpaper rotation stays with Common's per-user bluefin-dynamic-wallpaper
+# timer (hemisphere-aware, live month-boundary rotation) rather than Dakota's
+# boot-time month symlink: repointing the default would stand the Common
+# rotator down with no replacement until reboot (#675 decision, #732 review).
+# Installation date for fastfetch: read the first-boot timestamp instead of
+# inferring the image age from /var/log timestamps.
+FASTFETCH_JSONC=/usr/share/ublue-os/fastfetch.jsonc
+if [ -f "${FASTFETCH_JSONC}" ]; then
+    if grep -qF '/var/lib/ublue-os/install-date' "${FASTFETCH_JSONC}"; then
+        : already patched
+    elif grep -qF 'ls -alct /var/log' "${FASTFETCH_JSONC}"; then
+        sed -i "s#date -d\$(ls -alct /var/log --time-style=full-iso|tail -1|awk '{print \$6}')#date -d\$(cat /var/lib/ublue-os/install-date 2>/dev/null || date +%Y-%m-%d)#" "${FASTFETCH_JSONC}"
+    else
+        echo "ERROR: ${FASTFETCH_JSONC} changed upstream -- re-fit the install-date patch (see ublue-firstboot-date.service)" >&2
+        exit 1
+    fi
+fi
+# Community stats for fastfetch: read what bluefin-stats-refresh.service last
+# fetched, and fall back to the build-time placeholder until it has run once.
+# Common reads only the /usr/share/ublue-os copy, which is read-only at runtime,
+# so without this the banner shows the placeholder forever (#860).
+STATS_CACHE=/var/cache/bluefin-stats
+if [ -f "${FASTFETCH_JSONC}" ]; then
+    if grep -qF "${STATS_CACHE}/" "${FASTFETCH_JSONC}"; then
+        : already patched
+    elif grep -qF '"cat /usr/share/ublue-os/fastfetch-user-count"' "${FASTFETCH_JSONC}" \
+        && grep -qF '"cat /usr/share/ublue-os/bazaar-install-count"' "${FASTFETCH_JSONC}"; then
+        for stat in fastfetch-user-count bazaar-install-count; do
+            sed -i "s#\"cat /usr/share/ublue-os/${stat}\"#\"cat ${STATS_CACHE}/${stat} 2>/dev/null || cat /usr/share/ublue-os/${stat}\"#" "${FASTFETCH_JSONC}"
+        done
+    else
+        echo "ERROR: ${FASTFETCH_JSONC} changed upstream -- re-fit the community-stats patch (see bluefin-stats-refresh.service)" >&2
+        exit 1
+    fi
+fi
+# Booted image tag for fastfetch: prefer the boot-time snapshot
+# ublue-booted-image.service writes, since unprivileged `bootc status` fails
+# on bootc >= 1.14 and the baked tag is the compose-time one.
+IMAGE_INFO_SH=/usr/bin/ublue-image-info.sh
+if [ -f "${IMAGE_INFO_SH}" ]; then
+    if grep -qF '/run/ublue-os/booted-image' "${IMAGE_INFO_SH}"; then
+        : already patched
+    elif grep -qF '.status.booted.image.image.image' "${IMAGE_INFO_SH}"; then
+        sed -i '/^case "${BOOTED_REF}" in/i\
+\
+# Utah parity with Dakota (#675): prefer the boot-time snapshot written by\
+# ublue-booted-image.service. Unprivileged bootc status fails on bootc >= 1.14,\
+# and the baked image tag is the compose-time tag.\
+if [[ -r /run/ublue-os/booted-image ]]; then\
+\tread -r BOOTED_REF < /run/ublue-os/booted-image\
+fi' "${IMAGE_INFO_SH}"
+    else
+        echo "ERROR: ${IMAGE_INFO_SH} changed upstream -- re-fit the booted-image patch (see ublue-booted-image.service)" >&2
+        exit 1
+    fi
+fi
+# Non-interactive login shells (notably GDM's) source /etc/profile too: keep
+# uwelcome from activating the desktop portal outside interactive shells.
+UWELCOME_SH=/etc/profile.d/uwelcome.sh
+if [ -f "${UWELCOME_SH}" ]; then
+    if grep -qF 'case $- in' "${UWELCOME_SH}"; then
+        : already patched
+    elif grep -qF 'UWELCOME_SHOWN' "${UWELCOME_SH}"; then
+        sed -i '1a\
+\
+# GDM sources /etc/profile before graphical-session.target is active.\
+# Avoid portal activation and exporting UWELCOME_SHOWN into the desktop.\
+# Only interactive shells should run the greeting.\
+case $- in\
+    *i*) ;;\
+    *) return 0 ;;\
+esac' "${UWELCOME_SH}"
+    else
+        echo "ERROR: ${UWELCOME_SH} changed upstream -- re-fit the interactive-shell guard" >&2
+        exit 1
+    fi
+fi
 # input-remapper is installed by Bluefin's package set, but without its root
 # daemon running, udev autoload fails on input devices and the GUI prompts for
 # root credentials on launch. Enable it next to the desktop units; see #99.
 enable_unit input-remapper.service
 enable_unit ModemManager.service
+# Thermal management, as Fedora's preset enables it for Bluefin (#388).
+enable_unit thermald.service
+enable_unit intel_lpmd.service
+# sysstat accounting, as Fedora's preset enables it for Bluefin (#263).
+# nfs-client.target is turned off: see 85-utah-desktop.preset.
+disable_unit nfs-client.target
+enable_unit sysstat.service
+enable_unit sysstat-collect.timer
+enable_unit sysstat-summary.timer
 # Printing on demand, as Fedora's preset enables it for Bluefin; Hummingbird's
 # 99-default-disable would leave it off.
 enable_unit cups.socket

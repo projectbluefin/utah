@@ -1,0 +1,9 @@
+[Flatpak Repo]
+Title=TunaOS Flatpaks
+Url=oci+https://tunaos.org/flatpak
+Homepage=https://tunaos.org
+Comment=TunaOS Flatpak repository
+Description=TunaOS applications repository (Ghostty terminal)
+Icon=https://avatars.githubusercontent.com/u/196050174
+DefaultBranch=master
+DeployCollectionID=org.tunaos

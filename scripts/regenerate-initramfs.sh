@@ -26,8 +26,9 @@ image="/usr/lib/modules/${kver}/initramfs.img"
 
 # No host-only: the image boots on hardware the build host knows nothing
 # about. The remaining options (early_microcode, the bootc and ostree modules,
-# Common's unlock modules) come from dracut.conf.d.
-dracut --no-hostonly --reproducible --kver "$kver" --force "$image"
+# Common's unlock modules) come from dracut.conf.d. Compress with zstd to keep
+# the installed image's initramfs within the layer and offline ISO budget (#740).
+dracut --no-hostonly --reproducible --zstd --kver "$kver" --force "$image"
 
 listing="$(lsinitrd "$image")"
 grep -q '^Early CPIO image' <<<"$listing" \

@@ -21,19 +21,23 @@ on:
         description: Test an offline ISO for every configured flavor (requires review_vm and contract_only)
         type: boolean
         default: false
+      # The review matrix normally uses test-only zstd 15 to fit all flavors.
+      # Allow an explicit production level to measure the budget (#684).
+      review_iso_compression_level:
+        description: zstd level for the review ISO (15 = test-only; 3 = production budget)
+        type: string
+        default: '15'
       contract_only:
         description: Run contract checks and skip image publication
         type: boolean
         default: false
-      # sync-main-to-testing dispatches this workflow against the floating
-      # testing ref immediately after pushing it. A job that starts seconds
-      # later can resolve the ref to the pre-push commit and build stale
-      # inputs under a fresh version stamp (#371). The sync passes the SHA
-      # it just pushed here and every checkout below pins to it, so the
-      # whole run compiles one explicit tree. Empty on push/PR events, where
-      # the checkout falls back to the event SHA.
+      # Sync workflow dispatches against testing and passes its observed full SHA.
+      # GitHub binds each run to immutable github.sha; the contract job rejects a
+      # non-empty input that differs, so contract/cache and reusable build checkouts
+      # cannot diverge. A branch race fails before publication. Empty for push/PR,
+      # where all jobs use github.sha.
       sha:
-        description: Full commit SHA to check out instead of the event ref
+        description: Full commit SHA observed on testing; must match github.sha
         type: string
         default: ''
 
@@ -67,11 +71,32 @@ jobs:
       kernel_flavors: ${{ steps.flavors.outputs.kernel }}
       needs_kernel: ${{ steps.flavors.outputs.needs_kernel }}
     steps:
+      - name: Validate workflow-dispatch source and publication ref
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          INPUT_SHA: ${{ inputs.sha }}
+          CONTRACT_ONLY: ${{ inputs.contract_only }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${INPUT_SHA}" ]]; then
+            if [[ ! "${INPUT_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::workflow_dispatch sha must be a full lowercase 40-hex SHA"
+              exit 1
+            fi
+            if [[ "${INPUT_SHA}" != "${GITHUB_SHA}" ]]; then
+              echo "::error::workflow_dispatch sha must equal github.sha; refusing to validate one tree and publish another"
+              exit 1
+            fi
+          fi
+          if [[ "${CONTRACT_ONLY}" != "true" && "${GITHUB_REF}" != "refs/heads/testing" ]]; then
+            echo "::error::workflow_dispatch may publish only from refs/heads/testing; use contract_only for branch previews"
+            exit 1
+          fi
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           submodules: recursive
-          # Pinned by the sync dispatch (#371); the event SHA elsewhere.
+          # The dispatch guard requires this to equal the publisher's github.sha.
           ref: ${{ inputs.sha || github.sha }}
       - name: Install just
         uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3
@@ -147,7 +172,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
-          # Pinned by the sync dispatch (#371); the event SHA elsewhere.
+          # Contract validates this equals github.sha before any publisher can run.
           ref: ${{ inputs.sha || github.sha }}
       - name: Free disk space
         run: |
@@ -182,19 +207,13 @@ jobs:
         run: |
           set -euo pipefail
           ref="ghcr.io/${REPO_ORGANIZATION,,}/utah-kernel-cache:$(./scripts/kernel-cache-tag.sh)"
-          # The identity regexp pins the signature to this exact workflow in
-          # this repo; the ref suffix must cover every trigger that can reach
-          # `cosign sign` below. Same-repo pull requests run as
-          # refs/pull/N/merge, pushes arrive only from testing, but a manual
-          # workflow_dispatch -- whose UI defaults to main -- runs as
-          # refs/heads/<branch>. Pinning the suffix to testing alone made such
-          # a run sign the image and then fail its own verify, so accept any
-          # branch head: everyone who can dispatch this workflow can already
-          # sign from an arbitrary branch via a same-repo pull request.
+          # The identity regexp pins signatures to this workflow and only refs
+          # that may publish: same-repo PR merge refs and the trusted testing
+          # branch. Dispatches on preview branches are contract-only.
           verify() {
             cosign verify "ghcr.io/${REPO_ORGANIZATION,,}/utah-kernel-cache@${1}" \
               --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-              --certificate-identity-regexp '^https://github\.com/projectbluefin/utah/\.github/workflows/build\.yml@refs/(heads/[^@]+|pull/[0-9]+/merge)$'
+              --certificate-identity-regexp '^https://github\.com/projectbluefin/utah/\.github/workflows/build\.yml@refs/(heads/testing|pull/[0-9]+/merge)$'
           }
           if podman pull -q "$ref" >/dev/null 2>&1; then
             digest="$(podman image inspect --format '{{ index .RepoDigests 0 }}' "$ref" | cut -d@ -f2)"
@@ -248,7 +267,7 @@ jobs:
   build_main:
     needs: contract
     if: needs.contract.outputs.main_flavors != '[]' && !inputs.contract_only
-    uses: projectbluefin/actions/.github/workflows/reusable-build.yml@a52da5670b9337598cbc80c4d6a9a7b21e770aec # v1
+    uses: projectbluefin/actions/.github/workflows/reusable-build.yml@a7e7bba6c7ae819006cabc9a106318c77c2635f8 # v1
     permissions:
       contents: read
       packages: write
@@ -298,7 +317,7 @@ jobs:
   build_kernel:
     needs: [contract, kernel_cache]
     if: ${{ !cancelled() && !inputs.contract_only && needs.contract.result == 'success' && needs.kernel_cache.result == 'success' && needs.kernel_cache.outputs.available == 'true' && needs.contract.outputs.kernel_flavors != '[]' }}
-    uses: projectbluefin/actions/.github/workflows/reusable-build.yml@a52da5670b9337598cbc80c4d6a9a7b21e770aec # v1
+    uses: projectbluefin/actions/.github/workflows/reusable-build.yml@a7e7bba6c7ae819006cabc9a106318c77c2635f8 # v1
     permissions:
       contents: read
       packages: write
@@ -372,15 +391,27 @@ jobs:
         env:
           UTAH_ISO_WORKDIR: ${{ runner.temp }}
           # Test-only compression keeps every flavor under the ISO ceiling so
-          # this opt-in matrix can reach the install and boot checks. Production
-          # callers retain the builder's default compression level.
-          UTAH_ISO_COMPRESSION_LEVEL: "15"
+          # this opt-in matrix can reach the install/boot checks. Production
+          # callers retain the builder's default compression level; dispatch
+          # with review_iso_compression_level=3 to measure against it.
+          UTAH_ISO_COMPRESSION_LEVEL: ${{ inputs.review_iso_compression_level || '15' }}
         run: |
           set -euo pipefail
           image_ref=$(cat evidence/image-ref.txt)
           image_name=$(python3 scripts/flavors.py image "$REVIEW_FLAVOR")
+          rc=0
           bash iso/scripts/build-iso.sh "localhost/${image_name}:testing" "$PWD/output/utah-review.iso" \
-            "Utah Review $REVIEW_FLAVOR" 1 "$image_ref" 2>&1 | tee evidence/iso-build.log
+            "Utah Review $REVIEW_FLAVOR" 1 "$image_ref" 2>&1 | tee evidence/iso-build.log || rc=$?
+          # Record the size before honoring the budget guard so diagnostics
+          # still answer how far above/below budget the image landed.
+          if [ -f output/utah-review.iso ]; then
+            jq -n --arg flavor "$REVIEW_FLAVOR" --arg level "$UTAH_ISO_COMPRESSION_LEVEL" \
+              --argjson bytes "$(du -b output/utah-review.iso | cut -f1)" \
+              '{flavor:$flavor,compression_level:($level|tonumber),iso_bytes:$bytes,iso_mib:($bytes/1048576|floor)}' \
+              > evidence/iso-size.json
+            cat evidence/iso-size.json
+          fi
+          [ "$rc" -eq 0 ] || exit "$rc"
           sha256sum output/utah-review.iso > evidence/iso.sha256
       - name: Boot live desktop, install LUKS, log in and test review fixes
         env:

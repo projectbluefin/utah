@@ -103,17 +103,17 @@ use.
 
 | Hook | Purpose |
 |------|---------|
-| `05-bootupctl-adopt.sh` | Run `bootupctl adopt-and-update` on first boot so a switched-into-Utah system sees its on-disk shim and GRUB as managed by `bootupd`. Skips live sessions (`/sysroot` on `erofs`/`squashfs`) and image variants without `bootupctl` installed, both without committing so a later switch retries. Tracked by #363. |
+| `05-bootupctl-adopt.sh` | Run `bootupctl adopt-and-update` on first boot so a switched-into-Utah system sees its on-disk shim and GRUB as managed by `bootupd`. Skips live sessions (`/sysroot` on `erofs`/`squashfs`), image variants without `bootupctl` installed, and systemd-boot layouts with no `/boot/grub2` to adopt — all without committing so a later switch retries. Tracked by #363; the GRUB guard by #741. |
 | `06-boot-log-label.sh` | `restorecon` `/var/log/boot.log` to the policy's `plymouthd_var_log_t` so `plymouthd` can append to it, verifying the on-disk label before committing (#689). SELinux-disabled and log-absent boots skip without stamping so a later boot retries. |
-| `10-tailscale.sh` | Set a non-root pkexec caller as the Tailscale operator. Missing Tailscale or an invalid/root caller defers without stamping; a failed grant retries with the read-only API. |
+| `10-tailscale.sh` | Set a non-root pkexec caller as the Tailscale operator. Missing Tailscale or an invalid/root caller defers without stamping; a failed `tailscale set` leaves no stamp and retries only with the read-only `version-script-check`/`-commit` API (older common images fall back to `version-script`, which stamps on check). Tracked by #19. |
 | `11-framework-ucsi-workaround.sh` | Append the `usbcore.autosuspend=-1` karg on Intel-Core-Ultra Frameworks. Wrong hardware or an already-applied karg commits a deliberate skip; missing DMI or rpm-ostree retries. |
 | `20-home-labels.sh` | Relabel `/var/home` once on systems installed before #261, repairing a mis-keyed active `file_contexts.homedirs` first (#474). Version 3 reruns machines whose homedirs an update re-keyed on `/var/home` after the version-2 repair (#575). |
 | `99-flatpaks.sh` | Remove stale Bluefin Firefox preferences and copy optional defaults. Version 2 reruns machines that stamped version 1 while the quoted removal glob was a no-op (#489). Successful copies and deliberate absence/architecture skips commit; body failures retry with the read-only API. Common's `system_files/bluefin/` profile supplies `/usr/share/ublue-os/firefox-config/01-bluefin-global.js`; the image desktop contract requires the actual payload, not merely a Containerfile COPY line. Pinned by `contracts/bluefin-desktop.toml` (`[flatpak].files`). |
 
 `05-bootupctl-adopt.sh` is the canonical example of a transient-skip body:
-each guard (`command -v bootupctl`, the live-session check) exits without
-committing so a later `bootc switch` that brings bootupctl in or moves off
-the live root retries cleanly. `20-home-labels.sh` commits only after it
+each guard (`command -v bootupctl`, the live-session check, the `/boot/grub2`
+presence check) exits without committing so a later `bootc switch` that brings
+bootupctl in, moves off the live root, or provides a GRUB layout retries cleanly.
 verifies the real on-disk label, not merely that `restorecon` exited zero
 (#474): `file_contexts.subs_dist` aliases `/var/home` to `/home`, so a rule
 keyed on the wrong root is unreachable and `restorecon` silently relabels
@@ -145,9 +145,10 @@ exist in a container, so the `/home` symlink dangles (#281).
 `tests/test_setup_hook_version_contract.py` asserts the contract on
 `20-home-labels.sh`; `tests/test_bootupctl_adopt_hook.py` asserts the
 contract on `05-bootupctl-adopt.sh` and additionally drives the real hook
-against fake `libsetup.sh` and `bootupctl` stubs for the four state
+against fake `libsetup.sh` and `bootupctl` stubs for the five state
 transitions (fresh install, re-run after commit, live session, missing
-`bootupctl`). `tests/test_ghostty_hook.py` follows the same shape for
+`bootupctl`, systemd-boot layout without `/boot/grub2`).
+`tests/test_ghostty_hook.py` follows the same shape for
 `user-setup.hooks.d/30-ghostty.sh`, driving it against scratch homes for the
 fresh, migrate, already-symlinked and reverse-symlink (`~/.config/ghostty`
 pointing into the per-app dir) transitions, plus the two user-managed layouts

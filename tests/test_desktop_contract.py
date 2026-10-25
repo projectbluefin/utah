@@ -9,6 +9,7 @@ rejecting anything would still report success.
 
 import importlib.util
 import json
+import tomllib
 import tempfile
 import unittest
 from pathlib import Path
@@ -304,11 +305,15 @@ class FlatpaksModeTests(unittest.TestCase):
 
 class GnomeExtensionTests(unittest.TestCase):
     def shipped_tree(self, tmp, versions="51", uuids=None):
+        # Modes as the build leaves them, independent of the caller's umask.
         base = Path(tmp) / "usr/share/gnome-shell/extensions"
         for uuid in uuids if uuids is not None else extensions.SOURCE_EXTENSIONS:
             path = base / uuid / "metadata.json"
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps({"shell-version": [versions]}))
+            path.chmod(0o644)
+            path.parent.chmod(0o755)
+        base.chmod(0o755)
         return Path(tmp)
 
     def run_main(self, root):
@@ -318,6 +323,33 @@ class GnomeExtensionTests(unittest.TestCase):
     def test_complete_tree_declaring_gnome_51_passes(self):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(self.run_main(self.shipped_tree(tmp)), 0)
+
+    def test_metadata_the_user_cannot_read_fails(self):
+        # Release zips kept 0600 metadata: gnome-shell, running as the user,
+        # could not load those extensions ("Permission denied").
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.shipped_tree(tmp)
+            uuid = next(iter(extensions.SOURCE_EXTENSIONS))
+            (root / "usr/share/gnome-shell/extensions" / uuid / "metadata.json").chmod(0o600)
+            self.assertEqual(self.run_main(root), 1)
+
+    def test_untraversable_extension_directory_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.shipped_tree(tmp)
+            uuid = next(iter(extensions.SOURCE_EXTENSIONS))
+            directory = root / "usr/share/gnome-shell/extensions" / uuid
+            directory.chmod(0o744)
+            try:
+                self.assertEqual(self.run_main(root), 1)
+            finally:
+                directory.chmod(0o755)
+
+    def test_world_writable_extension_file_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.shipped_tree(tmp)
+            uuid = next(iter(extensions.SOURCE_EXTENSIONS))
+            (root / "usr/share/gnome-shell/extensions" / uuid / "metadata.json").chmod(0o666)
+            self.assertEqual(self.run_main(root), 1)
 
     def test_missing_extension_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -365,6 +397,33 @@ class ServiceMaskParityTests(unittest.TestCase):
         self.assertIn('"bluefin-stats-refresh.timer"', contract)
         self.assertIn("enable bluefin-stats-refresh.timer", preset)
         self.assertIn("enable_unit bluefin-stats-refresh.timer", services)
+
+    def test_dakota_parity_units_enabled_in_contract_preset_and_script(self):
+        contract = (ROOT / "contracts/bluefin-desktop.toml").read_text()
+        preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset").read_text()
+        services = (ROOT / "scripts/configure-services.sh").read_text()
+        for unit in (
+            "ublue-firstboot-date.service",
+            "ublue-booted-image.service",
+        ):
+            with self.subTest(unit=unit):
+                self.assertIn(f'"{unit}"', contract)
+                self.assertIn(f"enable {unit}", preset)
+                self.assertIn(f"enable_unit {unit}", services)
+                self.assertTrue((ROOT / "system_files/shared/usr/lib/systemd/system" / unit).is_file())
+
+    def test_dakota_parity_patch_targets_are_required_files(self):
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        files = contract["configuration"]["files"]
+        file_contains = contract["configuration"]["file_contains"]
+        for path in (
+            "/usr/share/ublue-os/fastfetch.jsonc",
+            "/usr/bin/ublue-image-info.sh",
+            "/etc/profile.d/uwelcome.sh",
+        ):
+            with self.subTest(path=path):
+                self.assertIn(path, files)
+                self.assertIn(path, file_contains)
 
     def test_bootc_fetch_apply_updates_masked_and_disabled(self):
         preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset").read_text()
@@ -708,6 +767,98 @@ class FwupdRefreshDropInTests(unittest.TestCase):
                 required, directive_lines,
                 f"drop-in must set {required} so the hardening posture is preserved",
             )
+
+
+class StatsRefreshCacheTests(unittest.TestCase):
+    """fastfetch must be able to read what bluefin-stats-refresh.service fetched.
+
+    The unit used DynamicUser=yes, which always puts CacheDirectory= under
+    /var/cache/private (mode 0700), and Common's fastfetch.jsonc only read
+    the read-only /usr/share/ublue-os placeholders, so the banner showed the
+    placeholder forever (#860).
+    """
+
+    UNIT = ROOT / "system_files/shared/usr/lib/systemd/system/bluefin-stats-refresh.service"
+    SYSUSERS = ROOT / "system_files/shared/usr/lib/sysusers.d/utah-bluefin-stats.conf"
+    SCRIPT = ROOT / "system_files/shared/usr/libexec/bluefin-refresh-stats"
+    CACHE = "/var/cache/bluefin-stats"
+    STATS = ("fastfetch-user-count", "bazaar-install-count")
+
+    @staticmethod
+    def directives(path):
+        return [
+            line.strip() for line in path.read_text().splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+
+    def test_unit_cache_is_public_and_owned_by_a_static_user(self):
+        lines = self.directives(self.UNIT)
+        for required in (
+            "DynamicUser=no",
+            "User=bluefin-stats",
+            "Group=bluefin-stats",
+            "CacheDirectory=bluefin-stats",
+            "CacheDirectoryMode=0755",
+            # Implied by DynamicUser=yes, not by DynamicUser=no.
+            "NoNewPrivileges=yes",
+            "PrivateTmp=yes",
+            "RemoveIPC=yes",
+            "RestrictSUIDSGID=yes",
+            "ProtectSystem=strict",
+        ):
+            with self.subTest(directive=required):
+                self.assertIn(required, lines)
+        self.assertNotIn("DynamicUser=yes", lines)
+        # Reusing "bluefin" would make systemd rename the existing
+        # /var/cache/private/bluefin back on upgraded machines.
+        self.assertNotIn("CacheDirectory=bluefin", lines)
+
+    def test_sysusers_allocates_the_unit_user(self):
+        active = self.directives(self.SYSUSERS)
+        self.assertEqual(len(active), 1)
+        fields = active[0].split(None, 3)
+        self.assertEqual(fields[:3], ["u", "bluefin-stats", "-"])
+
+    def test_script_writes_where_fastfetch_reads(self):
+        script = self.SCRIPT.read_text()
+        self.assertIn(f"${{CACHE_DIRECTORY:-{self.CACHE}}}", script)
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        wanted = contract["configuration"]["file_contains"]["/usr/share/ublue-os/fastfetch.jsonc"]
+        for stat in self.STATS:
+            with self.subTest(stat=stat):
+                self.assertIn(f"write_stat {stat} ", script)
+                self.assertIn(
+                    f"cat {self.CACHE}/{stat} 2>/dev/null || cat /usr/share/ublue-os/{stat}",
+                    wanted,
+                )
+
+    def test_fastfetch_patch_rewrites_common_lines_once(self):
+        import re
+        import subprocess
+
+        services = (ROOT / "scripts/configure-services.sh").read_text()
+        block = re.search(r"^STATS_CACHE=.*?^fi$", services, re.S | re.M).group(0)
+        common = "\n".join(
+            f'      "text": "cat /usr/share/ublue-os/{stat}",' for stat in self.STATS
+        ) + "\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            jsonc = Path(tmp) / "fastfetch.jsonc"
+            jsonc.write_text(common)
+            script = f"FASTFETCH_JSONC={jsonc}\n{block}\n"
+            for _ in range(2):
+                subprocess.run(["bash", "-euo", "pipefail", "-c", script], check=True)
+            patched = jsonc.read_text()
+            for stat in self.STATS:
+                with self.subTest(stat=stat):
+                    self.assertEqual(
+                        patched.count(f"cat {self.CACHE}/{stat} 2>/dev/null || cat /usr/share/ublue-os/{stat}"),
+                        1,
+                    )
+
+            jsonc.write_text('      "text": "cat /somewhere/else",\n')
+            result = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("re-fit the community-stats patch", result.stderr)
 
 
 if __name__ == "__main__":

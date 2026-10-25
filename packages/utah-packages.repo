@@ -1,7 +1,7 @@
 # Digest-pinned OCI repository copied from projectbluefin/utah-packages.
 # RPMs are authenticated by the pinned package image and its OCI provenance;
 # the repository itself does not carry an RPM GPG key.
-# factory-pin: sha256:bda6bc26a5d956066c3480496a9c622475172b919adfc26a2ec739c45193f9d8
+# factory-pin: sha256:d51bb860fad405517f74eecb5791791a1b586e2f6e44b914e477e1c17e87e840
 # The stamp above mirrors ARG PACKAGE_IMAGE_SHA in the Containerfile, and a pin
 # bump must move both together (a test enforces it). The ARG alone does not
 # invalidate the package transaction's registry layer cache on CI's buildah:
@@ -17,7 +17,10 @@ baseurl=file:///etc/utah-packages
 # The path exists only while the Containerfile bind mounts the pinned package
 # image there. The flavor step, the last one that installs anything, flips this
 # to enabled=0 so later dnf calls on the image (the live ISO build included)
-# do not fail on a baseurl that is not there.
+# do not fail on a baseurl that is not there. The flip also appends a comment
+# line: the rewritten file is mtime-pinned to the same epoch as the copy in the
+# earlier layer, and a same-length edit is invisible to a layer diff that
+# compares metadata only (#735).
 enabled=1
 gpgcheck=0
 repo_gpgcheck=0

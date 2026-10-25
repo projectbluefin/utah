@@ -18,7 +18,10 @@
 #   install-v4l2loopback.sh ogc
 #       The OGC kernel on the gaming flavors. Its build tree is preserved in
 #       the image by install-ogc-kernel.sh, the same tree NVIDIA's module is
-#       compiled against, so no kernel-devel is involved.
+#       compiled against, so no kernel-devel is involved. This is the last
+#       module built against that tree (the Containerfile orders it after
+#       install-nvidia), so once the module is verified the tree is removed
+#       again -- see the end of this script.
 #
 # The userspace half of Bluefin's v4l2loopback package is v4l2loopback-ctl,
 # the only user-visible file it owns; it is built with the base module. The
@@ -173,3 +176,20 @@ for need in "${root}/${module}" "${root}/usr/bin/v4l2loopback-ctl"; do
 done
 modinfo ${root:+-b "$root"} -k "$release" v4l2loopback >/dev/null
 echo "v4l2loopback ${V4L2LOOPBACK_VERSION} installed for ${release}"
+
+# The OGC external-module build tree is build input, not image content. It is
+# needed only to compile against, and this is its last consumer: the
+# Containerfile runs the OGC v4l2loopback build after install-nvidia, and
+# nothing at runtime reads it (the v4l2loopback stage removes kernel-devel for
+# the base kernel on the same reasoning). Left in place it shipped in every
+# gaming image: 286 MiB uncompressed, about 150 MiB in the live ISO's zstd-3
+# squashfs, most of it the built arch/x86 objects and the boot images that
+# `cp -a arch/x86` carried along (#684). It is removed here, after the module
+# is verified, rather than in install-ogc-kernel.sh, so the kernel cache tag
+# does not move and the removal lands in the same layer that unpacked the
+# tree -- a later layer's whiteout would not shrink an un-rechunked image.
+# The modules/<release>/build symlink goes with it, as kernel-devel's would.
+if [ "$target" = ogc ]; then
+  rm -rf "${root}/usr/src/linux-${release}" "$tree"
+  echo "Removed the OGC external-module build tree for ${release}"
+fi

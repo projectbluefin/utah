@@ -51,7 +51,7 @@ jobs:
   execute:
     needs: [check-trigger, variants]
     if: needs.check-trigger.outputs.is-promotion == 'true'
-    uses: projectbluefin/actions/.github/workflows/reusable-execute-release.yml@a52da5670b9337598cbc80c4d6a9a7b21e770aec # v1
+    uses: projectbluefin/actions/.github/workflows/reusable-execute-release.yml@a7e7bba6c7ae819006cabc9a106318c77c2635f8 # v1
     permissions:
       actions: read
       contents: write
@@ -63,6 +63,12 @@ jobs:
       variants: ${{ needs.variants.outputs.list }}
       cosign_identity_regexp: ^https://github\.com/projectbluefin/actions/\.github/workflows/reusable-build\.yml@[0-9a-f]{40}$
       fast_forward_sha: ${{ github.sha }}
+      # The release gate re-runs smoke,common against the exact candidate
+      # digests, with no scenario exclusions.
       run_release_gate: true
       gate_suites: smoke,common
+      # The same testsuite commit post-testing-e2e.yml validated, not the
+      # floating v1 tag, so the gate cannot drift from that evidence (#773).
+      # tests/test_iso_ci.py keeps the two refs equal.
+      gate_test_ref: f690d22e4dfb8f71a3cdb7e56c20fb1f9e88066a
     secrets: inherit

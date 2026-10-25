@@ -247,6 +247,10 @@ class MigratedSetupHookContractTests(unittest.TestCase):
         (env.bin / "tailscale").unlink()
         deferred = env.run()
         self.assertEqual(deferred.returncode, 0, deferred.stderr)
+        self.assertIn(
+            "tailscale is not installed; deferring privileged operator setup until it is present",
+            deferred.stdout,
+        )
         self.assertFalse(env.stamp.exists())
         env.install("tailscale", TOOLS["tailscale"])
         recovered = env.run()

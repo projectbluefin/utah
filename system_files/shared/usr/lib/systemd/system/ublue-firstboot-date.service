@@ -1,0 +1,16 @@
+[Unit]
+Description=Record Utah first-boot installation date
+Documentation=https://github.com/projectbluefin/utah/issues/675
+ConditionPathExists=!/var/lib/ublue-os/install-date
+After=local-fs.target
+
+[Service]
+Type=oneshot
+# Seed from the oldest /var/log entry (the heuristic fastfetch used before
+# this unit existed) so existing installs keep their original install date;
+# fall back to today only when that yields nothing usable.
+ExecStart=/bin/bash -c 'mkdir -p /var/lib/ublue-os; set -- $$(ls -alct --time-style=full-iso /var/log 2>/dev/null | tail -1); d=$${6:-}; [[ $$d =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$$ ]] || d=$$(date +%%Y-%%m-%%d); echo "$$d" > /var/lib/ublue-os/install-date'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

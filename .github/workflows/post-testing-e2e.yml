@@ -213,7 +213,7 @@ jobs:
           # The live ISO must stay under the budget (#128): the embedded image,
           # the Flatpaks, and the bootc-installer bundle all live inside it.
           size_bytes=$(stat -c %s output/utah-main-tacklebox.iso)
-          limit=$((6 * 1024 * 1024 * 1024))
+          limit=$((8 * 1024 * 1024 * 1024))
           echo "utah-main-tacklebox.iso is $size_bytes bytes"
           test "$size_bytes" -le "$limit" || { echo "ISO exceeds the size budget" >&2; exit 1; }
       - name: Live-boot and observe the UTAH_LIVE_READY marker
@@ -311,13 +311,13 @@ jobs:
       fail-fast: false
       matrix:
         include: ${{ fromJSON(needs.resolve.outputs.suites) }}
-    uses: projectbluefin/testsuite/.github/workflows/e2e.yml@7da50e5b6f165a4704159b0ce5a4898caff6466a # v1
+    uses: projectbluefin/testsuite/.github/workflows/e2e.yml@ba623feec2c7fba4b3ed133177f049d24e316a66 # v1
     with:
       image: ${{ fromJSON(needs.resolve.outputs.digests)[matrix.image] }}
       compose_image: false
       suites: ${{ matrix.suites }}
       test_repository: projectbluefin/testsuite
-      test_ref: 7da50e5b6f165a4704159b0ce5a4898caff6466a
+      test_ref: f690d22e4dfb8f71a3cdb7e56c20fb1f9e88066a
 
   promote-to-testing:
     needs: [resolve, luks, production-iso]

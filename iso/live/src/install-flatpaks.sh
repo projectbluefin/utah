@@ -78,6 +78,12 @@ if [[ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
     DBUS_SESSION_BUS_ADDRESS="$(dbus-daemon --session --fork --print-address)"
     export DBUS_SESSION_BUS_ADDRESS
 fi
+# An OCI remote's token flow keeps its system cache under /var/tmp, hardcoded
+# in flatpak (it ignores $TMPDIR) -- and /var/tmp does not exist in a container
+# build; on a booted system systemd-tmpfiles creates it. The TunaOS remote is
+# the only OCI remote here, so only it trips over the missing directory:
+#   error: Failed to get tokens for ref: opendir(/var/tmp): No such file or directory
+mkdir -p /var/tmp && chmod 1777 /var/tmp
 sleep 1
 
 if [[ -d "${FLATPAK_CACHE}/repo/refs" ]]; then
@@ -145,11 +151,9 @@ retry_flatpak install --system --noninteractive --no-related --or-update flathub
 
 # Ghostty, from the TunaOS OCI remote.
 #
-# Utah ships no terminal emulator at all otherwise. Bluefin's own image test
-# asserts ptyxis, but ptyxis is not in Bluefin's package contract because
-# Fedora's base image carries it -- and Hummingbird's does not, nor does it
-# package ptyxis, vte291 or gnome-console, so there is nothing to install.
-# Until this factory builds a terminal, the flatpak is the terminal.
+# Bluefin's terminal is ptyxis, which the image now installs from the factory
+# (packages/utah.toml [parity]). Ghostty is Utah's own addition on top: a
+# Flatpak, so Flatpak-first does not apply to ptyxis, a different app.
 #
 # Kept out of the Brewfile-derived list on purpose: that list is the parity
 # contract with Bluefin and verify-desktop-contract compares it byte for byte.

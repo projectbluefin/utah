@@ -1456,9 +1456,10 @@ def main() -> int:
     # only exists while kernel-devel is installed, and install-nvidia.sh removes
     # that again once the module is compiled -- 215 MiB there is no reason to
     # ship. Requiring one here meant plain nvidia could never pass: the OGC
-    # flavors only satisfied it because install-ogc-kernel.sh leaves its own
-    # tree behind. A module tree is what says the image can boot that kernel,
-    # which is the thing being asserted.
+    # flavors only satisfied it while install-ogc-kernel.sh's own tree was
+    # still around, and install-v4l2loopback.sh now removes that too once the
+    # last module is built (#684). A module tree is what says the image can
+    # boot that kernel, which is the thing being asserted.
     if not base or not Path(f"/usr/lib/modules/{base}").is_dir():
         candidates = sorted(d.name for d in Path("/usr/lib/modules").glob("*")
                             if d.name != ogc_release and d.is_dir())

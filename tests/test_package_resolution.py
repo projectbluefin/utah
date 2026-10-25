@@ -535,7 +535,53 @@ class ImageSizeTests(unittest.TestCase):
         self.assertIn("utah-install-nvidia", steps[1])
         # Nothing installs after the flavor step, so it is the one that turns
         # the repository file off for the image's lifetime.
-        self.assertIn("sed -i 's/^enabled=1$/enabled=0/' /etc/yum.repos.d/utah-packages.repo", steps[1])
+        self.assertIn("-e 's/^enabled=1$/enabled=0/'", steps[1])
+        self.assertIn("/etc/yum.repos.d/utah-packages.repo", steps[1])
+
+    @staticmethod
+    def flip_command() -> str:
+        """The flavor step's `sed -i ... && grep ... && grep ...` chain, as shell."""
+        source = (ROOT / "Containerfile").read_text()
+        match = re.search(
+            r"^\s*sed -i \\\n(?:.*\\\n)*?\s*&& grep -q [^\n]*utah-packages\.repo && \\$",
+            source, re.M)
+        assert match, "the flavor step's repo flip was not found"
+        return match.group(0).rstrip("\\ \n").removesuffix("&&").rstrip()
+
+    def test_repository_flip_changes_the_file_size(self):
+        # #735: the flip is followed by the mtime pin, which stamps the
+        # rewritten file with the same epoch as the earlier layer's copy, and
+        # `enabled=1` -> `enabled=0` keeps the length. containers/storage's
+        # naive layer diff compares mode, owner, mtime and size only, so an
+        # equal-size flip was dropped from the layer and the published image
+        # shipped the repository enabled with a dangling file:// baseurl.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repo = root / "etc/yum.repos.d/utah-packages.repo"
+            repo.parent.mkdir(parents=True)
+            repo.write_bytes((ROOT / "packages/utah-packages.repo").read_bytes())
+            before = repo.stat().st_size
+            command = self.flip_command().replace("/etc/yum.repos.d/", f"{root}/etc/yum.repos.d/")
+            subprocess.run(["bash", "-euo", "pipefail", "-c", command], check=True)
+            after = repo.read_text()
+            self.assertNotEqual(before, repo.stat().st_size,
+                                "a same-size flip is invisible to a metadata-only layer diff")
+            lines = after.splitlines()
+            self.assertNotIn("enabled=1", lines)
+            self.assertEqual(lines.count("enabled=0"), 1)
+            # Still a parseable repo file with the pin stamp the contract
+            # verifier reads from the image.
+            self.assertIn("# factory-pin: sha256:", after)
+            self.assertIn("[utah-packages]", after)
+
+    def test_repository_flip_is_asserted_in_the_build(self):
+        # The grep after the sed must fail the build if the added bytes are
+        # missing, so a future edit cannot quietly reintroduce #735.
+        command = self.flip_command()
+        self.assertIn("grep -q '^enabled=0$'", command)
+        self.assertRegex(command, r"grep -q '\^# [^']+' /etc/yum\.repos\.d/utah-packages\.repo")
+        self.assertIn("/utah-pin-build-mtimes",
+                      (ROOT / "Containerfile").read_text().split(command, 1)[1][:200])
 
     def test_package_repository_file_is_enabled_only_during_the_build(self):
         text = (ROOT / "packages/utah-packages.repo").read_text()
@@ -558,6 +604,7 @@ class ImageSizeTests(unittest.TestCase):
         self.assertIn("mkdir -p /var/roothome", source)
         self.assertIn("set -euxo pipefail", source)
         self.assertIn("dracut\\[E\\]: FAILED", source)
+        self.assertIn("--zstd", source)
 
 
 class DesktopUnitEnablementTests(unittest.TestCase):

@@ -11,6 +11,7 @@ enable fwupd.service
 enable fwupd-refresh.timer
 enable tailscaled.service
 enable uupd.timer
+enable projectbluefin-countme.timer
 enable bluefin-stats-refresh.timer
 enable ublue-system-setup.service
 enable systemd-resolved.service
@@ -20,7 +21,14 @@ enable systemd-resolved.service
 enable systemd-boot-update.service
 enable bootc-unified-storage.service
 enable dconf-update.service
-# First-boot Flatpaks (Bazaar, from common's preinstall.d). configure-services.sh
+# Dakota desktop parity (#675): first-boot install-date stamping and the
+# booted-image snapshot fastfetch reads. Wallpaper rotation stays with
+# Common's per-user timer (see configure-services.sh).
+# configure-services.sh enables these at build time; the preset lines keep
+# bootc's first-boot preset application from undoing that (see #98).
+enable ublue-firstboot-date.service
+enable ublue-booted-image.service
+# First-boot Flatpaks (Bazaar, and Ghostty from TunaOS). configure-services.sh
 # enabled these at build time, but with no line here bootc's first-boot preset
 # application turned them back off, and an image installed by anything but the
 # ISO booted with no app store at all.
@@ -28,6 +36,23 @@ enable flatpak-preinstall.service
 enable flatpak-nuke-fedora.service
 enable input-remapper.service
 enable ModemManager.service
+# Laptop thermal management (#388). Fedora's 90-default.preset enables both for
+# desktops; Hummingbird's 99-default-disable would leave them off.
+enable thermald.service
+enable intel_lpmd.service
+# System activity accounting, enabled by Fedora's 90-default.preset for Bluefin
+# (#263).
+enable sysstat.service
+enable sysstat-collect.timer
+enable sysstat-summary.timer
+# nfs-client.target is enabled by both Fedora's and Hummingbird's 90-default
+# preset, and is turned off here on purpose. Installing nfs-common-utils (#263)
+# made it start gssproxy.service (target -> auth-rpcgss-module.service ->
+# gssproxy.service), which failed every boot in the review VM with
+# status=238/STATE_DIRECTORY, Permission denied creating /var/lib/gssproxy
+# (cause not diagnosed). mount.nfs starts rpc-statd on demand, so NFS mounts do
+# not need the target.
+disable nfs-client.target
 # Printing on demand, as Fedora's preset enables it for Bluefin.
 enable cups.socket
 enable cups.path

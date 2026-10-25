@@ -28,20 +28,20 @@ files = [
 ]
 
 [branding.os_release]
-NAME = "Utah"
+NAME = "Bluefin"
 ID = "hummingbird"
 ID_LIKE = "fedora"
 HOME_URL = "https://projectbluefin.io"
 DOCUMENTATION_URL = "https://docs.projectbluefin.io"
 SUPPORT_URL = "https://github.com/projectbluefin/utah/issues/"
 BUG_REPORT_URL = "https://github.com/projectbluefin/utah/issues/"
-DEFAULT_HOSTNAME = "utah"
+DEFAULT_HOSTNAME = "bluefin"
 VERSION_CODENAME = "Utahraptor"
 IMAGE_ID = "utah"
 LOGO = "fedora-logo-icon"
 
 [branding.os_release_patterns]
-PRETTY_NAME = '^Utah \(Version: .+\)$'
+PRETTY_NAME = '^Bluefin \(Version: .+\)$'
 VERSION = '^.+ \(Hummingbird\)$'
 VARIANT_ID = '^utah(-.*)?$'
 # ID, VERSION_ID and CPE_NAME are left at the Hummingbird base values so CVE
@@ -79,6 +79,10 @@ files = [
   "/usr/share/glib-2.0/schemas/io.projectbluefin.chairlift.livery.gschema.xml",
   "/usr/share/glib-2.0/schemas/io.projectbluefin.chairlift.updates.gschema.xml",
   "/usr/share/glib-2.0/schemas/io.projectbluefin.chairlift.firstrun.gschema.xml",
+  # dconf reads distro keyfiles only when the user profile names
+  # system-db:distro. The factory dconf RPM ships that profile (with local
+  # and site layers); Utah asserts it but must not overlay its own copy.
+  "/etc/dconf/profile/user",
   "/etc/dconf/db/distro.d/01-bluefin-folders",
   "/etc/dconf/db/distro.d/02-bluefin-keybindings",
   "/etc/dconf/db/distro.d/03-bluefin-ptyxis-palette",
@@ -97,6 +101,28 @@ files = [
   # reconfigure", and degrades the boot. The drop-in adds ConditionPathIsReadWrite=/
   # so the unit is skipped, not failed. #585.
   "/usr/lib/systemd/system/systemd-remount-fs.service.d/10-utah-composefs-skip.conf",
+  # projectbluefin-countme.service.d/10-utah-burst-tolerance.conf. The daily
+  # ping exits 0 per start, but harness-driven bursts (test unmask/reload
+  # loops) trip systemd's default start limit and leave a failed unit that
+  # fails the health check. The drop-in widens the burst window; #741.
+  "/usr/lib/systemd/system/projectbluefin-countme.service.d/10-utah-burst-tolerance.conf",
+  # Dakota desktop parity (#675): first-boot install-date stamping and the
+  # booted-image snapshot for fastfetch. Wallpaper rotation stays with
+  # Common's per-user timer (see configure-services.sh), so the Dakota month
+  # symlink units are intentionally not shipped.
+  "/usr/lib/systemd/system/ublue-firstboot-date.service",
+  "/usr/lib/systemd/system/ublue-booted-image.service",
+  "/usr/bin/ublue-booted-image-sync",
+  # Common files configure-services.sh patches for Dakota parity. file_contains
+  # skips missing files, so list them here to fail the build if Common drops one.
+  "/usr/share/ublue-os/fastfetch.jsonc",
+  "/usr/bin/ublue-image-info.sh",
+  "/etc/profile.d/uwelcome.sh",
+  # Common's Red Hat signature policy uses the unsuffixed key path. The pinned
+  # Hummingbird base carries that key; Utah also stages its repository copy.
+  "/etc/containers/policy.json",
+  "/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release",
+  "/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2",
 ]
 
 [configuration.file_contains]
@@ -115,6 +141,38 @@ files = [
 "/usr/share/glib-2.0/schemas/zz0-bluefin-modifications.gschema.override" = [
   "io.github.kolunmi.Bazaar.desktop",
   "picture-uri='file:///usr/share/backgrounds/bluefin/",
+]
+# Dakota parity (#675): fastfetch reads the first-boot install date stamped
+# by ublue-firstboot-date.service instead of inferring age from /var/log.
+"/usr/share/ublue-os/fastfetch.jsonc" = [
+  "/var/lib/ublue-os/install-date",
+  # The community stats come from bluefin-stats-refresh.service's cache (#860).
+  "cat /var/cache/bluefin-stats/fastfetch-user-count 2>/dev/null || cat /usr/share/ublue-os/fastfetch-user-count",
+  "cat /var/cache/bluefin-stats/bazaar-install-count 2>/dev/null || cat /usr/share/ublue-os/bazaar-install-count",
+]
+# Dakota parity (#675): ublue-image-info.sh prefers the boot-time snapshot
+# ublue-booted-image.service writes, since unprivileged bootc status fails on
+# bootc >= 1.14.
+"/usr/bin/ublue-image-info.sh" = [
+  "/run/ublue-os/booted-image",
+]
+# Dakota parity (#675): GDM's non-interactive login shell sources
+# /etc/profile too, so uwelcome must only greet interactive shells.
+"/etc/profile.d/uwelcome.sh" = [
+  "case $- in",
+]
+"/etc/dconf/profile/user" = [
+  "user-db:user",
+  "system-db:distro",
+]
+"/etc/containers/policy.json" = [
+  "\"keyPath\": \"/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release\"",
+]
+"/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release" = [
+  "Key fingerprint = 567E 347A D004 4ADE 55BA  8A5F 199E 2F91 FD43 1D51",
+]
+"/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2" = [
+  "Key fingerprint = 567E 347A D004 4ADE 55BA  8A5F 199E 2F91 FD43 1D51",
 ]
 "/etc/dconf/db/distro.d/04-bluefin-custom-command-menu" = [
   "Bazaar App Store",
@@ -152,6 +210,8 @@ files = [
 files = [
   "/etc/flatpak/remotes.d/flathub.flatpakrepo",
   "/usr/share/flatpak/preinstall.d/bazaar.preinstall",
+  "/usr/share/flatpak/preinstall.d/ghostty.preinstall",
+  "/etc/flatpak/remotes.d/tuna-os.flatpakrepo",
   "/usr/share/ublue-os/privileged-setup.hooks.d/99-flatpaks.sh",
   "/usr/share/ublue-os/homebrew/system-flatpaks.Brewfile",
   # Common's `system_files/bluefin/` profile supplies the Firefox preference
@@ -215,6 +275,9 @@ enabled = [
   "avahi-daemon.service",
   "avahi-daemon.socket",
   "bluetooth.service",
+  # Dakota desktop parity (#675).
+  "ublue-firstboot-date.service",
+  "ublue-booted-image.service",
   "bootc-unified-storage.service",
   "brew-setup.service",
   "cups.socket",
@@ -225,6 +288,12 @@ enabled = [
   "gdm.service",
   "input-remapper.service",
   "ModemManager.service",
+  "thermald.service",
+  "intel_lpmd.service",
+  "sysstat.service",
+  "sysstat-collect.timer",
+  "sysstat-summary.timer",
+  "projectbluefin-countme.timer",
   "switcheroo-control.service",
   "ublue-system-setup.service",
   "uupd.timer",

@@ -35,7 +35,7 @@ class KernelDevelPinTests(unittest.TestCase):
     def test_the_pin_matches_the_kernel_the_base_image_boots(self):
         # The one assertion that actually catches the staleness: the recorded
         # NEVR has to be the kernel this base carries. Update both together.
-        self.assertEqual(constant("KERNEL_DEVEL_NEVR"), "7.2.5-200.fc44.x86_64")
+        self.assertEqual(constant("KERNEL_DEVEL_NEVR"), "7.2.10-200.fc44.x86_64")
 
     def test_a_mismatched_kernel_fails_before_downloading_60mb(self):
         """Drive the real guard: a kernel that is not the recorded one exits 1."""

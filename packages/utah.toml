@@ -3,7 +3,9 @@
 # packages/bluefin.toml is a byte-for-byte copy of projectbluefin/bluefin's
 # build_files/packages/base.toml and must stay that way -- it is the parity
 # contract, and any drift there is a parity bug.  Everything Utah needs *in
-# addition to* (or *instead of*) that contract lives here.
+# addition to* (or *instead of*) that contract lives here.  Flatpak-first:
+# never add an RPM for an end-user app Utah ships as a Flatpak (see
+# contracts/bluefin-desktop.toml [flatpak]); drop conditions ride inline.
 #
 # Sections:
 #   [gnome]        GNOME 51 desktop contract Hummingbird does not ship
@@ -26,6 +28,9 @@
 # utah-packages repository supplies the complete GNOME 51 dependency graph.
 packages = [
     "gnome-control-center",
+    # blur-my-shell loads this Mutter 51-linked runtime library at run time.
+    # Keep its -devel RPM out of the image; no Utah build links against it.
+    "gnome-rounded-blur",
     "gnome-session",
     "gnome-settings-daemon",
     "gnome-shell",
@@ -63,6 +68,27 @@ packages = [
     # installer's user step stays until an install is verified to boot into
     # it; tests/test_installer_recipe.py allows dropping it after that.
     "gnome-initial-setup",
+    # GNOME apps and integration from the factory (#263, #391). Flatpak-first:
+    # gnome-system-monitor is deliberately absent because Mission Center is
+    # the shipped Flatpak (contracts/bluefin-desktop.toml).
+    # Help content: Bluefin's [excluded] removes the yelp viewer itself but its
+    # image keeps the libraries, stylesheets and gnome-user-docs.
+    "yelp-libs",
+    "yelp-xsl",
+    "gnome-user-docs",
+    "gnome-tour",
+    # Settings integration: RDP screen sharing, colour profiles, and the
+    # extensions-site browser connector.
+    "gnome-remote-desktop",
+    "gnome-color-manager",
+    "gnome-browser-connector",
+    # Session data: wallpapers, menu definitions and the app grid layout.
+    "gnome-backgrounds",
+    "gnome-menus",
+    "gnome-app-list",
+    # Public-folder sharing (WebDAV via httpd + mod_dnssd, both from the
+    # factory/Hummingbird) behind Settings > Sharing > File Sharing.
+    "gnome-user-share",
 ]
 
 # Required major versions for the GNOME desktop contract packages above. The
@@ -161,8 +187,7 @@ packages = [
     "intel-mediasdk",
     "intel-vpl-gpu-rt",
     "libvpl",
-    # GStreamer bad-free and Totem remain omitted pending their dependency
-    # closures (SoundTouch/faad/openal/srtp2 and uchardet); tracked by #383.
+    # Totem stays omitted: uchardet is unpublished (#383).
     # Locale and fonts
     "langpacks-en",
     "langpacks-fonts-en",
@@ -243,11 +268,10 @@ packages = [
     # links (libavcodec/libavformat/libavutil/libavfilter) come from the
     # factory, plus libjpeg-turbo/libpng from Hummingbird. libavformat-free and
     # libavfilter-free are new to the image and pull zeromq, libssh, and
-    # libvmaf from Hummingbird, so expect image growth. The remaining
-    # thumbnailers (papers-thumbnailer, gnome-epub-thumbnailer) and the
-    # GStreamer H.264 plugins (gstreamer1-plugin-libav, openh264,
-    # gstreamer1-plugins-ugly-free, gstreamer1-plugin-dav1d) are still not in
-    # the factory and stay out until utah-packages publishes them (#383).
+    # libvmaf from Hummingbird, so expect image growth. The other thumbnailers
+    # and GStreamer plugins (gnome-epub-thumbnailer, papers-thumbnailer,
+    # gstreamer1-plugin-libav, -dav1d, -bad-free, -ugly-free) are requested in
+    # the parity block below (#383).
     "ffmpegthumbnailer",
     "samba-client",
     "samba-common-tools",
@@ -288,6 +312,207 @@ packages = [
     # repository. All of these stay out until utah-packages builds their
     # missing dependencies (#263).
     "samba",
+    # Screen reader stack Bluefin ships (baselines/bluefin/rpms.tsv: orca 50.2,
+    # speech-dispatcher 0.12.1) and the upstream testsuite asserts. Published
+    # by the pinned factory image (#741, utah-packages#447).
+    "orca",
+    "speech-dispatcher",
+    "speech-dispatcher-espeak-ng",
+    # spd-say, which the @orca "module list" scenario runs; Bluefin ships it.
+    "speech-dispatcher-utils",
+    # Essential base utilities and tools for Bluefin parity (baselines/GAP.md, #263):
+    # dbus-daemon supplies dbus-run-session (needed for headless/preinstall OCI token auth);
+    # python-unversioned-command provides /usr/bin/python; m4, gdbm, uriparser, xmlsec1,
+    # and avahi-tools supply standard command-line tools and libraries.
+    "dbus-daemon",
+    "python-unversioned-command",
+    "m4",
+    "gdbm",
+    "uriparser",
+    "xmlsec1",
+    "avahi-tools",
+    # Slice 2 base system parity additions (baselines/GAP.md, #263):
+    # Security/smartcard daemon: gnupg2-scdaemon.
+    # Diagnostics & system services: dnf5daemon-server, capstone, tcl, unbound-anchor.
+    "gnupg2-scdaemon",
+    "dnf5daemon-server",
+    "capstone",
+    "tcl",
+    "unbound-anchor",
+    # Slice 3 base system parity additions (baselines/GAP.md, #263):
+    # Qt6 base desktop runtime and core Python network libraries.
+    "qt6-qtbase",
+    "python3-charset-normalizer",
+    "python3-idna",
+    # Factory-published Bluefin tools consumed from the pinned image (#263).
+    # Everything below is built by utah-packages and is asserted in
+    # [factory].parity. Flatpak-first applies: no RPM here duplicates a
+    # shipped app (contracts/bluefin-desktop.toml [flatpak]), and nothing is
+    # in Bluefin's [excluded] list. Each name was resolved against the pinned
+    # image by CI's package availability step.
+    #
+    # Power and thermal policy (#388). Fedora's preset (redhat-systemd-presets
+    # 90-default.preset, which Bluefin inherits) enables thermald and
+    # intel_lpmd; the matching enablements are in 85-utah-desktop.preset and
+    # configure-services.sh.
+    "thermald",
+    "intel-lpmd",
+    "powerstat",
+    # Everyday command-line tools (#392). xdg-utils supplies xdg-open, which
+    # nothing else in the image provides. nano-default-editor sets EDITOR.
+    "xdg-utils",
+    "rsync",
+    "nano",
+    "nano-default-editor",
+    "htop",
+    "pv",
+    "fpaste",
+    # GPG/smartcard pin entry, braille display daemon, and Bluefin's default
+    # terminal. Ghostty stays as the TunaOS Flatpak terminal; ptyxis is a
+    # different app, so Flatpak-first does not apply.
+    "pinentry",
+    "pinentry-gnome3",
+    "brltty",
+    "ptyxis",
+    # Network file systems and Windows domain clients (the NFS family follows
+    # in the second-wave block below).
+    "cifs-utils",
+    "cifs-utils-info",
+    "rpcbind",
+    "autofs",
+    "samba-winbind",
+    "samba-winbind-clients",
+    # VPN clients and their NetworkManager plugins (#262, #389). pkcs11-helper
+    # is the library openvpn Requires; stoken-libs is openconnect's token
+    # library, which is what Bluefin ships (the stoken CLI is not in Bluefin).
+    # No unit is enabled: Bluefin's preset leaves all of these off and
+    # NetworkManager starts the plugins on demand.
+    "pkcs11-helper",
+    "openvpn",
+    "NetworkManager-openvpn",
+    "NetworkManager-openvpn-gnome",
+    "openconnect",
+    "NetworkManager-openconnect",
+    "NetworkManager-openconnect-gnome",
+    "vpnc",
+    "vpnc-script",
+    "stoken-libs",
+    # usermode and its libuser dependency, both of which Bluefin ships.
+    "libuser",
+    "usermode",
+    # Scanning and printer drivers (#390). CUPS, cups-filters, ghostscript and
+    # ipp-usb (already pulled by the driverless stack) come from the earlier
+    # printing block. Bluefin's image has no system-config-printer UI; GNOME
+    # Settings is the printer UI. Nothing is enabled here: Fedora's preset has no
+    # line for saned or ipp-usb, and cups-browsed stays off as before.
+    "sane-backends",
+    "sane-backends-libs",
+    "sane-backends-drivers-scanners",
+    "sane-backends-drivers-cameras",
+    "sane-airscan",
+    "libsane-airscan",
+    "ipp-usb",
+    "libieee1284",
+    "gutenprint",
+    "gutenprint-cups",
+    "gutenprint-libs",
+    "foo2zjs",
+    "foomatic-db-filesystem",
+    "c2esp",
+    "dymo-cups-drivers",
+    "printer-driver-brlaser",
+    "ptouch-driver",
+    "splix",
+    "mpage",
+    # Everyday command-line and hardware tools (#263, #392). Fedora's preset
+    # has no enable line for any unit these ship (bolt, dnsmasq, gamemode);
+    # smartd.service is in the preset but smartmontools is not published (see
+    # "Left out" below).
+    "bc",
+    "bolt",
+    "borgbackup",
+    "dnsmasq",
+    "ethtool",
+    "exfatprogs",
+    "f2fs-tools",
+    "gamemode",
+    "hdparm",
+    "lshw",
+    "lsof",
+    "man-pages",
+    "mtr",
+    "nvme-cli",
+    "pinfo",
+    "tcpdump",
+    "tree",
+    "words",
+    # Media: the GStreamer libav decoder and AV1 plugin (#383), the EPUB
+    # thumbnailer a sandboxed Files cannot supply, and the colour-management
+    # and audio libraries Bluefin carries (argyllcms backs gnome-color-manager).
+    "gstreamer1-plugin-libav",
+    "gstreamer1-plugin-dav1d",
+    "gnome-epub-thumbnailer",
+    "argyllcms",
+    "lcms",
+    "openal-soft",
+    "soundtouch",
+    # Second publish wave (#263): the providers the first wave was blocked on
+    # (libutempter, libhandy, gssproxy, quota, python3-pillow, python3-cups,
+    # usbutils, net-snmp, libtraceevent/libtracefs, libsrtp, gtksourceview5,
+    # djvulibre, liba52, libmpeg2) are published, so the names they gated resolve.
+    # sysstat's units are the ones Fedora's preset enables and Utah wires
+    # (85-utah-desktop.preset, configure-services.sh, desktop contract);
+    # nfs-client.target is disabled, see 85-utah-desktop.preset.
+    "tmux",
+    "powertop",
+    "sysstat",
+    "gnome-disk-utility",
+    "nfs-utils",
+    "nfs-common-utils",
+    "nfs-client-utils",
+    "nfsv3-client-utils",
+    "nfsv4-client-utils",
+    "gssproxy",
+    "quota",
+    # Printer and scanner support left from #390. Bluefin ships the
+    # system-config-printer libraries and udev rules (not the UI: GNOME
+    # Settings is the printer UI).
+    "hplip",
+    "hplip-common",
+    "hplip-libs",
+    "libsane-hpaio",
+    "system-config-printer-libs",
+    "system-config-printer-udev",
+    # GStreamer plugin sets Bluefin carries. -good-qt is not requested: see
+    # "Left out".
+    "gstreamer1-plugins-bad-free",
+    "gstreamer1-plugins-bad-free-libs",
+    "gstreamer1-plugins-ugly-free",
+    # Papers integration the sandboxed Flatpak cannot provide: the thumbnailer
+    # and Files property page run in the host's Nautilus. The Papers app itself
+    # stays the org.gnome.Papers Flatpak (Bluefin has no `papers` RPM), and
+    # papers-previewer is waived (triage.toml).
+    "papers-libs",
+    "papers-thumbnailer",
+    "papers-nautilus",
+    #
+    # Left out (resolved against sha256:d3b5bac2):
+    #   tuned, tuned-ppd (#388)     Requires (rpm-ostree if bootc). bootc is in
+    #                               the image, rpm-ostree is waived (Utah updates
+    #                               with bootc) and published nowhere. Bluefin
+    #                               runs tuned-ppd instead of
+    #                               power-profiles-daemon, so the latter is not
+    #                               installed as a stand-in.
+    #   gstreamer1-plugins-good-qt  Qt5 (libQt5Qml, libQt5Quick,
+    #                               libQt5WaylandClient, libQt5X11Extras);
+    #                               Bluefin also ships the -qt6 split, which is
+    #                               not published
+    #   smartmontools, traceroute   not published: both are in the factory run's
+    #                               `failed` list (as is foo2zjs, whose last
+    #                               good build is still in the repository)
+    #   foomatic-db, foomatic-db-ppds
+    #                               published, but Bluefin does not ship them
+    #                               (only foomatic-db-filesystem)
 ]
 
 [hardware]
@@ -619,10 +844,24 @@ nvidia-container-toolkit = ["https://nvidia.github.io/libnvidia-container/gpgkey
 packages = [
     "gnome-shell",
     "mutter",
+    "gnome-rounded-blur",
     "gnome-session",
     "gnome-settings-daemon",
     "gnome-control-center",
     "gsettings-desktop-schemas",
+    # GNOME apps and Help stack consumed from the pinned factory (#263, #391).
+    # Fail the image build if a base package silently replaces one of them.
+    "gnome-app-list",
+    "gnome-backgrounds",
+    "gnome-browser-connector",
+    "gnome-color-manager",
+    "gnome-menus",
+    "gnome-remote-desktop",
+    "gnome-tour",
+    "gnome-user-docs",
+    "gnome-user-share",
+    "yelp-libs",
+    "yelp-xsl",
 ]
 parity = [
     "wpa_supplicant",
@@ -631,4 +870,113 @@ parity = [
     "alsa-utils",
     "fprintd",
     "fprintd-pam",
+    # Media packages already consumed from the pinned factory (#12, #383).
+    # Fail the image build if a base package silently replaces one of them.
+    "intel-gmmlib",
+    "libva-intel-media-driver",
+    "intel-mediasdk",
+    "intel-vpl-gpu-rt",
+    "ffmpegthumbnailer",
+    # Bluefin tools consumed from the pinned factory (#263, #388, #392).
+    "thermald",
+    "intel-lpmd",
+    "powerstat",
+    "xdg-utils",
+    "rsync",
+    "nano",
+    "nano-default-editor",
+    "htop",
+    "pv",
+    "fpaste",
+    "pinentry",
+    "pinentry-gnome3",
+    "brltty",
+    "ptyxis",
+    "cifs-utils",
+    "rpcbind",
+    "autofs",
+    "samba-winbind",
+    "samba-winbind-clients",
+    # Second wave from the 2026-10-24 factory publish (#262, #263, #388-#392).
+    "cifs-utils-info",
+    "pkcs11-helper",
+    "openvpn",
+    "NetworkManager-openvpn",
+    "NetworkManager-openvpn-gnome",
+    "openconnect",
+    "NetworkManager-openconnect",
+    "NetworkManager-openconnect-gnome",
+    "vpnc",
+    "vpnc-script",
+    "stoken-libs",
+    "libuser",
+    "usermode",
+    "sane-backends",
+    "sane-backends-libs",
+    "sane-backends-drivers-scanners",
+    "sane-backends-drivers-cameras",
+    "sane-airscan",
+    "libsane-airscan",
+    "ipp-usb",
+    "libieee1284",
+    "gutenprint",
+    "gutenprint-cups",
+    "gutenprint-libs",
+    "foo2zjs",
+    "foomatic-db-filesystem",
+    "c2esp",
+    "dymo-cups-drivers",
+    "printer-driver-brlaser",
+    "ptouch-driver",
+    "splix",
+    "mpage",
+    "bc",
+    "bolt",
+    "borgbackup",
+    "dnsmasq",
+    "ethtool",
+    "exfatprogs",
+    "f2fs-tools",
+    "gamemode",
+    "hdparm",
+    "lshw",
+    "lsof",
+    "man-pages",
+    "mtr",
+    "nvme-cli",
+    "pinfo",
+    "tcpdump",
+    "tree",
+    "words",
+    "gstreamer1-plugin-libav",
+    "gstreamer1-plugin-dav1d",
+    "gnome-epub-thumbnailer",
+    "argyllcms",
+    "lcms",
+    "openal-soft",
+    "soundtouch",
+    # Second publish wave (#263).
+    "tmux",
+    "powertop",
+    "sysstat",
+    "gnome-disk-utility",
+    "nfs-utils",
+    "nfs-common-utils",
+    "nfs-client-utils",
+    "nfsv3-client-utils",
+    "nfsv4-client-utils",
+    "gssproxy",
+    "quota",
+    "hplip",
+    "hplip-common",
+    "hplip-libs",
+    "libsane-hpaio",
+    "system-config-printer-libs",
+    "system-config-printer-udev",
+    "gstreamer1-plugins-bad-free",
+    "gstreamer1-plugins-bad-free-libs",
+    "gstreamer1-plugins-ugly-free",
+    "papers-libs",
+    "papers-thumbnailer",
+    "papers-nautilus",
 ]

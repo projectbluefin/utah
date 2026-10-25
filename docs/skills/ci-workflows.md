@@ -1,7 +1,7 @@
 ---
 name: ci-workflows
 version: "1.1"
-last_updated: "2026-10-12"
+last_updated: "2026-10-14"
 id: ci-workflows
 one_line_purpose: Navigate Utah's build, promote, and sync workflow topology.
 entry_point: docs/skills/ci-workflows.md
@@ -28,12 +28,20 @@ post-build verification workflows, not the complete workflow inventory:
   manual dispatch. Top-level `permissions: {}`; each job
   grants its own. Cancels in-progress runs per workflow and ref. A dispatch
   with `contract_only=true` skips the publication jobs and `dispatch-iso`.
+  Publishing dispatches (`contract_only=false`) must target `testing`; a
+  dispatch from any other ref, including the Actions UI default `main`,
+  fails unless `contract_only=true`. An optional `sha` input must equal the
+  dispatched ref's `github.sha`, so a sync race fails closed and `testing`
+  waits for the next sync or nightly run.
   With the default `review_vm=false`, only the contract checks run. Set
   `review_vm=true` as well to build a disposable image on the runner, compose
   and boot an offline ISO, and retain test evidence; `review_iso_all_flavors`
   expands that job from main flavors to every flavor in `config/flavors.json`.
-  This path has read-only registry access and never publishes or signs the
-  review image. For kernel-cache consumers, first build the matching signed
+  The review ISO defaults to zstd level 15 so all flavors fit for VM testing.
+  Set `review_iso_compression_level=3` to measure the production ISO budget;
+  `evidence/iso-size.json` records the image size even when the 8 GiB guard
+  fails. This path has read-only registry access and never publishes or signs
+  the review image. For kernel-cache consumers, first build the matching signed
   cache through the normal pipeline.
 - `.github/workflows/promote-testing-to-main.yml` -- pushes to `testing`, a
   nightly cron, and manual dispatch.
@@ -114,6 +122,7 @@ chunkah layer order: `scripts/check-reproducible-build.sh` compares native
 - [Kernel cache and build matrix](ci-workflows/references/kernel-and-build.md)
 - [ISO end-to-end verification](ci-workflows/references/iso-e2e.md)
 - [Release cadence and factory pin](ci-workflows/references/release-cadence.md)
+- [Testsuite triage runbook](ci-workflows/references/testsuite-triage.md)
 
 ## Verification
 

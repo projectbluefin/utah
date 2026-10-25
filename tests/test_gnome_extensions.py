@@ -14,8 +14,8 @@ affected revision fails here instead of in a booted VM.
 
 from pathlib import Path
 import re
+import subprocess
 import unittest
-
 ROOT = Path(__file__).resolve().parents[1]
 EXTENSIONS = ROOT / "system_files/shared/usr/share/gnome-shell/extensions"
 GSCONNECT = EXTENSIONS / "gsconnect@andyholmes.github.io"
@@ -24,6 +24,33 @@ FINAL_SUBCLASS = "extends GjsPrivate.DBusImplementation"
 
 
 class GnomeExtensionPatchTests(unittest.TestCase):
+    def test_extension_state_helpers_follow_last_state_and_accept_active_states(self):
+        helper = ROOT / "iso/scripts/extension-state.sh"
+        cases = (
+            ("State: ACTIVE\n", "ACTIVE", True),
+            ("State: ENABLED\n", "ENABLED", True),
+            ("State: ERROR\n", "ERROR", False),
+            ("State: ACTIVE\nState: ERROR\n", "ERROR", False),
+            ("no state\n", "", False),
+        )
+        command = (
+            'source "$1"; '
+            'state="$(extension_state_from_info)"; '
+            'printf "%s\\n" "$state"; '
+            'extension_state_is_active "$state"'
+        )
+        for info, expected_state, expected_active in cases:
+            with self.subTest(info=info):
+                result = subprocess.run(
+                    ["bash", "-c", command, "extension-state-test", str(helper)],
+                    input=info,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertEqual(result.stdout.rstrip("\n"), expected_state)
+                self.assertEqual(result.returncode, 0 if expected_active else 1)
+
     def test_build_script_guards_the_gsconnect_final_type(self):
         script = (ROOT / "scripts/build-gnome-extensions.sh").read_text()
         self.assertIn(f'grep -rn "{FINAL_SUBCLASS}" "${{gsconnect_dir}}/src"', script)

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import stat
 import sys
 from pathlib import Path
 
@@ -76,6 +77,21 @@ def main() -> int:
             continue
         if "51" not in versions and not validation_disabled:
             failures.append(f"{uuid}: GNOME 51 not declared ({versions})")
+
+    if not args.source:
+        # gnome-shell runs as the user: an unreadable file stops the extension
+        # loading ("Permission denied"), and a writable one lets any user
+        # change code every session runs. Symlinks carry no meaningful mode.
+        for path in sorted(base.rglob("*")):
+            if path.is_symlink():
+                continue
+            mode = path.lstat().st_mode
+            if not mode & stat.S_IROTH:
+                failures.append(f"{path}: not world-readable ({stat.filemode(mode)})")
+            if stat.S_ISDIR(mode) and not mode & stat.S_IXOTH:
+                failures.append(f"{path}: directory not traversable ({stat.filemode(mode)})")
+            if mode & (stat.S_IWGRP | stat.S_IWOTH):
+                failures.append(f"{path}: group/world-writable ({stat.filemode(mode)})")
 
     if failures:
         print("GNOME extension contract failed:", *failures, sep="\n  ", file=sys.stderr)

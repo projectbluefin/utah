@@ -1,9 +1,9 @@
 ---
 name: desktop-contract
 version: "1.0"
-last_updated: "2026-10-11"
+last_updated: "2026-10-13"
 id: desktop-contract
-one_line_purpose: Maintain Utah identity, Bluefin desktop defaults, and first-boot Flatpak policy.
+one_line_purpose: Maintain Bluefin Utah identity, Bluefin desktop defaults, and first-boot Flatpak policy.
 entry_point: docs/skills/desktop-contract.md
 category: contracts
 mcp_compliance_level: partial
@@ -36,14 +36,14 @@ The TOML's sections are the contract's table of contents:
 - **`[branding]`** — files that must exist (Bluefin logos, backgrounds, the
   `zz0-bluefin-modifications` gschema override, fastfetch and Bazaar count
   files) plus the os-release identity. The identity fields are exact values:
-  `NAME=Utah`, `ID=hummingbird`, `ID_LIKE=fedora`, `VERSION_CODENAME=Utahraptor`,
-  `DEFAULT_HOSTNAME=utah`, `IMAGE_ID=utah`, and the projectbluefin.io URLs.
+  `NAME=Bluefin`, `ID=hummingbird`, `ID_LIKE=fedora`, `VERSION_CODENAME=Utahraptor`,
+  `DEFAULT_HOSTNAME=bluefin`, `IMAGE_ID=utah`, and the projectbluefin.io URLs.
   `ID`, `VERSION_ID` and `CPE_NAME` are left at the Hummingbird base values
   (issue #377) so CVE scanners still recognise the image as Hummingbird-based;
   `CPE_NAME` is asserted as a base-identity pattern
   (`^cpe:/a:redhat:hummingbird:\d+$`) rather than a utah-branded exact value.
   `[branding.os_release_patterns]` shapes the fields the build generates:
-  `PRETTY_NAME` is `Utah (Version: ...)`, `VERSION` carries `(Hummingbird)`,
+  `PRETTY_NAME` is `Bluefin (Version: ...)`, `VERSION` carries `(Hummingbird)`,
   `VARIANT_ID` starts with `utah`. The verifier checks both `/usr/lib/os-release` and
   `/etc/os-release` (the file the GNOME About panel reads, which is a regular
   file rather than a symlink on some bases), and fails if either is missing or
@@ -53,32 +53,47 @@ The TOML's sections are the contract's table of contents:
   flavor pattern `(main|nvidia|gaming|nvidia-gaming)` and the matching
   `ostree-image-signed` ref pattern.
 - **`[configuration]`** — the dconf distro databases and locks under
-  `/etc/dconf/db/distro.d/` must exist, plus the GDM keyfile under
-  `/etc/dconf/db/gdm.d/01-bluefin-gdm-logo` that overrides
+  `/etc/dconf/db/distro.d/` must exist, and `/etc/dconf/profile/user` must
+  select both `user-db:user` and `system-db:distro`. The factory `dconf` RPM
+  ships that profile (including the `local` and `site` admin layers), so Utah
+  must not overlay its own copy — a shorter file would silently drop the admin
+  override layers even though the distro keyfiles keep working (#732 review).
+  The GDM keyfile under `/etc/dconf/db/gdm.d/01-bluefin-gdm-logo` overrides
   `org.gnome.login-screen.logo` to point at the Bluefin mark; otherwise
   gnome-shell falls back to `fedora-logos`' Fedora wordmark at the greeter
   (#378). `file_contains` pins the live configuration: the gschema override
   references Bazaar and the Bluefin background path, the custom command menu
-  points at `docs.projectbluefin.io`, the keybindings set
-  `xdg-terminal-exec`, the GDM keyfile declares the login-screen schema and
-  the Bluefin asset path.
-- **`[flatpak]`** — first-boot policy: the Flathub remote
-  (`https://dl.flathub.org/repo/`), the Bazaar preinstall, the
-  `99-flatpaks.sh` privileged-setup hook, and the system-flatpaks Brewfile
-  whose app list the contract enumerates.
-- **`[services]`** — systemd units the preset must enable: `gdm.service`,
-  `avahi-daemon.service`, `avahi-daemon.socket`, `switcheroo-control.service`,
-  `bluetooth.service`, `ublue-system-setup.service`, `flatpak-preinstall.service`,
-  `flatpak-nuke-fedora.service`, `brew-setup.service`, `dconf-update.service`,
-  `bootc-unified-storage.service`, `input-remapper.service`,
-  `ModemManager.service`, `cups.socket`, `systemd-boot-update.service`,
-  `uupd.timer`, `bluefin-stats-refresh.timer`. Update policy delegates
-  background updates to `uupd.timer`; `bootc-fetch-apply-updates.timer` and
-  `bootc-fetch-apply-updates.service` are masked in `/etc` and `/usr/lib` (and
-  disabled in `85-utah-desktop.preset`) so cross-vendor `/etc` 3-way merges
-  (e.g. switching from Bluefin) do not carry active `timers.target.wants`
-  symlinks that bypass uupd staging or undo manual rollbacks. Switchers can
-  also manually verify or mask them if a local `/etc` symlink was preserved.
+  points at `docs.projectbluefin.io`, the keybindings set `xdg-terminal-exec`,
+  the GDM keyfile declares the login-screen schema and the Bluefin asset path.
+  Common's container signature policy names
+  `/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release`; the pinned Hummingbird base
+  supplies that key (fingerprint `567E…1D51`) alongside Utah's
+  `RPM-GPG-KEY-redhat-release-2`, so no policy weakening or alias is needed.
+- **`[flatpak]`** — first-boot policy: the Flathub and TunaOS remotes,
+  the Bazaar and Ghostty preinstalls, the `99-flatpaks.sh` hook, and the
+  system-flatpaks Brewfile whose app list the contract enumerates.
+- **`[services]`** — systemd units the preset must enable: `gdm.service`, `avahi-daemon.service`,
+  `avahi-daemon.socket`, `switcheroo-control.service`, `bluetooth.service`,
+  `ublue-system-setup.service`, `flatpak-preinstall.service`, `flatpak-nuke-fedora.service`,
+  `brew-setup.service`, `dconf-update.service`, `bootc-unified-storage.service`,
+  `input-remapper.service`, `ModemManager.service`, `thermald.service`, `intel_lpmd.service`,
+  `sysstat.service`, `sysstat-collect.timer`, `sysstat-summary.timer`,
+  `projectbluefin-countme.timer`, `cups.socket`, `systemd-boot-update.service`, `uupd.timer`,
+  `bluefin-stats-refresh.timer`, `ublue-firstboot-date.service`, `ublue-booted-image.service`.
+  Update policy delegates background updates to `uupd.timer`; `bootc-fetch-apply-updates.timer` and
+  `bootc-fetch-apply-updates.service` are masked in `/etc` and `/usr/lib` (and disabled in
+  `85-utah-desktop.preset`) so cross-vendor `/etc` 3-way merges (e.g. switching from Bluefin) do not
+  carry active `timers.target.wants` symlinks that bypass uupd staging or undo manual rollbacks.
+  Switchers can also manually verify or mask them if a local `/etc` symlink was preserved.
+
+  The last two units are Dakota parity (#675): install-date stamping and the
+  booted-image snapshot fastfetch reads. `configure-services.sh` enables them
+  and patches Common's fastfetch ([stats](desktop-contract/references/stats-refresh.md)),
+  image-info and `uwelcome.sh`; non-interactive shells skip the greeting. Wallpaper rotation is
+  deliberately NOT Dakota parity: Common's per-user `bluefin-dynamic-wallpaper`
+  timer is hemisphere-aware and rotates live at month boundaries, while
+  Dakota's boot-time month symlink is northern-only and stale until reboot, so
+  repointing the default would stand the better rotator down (#675 decision).
 
   A unit being enabled in the built image is not the same as it being enabled
   on a booted one. bootc applies presets on first boot, and Hummingbird's
@@ -148,6 +163,7 @@ known case (#443): it exited 255 every start, so mDNS never worked.
 daemon still runs confined as `avahi_t`. Spot others on a booted VM with
 `journalctl -b | grep nnp_transition` and `ps -eZ` (a daemon showing
 `init_t` is the symptom).
+
 ## First-boot work must not gate graphical.target
 
 `systemd-analyze critical-chain graphical.target` on a fresh VM is the check.
@@ -162,6 +178,7 @@ Do not wrap `bootc` in `sh -c` to sequence it: the bare binary's
 `install_exec_t` label is its SELinux entrypoint, and wrapped it ran as
 `initrc_t` with its `chcon` calls denied `mac_admin`. Pinned by
 `tests/test_unified_storage_unit.py`.
+
 ## Boot-error noise is a bug (#444)
 
 `ujust report` attaches the current boot's error-priority journal, and on a
@@ -198,10 +215,9 @@ one is pending a composefs boot check (see below):
   deployment), so the unit is skipped there too. The skip covers the
   whole unit, not just `/`: other fstab entries systemd-remount-fs would
   remount (`/usr`, API VFS such as a `/tmp` tmpfs or `/proc` `hidepid=`)
-  are also left alone. Utah ships no such entries, so only
-  operator-added fstab lines are affected; removing the drop-in restores
-  the unit. The verifier in `tests/test_boot_noise.py` keeps the
-  drop-in in sync with the contract.
+  are also left alone. Utah ships no such entries, so only operator-added fstab
+  lines are affected; removing the drop-in restores the unit. The verifier in
+  `tests/test_boot_noise.py` keeps the drop-in in sync with the contract.
   Not yet boot-verified: on a composefs VM, confirm
   `systemctl show -p ActiveState,ConditionResult systemd-remount-fs` reports
   `inactive`/`no` and `systemctl is-system-running` reports `running`.
@@ -244,14 +260,17 @@ for the live image's own `installer-local` remote.
 
 ## GNOME extensions are pinned submodules
 
-Bluefin's GNOME extension submodules are retained with their normal build
-step. `.gitmodules` pins all 16 extension trees by URL and branch under
-The weekly `.github/workflows/update-gnome-extensions.yml` workflow opens or
-updates review PRs with old/new commits and each extension's declared GNOME
-Shell versions. Its contract-only check validates source metadata; it does not
-build an image or run the installed extension verifier. A full image build
-must verify proposed pins before merge. Edit `.gitmodules` directly for source
-URL or tracked-branch changes; automation only advances existing pins.
+Utah deliberately differs from Bluefin Classic's RPM path: selected GNOME Shell
+extensions are pinned as Git submodules and built into the image. `.gitmodules`
+has 16 trees under `system_files/shared/usr/share/gnome-shell/extensions/`;
+gitlinks pin exact commits. Submodule URLs and branches feed the weekly update
+workflow; only matching Utah submodules represent an extension, not full
+package-backlog parity. Do not add RPM recipes for an extension already covered
+by a Utah submodule. `.github/workflows/update-gnome-extensions.yml` opens or
+updates review PRs with old/new commits and declared Shell versions. Its
+contract-only check validates source metadata, not the installed verifier; a
+full image build must verify pins before merge. Edit `.gitmodules` directly
+for source URL or tracked-branch changes; automation advances existing pins.
 Search Light was dropped: GNOME 51 removed `set_shader_source`, which its shader code calls, so it failed ISO tests.
 
 `scripts/verify-gnome-extensions.py` asserts every one declares GNOME 51 in
@@ -262,7 +281,10 @@ its `metadata.json`. It runs in two modes from the same script:
 - **Installed mode** — the default checks `/usr/share/gnome-shell/extensions`
   under an image root; this is what runs in the Containerfile as
   `/usr/local/libexec/utah-verify-gnome-extensions`, right after
-  `utah-build-gnome-extensions`.
+  `utah-build-gnome-extensions`. It also fails on any extension file that is
+  not world-readable or is group/world-writable: release zips kept `0600`
+  metadata, so gnome-shell hit "Permission denied". The build script
+  normalizes the tree with `chmod -R u+rwX,go+rX,go-w`.
 
 Building GSConnect runs meson install. Because `desktop-file-utils` is not
 published by Hummingbird or Utah's repository, `scripts/build-gnome-extensions.sh`
@@ -289,11 +311,12 @@ in a booted session's journal (`journalctl _UID=1000 | grep -i extension`).
   so the dock silently never loaded; upstream 38545156 moved it to
   `Meta.CursorTracker`.
 
-`tests/test_gnome_extensions.py` reads the pinned sources for both, so a pin
-moved back to an affected revision fails `just check`. To validate an
-extension bump without an image build, copy the built tree over the installed
-one on a booted VM under `bootc usr-overlay`, restart `gdm`, and read the
-session journal and `gnome-extensions info <uuid>` (`State: ACTIVE`).
+`tests/test_gnome_extensions.py` covers both pinned sources. On a booted VM,
+copy the changed tree under `bootc usr-overlay`, restart `gdm`, then verify
+`gnome-extensions info <uuid>` reports `State: ACTIVE`; inspect the session
+journal for load errors. SSH probes must set `XDG_RUNTIME_DIR=/run/user/<uid>`
+and `DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/<uid>/bus`, because SSH does
+not inherit the graphical session's D-Bus environment.
 
 ## The OS logo is an os-release key
 

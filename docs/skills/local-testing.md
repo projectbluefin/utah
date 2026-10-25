@@ -235,6 +235,10 @@ so there is no tag-name continuity to lean on when bumping it.
 take the digest from that release's `org.bootcinstaller.Installer.flatpak`
 asset (`digest` field of `gh api repos/tuna-os/bootc-installer/releases/tags/<tag>`,
 or download and `sha256sum` it) rather than guessing or reusing an old value.
+`install-flatpaks.sh` also shims the container-build environment: a machine id,
+a session bus (only OCI remotes reach for either), and `/var/tmp` (flatpak's OCI
+token cache, hardcoded, ignoring `$TMPDIR`; tmpfiles creates it on boot, but an
+image build never boots). All three bite only the OCI `tuna-os` remote.
 
 ## Tacklebox ISOs (unpublished variants)
 
@@ -300,6 +304,12 @@ expected Flatpak set directly (empty skips the check), and
 `UTAH_E2E_PAYLOAD_CHECK=""` skips the booted-image assertion. The booted-image
 read falls back to `sudo` when `bootc status --json` returns nothing to the
 unprivileged test user.
+
+When `UTAH_E2E_EXPECT_FLAVOR` is set (the `review_vm` workflow), the harness
+also checks first-boot service policy and status plus the Flathub remote, then
+performs a graceful second boot, unlocks the same LUKS disk, and rechecks
+services, Flathub, and the default Flatpaks. This is the repeat-boot
+idempotence gate; plain `just luks-test` remains a single boot.
 Read the recipe and script prerequisites before running it: it creates test
 accounts and requires local QEMU/KVM access, not a production installation.
 
@@ -319,8 +329,9 @@ the terminal autostart release via a trigger file so `installed-desktop.png`
 captures a clean desktop state before `installed-fastfetch.png` captures the
 terminal overlay, preventing duplicate verification evidence (#240). CI sets
 `UTAH_E2E_REQUIRE_FASTFETCH=1` to require OCR of its completion marker and
-kernel output, and `UTAH_E2E_REQUIRE_SCREENSHOTS=1` to reject missing PNGs.
-CI retains the tested commit/image digest and proposes evidence updates in a
+kernel output, and `UTAH_E2E_REQUIRE_SCREENSHOTS=1` to reject missing PNGs and
+blank or flat-colour frames: a solid-black or frozen screen would otherwise pass
+the non-empty check and be published as proof a session started (#786). CI retains the tested commit/image digest and proposes evidence updates in a
 documentation PR only after all flavors pass. See [ci-workflows.md](ci-workflows.md).
 
 Ghostty is the only terminal the harness's fastfetch capture can show, and
@@ -461,7 +472,7 @@ login and digest checks then prove the new deployment actually booted; never
 hard-reset a staged deployment. QEMU runs without `-no-reboot` and uses its
 normal guest-reboot reset action, retaining the same disk and firmware state.
 Every desktop milestone also requires `/etc/os-release` to identify
-`ID=hummingbird`, `NAME=Utah`, and `PRETTY_NAME=Utah (Version: ...)`, matching
+`ID=hummingbird`, `NAME=Bluefin`, and `PRETTY_NAME=Bluefin (Version: ...)`, matching
 the desktop contract. A readable os-release file is not identity proof.
 
 After each baseline, upgraded and rollback boot, the harness enters the

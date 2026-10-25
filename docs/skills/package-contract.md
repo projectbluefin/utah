@@ -59,6 +59,11 @@ policy for changing them.
     from the published Bluefin image snapshot
     (`baselines/bluefin/rpms.tsv`).
 
+Flatpak-first (standing policy): no RPM for an end-user app Utah ships as a
+Flatpak (`contracts/bluefin-desktop.toml` `[flatpak]`). Transitional native
+payloads need an inline drop condition in `packages/utah.toml`; the factory
+follows the same rule when importing recipes.
+
 ## Wi-Fi documentation currency
 
 Wi-Fi needs both `[hardware]` firmware and the `[parity]` userspace stack:
@@ -97,16 +102,15 @@ pull it in, so read the resolved origin from the build's
 Utah also requests `libvpl`, which is not an overrides name but a dependency
 of `intel-vpl-gpu-rt`, so the media request is five packages in total.
 
-`gstreamer1-plugins-bad-free` and `totem-pl-parser` are published package
-names but are omitted from the install request because their dependency
-closures are unsatisfied in the pinned factory inputs: bad-free needs
-`libSoundTouch.so.2`, `libfaad.so.2`, `libopenal.so.1`, and `libsrtp2.so.1`,
-and Totem needs `libuchardet.so.0`. Factory builds of `soundtouch`, `faad2`,
-`openal-soft`, `libsrtp`, and `uchardet` are prerequisites, tracked by #383.
-These are not absent package names or flaky repository failures; do not add
-them to `[unavailable]` or count them as installed. The pin stays unchanged.
-After closure publication, require `just check-repos` against the reviewed
-pinned inputs before restoring either request.
+The four requested overrides and `ffmpegthumbnailer` are in `[factory].parity`;
+their installed releases must carry `.bfin` to prevent base substitution.
+Check new names with `just check-repos` and the image's `package-origins.txt`.
+
+`gstreamer1-plugins-bad-free` and `totem-pl-parser` stay out of the install
+request until their dependency closures publish (`soundtouch`, `faad2`,
+`openal-soft`, `libsrtp`, `uchardet` — tracked by #383). Do not list them
+under `[unavailable]`; after publication, re-verify with `just check-repos`
+against the reviewed pinned inputs before restoring either request.
 
 Package installation does not prove codec functionality. On Intel hardware,
 run `vainfo` against the render device and confirm the iHD driver loads and
@@ -115,13 +119,13 @@ and `vah264dec` with `gst-inspect-1.0`, then test a known H.264 sample.
 The audit pin published `gstreamer1-plugin-openh264` but only `noopenh264`;
 resolving that library dependency is not proof of a working decoder.
 
-Remaining #383 gaps at the audit: `gstreamer1-plugin-libav`,
-`gstreamer1-plugins-ugly-free`, `gstreamer1-plugin-dav1d`,
-`papers-thumbnailer`, `gnome-epub-thumbnailer`, and `gst-thumbnailers`.
-`ffmpegthumbnailer` is now consumed. Consume the rest only after factory builds
-and dependency closures resolve against Utah's pinned inputs. `totem-pl-parser` is not a
-replacement for those thumbnailers. Full FFmpeg versus `ffmpeg-free` remains
-a maintainer policy decision; keep #383 open for hardware and codec proof.
+Remaining #383 gaps: `gstreamer1-plugin-libav` (blocked on the gstreamer1
+family bump), `papers-thumbnailer` (needs published `libspelling` or another
+native PDF provider), and `gst-thumbnailers` (needs the Rust crate stack,
+see factory #527). `ffmpegthumbnailer` is consumed; ugly-free, plugin-dav1d, and the
+epub thumbnailer are still not in the factory and stay out until
+utah-packages publishes them (#383). Full FFmpeg (not `-free`) is the decided
+direction; keep #383 open for hardware and codec proof.
 
 ## Repository policy
 
@@ -245,19 +249,18 @@ a separate Bluetooth printer backend, and installing CUPS alone does not
 request it. It requires the matching `bluez` build, so validate the full
 transaction with `just check-repos` when changing this entry.
 
-The factory pin inspected for #390's audit had no packages for the remaining
-families: `system-config-printer`, `hplip`, `sane-backends`,
-`sane-airscan`/`libsane-airscan`, `libsane-hpaio`, `ipp-usb`, `gutenprint`,
-`foo2zjs`, `c2esp`, `dymo-cups-drivers`, `printer-driver-brlaser`,
-`ptouch-driver`, `splix`, `braille-printer-app`, `paps`, and `mpage`.
-Recheck the current Containerfile pin before adding them: they need factory
-publication and dependency closure, not Fedora runtime repositories.
-Prioritize the printer configuration tool, HP support and AirScan as
-requested in #390, then resolve the published RPM names and their
-dependencies against the pinned inputs. A metadata name match is only a
-preflight: require transaction resolution, then verify printer
-discovery/setup and scanning on hardware before claiming the cluster works.
-Keep #390 open until the remaining work is covered.
+`[parity]` requests the scanner and driver families the factory publishes
+(`sane-backends*`, `sane-airscan`, `ipp-usb`, `gutenprint*`, `hplip*`,
+`libsane-hpaio`, `system-config-printer-{libs,udev}`, `foo2zjs`, `c2esp`,
+`dymo-cups-drivers`, `printer-driver-brlaser`, `ptouch-driver`, `splix`,
+`mpage`, `libieee1284`). `braille-printer-app` and `paps` are unpublished.
+Bluefin ships no `system-config-printer` UI (GNOME Settings is it). The
+`[parity]` "Left out" comment in `packages/utah.toml` lists what is still
+blocked. Method:
+[`references/factory-consumption.md`](package-contract/references/factory-consumption.md).
+A metadata name match is only a preflight: require transaction resolution, then
+verify printer discovery/setup and scanning on hardware before claiming the
+cluster works. Keep #390 open until the remaining work is covered.
 
 ## Supply-chain download verification
 
@@ -359,7 +362,7 @@ Raise the overlay change as its own pull request against `main`; the bump PR
 then picks the fix up on its next rebuild.
 
 Current counts, per the README "Package parity" section: 61 Bluefin contract
-packages installed, 121 Utah additions (GNOME 51, base-image parity, device
+packages installed, 251 Utah additions (GNOME 51, base-image parity, device
 firmware, desktop services), 7 genuinely unavailable. `scripts/check-doc-counts.py` (part of
 `just check`) recomputes these from the manifests and fails if either
 document drifts from `site/data/packages.json`.

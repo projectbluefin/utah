@@ -10,11 +10,21 @@ Type=oneshot
 ExecStart=/usr/libexec/bluefin-refresh-stats
 StandardOutput=journal
 StandardError=journal
-# The job needs the network and a writable /var/cache/bluefin, nothing else.
-# CacheDirectory replaces the ExecStartPre mkdir and owns the directory for
-# the dynamic user; the files it writes stay world-readable for fastfetch.
-DynamicUser=yes
-CacheDirectory=bluefin
+# The job needs the network and a writable cache directory, nothing else.
+# fastfetch reads the cache from unprivileged user shells, so it must not sit
+# under /var/cache/private: DynamicUser=yes always puts CacheDirectory= there,
+# mode 0700 (#860). Run as the static user from
+# sysusers.d/utah-bluefin-stats.conf instead, with the hardening DynamicUser=yes
+# implied spelled out. The directory name is new rather than "bluefin" so
+# systemd never runs its private-to-public rename on machines that already
+# have /var/cache/private/bluefin (that rename fails on this image, see #385).
+User=bluefin-stats
+Group=bluefin-stats
+DynamicUser=no
+CacheDirectory=bluefin-stats
+CacheDirectoryMode=0755
+UMask=0022
+RemoveIPC=yes
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectHome=yes

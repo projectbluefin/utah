@@ -189,7 +189,7 @@ class EvidenceTests(unittest.TestCase):
         # to an unexported, unpassed variable (which dies under set -u inside
         # the assembly) is caught here before it breaks every ISO build.
         self.assertRegex(script, r"podman unshare bash -s -- .*\$\{ISO_MAX_GB\}")
-        self.assertIn('ISO_MAX_GB="${UTAH_ISO_MAX_GB:-6}"', script)
+        self.assertIn('ISO_MAX_GB="${UTAH_ISO_MAX_GB:-8}"', script)
         self.assertIn('ISO_MAX_GB="$8"', script)
         start = script.index("iso_max_bytes=$(( ISO_MAX_GB")
         end = script.index("\nfi\n", start) + len("\nfi\n")
@@ -209,6 +209,17 @@ class EvidenceTests(unittest.TestCase):
         result = subprocess.run(["bash", "-eu", "-c", run], capture_output=True, text=True, env=over)
         self.assertNotEqual(result.returncode, 0, result.stdout)
         self.assertIn("exceeds 6 GB budget", result.stderr)
+
+    def test_release_gate_runs_the_testsuite_commit_post_testing_validated(self):
+        # A gate on a different testsuite commit can pass or fail on tests the
+        # promoted image never ran (#773). Bump both refs together.
+        import yaml
+        e2e = yaml.safe_load((ROOT / ".github/workflows/post-testing-e2e.yml").read_text())
+        release = yaml.safe_load((ROOT / ".github/workflows/execute-release.yml").read_text())
+        validated = e2e["jobs"]["testsuite"]["with"]["test_ref"]
+        gated = release["jobs"]["execute"]["with"]["gate_test_ref"]
+        self.assertRegex(validated, r"^[0-9a-f]{40}$")
+        self.assertEqual(gated, validated)
 
     def test_build_explicitly_dispatches_iso_after_both_image_jobs(self):
         import yaml
@@ -269,6 +280,146 @@ class EvidenceTests(unittest.TestCase):
         self.assertIn("systemd.wants=sshd.service", script)
         self.assertIn("fastfetch output was not visible", script)
         self.assertIn("missing required screenshot", script)
+        # #786: the gate must also reject a blank/frozen frame, not only an
+        # empty one. screenshot_not_blank is called for every required label.
+        gate = script[script.index("UTAH_E2E_REQUIRE_SCREENSHOTS"):script.index(
+            "installed-desktop.png and installed-fastfetch.png")]
+        self.assertIn("screenshot_not_blank", gate)
+        # Defined once, called once inside the per-label loop.
+        self.assertEqual(script.count("screenshot_not_blank()"), 1)
+        self.assertEqual(gate.count("screenshot_not_blank"), 1)
+
+    def _make_png(self, path, solid):
+        import struct, zlib
+        w, h = 1920, 1080
+        if solid:
+            px = [(0, 0, 0)] * (w * h)
+        else:
+            # A busy gradient: thousands of distinct colours, unlike a frozen
+            # frame. The point is that it is nowhere near a single colour.
+            px = []
+            for y in range(h):
+                for x in range(w):
+                    px.append(((x * 7) % 256, (y * 11) % 256, ((x + y) * 3) % 256))
+        raw = bytearray()
+        for y in range(h):
+            raw.append(0)
+            for x in range(w):
+                r, g, b = px[y * w + x]
+                raw += bytes((r, g, b))
+        ihdr = struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)
+        def chunk(ct, data):
+            body = ct + data
+            return struct.pack(">I", len(data)) + body + struct.pack(
+                ">I", zlib.crc32(body) & 0xffffffff)
+        blob = (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr)
+                + chunk(b"IDAT", zlib.compress(bytes(raw))) + chunk(b"IEND", b""))
+        path.write_bytes(blob)
+
+    def test_a_blank_screenshot_is_rejected_and_a_real_one_passes(self):
+        # #786: the screenshot gate only asserted -s (non-empty) per label, so a
+        # solid-black capture of a few kilobytes passed the gate and was
+        # published as proof a session started. The blank-frame check must fail
+        # such a frame. Drive the real helper against generated PNGs.
+        script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
+        func = "screenshot_not_blank() {" + script.split(
+            "screenshot_not_blank() {", 1)[1].split("\n}\n", 1)[0] + "\n}\n"
+
+        def drive(path):
+            harness = "fail() { echo FAIL: $* >&2; exit 1; }\n" + func + "screenshot_not_blank \"$1\"\n"
+            return subprocess.run(["bash", "-eu", "-c", harness, "x", str(path)],
+                                  capture_output=True, text=True)
+
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td)
+            blank = td / "blank.png"
+            real = td / "real.png"
+            garbage = td / "garbage.png"
+            self._make_png(blank, True)
+            self._make_png(real, False)
+            garbage.write_bytes(b"not an image at all")
+            self.assertEqual(drive(real).returncode, 0, drive(real).stderr)
+            self.assertNotEqual(drive(blank).returncode, 0)
+            self.assertIn("blank frame", drive(blank).stderr)
+            self.assertNotEqual(drive(garbage).returncode, 0)
+
+    def _encode_truecolor_png(self, pixels, filter_type):
+        # pixels: list of rows, each a list of (r, g, b) tuples. Encodes every
+        # scanline with the given PNG filter type (0-4) using the spec predictor,
+        # so decoding must reproduce the exact input pixels.
+        import struct, zlib
+        w, h = len(pixels[0]), len(pixels)
+        stride = w * 3
+        raw = bytearray()
+        for y in range(h):
+            prev = pixels[y - 1] if y > 0 else None
+            line = pixels[y]
+            raw.append(filter_type)
+            for x in range(stride):
+                px = line[x // 3][x % 3]
+                a = line[x // 3 - 1][x % 3] if x >= 3 else 0
+                b = prev[x // 3][x % 3] if prev else 0
+                c = prev[x // 3 - 1][x % 3] if (prev and x >= 3) else 0
+                if filter_type == 0:
+                    f = px
+                elif filter_type == 1:
+                    f = (px - a) & 255
+                elif filter_type == 2:
+                    f = (px - b) & 255
+                elif filter_type == 3:
+                    f = (px - ((a + b) >> 1)) & 255
+                else:
+                    # Paeth predictor (RFC 2083 §6.6)
+                    p = a + b - c
+                    pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                    pred = a if pa <= pb and pa <= pc else (b if pb <= pc else c)
+                    f = (px - pred) & 255
+                raw.append(f)
+        ihdr = struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)
+
+        def chunk(ct, data):
+            body = ct + data
+            return struct.pack(">I", len(data)) + body + struct.pack(
+                ">I", zlib.crc32(body) & 0xffffffff)
+
+        return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr)
+                + chunk(b"IDAT", zlib.compress(bytes(raw))) + chunk(b"IEND", b""))
+
+    def _decode_via_helper(self, png_bytes):
+        # Run the PNG decoder embedded in the real screenshot_not_blank helper
+        # (the exact code under test) and return its decoded pixels.
+        import json, sys
+        script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
+        start = script.index("python3 -c '") + len("python3 -c '")
+        end = script.index("'", start)
+        body = script[start:end]
+        # Keep only the decoder definitions (drop the gate logic that exits),
+        # then print the decoded pixels for the given file.
+        defs = body.split("\nif data[:2] == b\"P6\":", 1)[0]
+        program = defs + "\nimport json\nprint(json.dumps(png(data)[2]))\n"
+        with tempfile.TemporaryDirectory() as td:
+            png = Path(td) / "decode.png"
+            png.write_bytes(png_bytes)
+            result = subprocess.run([sys.executable, "-c", program, str(png)],
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            return [tuple(px) for px in json.loads(result.stdout)]
+
+    def test_png_filters_0_through_4_round_trip_exact_pixels(self):
+        # #796 / hanthor's review: screenshot_not_blank decoded PNG filter type 4
+        # (Paeth) with a wrong predictor, so busy frames could be miscounted.
+        # Round-trip a small busy image through every filter type 0-4 and assert
+        # the helper's decoder reproduces the exact input pixels. A wrong Paeth
+        # (e.g. p = b - a, pr = a + c - p) fails this for filter 4.
+        pixels = [[((y * 41 + x * 7) & 255, (y * 83 + x * 131) & 255,
+                    (y * 17 + x * 227) & 255) for x in range(4)]
+                  for y in range(3)]
+        expected = [px for row in pixels for px in row]
+        for ft in range(5):
+            with self.subTest(filter_type=ft):
+                encoded = self._encode_truecolor_png(pixels, ft)
+                decoded = self._decode_via_helper(encoded)
+                self.assertEqual(decoded, expected)
 
     def test_installed_system_asserts_the_booted_image_is_the_offline_payload(self):
         script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
@@ -299,6 +450,7 @@ class EvidenceTests(unittest.TestCase):
                 "sleep() { :; }\n"
                 "ssh_target() { [[ \"$1\" == *'flatpak list'* ]] && printf '%s\\n' \"$INSTALLED\"; }\n"
                 "fail() { echo \"FAIL: $*\" >&2; exit 1; }\n"
+                "dump_flatpak_preinstall_diagnostics() { echo \"DIAG: $1\" >&2; }\n"
                 + block
             )
             env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"),
@@ -314,10 +466,47 @@ class EvidenceTests(unittest.TestCase):
         self.assertNotEqual(missing.returncode, 0)
         self.assertIn("org.b", missing.stderr)
         self.assertNotIn("org.a\n", missing.stderr.split("missing")[-1])
+        self.assertIn("DIAG: first boot", missing.stderr)
 
         skipped = run("org.a", "")
         self.assertEqual(skipped.returncode, 0, skipped.stderr)
         self.assertNotIn("present offline", skipped.stdout)
+
+    def test_setup_unit_checks_reject_non_success_results(self):
+        # systemd's Result= is success/exit-code/signal/timeout/...; it is never
+        # "failed" (that is an ActiveState). A setup unit that exited non-zero
+        # must fail the gate on both the system and user helper.
+        script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
+        start = script.index("check_system_unit_state() {")
+        end = script.index("\nverify_setup_state() {", start)
+        block = script[start:end]
+
+        def run(call, active, result):
+            harness = (
+                "fail() { echo \"FAIL: $*\" >&2; exit 1; }\n"
+                "ssh_target() {\n"
+                "  case \"$1\" in\n"
+                "    *is-enabled*) echo enabled ;;\n"
+                "    *) printf 'LoadState=loaded\\nActiveState=%s\\nResult=%s\\n"
+                "ExecMainStartTimestamp=Tue 2026-10-13 10:00:00 UTC\\n' \"$ACTIVE\" \"$RESULT\" ;;\n"
+                "  esac\n"
+                "}\n"
+                + block + "\n" + call + "\n"
+            )
+            env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+                   "TEST_PASSWORD": "pw", "ACTIVE": active, "RESULT": result}
+            return subprocess.run(["bash", "-eu", "-c", harness],
+                                   capture_output=True, text=True, env=env)
+
+        for call in ("check_system_unit_state ublue-system-setup.service true true first",
+                     "check_user_setup_unit second"):
+            ok = run(call, "inactive", "success")
+            self.assertEqual(ok.returncode, 0, ok.stderr)
+            for active, result in (("inactive", "exit-code"), ("failed", "exit-code"),
+                                   ("failed", "success"), ("inactive", "timeout")):
+                bad = run(call, active, result)
+                self.assertNotEqual(bad.returncode, 0, (call, active, result))
+                self.assertIn(f"Result={result}", bad.stderr)
 
     def test_failure_diagnostics_run_from_the_exit_trap_not_only_fail(self):
         script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
@@ -530,6 +719,42 @@ class OgcKernelConfigGateTests(unittest.TestCase):
     def test_btrfs_is_required(self):
         self.assertIn("BTRFS_FS", self.required_symbols())
 
+    def test_flatpak_user_namespaces_and_tailscale_tun_are_required(self):
+        symbols = self.required_symbols()
+        for symbol in ("USER_NS", "TUN"):
+            with self.subTest(symbol=symbol):
+                self.assertIn(symbol, symbols)
+                body = "".join(f"CONFIG_{item}=y\n" for item in symbols
+                               if item != symbol)
+                result = self.gate(body)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(f"missing CONFIG_{symbol}", result.stderr)
+
+    def test_uinput_is_required_for_testsuite_key_combos(self):
+        # smoke-b "Settings closes cleanly via Ctrl+Q" errors on the gaming
+        # flavors because the OGC guest has no /dev/uinput even after
+        # `modprobe uinput` (#741). The gate must reject a config without it.
+        symbols = self.required_symbols()
+        self.assertIn("INPUT_UINPUT", symbols)
+        body = "".join(f"CONFIG_{s}=y\n" for s in symbols
+                       if s != "INPUT_UINPUT")
+        result = self.gate(body)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("missing CONFIG_INPUT_UINPUT", result.stderr)
+        self.assertRegex(
+            self.SCRIPT.read_text(), r"--module INPUT_UINPUT(?:\s|$)")
+
+    def test_zram_is_required_so_boot_does_not_wait_for_zram0(self):
+        # zram-generator asks for /dev/zram0; without CONFIG_ZRAM systemd waits
+        # 50s for it and geoclue times out on the gaming flavors (#741).
+        symbols = self.required_symbols()
+        self.assertIn("ZRAM", symbols)
+        body = "".join(f"CONFIG_{s}=y\n" for s in symbols if s != "ZRAM")
+        result = self.gate(body)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("missing CONFIG_ZRAM", result.stderr)
+        self.assertRegex(self.SCRIPT.read_text(), r"--module ZRAM(?:\s|$)")
+
     def test_a_config_missing_btrfs_is_rejected_by_name(self):
         body = "".join(f"CONFIG_{s}=y\n" for s in self.required_symbols()
                        if s != "BTRFS_FS")
@@ -606,6 +831,45 @@ class ForkPullRequestKernelCacheTests(unittest.TestCase):
                     if s.get("id") == "cache")
         hit = step["run"].index("Cache hit")
         self.assertIn("available=true", step["run"][hit:hit + 200])
+
+class ReviewIsoBudgetMeasurementTests(unittest.TestCase):
+    """The review ISO can measure against the production size ceiling."""
+
+    def setUp(self):
+        import yaml
+        build = yaml.safe_load((ROOT / ".github/workflows/build.yml").read_text())
+        self.inputs = build[True]["workflow_dispatch"]["inputs"]
+        self.step = next(
+            step for step in build["jobs"]["review_vm"]["steps"]
+            if step.get("name", "").startswith("Compose offline debug ISO")
+        )
+
+    def test_default_keeps_the_test_only_compression_level(self):
+        self.assertEqual(self.inputs["review_iso_compression_level"]["default"], "15")
+        self.assertEqual(
+            self.step["env"]["UTAH_ISO_COMPRESSION_LEVEL"],
+            "${{ inputs.review_iso_compression_level || '15' }}",
+        )
+
+    def test_size_is_saved_even_when_budget_guard_fails(self):
+        run = self.step["run"]
+        record = run.index("evidence/iso-size.json")
+        guard = run.index('[ "$rc" -eq 0 ] || exit "$rc"')
+        self.assertLess(record, guard)
+        self.assertIn("compression_level", run)
+        self.assertIn("iso_bytes", run)
+
+    def test_initramfs_builds_use_reproducible_zstd(self):
+        # Plain nvidia exceeded the 6 GiB size ceiling (#740) because the base
+        # kernel's uncompressed/gzip initramfs was duplicated across pxeboot,
+        # efi.img ESP, live squashfs, and offline container store. Both the
+        # installed image regeneration and the live ISO rebuild must pass --zstd
+        # and --reproducible to stay compact.
+        regen = (ROOT / "scripts/regenerate-initramfs.sh").read_text()
+        self.assertIn("dracut --no-hostonly --reproducible --zstd", regen)
+        live = (ROOT / "iso/live/Containerfile").read_text()
+        self.assertIn("dracut --force --reproducible --zstd --no-hostonly", live)
+
 
 class ConcurrencyTests(unittest.TestCase):
     """A testing build must not be cancelled by the next one.

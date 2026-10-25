@@ -56,6 +56,20 @@ if findmnt -n -o FSTYPE /sysroot 2>/dev/null | grep -Eq '^(erofs|squashfs)$'; th
     exit 0
 fi
 
+# A systemd-boot layout has no GRUB second stage for bootupctl to adopt:
+# `bootupctl adopt-and-update` unconditionally opens /boot/grub2 and fails
+# when it is absent, leaving a failed transient bootupd.service behind. Utah
+# boots systemd-boot (the GRUB binary on the ESP is QEMU fallback only), so
+# there is nothing adoptable here. Skip without committing so a later bootc
+# switch that provides a GRUB layout still retries (#741).
+# BOOTUPCTL_BOOT_DIR exists so the host-side hook tests can point the guard
+# at a scratch tree; production always uses /boot.
+boot_dir="${BOOTUPCTL_BOOT_DIR:-/boot}"
+if [ ! -d "$boot_dir/grub2" ]; then
+    echo "bootupctl-adopt: no $boot_dir/grub2 (systemd-boot layout); skipping"
+    exit 0
+fi
+
 version-script-check bootupctl-adopt privileged 1 || exit 0
 
 # Adopt the on-disk bootloader and write /boot/bootupd-state.json. On a

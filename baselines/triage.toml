@@ -143,11 +143,13 @@ issue = "#263"
 status = "planned"
 area = "hardware-power"
 issue = "#263"
+reason = "Published by the factory (#388) but uninstallable: Requires (rpm-ostree if bootc); bootc is in the image and rpm-ostree is waived and published nowhere (sha256:d3b5bac2)"
 
 [package.tuned-ppd]
 status = "planned"
 area = "hardware-power"
 issue = "#263"
+reason = "Published by the factory (#388) but uninstallable: Requires tuned (see tuned). Bluefin runs tuned-ppd instead of power-profiles-daemon, so the latter is not installed as a stand-in"
 
 [package.thermald]
 status = "planned"
@@ -168,6 +170,7 @@ issue = "#263"
 status = "planned"
 area = "hardware-power"
 issue = "#263"
+reason = "Not published: the factory run behind sha256:d3b5bac2 still lists smartmontools under its failed builds (libblockdev-smartmontools is published, the daemon is not)"
 
 [package.nvme-cli]
 status = "planned"
@@ -194,32 +197,7 @@ status = "planned"
 area = "hardware-power"
 issue = "#263"
 
-[package.orca]
-status = "planned"
-area = "accessibility-input"
-issue = "#263"
-
-[package.speech-dispatcher]
-status = "planned"
-area = "accessibility-input"
-issue = "#263"
-
-[package.speech-dispatcher-utils]
-status = "planned"
-area = "accessibility-input"
-issue = "#263"
-
-[package.espeak-ng]
-status = "planned"
-area = "accessibility-input"
-issue = "#263"
-
 [package.brltty]
-status = "planned"
-area = "accessibility-input"
-issue = "#263"
-
-[package.brlapi]
 status = "planned"
 area = "accessibility-input"
 issue = "#263"
@@ -285,9 +263,8 @@ area = "desktop-apps"
 issue = "#263"
 
 [package.gnome-system-monitor]
-status = "planned"
-area = "desktop-apps"
-issue = "#263"
+status = "waived"
+reason = "Flatpak-first: Utah ships Mission Center (io.missioncenter.MissionCenter) in contracts/bluefin-desktop.toml; the factory builds gnome-system-monitor (utah-packages#542) but Utah does not install a duplicate"
 
 [package.gnome-color-manager]
 status = "planned"
@@ -310,9 +287,8 @@ area = "desktop-apps"
 issue = "#263"
 
 [package.papers-previewer]
-status = "planned"
-area = "desktop-apps"
-issue = "#263"
+status = "waived"
+reason = "Flatpak-first: it is a standalone previewer application (papers-previewer binary and desktop entry); Utah ships org.gnome.NautilusPreviewer as the Flatpak previewer. The host-side integration, papers-libs, papers-thumbnailer and papers-nautilus, is installed"
 
 [package.papers-thumbnailer]
 status = "planned"
@@ -430,11 +406,6 @@ area = "auth-security"
 issue = "#263"
 
 [package.openpace]
-status = "planned"
-area = "auth-security"
-issue = "#263"
-
-[package.tpm2-tools]
 status = "planned"
 area = "auth-security"
 issue = "#263"
@@ -573,6 +544,7 @@ issue = "#263"
 status = "planned"
 area = "cli-tools"
 issue = "#263"
+reason = "Not published: the factory run behind sha256:d3b5bac2 still lists traceroute under its failed builds"
 
 [package.mtr]
 status = "planned"
@@ -695,8 +667,9 @@ area = "cli-tools"
 issue = "#263"
 
 [package.dbus-daemon]
-status = "waived"
-reason = "Utah uses dbus-broker, as Bluefin does for the system bus"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.dbus-x11]
 status = "waived"
@@ -735,8 +708,9 @@ status = "waived"
 reason = "Legacy SysV service shim"
 
 [package.ptyxis]
-status = "waived"
-reason = "Utah's terminal is the Ghostty Flatpak (Hummingbird packages no ptyxis/vte291)"
+status = "planned"
+area = "desktop"
+issue = "#263"
 
 [package.qemu-user-static-aarch64]
 status = "waived"
@@ -755,203 +729,333 @@ status = "waived"
 reason = "Out-of-tree kernel module; not built for Hummingbird's kernel"
 
 [package.ImageMagick]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.antiword]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.argyllcms]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.avahi-tools]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.b43-fwcutter]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.bcache-tools]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.bison]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.capstone]
-status = "untriaged"
+status = "planned"
+area = "system-tools"
+issue = "#263"
 
 [package.dnf5daemon-server]
-status = "untriaged"
+status = "planned"
+area = "system-tools"
+issue = "#263"
 
 [package.dnsmasq]
-status = "untriaged"
+status = "planned"
+area = "networking"
+issue = "#263"
 
 [package.flex]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.gamemode]
-status = "untriaged"
+status = "planned"
+area = "desktop"
+issue = "#263"
 
 [package.gdbm]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.gst-editing-services]
-status = "untriaged"
+status = "planned"
+area = "media"
+issue = "#263"
 
 [package.gstreamer1-plugins-bad-free]
-status = "untriaged"
+status = "planned"
+area = "media"
+issue = "#263"
 
 [package.hfsplus-tools]
-status = "untriaged"
+status = "planned"
+area = "files-devices"
+issue = "#263"
 
 [package.ipset]
-status = "untriaged"
+status = "planned"
+area = "networking"
+issue = "#263"
 
 [package.iptstate]
-status = "untriaged"
+status = "planned"
+area = "networking"
+issue = "#263"
 
 [package.kpartx]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.lcms]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.libavc1394]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.liblouisutdml-utils]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.libraw1394]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.libuser]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.libwnck3]
-status = "untriaged"
+status = "planned"
+area = "desktop"
+issue = "#263"
 
 [package.lockdev]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.lrzsz]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.m4]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.mcelog]
-status = "untriaged"
+status = "planned"
+area = "hardware-power"
+issue = "#263"
 
 [package.memstrack]
-status = "untriaged"
+status = "planned"
+area = "hardware-power"
+issue = "#263"
 
 [package.mkpasswd]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.nilfs-utils]
-status = "untriaged"
+status = "planned"
+area = "files-devices"
+issue = "#263"
 
 [package.openal-soft]
-status = "untriaged"
+status = "planned"
+area = "media"
+issue = "#263"
 
 [package.passwdqc-utils]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.powerstat]
-status = "untriaged"
+status = "planned"
+area = "hardware-power"
+issue = "#263"
 
 [package.python-unversioned-command]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.python3-charset-normalizer]
-status = "untriaged"
+status = "planned"
+area = "python-libraries"
+issue = "#263"
 
 [package.python3-email-validator]
-status = "untriaged"
+status = "planned"
+area = "python-libraries"
+issue = "#263"
 
 [package.python3-html2text]
-status = "untriaged"
+status = "planned"
+area = "python-libraries"
+issue = "#263"
 
 [package.python3-idna]
-status = "untriaged"
+status = "planned"
+area = "python-libraries"
+issue = "#263"
 
 [package.python3-inotify]
-status = "untriaged"
+status = "planned"
+area = "python-libraries"
+issue = "#263"
 
 [package.python3-jmespath]
-status = "untriaged"
+status = "planned"
+area = "python-libraries"
+issue = "#263"
 
 [package.python3-keyring]
-status = "untriaged"
+status = "planned"
+area = "python-libraries"
+issue = "#263"
 
 [package.python3-linux-procfs]
-status = "untriaged"
+status = "planned"
+area = "python-libraries"
+issue = "#263"
 
 [package.python3-pskc]
-status = "untriaged"
+status = "planned"
+area = "python-libraries"
+issue = "#263"
 
 [package.python3-shtab]
-status = "untriaged"
+status = "planned"
+area = "python-libraries"
+issue = "#263"
 
 [package.qt6-qtbase]
-status = "untriaged"
+status = "planned"
+area = "desktop"
+issue = "#263"
 
 [package.quota]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.serd]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.sord]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.sos]
-status = "untriaged"
+status = "planned"
+area = "hardware-power"
+issue = "#263"
 
 [package.soundtouch]
-status = "untriaged"
+status = "planned"
+area = "media"
+issue = "#263"
 
 [package.sysstat]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.tcl]
-status = "untriaged"
+status = "planned"
+area = "system-tools"
+issue = "#263"
 
 [package.tslib]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.uchardet]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.unbound-anchor]
-status = "untriaged"
+status = "planned"
+area = "system-tools"
+issue = "#263"
 
 [package.uresourced]
-status = "untriaged"
+status = "planned"
+area = "system-daemons"
+issue = "#263"
 
 [package.uriparser]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.usbip]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.usermode]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.uupd]
-status = "untriaged"
+status = "waived"
+reason = "Utah installs uupd from the pinned upstream release (Containerfile); only Bluefin's uupd-manual.service differs"
 
 [package.virt-what]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.xdriinfo]
-status = "untriaged"
+status = "waived"
+reason = "X11 client tool; Utah ships the Wayland session only"
 
 [package.xmlsec1]
-status = "untriaged"
+status = "planned"
+area = "cli-tools"
+issue = "#263"
 
 [package.xrandr]
-status = "untriaged"
+status = "waived"
+reason = "X11 client tool; Utah ships the Wayland session only"
 
 [package.xset]
-status = "untriaged"
+status = "waived"
+reason = "X11 client tool; Utah ships the Wayland session only"
 

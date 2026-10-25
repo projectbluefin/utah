@@ -16,7 +16,7 @@
       ],
       "description": "Build and contract jobs, promotion, branch sync, parity and extension update workflows, reusable actions and Renovate pins. Use when editing GitHub Actions or debugging CI.",
       "version": "1.1",
-      "last_updated": "2026-10-12",
+      "last_updated": "2026-10-14",
       "doc_type": "reference"
     },
     {
@@ -40,7 +40,7 @@
     {
       "id": "desktop-contract",
       "name": "desktop-contract",
-      "one_line_purpose": "Maintain Utah identity, Bluefin desktop defaults, and first-boot Flatpak policy.",
+      "one_line_purpose": "Maintain Bluefin Utah identity, Bluefin desktop defaults, and first-boot Flatpak policy.",
       "entry_point": "docs/skills/desktop-contract.md",
       "category": "contracts",
       "status": "active",
@@ -52,7 +52,7 @@
       ],
       "description": "The runtime desktop contract in contracts/bluefin-desktop.toml and its in-image verifiers. Use when changing branding, os-release, service presets, GNOME extensions, or first-boot Flatpak behavior.",
       "version": "1.0",
-      "last_updated": "2026-10-11",
+      "last_updated": "2026-10-13",
       "doc_type": "policy"
     },
     {
@@ -72,7 +72,7 @@
       ],
       "description": "README is the upstream source for docs.projectbluefin.io/utah; the docs page is rendered at build time. Use when the README changes touch what the docs page shows, when the docs page gains a live component, or when reconciling the two for a release.",
       "version": "1.0",
-      "last_updated": "2026-10-03",
+      "last_updated": "2026-10-15",
       "doc_type": "procedure"
     },
     {

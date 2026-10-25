@@ -37,7 +37,8 @@ just build-kernel-cache
 ```
 
 CI reuses a published cache only when its digest is signed by this repository's
-`build.yml` (GitHub OIDC issuer; branch heads and same-repo PR merge refs).
+`build.yml` (GitHub OIDC issuer; `refs/heads/testing` and same-repo PR merge
+refs only).
 Misses and unsigned or wrongly signed hits are built, pushed, signed and
 verified. The consumer resolves the content tag once, requires cosign, verifies
 that immutable digest with the same identity regexp, and passes only those
@@ -141,6 +142,27 @@ adds a `modprobe btrfs` pre-check before the installer runs, turning a repeat
 into a one-line diagnosis. Changes to this contract invalidate the cache
 through the existing script hash and require a real kernel rebuild plus the ISO
 boot tests.
+
+The gaming desktop also depends on two OGC config options that the x86_64
+defconfig omits: Flatpak's Bubblewrap sandbox needs unprivileged user
+namespaces (`CONFIG_USER_NS`), and Tailscale needs the TUN device
+(`CONFIG_TUN`). A gaming VM boot exposed both gaps in `7.1.8-ogc1`: user
+namespace creation returned `EINVAL`, and Tailscale could not load `tun`.
+`install-ogc-kernel.sh` now checks both in `required_config`, so a cached or
+fresh OGC kernel fails during image build instead of losing these desktop
+features at runtime.
+
+The testsuite drives key combos through `/dev/uinput`, which the defconfig
+also omits: the guest has no uinput device even after `modprobe uinput`, so
+every uinput step errors (smoke-b "Settings closes cleanly via Ctrl+Q" on the
+gaming flavors, #741). The script builds it as a module, as Fedora ships it,
+and gates on it like the options above.
+
+zram is missing too, but nothing errors outright: zram-generator asks for
+`/dev/zram0`, systemd waits 50s for `dev-zram0.device`, and the late boot
+pushes `geoclue.service` past its start timeout ("No failed systemd units at
+boot" on the gaming flavors, #741). A serial log with `Timed out waiting for
+device dev-zram0.device` means this. Built as a module with `ZSMALLOC`, gated.
 
 The contract also covers the display. `x86_64_defconfig` enables DRM and the
 Intel i915 driver and nothing else, so on any other GPU, QEMU's included, the

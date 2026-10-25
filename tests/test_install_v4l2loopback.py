@@ -90,6 +90,50 @@ class InstallV4l2loopbackTests(unittest.TestCase):
                       result.stderr)
         self.assertEqual(self.called(), [])
 
+    def put_ogc_build_tree(self) -> tuple[Path, Path]:
+        # What install-ogc-kernel.sh leaves behind: the external-module tree
+        # under /usr/src and the modules/<release>/build symlink pointing at it,
+        # absolute, as it is in the image.
+        src = self.root / f"usr/src/linux-{OGC}"
+        self.put(src, "arch/x86/boot/bzImage")
+        link = self.root / "usr/lib/modules" / OGC / "build"
+        link.symlink_to(f"/usr/src/linux-{OGC}")
+        return src, link
+
+    def test_ogc_run_removes_the_build_tree_once_the_module_is_verified(self):
+        # 286 MiB of built objects shipped in every gaming image until the run
+        # that last needs the tree started removing it (#684).
+        src, link = self.put_ogc_build_tree()
+        self.put(self.root, MODULE.format(OGC))
+        self.put(self.root, "usr/bin/v4l2loopback-ctl")
+        result = self.run_script("ogc")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"installed for {OGC}", result.stdout)
+        self.assertIn(f"Removed the OGC external-module build tree for {OGC}", result.stdout)
+        self.assertFalse(src.exists(), "/usr/src tree must not ship")
+        self.assertFalse(link.is_symlink(), "build symlink must not dangle")
+        self.assertTrue((self.root / MODULE.format(OGC)).is_file())
+        self.assertTrue((self.root / "usr/lib/modules" / OGC).is_dir())
+
+    def test_ogc_run_keeps_the_build_tree_when_the_module_is_incomplete(self):
+        # A failed run leaves the tree for diagnosis, and for a rerun.
+        src, link = self.put_ogc_build_tree()
+        self.put(self.root, MODULE.format(OGC))
+        result = self.run_script("ogc")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("usr/bin/v4l2loopback-ctl is missing", result.stderr)
+        self.assertTrue(src.is_dir())
+        self.assertTrue(link.is_symlink())
+
+    def test_base_run_never_touches_the_ogc_build_tree(self):
+        src, link = self.put_ogc_build_tree()
+        self.put(self.root, MODULE.format(BASE))
+        self.put(self.root, "usr/bin/v4l2loopback-ctl")
+        result = self.run_script("base")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(src.is_dir())
+        self.assertTrue(link.is_symlink())
+
     def test_ogc_cannot_be_staged(self):
         result = self.run_script("ogc", str(self.tmp / "out"))
         self.assertEqual(result.returncode, 2)

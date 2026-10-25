@@ -1,7 +1,7 @@
 {
   "log_file": "/var/log/bootc-installer.log",
-  "distro_name": "Utah",
-  "welcome_title": "Welcome to Utah",
+  "distro_name": "Bluefin Utah",
+  "welcome_title": "Welcome to Bluefin Utah",
   "distro_logo": "resource:///org/bootcinstaller/Installer/images/bluefin.png",
   "imgref": "ghcr.io/projectbluefin/utah:testing",
   "local_imgref": "containers-storage:ghcr.io/projectbluefin/utah:testing",
@@ -11,18 +11,18 @@
   "tour": {
     "welcome": {
       "image": "/run/host/usr/share/bootc-installer/images/utahraptor.png",
-      "title": "Welcome to Utah",
+      "title": "Welcome to Bluefin Utah",
       "description": "Utahraptor is a Bluefin-derived GNOME workstation built on Fedora Hummingbird."
     },
     "features": {
       "image": "/run/host/usr/share/bootc-installer/images/utahraptor.png",
       "title": "Offline installation",
-      "description": "This ISO carries the Utah image and its default Flatpaks, so installation does not need a network connection."
+      "description": "This ISO carries the Bluefin Utah image and its default Flatpaks, so installation does not need a network connection."
     },
     "completed": {
       "image": "/run/host/usr/share/bootc-installer/images/utahraptor.png",
-      "title": "Utah is installed",
-      "description": "Restart your computer to begin using Utah."
+      "title": "Bluefin is installed",
+      "description": "Restart your computer to begin using Bluefin."
     }
   },
   "steps": {
