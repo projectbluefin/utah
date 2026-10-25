@@ -1,7 +1,7 @@
 # Digest-pinned OCI repository copied from projectbluefin/utah-packages.
 # RPMs are authenticated by the pinned package image and its OCI provenance;
 # the repository itself does not carry an RPM GPG key.
-# factory-pin: sha256:d51bb860fad405517f74eecb5791791a1b586e2f6e44b914e477e1c17e87e840
+# factory-pin: sha256:ff6bc510b28270132c7f708f0967f9f5839286bce341e3360d2a815876b38935
 # The stamp above mirrors ARG PACKAGE_IMAGE_SHA in the Containerfile, and a pin
 # bump must move both together (a test enforces it). The ARG alone does not
 # invalidate the package transaction's registry layer cache on CI's buildah:
