@@ -191,16 +191,18 @@ build_live_image() { # NAME IMAGE -> localhost/utah-live:NAME
   local LIVE_IMAGE="localhost/utah-live:${NAME}"
   # Progress and build output go to stderr: stdout is captured by the caller
   # and must carry only the image reference.
+  # Rebuild every run, like build-iso.sh: the payload is re-read from
+  # containers-storage:IMAGE, so a cached live image could pair an old rootfs
+  # with a newer store after IMAGE is re-pulled. --layers keeps a rebuild
+  # against an unchanged IMAGE cheap.
   echo "Building live image for ${NAME} from ${IMAGE}" >&2
-  if ! podman image exists "${LIVE_IMAGE}"; then
-    podman build --layers \
-      --cap-add sys_admin --security-opt label=disable \
-      --build-arg SOURCE_IMAGE="${IMAGE}" \
-      --build-arg TARGET_IMAGE="${IMAGE}" \
-      --build-arg DEBUG="0" \
-      --tag "${LIVE_IMAGE}" \
-      --file iso/live/Containerfile iso/live >&2
-  fi
+  podman build --layers \
+    --cap-add sys_admin --security-opt label=disable \
+    --build-arg SOURCE_IMAGE="${IMAGE}" \
+    --build-arg TARGET_IMAGE="${IMAGE}" \
+    --build-arg DEBUG="0" \
+    --tag "${LIVE_IMAGE}" \
+    --file iso/live/Containerfile iso/live >&2
   echo "${LIVE_IMAGE}"
 }
 

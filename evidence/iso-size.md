@@ -67,14 +67,16 @@ which is the one strategy where the two copies overlap.
 | vfs-store     | vfs     | 3          | 131072     | none       | experiment 1: vfs vs overlay store driver        |
 | zstd-7        | overlay | 7          | 131072     | none       | experiment 3: mid zstd level                       |
 | zstd-11       | overlay | 11         | 131072     | none       | experiment 3: higher zstd level                    |
-| zstd-15       | overlay | 15         | 131072     | none       | experiment 3: maximum zstd level                   |
+| zstd-15       | overlay | 15         | 131072     | none       | experiment 3: #875 release level (mksquashfs accepts 1-22) |
 | block-1m      | overlay | 3          | 1048576    | none       | experiment 3: 1 MiB squashfs block size          |
 | hardlink-dedupe | overlay | 3        | 131072     | hardlink   | experiment 2: dedupe between rootfs and store    |
 
 ## Results
 
-Filled in by the first `just measure-iso` run. Squashfs-root bytes; divide by
-`1024**3` for GiB.
+`just measure-iso` writes only `evidence/iso-size.json`; it does not touch
+this file. Rows here are hand-copied from that JSON after a run, and the JSON
+is authoritative if the two differ. Squashfs-root bytes; divide by `1024**3`
+for GiB.
 
 | flavor         | strategy      | squashfs_bytes | rootfs_uncompressed_bytes |
 |----------------|---------------|----------------|---------------------------|
