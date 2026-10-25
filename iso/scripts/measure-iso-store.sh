@@ -93,7 +93,7 @@ measure_strategy() { # LIVE_IMAGE PAYLOAD_IMAGE driver level block dedupe
   # build-iso.sh runs its whole mount/copy/skopeo/podman-run/squashfs assembly
   # inside `podman unshare` so rootless Podman accepts `image mount`; mirror it
   # here. The "squashfs_bytes rootfs_bytes" line is the only output that
-  # escapes back to this function's stdout.
+  # escapes back to this function's stdout (tool output goes to stderr).
   podman unshare bash -s -- \
     "${LIVE_IMAGE}" "${PAYLOAD_IMAGE}" "${driver}" "${level}" "${block}" \
     "${dedupe}" "${WORK}" "${SQUASHFS_ROOT}" "${PAYLOAD_EXPORT}" \
@@ -110,6 +110,10 @@ SQUASHFS_ROOT="$8"
 PAYLOAD_EXPORT="${9}"
 PAYLOAD_STORE="${10}"
 STORAGE_CONF="${11}"
+# skopeo, the in-container skopeo and mksquashfs print progress on stdout; the
+# caller parses this shell's stdout as the byte pair. Keep the real stdout on
+# fd 3 for that one line and send everything else to stderr.
+exec 3>&1 1>&2
 cleanup() {
     set +e
     podman image unmount "${LIVE_IMAGE}" >/dev/null 2>&1
@@ -176,7 +180,7 @@ mksquashfs "${SQUASHFS_ROOT}" "${SQUASHFS}" \
     -noappend -comp zstd -Xcompression-level "${level}" -b "${block}" -processors 4 \
     -wildcards -e 'proc/*' -e 'sys/*' -e 'dev/*' -e run -e tmp
 squashfs_bytes="$(du -b "${SQUASHFS}" | cut -f1)"
-echo "${squashfs_bytes} ${rootfs_bytes}"
+echo "${squashfs_bytes} ${rootfs_bytes}" >&3
 ASSEMBLY
 }
 

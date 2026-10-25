@@ -161,7 +161,8 @@ main tacklebox ISO at 7,288,455,168 bytes (6.79 GiB; the budget had already
 been exceeded, 6,928,269,312 bytes, before the GNOME app and parity packages
 landed). The post-testing E2E applies the same limit to that ISO. Size
 reduction strategies are tracked in #875; move the guard down again only with
-a measured reduction.
+a measured reduction. `just measure-iso` measures the squashfs root under each
+store/compression strategy (see `evidence/iso-size.md`).
 
 When the guard trips, measure before trimming. The kernel cache image's last
 layer is only `/utah-cache`, so its archives can be inventoried without a

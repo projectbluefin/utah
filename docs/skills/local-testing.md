@@ -127,6 +127,7 @@ the next ISO milestone (comment above `iso` in `Justfile`):
 just iso testing
 just boot-iso        # QEMU/noVNC live-session validation
 just iso testing 1   # optional live-session SSH diagnostics (debug=1)
+just measure-iso     # #875 squashfs size per store/compression strategy
 ```
 
 The result is `output/utah-live.iso`, assembled with systemd-boot, a

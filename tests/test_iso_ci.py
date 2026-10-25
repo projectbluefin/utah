@@ -640,14 +640,22 @@ case "$1" in
     esac
   done
   check_ref "$image"
+  [[ -z "${NOISY_TOOLS:-}" ]] || echo "Copying blob sha256:abc done"
   driver="${PODMAN_FORCE_DRIVER:-$(sed -n 's/^driver = "\(.*\)"$/\1/p' "$conf")}"
   mkdir -p "$store/$driver" ;;
 esac
 exit 0
 """)
-        write("skopeo", "#!/usr/bin/env bash\nexit 0\n")
+        # NOISY_TOOLS makes skopeo, podman run and mksquashfs print progress on
+        # stdout the way the real tools do.
+        write("skopeo",
+              "#!/usr/bin/env bash\n[[ -z \"${NOISY_TOOLS:-}\" ]] || "
+              "printf 'Getting image source signatures\\nWriting manifest to image destination\\n'\n"
+              "exit 0\n")
         write("mksquashfs",
               "#!/usr/bin/env bash\n[[ -z \"${MKSQUASHFS_FAIL:-}\" ]] || exit 1\n"
+              "[[ -z \"${NOISY_TOOLS:-}\" ]] || "
+              "printf 'Parallel mksquashfs: Using 4 processors\\n[=====] 100%%\\n'\n"
               ": > \"$2\"\nprintf '%s\\n' \"$*\" >> \"$RECORD_FILE\"\nexit 0\n")
         write("du", "#!/usr/bin/env bash\nprintf '%s\\t%s\\n' \"$DU_BYTES\" \"$2\"\n")
         env = dict(os.environ)
@@ -766,6 +774,22 @@ exit 0
                 self.assertIsNone(entry["squashfs_bytes"])
                 self.assertIn("error", entry)
         self.assertEqual(self.EVIDENCE.read_text(), original)
+
+    def test_measure_harness_ignores_tool_progress_on_stdout(self):
+        # Real skopeo, in-container skopeo and mksquashfs print progress on
+        # stdout; only the byte pair may reach the parser.
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            env = self._stubs(tmp, tmp / "mksquashfs.log")
+            env["NOISY_TOOLS"] = "1"
+            result, out = self._run(tmp, env)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            rows = json.loads(out.read_text())["strategies"]
+            self.assertEqual(len(rows), 7)
+            for entry in rows:
+                self.assertNotIn("error", entry)
+                self.assertEqual(entry["squashfs_bytes"], 1234567890)
+                self.assertEqual(entry["rootfs_uncompressed_bytes"], 1234567890)
 
     def test_measure_harness_preserves_full_iso_reference(self):
         # Only "strategies" is rewritten; hand-filled reference sizes survive.
