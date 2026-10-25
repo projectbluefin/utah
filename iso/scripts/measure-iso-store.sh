@@ -9,11 +9,18 @@
 # container store is embedded inside it.
 #
 # Usage:
-#   measure-iso-store.sh NAME=IMAGE [NAME=IMAGE ...] [OUTPUT_JSON]
+#   [OUTPUT_JSON=path] measure-iso-store.sh NAME=IMAGE [NAME=IMAGE ...]
 #     NAME=IMAGE   one flavor to measure, e.g.
 #                  main=ghcr.io/projectbluefin/utah:testing
 #                  nvidia-gaming=ghcr.io/projectbluefin/utah-nvidia-gaming:testing
-#     OUTPUT_JSON  results file (default: evidence/iso-size.json)
+#     OUTPUT_JSON  environment variable naming the results file
+#                  (default: evidence/iso-size.json)
+#
+# The results file is rewritten after every row, so an interrupted run keeps
+# the rows it finished. A row whose assembly fails is recorded with null byte
+# counts and an "error" field and the run continues; the script then exits 1.
+# Only "strategies" is replaced: "issue", "note" and "full_iso_reference" are
+# carried over from an existing results file.
 #
 # Strategy space, each row name|driver|zstd-level|block-bytes|dedupe:
 #   - driver:     overlay (production) vs vfs (flattened store layout)
@@ -23,7 +30,8 @@
 #                 across the whole image, so the hardlink row is expected to
 #                 read ~0 and confirms that point rather than shrinking further.
 #
-# Requires podman, skopeo, mksquashfs, and the source image pulled locally.
+# Requires podman, skopeo, mksquashfs, python3, and the source image pulled
+# locally.
 set -euo pipefail
 # Keep set -e inside the command substitutions below (measure_strategy runs in
 # "$(...)"): without inherit_errexit bash ignores set -e there, so a failed
@@ -51,15 +59,15 @@ STRATEGIES=(
 _JSON=""
 _json_first=1
 _json_start() { _JSON="["; _json_first=1; }
-_json_add() { # name driver level block dedupe squashfs_bytes rootfs_bytes
+_json_add() { # flavor name driver level block dedupe squashfs_bytes rootfs_bytes [error]
   local sep=","
   [[ ${_json_first} -eq 1 ]] && sep=""
   _json_first=0
+  local error=""
+  [[ -n "${9:-}" ]] && error=", \"error\": \"$9\""
   _JSON+="
-${sep}{\"flavor\": \"$1\", \"strategy\": \"$2\", \"driver\": \"$3\", \"comp_level\": $4, \"block_size\": $5, \"dedupe\": \"$6\", \"squashfs_bytes\": $7, \"rootfs_uncompressed_bytes\": $8}"
+${sep}{\"flavor\": \"$1\", \"strategy\": \"$2\", \"driver\": \"$3\", \"comp_level\": $4, \"block_size\": $5, \"dedupe\": \"$6\", \"squashfs_bytes\": $7, \"rootfs_uncompressed_bytes\": $8${error}}"
 }
-_json_end() { _JSON+="
-]"; }
 
 # ---- per-strategy assembly (mirrors build-iso.sh) --------------------------
 # Assembles one squashfs root for one strategy and prints "squashfs_bytes
@@ -70,7 +78,8 @@ _json_end() { _JSON+="
 measure_strategy() { # LIVE_IMAGE PAYLOAD_IMAGE driver level block dedupe
   local LIVE_IMAGE="$1" PAYLOAD_IMAGE="$2" driver="$3" level="$4" block="$5" dedupe="$6"
   local WORK SQUASHFS_ROOT PAYLOAD_EXPORT PAYLOAD_STORE STORAGE_CONF
-  WORK="$(mktemp -d "${UTAH_ISO_WORKDIR:-/var/tmp}/utah-measure.XXXXXX")"
+  # Explicit return: the caller runs this in an `if`, where set -e is off.
+  WORK="$(mktemp -d "${UTAH_ISO_WORKDIR:-/var/tmp}/utah-measure.XXXXXX")" || return 1
   SQUASHFS_ROOT="${WORK}/squashfs-root"
   PAYLOAD_EXPORT="${WORK}/utah-payload"
   PAYLOAD_STORE="${WORK}/payload-store"
@@ -115,8 +124,10 @@ cp -a "${MOUNT}/." "${SQUASHFS_ROOT}/"
 mkdir -p "${PAYLOAD_STORE}"
 # driver = overlay keeps one directory per layer; driver = vfs keeps a full
 # flattened copy per layer. build-iso.sh notes a vendor drop-in
-# (/usr/share/containers/storage.conf.d/00-vendor.conf) that forces overlay, so
-# the store layout is checked after the copy below instead of being assumed.
+# (/usr/share/containers/storage.conf.d/00-vendor.conf) that forces overlay;
+# STORAGE_DRIVER overrides config files and drop-ins, so it is set for the
+# in-container skopeo too. The store layout is still checked after the copy
+# instead of being assumed.
 printf '[storage]\ndriver = "%s"\nrunroot = "/tmp/cs-runroot"\ngraphroot = "/payload-store"\n' "${driver}" > "${STORAGE_CONF}"
 
 payload_source="containers-storage:${PAYLOAD_IMAGE}"
@@ -130,7 +141,7 @@ podman run --rm --privileged \
     -v "${PAYLOAD_EXPORT}:/payload:ro" \
     -v "${PAYLOAD_STORE}:/payload-store" \
     -v "${STORAGE_CONF}:/tmp/storage.conf:ro" \
-    "${LIVE_IMAGE}" sh -c 'mkdir -p /tmp/cs-runroot /var/tmp && CONTAINERS_STORAGE_CONF=/tmp/storage.conf skopeo copy --preserve-digests dir:/payload "containers-storage:$1"' sh "${PAYLOAD_IMAGE}"
+    "${LIVE_IMAGE}" sh -c 'mkdir -p /tmp/cs-runroot /var/tmp && CONTAINERS_STORAGE_CONF=/tmp/storage.conf STORAGE_DRIVER="$2" skopeo copy --preserve-digests dir:/payload "containers-storage:$1"' sh "${PAYLOAD_IMAGE}" "${driver}"
 if [[ ! -d "${PAYLOAD_STORE}/${driver}" ]]; then
     echo "payload store has no ${driver}/ directory; the requested driver was not applied" >&2
     exit 1
@@ -154,8 +165,7 @@ if [[ "${dedupe}" == "hardlink" ]]; then
     while IFS= read -r -d '' f; do
         h="$(sha256sum "${f}" | cut -d' ' -f1)"
         if [[ -n "${HASH[${h}]:-}" ]]; then
-            rm -f "${f}"
-            ln "${HASH[${h}]}" "${f}" 2>/dev/null || true
+            ln -f "${HASH[${h}]}" "${f}"
         fi
     done < <(find "${SQUASHFS_ROOT}/usr/lib/containers/storage" -type f -size -16M -print0)
 fi
@@ -190,8 +200,40 @@ build_live_image() { # NAME IMAGE -> localhost/utah-live:NAME
   echo "${LIVE_IMAGE}"
 }
 
+# ---- results file ----------------------------------------------------------
+# Replace only "strategies"; keep "issue", "note" and "full_iso_reference" from
+# an existing file so hand-filled reference sizes survive a re-run.
+write_output() {
+  mkdir -p "$(dirname "${OUTPUT_JSON}")"
+  printf '%s\n]' "${_JSON}" | python3 -c '
+import json, os, sys
+path = sys.argv[1]
+data = {
+    "issue": "projectbluefin/utah#875",
+    "note": "Squashfs-root sizes per strategy. The baseline row (production settings) is the reference; strategy rows are filled by running \u0027just measure-iso\u0027.",
+    "full_iso_reference": {
+        "note": "Full ISO sizes from CI for context; the harness measures the squashfs root only.",
+        "main": {"bytes": 7288455168, "gib": 6.79, "source": "post-testing E2E run 40107791411, 2026-10-24"},
+        "nvidia-gaming": {"bytes": None, "source": "pending measurement"},
+    },
+}
+if os.path.exists(path):
+    with open(path) as f:
+        existing = json.load(f)
+    for key in ("issue", "note", "full_iso_reference"):
+        if key in existing:
+            data[key] = existing[key]
+data["strategies"] = json.load(sys.stdin)
+tmp = path + ".tmp"
+with open(tmp, "w") as f:
+    json.dump(data, f, indent=2)
+    f.write("\n")
+os.replace(tmp, path)
+' "${OUTPUT_JSON}"
+}
+
 # ---- main ------------------------------------------------------------------
-[[ $# -ge 1 ]] || { echo "usage: $0 NAME=IMAGE [NAME=IMAGE ...] [OUTPUT_JSON]" >&2; exit 2; }
+[[ $# -ge 1 ]] || { echo "usage: [OUTPUT_JSON=path] $0 NAME=IMAGE [NAME=IMAGE ...]" >&2; exit 2; }
 
 _flavors=()
 _images=()
@@ -202,37 +244,39 @@ for arg in "$@"; do
 done
 
 _json_start
+failed=0
 for i in "${!_flavors[@]}"; do
   NAME="${_flavors[$i]}"
   IMAGE="${_images[$i]}"
   LIVE_IMAGE="$(build_live_image "${NAME}" "${IMAGE}")"
   for row in "${STRATEGIES[@]}"; do
     IFS='|' read -r name driver level block dedupe <<< "${row}"
-    # Assign first so a failed assembly aborts here (set -e); a here-string
-    # around "$(...)" would discard the exit status and record empty fields.
-    result="$(measure_strategy "${LIVE_IMAGE}" "${IMAGE}" "${driver}" "${level}" "${block}" "${dedupe}")"
-    read -r squashfs_bytes rootfs_bytes <<< "${result}"
-    if [[ ! "${squashfs_bytes}" =~ ^[0-9]+$ || ! "${rootfs_bytes}" =~ ^[0-9]+$ ]]; then
-      echo "${NAME}/${name}: expected two byte counts, got '${result}'" >&2
-      exit 1
+    # One failed row must not discard the others: record it with null byte
+    # counts and move on. A here-string around "$(...)" would hide the status.
+    error=""
+    if result="$(measure_strategy "${LIVE_IMAGE}" "${IMAGE}" "${driver}" "${level}" "${block}" "${dedupe}")"; then
+      read -r squashfs_bytes rootfs_bytes <<< "${result}" || true
+      if [[ ! "${squashfs_bytes:-}" =~ ^[0-9]+$ || ! "${rootfs_bytes:-}" =~ ^[0-9]+$ ]]; then
+        echo "${NAME}/${name}: expected two byte counts, got '${result}'" >&2
+        error="assembly did not report two byte counts"
+      fi
+    else
+      error="assembly failed"
     fi
-    echo "  ${NAME}/${name}: squashfs ${squashfs_bytes} B (rootfs ${rootfs_bytes} B uncompressed)"
-    _json_add "${NAME}" "${name}" "${driver}" "${level}" "${block}" "${dedupe}" "${squashfs_bytes}" "${rootfs_bytes}"
+    if [[ -n "${error}" ]]; then
+      echo "  ${NAME}/${name}: FAILED (${error})"
+      failed=$((failed + 1))
+      _json_add "${NAME}" "${name}" "${driver}" "${level}" "${block}" "${dedupe}" null null "${error}"
+    else
+      echo "  ${NAME}/${name}: squashfs ${squashfs_bytes} B (rootfs ${rootfs_bytes} B uncompressed)"
+      _json_add "${NAME}" "${name}" "${driver}" "${level}" "${block}" "${dedupe}" "${squashfs_bytes}" "${rootfs_bytes}"
+    fi
+    write_output
   done
 done
-_json_end
 
-mkdir -p "$(dirname "${OUTPUT_JSON}")"
-cat > "${OUTPUT_JSON}" <<EOF
-{
-  "issue": "projectbluefin/utah#875",
-  "note": "Squashfs-root sizes per strategy. The baseline row (production settings) is the reference; strategy rows are filled by running 'just measure-iso'.",
-  "full_iso_reference": {
-    "note": "Full ISO sizes from CI for context; the harness measures the squashfs root only.",
-    "main": { "bytes": 7288455168, "gib": 6.79, "source": "post-testing E2E run 40107791411, 2026-10-24" },
-    "nvidia-gaming": { "bytes": null, "source": "pending measurement" }
-  },
-  "strategies": ${_JSON}
-}
-EOF
 echo "Wrote ${OUTPUT_JSON}"
+if [[ ${failed} -gt 0 ]]; then
+  echo "${failed} strategy row(s) failed; see the \"error\" fields in ${OUTPUT_JSON}" >&2
+  exit 1
+fi

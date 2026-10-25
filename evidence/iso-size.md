@@ -42,13 +42,18 @@ are kept out of the strategy table so the two are never confused.
 4. `podman run` the live image with the export, the payload store and the
    `storage.conf` mounted, and inside it run
    `CONTAINERS_STORAGE_CONF=/tmp/storage.conf skopeo copy` from the export into
-   `containers-storage:`, exactly as `build-iso.sh` does. The harness then
-   checks that `payload-store/<driver>/` exists, so a vfs row cannot silently
+   `containers-storage:`, exactly as `build-iso.sh` does, with
+   `STORAGE_DRIVER` set to the strategy's driver so the image's vendor
+   `storage.conf.d` drop-in cannot force overlay. The harness then checks that `payload-store/<driver>/` exists, so a vfs row cannot silently
    measure an overlay store.
 5. Copy the payload store into `usr/lib/containers/storage` of the squashfs
    root and `mksquashfs` it with the strategy's compression and block size.
-6. `du` the squashfs and the uncompressed root; emit one JSON row. A failed
-   step or a non-integer size aborts the run without rewriting the evidence.
+6. `du` the squashfs and the uncompressed root; emit one JSON row and rewrite
+   the results file (`OUTPUT_JSON`, default `evidence/iso-size.json`) so an
+   interrupted run keeps finished rows. A failed step or a non-integer size
+   records that row with null byte counts and an `error` field; the remaining
+   rows still run and the script exits 1. Only `strategies` is replaced;
+   `issue`, `note` and `full_iso_reference` are kept from the existing file.
 
 A hardlink dedupe row additionally scans the squashfs root and the embedded
 store for identical files and hardlinks the store copies onto the root copies,

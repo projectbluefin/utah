@@ -640,7 +640,7 @@ case "$1" in
     esac
   done
   check_ref "$image"
-  driver="$(sed -n 's/^driver = "\(.*\)"$/\1/p' "$conf")"
+  driver="${PODMAN_FORCE_DRIVER:-$(sed -n 's/^driver = "\(.*\)"$/\1/p' "$conf")}"
   mkdir -p "$store/$driver" ;;
 esac
 exit 0
@@ -692,60 +692,96 @@ exit 0
         self.assertRegex(just, re.compile(r"^measure-iso\s*\*flavors:", re.MULTILINE))
         self.assertIn("iso/scripts/measure-iso-store.sh", just)
 
+    def _run(self, tmp: Path, env: dict[str, str]):
+        # OUTPUT_JSON points at a temp file so the stubbed run never touches
+        # the committed evidence/iso-size.json.
+        out = tmp / "iso-size.json"
+        env["OUTPUT_JSON"] = str(out)
+        result = subprocess.run(
+            ["bash", str(self.SCRIPT), "main=ghcr.io/projectbluefin/utah:testing"],
+            capture_output=True, text=True, env=env)
+        return result, out
+
     def test_measure_harness_runs_and_emits_a_valid_table(self):
-        # Back up the committed evidence file: the harness writes to it, and the
-        # stubbed run must not leave fabricated numbers in the tree.
         original = self.EVIDENCE.read_text()
-        try:
-            with tempfile.TemporaryDirectory() as td:
-                tmp = Path(td)
-                record = tmp / "mksquashfs.log"
-                env = self._stubs(tmp, record)
-                result = subprocess.run(
-                    ["bash", str(self.SCRIPT), "main=ghcr.io/projectbluefin/utah:testing"],
-                    capture_output=True, text=True, env=env)
-                self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertNotIn("Building live image", result.stdout)
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            record = tmp / "mksquashfs.log"
+            env = self._stubs(tmp, record)
+            result, out = self._run(tmp, env)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertNotIn("Building live image", result.stdout)
 
-                data = json.loads(self.EVIDENCE.read_text())
-                self.assertEqual(data["issue"], "projectbluefin/utah#875")
-                self.assertEqual(len(data["strategies"]), 7,
-                                 "one strategy row per matrix entry")
-                for entry in data["strategies"]:
-                    self.assertEqual(entry["flavor"], "main")
-                    self.assertIsInstance(entry["squashfs_bytes"], int)
-                    self.assertIsInstance(entry["rootfs_uncompressed_bytes"], int)
-                    self.assertIn(entry["strategy"],
-                                  {"baseline", "vfs-store", "zstd-7", "zstd-11",
-                                   "zstd-15", "block-1m", "hardlink-dedupe"})
-                    self.assertIn(entry["driver"], {"overlay", "vfs"})
+            data = json.loads(out.read_text())
+            self.assertEqual(data["issue"], "projectbluefin/utah#875")
+            self.assertIn("full_iso_reference", data)
+            self.assertEqual(len(data["strategies"]), 7,
+                             "one strategy row per matrix entry")
+            for entry in data["strategies"]:
+                self.assertEqual(entry["flavor"], "main")
+                self.assertIsInstance(entry["squashfs_bytes"], int)
+                self.assertIsInstance(entry["rootfs_uncompressed_bytes"], int)
+                self.assertNotIn("error", entry)
+                self.assertIn(entry["strategy"],
+                              {"baseline", "vfs-store", "zstd-7", "zstd-11",
+                               "zstd-15", "block-1m", "hardlink-dedupe"})
+                self.assertIn(entry["driver"], {"overlay", "vfs"})
 
-                # The compression axis really reached mksquashfs: zstd at the
-                # baseline level (3) and the strongest level (15) were used.
-                log = record.read_text()
-                self.assertIn("-comp zstd", log)
-                self.assertIn("-Xcompression-level 3", log)
-                self.assertIn("-Xcompression-level 15", log)
-        finally:
-            self.EVIDENCE.write_text(original)
+            # The compression axis really reached mksquashfs: zstd at the
+            # baseline level (3) and the strongest level (15) were used.
+            log = record.read_text()
+            self.assertIn("-comp zstd", log)
+            self.assertIn("-Xcompression-level 3", log)
+            self.assertIn("-Xcompression-level 15", log)
+        self.assertEqual(self.EVIDENCE.read_text(), original)
 
+    def test_measure_harness_records_a_failed_row_and_keeps_the_rest(self):
+        # One failing strategy (here the vfs store, whose driver directory
+        # never appears) must not discard the other rows: it is recorded with
+        # null byte counts and an error, and the run exits non-zero.
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            env = self._stubs(tmp, tmp / "mksquashfs.log")
+            env["PODMAN_FORCE_DRIVER"] = "overlay"
+            result, out = self._run(tmp, env)
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+            rows = {e["strategy"]: e for e in json.loads(out.read_text())["strategies"]}
+            self.assertEqual(len(rows), 7)
+            self.assertIsNone(rows["vfs-store"]["squashfs_bytes"])
+            self.assertIsNone(rows["vfs-store"]["rootfs_uncompressed_bytes"])
+            self.assertIn("error", rows["vfs-store"])
+            for name, entry in rows.items():
+                if name != "vfs-store":
+                    self.assertIsInstance(entry["squashfs_bytes"], int, name)
 
-    def test_measure_harness_fails_when_a_strategy_fails(self):
-        # A failed assembly must abort the run and leave the committed evidence
-        # untouched rather than writing empty (invalid JSON) byte fields.
+    def test_measure_harness_fails_when_every_strategy_fails(self):
         original = self.EVIDENCE.read_text()
-        try:
-            with tempfile.TemporaryDirectory() as td:
-                tmp = Path(td)
-                env = self._stubs(tmp, tmp / "mksquashfs.log")
-                env["MKSQUASHFS_FAIL"] = "1"
-                result = subprocess.run(
-                    ["bash", str(self.SCRIPT), "main=ghcr.io/projectbluefin/utah:testing"],
-                    capture_output=True, text=True, env=env)
-                self.assertNotEqual(result.returncode, 0, result.stdout)
-                self.assertEqual(self.EVIDENCE.read_text(), original)
-        finally:
-            self.EVIDENCE.write_text(original)
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            env = self._stubs(tmp, tmp / "mksquashfs.log")
+            env["MKSQUASHFS_FAIL"] = "1"
+            result, out = self._run(tmp, env)
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+            for entry in json.loads(out.read_text())["strategies"]:
+                self.assertIsNone(entry["squashfs_bytes"])
+                self.assertIn("error", entry)
+        self.assertEqual(self.EVIDENCE.read_text(), original)
+
+    def test_measure_harness_preserves_full_iso_reference(self):
+        # Only "strategies" is rewritten; hand-filled reference sizes survive.
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            env = self._stubs(tmp, tmp / "mksquashfs.log")
+            existing = json.loads(self.EVIDENCE.read_text())
+            existing["full_iso_reference"]["nvidia-gaming"] = {
+                "bytes": 9000000000, "source": "hand-filled"}
+            (tmp / "iso-size.json").write_text(json.dumps(existing))
+            result, out = self._run(tmp, env)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            data = json.loads(out.read_text())
+            self.assertEqual(data["full_iso_reference"], existing["full_iso_reference"])
+            self.assertEqual(data["note"], existing["note"])
+            self.assertEqual(len(data["strategies"]), 7)
 
 
 class FastfetchOcrGateTests(unittest.TestCase):
