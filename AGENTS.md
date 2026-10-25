@@ -3,9 +3,9 @@
 Utah composes [Bluefin](https://projectbluefin.io) on the Fedora Hummingbird
 `os-minimal` base. Experimental pre-alpha: it has a build, not users, and
 nothing is ready for real machines. It publishes `:testing` container images,
-a testing live ISO for hardware testing, and a rolling `:stable` tag that
-`execute-release.yml` moves on each testing-to-main promotion once the release
-gate passes (#336; see
+a live ISO built monthly from `:stable` by `projectbluefin/dakota-iso`, and a
+rolling `:stable` tag that `execute-release.yml` releases weekly (Mondays
+06:00 UTC) once the release gate passes (#336; see
 `docs/skills/ci-workflows/references/release-cadence.md`).
 
 ## Read order
