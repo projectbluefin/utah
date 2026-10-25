@@ -575,6 +575,118 @@ class EvidenceTests(unittest.TestCase):
         self.assertNotIn("preserve_failed_disk_diagnostics", script[fail_at:fail_at + 80])
 
 
+class MeasureIsoStoreTests(unittest.TestCase):
+    """#875: the size harness must assemble and squashfs each strategy and emit
+    a valid evidence table -- tested with the build tools stubbed so it runs on
+    a plain CI runner with no podman/skopeo/mksquashfs installed."""
+
+    SCRIPT = ROOT / "iso/scripts/measure-iso-store.sh"
+    EVIDENCE = ROOT / "evidence/iso-size.json"
+
+    def _stubs(self, tmp: Path, record: Path) -> dict[str, str]:
+        """A PATH directory of fakes that reproduce the harness's build tools.
+
+        `podman image mount` prints a real directory full of files so the
+        `cp -a` and the sha256sum/find dedupe path all operate on real data;
+        `mksquashfs` records its args so the test can assert the compression
+        axis; `du` returns a fixed byte count for both -b and -sb."""
+        mount_dir = tmp / "mount"
+        mount_dir.mkdir()
+        (mount_dir / "var").mkdir()
+        (mount_dir / "etc").mkdir()
+        (mount_dir / "etc").joinpath("utah").write_text("utah\n")
+        (mount_dir / "etc").joinpath("hostname").write_text("utah\n")
+        bin = tmp / "bin"
+        bin.mkdir()
+
+        def write(name, body):
+            p = bin / name
+            p.write_text(body)
+            p.chmod(0o755)
+            return p
+
+        write("podman", "#!/usr/bin/env bash\ncase \"$1\" in\n image)\n  case \"$2\" in\n   mount) printf '%s\\n' \"$MOUNT_DIR\" ;;\n   exists) exit 0 ;;\n  esac ;;\n run) exit 0 ;;\nesac\nexit 0\n")
+        write("skopeo", "#!/usr/bin/env bash\nexit 0\n")
+        write("mksquashfs",
+              "#!/usr/bin/env bash\n: > \"$2\"\nprintf '%s\\n' \"$*\" >> \"$RECORD_FILE\"\nexit 0\n")
+        write("du", "#!/usr/bin/env bash\nprintf '%s\\t%s\\n' \"$DU_BYTES\" \"$2\"\n")
+        env = dict(os.environ)
+        env["PATH"] = f"{bin}:{env.get('PATH','')}"
+        env["MOUNT_DIR"] = str(mount_dir)
+        env["RECORD_FILE"] = str(record)
+        env["DU_BYTES"] = "1234567890"
+        env["UTAH_ISO_WORKDIR"] = str(tmp / "work")
+        return env
+
+    def test_harness_file_exists_and_is_executable(self):
+        self.assertTrue(self.SCRIPT.is_file())
+        self.assertTrue(os.access(self.SCRIPT, os.X_OK))
+
+    def test_harness_covers_every_experiment_axis(self):
+        text = self.SCRIPT.read_text()
+        # storage.conf driver flip (overlay vs vfs) and zstd level plumbing.
+        self.assertIn("${STORAGE_CONF}", text)
+        self.assertIn("vfs", text)
+        self.assertIn("-comp zstd -Xcompression-level", text)
+        # The strategy matrix rows: baseline, vfs store, three zstd levels,
+        # a wider block, and hardlink dedupe.
+        for row in ("baseline", "vfs-store", "zstd-7", "zstd-11", "zstd-15",
+                    "block-1m", "hardlink-dedupe"):
+            self.assertIn(row, text)
+
+    def test_evidence_file_has_the_harness_schema(self):
+        data = json.loads(self.EVIDENCE.read_text())
+        self.assertEqual(data["issue"], "projectbluefin/utah#875")
+        self.assertIn("baselines", data)
+        self.assertIn("strategies", data)
+        for entry in data["baselines"]:
+            for key in ("flavor", "strategy", "driver", "comp_level",
+                        "block_size", "dedupe", "squashfs_bytes",
+                        "rootfs_uncompressed_bytes"):
+                self.assertIn(key, entry)
+
+    def test_justfile_wires_the_measure_recipe(self):
+        just = (ROOT / "Justfile").read_text()
+        self.assertRegex(just, re.compile(r"^measure-iso:", re.MULTILINE))
+        self.assertIn("iso/scripts/measure-iso-store.sh", just)
+
+    def test_measure_harness_runs_and_emits_a_valid_table(self):
+        # Back up the committed evidence file: the harness writes to it, and the
+        # stubbed run must not leave fabricated numbers in the tree.
+        original = self.EVIDENCE.read_text()
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                tmp = Path(td)
+                record = tmp / "mksquashfs.log"
+                env = self._stubs(tmp, record)
+                result = subprocess.run(
+                    ["bash", str(self.SCRIPT), "main=ghcr.io/projectbluefin/utah:testing"],
+                    capture_output=True, text=True, env=env)
+                self.assertEqual(result.returncode, 0, result.stderr)
+
+                data = json.loads(self.EVIDENCE.read_text())
+                self.assertEqual(data["issue"], "projectbluefin/utah#875")
+                self.assertEqual(len(data["strategies"]), 7,
+                                 "one strategy row per matrix entry")
+                for entry in data["strategies"]:
+                    self.assertEqual(entry["flavor"], "main")
+                    self.assertIsInstance(entry["squashfs_bytes"], int)
+                    self.assertIsInstance(entry["rootfs_uncompressed_bytes"], int)
+                    self.assertIn(entry["strategy"],
+                                  {"baseline", "vfs-store", "zstd-7", "zstd-11",
+                                   "zstd-15", "block-1m", "hardlink-dedupe"})
+                    self.assertIn(entry["driver"], {"overlay", "vfs"})
+
+                # The compression axis really reached mksquashfs: zstd at the
+                # baseline level (3) and the strongest level (15) were used.
+                log = record.read_text()
+                self.assertIn("-comp zstd", log)
+                self.assertIn("-Xcompression-level 3", log)
+                self.assertIn("-Xcompression-level 15", log)
+        finally:
+            self.EVIDENCE.write_text(original)
+
+
 class FastfetchOcrGateTests(unittest.TestCase):
     """The gate runs against tesseract output, which drops and mangles glyphs."""
 

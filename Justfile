@@ -96,6 +96,9 @@ check:
     test -f iso/live/src/etc/bootc-installer/images.json
     test -f iso/live/src/etc/bootc-installer/recipe.json
     test -f iso/scripts/build-iso.sh
+    test -f iso/scripts/measure-iso-store.sh
+    bash -n iso/scripts/measure-iso-store.sh
+    python3 -m json.tool evidence/iso-size.json >/dev/null
     test -f iso/scripts/build-iso-tacklebox.sh
     test -f iso/scripts/tacklebox-boot-gate.sh
     test -f iso/live/Containerfile.tacklebox
@@ -636,6 +639,17 @@ iso stream="testing" debug="0":
     podman image exists "$ref" || { echo "Image $ref not found; run just build-ghcr {{ image }} {{ stream }} main" >&2; exit 1; }
     mkdir -p "{{ base_dir }}"
     bash iso/scripts/build-iso.sh "$ref" "$(realpath "{{ base_dir }}")/utah-live.iso" "Utah Live" "{{ debug }}" "ghcr.io/{{ repo_organization }}/{{ image }}:{{ stream }}"
+
+# #875 ISO size experiments: measure the live-rootfs squashfs under each
+# embedded-store / compression strategy for one or more flavors, and write the
+# table to evidence/iso-size.json. It mirrors build-iso.sh's assembly but does
+# NOT assemble the ISO or boot it. Pass NAME=IMAGE pairs; defaults to the two
+# largest flavors:
+#   just measure-iso main=ghcr.io/projectbluefin/utah:testing
+measure-iso:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    bash iso/scripts/measure-iso-store.sh "${@:-main=ghcr.io/{{ repo_organization }}/utah:testing nvidia-gaming=ghcr.io/{{ repo_organization }}/utah-nvidia-gaming:testing}"
 
 # Fast live ISO via tacklebox for any flavors.json flavor, including variants
 # this project publishes no ISO for. Two stages: a rootless Flatpak bake

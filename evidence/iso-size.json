@@ -1,0 +1,14 @@
+{
+  "issue": "projectbluefin/utah#875",
+  "note": "Squashfs-root sizes per strategy, produced by iso/scripts/measure-iso-store.sh. The squashfs root is the dominant term in the ISO because the offline container store is embedded inside it. Run 'just measure-iso' to fill the strategy rows; baselines squashfs_bytes stay null until the first run. Full-ISO byte counts reported by post-testing E2E / diagnostic runs live in docs/skills/ci-workflows/references/iso-e2e.md, not here, because they are a different metric (ISO minus the ~150-300 MiB ESP + boot files).",
+  "full_iso_reference": {
+    "note": "Full ISO sizes from CI for context; the harness measures the squashfs root only.",
+    "main": { "bytes": 7288455168, "gib": 6.79, "source": "post-testing E2E run 40107791411, 2026-10-24" },
+    "nvidia-gaming": { "bytes": null, "source": "pending measurement" }
+  },
+  "baselines": [
+    { "flavor": "main", "strategy": "production", "driver": "overlay", "comp_level": 3, "block_size": 131072, "dedupe": "none", "squashfs_bytes": null, "rootfs_uncompressed_bytes": null },
+    { "flavor": "nvidia-gaming", "strategy": "production", "driver": "overlay", "comp_level": 3, "block_size": 131072, "dedupe": "none", "squashfs_bytes": null, "rootfs_uncompressed_bytes": null }
+  ],
+  "strategies": []
+}
