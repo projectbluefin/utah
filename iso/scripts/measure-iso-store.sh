@@ -30,8 +30,8 @@
 #                 across the whole image, so the hardlink row is expected to
 #                 read ~0 and confirms that point rather than shrinking further.
 #
-# Requires podman, skopeo, mksquashfs, python3, and the source image pulled
-# locally.
+# Requires podman, skopeo, mksquashfs, python3, curl (installer artwork
+# fetch), and the source image pulled locally.
 set -euo pipefail
 # Keep set -e inside the command substitutions below (measure_strategy runs in
 # "$(...)"): without inherit_errexit bash ignores set -e there, so a failed
@@ -248,6 +248,20 @@ for arg in "$@"; do
   _flavors+=("${arg%%=*}")
   _images+=("${arg#*=}")
 done
+
+# The live build context is iso/live/, which cannot reach repo-root scripts/.
+# Stage the same two files build-iso.sh stages: the Containerfile COPYs the
+# Flatpak parser, and configure-live.sh exits without the installer mascot
+# (pinned in config/artwork.lock, not committed). The trap removes both.
+cleanup_staged() {
+  rm -f "${ROOT}/iso/live/src/utah-verify-desktop-contract.py" "${ROOT}/iso/live/src/images/utahraptor.png"
+  rmdir "${ROOT}/iso/live/src/images" 2>/dev/null || true
+}
+trap cleanup_staged EXIT
+cp scripts/verify-desktop-contract.py iso/live/src/utah-verify-desktop-contract.py
+scripts/fetch-artwork.sh \
+  assets/raster/dinos/jacob-schnurr/utah/utah-look/black-outline/utah-look-black-outline.png \
+  iso/live/src/images/utahraptor.png >&2
 
 _json_start
 failed=0

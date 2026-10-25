@@ -1,4 +1,5 @@
 """CI must test the complete exact-digest set before publication."""
+import hashlib
 import importlib.util
 import json
 import os
@@ -624,7 +625,14 @@ case "$1" in
    exists) exit 0 ;;
   esac ;;
  unshare) shift; exec "$@" ;;
- build) echo "STEP 1/1: FROM fake" ;;
+ build)
+  # Real podman build fails without these: the Containerfile COPYs the
+  # verifier and configure-live.sh exits without the mascot art.
+  ctx="${@: -1}"
+  for f in src/utah-verify-desktop-contract.py src/images/utahraptor.png; do
+    [[ -s "$ctx/$f" ]] || { echo "build context missing $f" >&2; exit 1; }
+  done
+  echo "STEP 1/1: FROM fake" ;;
  run)
   shift; store=""; conf=""; image=""
   while [[ $# -gt 0 ]]; do
@@ -664,6 +672,19 @@ exit 0
         env["RECORD_FILE"] = str(record)
         env["DU_BYTES"] = "1234567890"
         env["UTAH_ISO_WORKDIR"] = str(tmp / "work")
+        # Serve the installer art from a local file:// tree pinned by a temp
+        # lock, so fetch-artwork.sh runs for real without the network.
+        art_path = ("assets/raster/dinos/jacob-schnurr/utah/utah-look/"
+                    "black-outline/utah-look-black-outline.png")
+        commit = "0" * 40
+        art = tmp / "artwork" / commit / art_path
+        art.parent.mkdir(parents=True)
+        art.write_bytes(b"\x89PNG fake mascot\n")
+        digest = hashlib.sha256(art.read_bytes()).hexdigest()
+        lock = tmp / "artwork.lock"
+        lock.write_text(f"commit {commit}\n{digest} {art_path}\n")
+        env["UTAH_ARTWORK_LOCK"] = str(lock)
+        env["UTAH_ARTWORK_BASE"] = f"file://{tmp / 'artwork'}"
         return env
 
     def test_harness_file_exists_and_is_executable(self):
@@ -742,6 +763,32 @@ exit 0
             self.assertIn("-Xcompression-level 3", log)
             self.assertIn("-Xcompression-level 15", log)
         self.assertEqual(self.EVIDENCE.read_text(), original)
+
+    def test_harness_stages_the_live_build_context_like_build_iso(self):
+        # iso/live/Containerfile COPYs the verifier and configure-live.sh
+        # needs the mascot; neither is committed, so the harness must stage
+        # both before podman build and remove them on exit.
+        text = self.SCRIPT.read_text()
+        self.assertIn("cp scripts/verify-desktop-contract.py "
+                      "iso/live/src/utah-verify-desktop-contract.py", text)
+        self.assertIn("scripts/fetch-artwork.sh", text)
+        self.assertIn("iso/live/src/images/utahraptor.png", text)
+        self.assertRegex(text, r"trap cleanup_staged EXIT")
+        self.assertLess(text.index("trap cleanup_staged EXIT"),
+                        text.index("\n_json_start\n"))
+
+    def test_measure_harness_removes_staged_build_context(self):
+        verifier = ROOT / "iso/live/src/utah-verify-desktop-contract.py"
+        mascot = ROOT / "iso/live/src/images/utahraptor.png"
+        if verifier.exists() or mascot.exists():
+            self.skipTest("staged live build-context files already present")
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            env = self._stubs(tmp, tmp / "mksquashfs.log")
+            result, _ = self._run(tmp, env)
+            self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(verifier.exists())
+        self.assertFalse(mascot.exists())
 
     def test_measure_harness_records_a_failed_row_and_keeps_the_rest(self):
         # One failing strategy (here the vfs store, whose driver directory
