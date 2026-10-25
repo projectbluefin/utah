@@ -21,8 +21,9 @@ MiB of firmware, kernel, initramfs and GRUB). The offline container store is
 embedded *inside* that squashfs, so it is the single dominant term in the total
 size. Shrinking anything else shrinks the ISO by the same fraction; shrinking
 the root is where the bytes actually are. The harness therefore measures the
-squashfs root directly, which is what `build-iso.sh` feeds into the 8 GiB budget
-guard.
+squashfs root directly. `build-iso.sh`'s 8 GiB budget guard measures the
+finished ISO (`du -b` of the output file), so a squashfs-root number is a lower
+bound on what that guard sees, not the same figure.
 
 The full-ISO byte counts from post-testing E2E and diagnostic runs are recorded
 in the `full_iso_reference` block of `evidence/iso-size.json` and in
@@ -33,14 +34,21 @@ are kept out of the strategy table so the two are never confused.
 
 `measure-iso-store.sh` runs, per flavor, one assembly per strategy:
 
-1. `podman image mount` the live image into a temp dir.
-2. `cp -a` the mounted tree into a fresh graphroot.
-3. Write a `storage.conf` with the strategy's `graphdriver` (`overlay` or
-   `vfs`) and run `podman run` with `--graph` pointed at it, so the offline
-   store is unpacked into that driver's store exactly as `build-iso.sh` does.
-4. `skopeo copy` the offline store into the graphroot.
-5. `mksquashfs` the graphroot with the strategy's compression and block size.
-6. `du` the squashfs and the uncompressed root; emit one JSON row.
+1. `podman image mount` the live image (inside `podman unshare`).
+2. `cp -a` the mounted tree into a fresh squashfs root.
+3. Write a `storage.conf` with the strategy's `driver` (`overlay` or `vfs`) and
+   `graphroot = "/payload-store"`, then `skopeo copy` the payload image to a
+   `dir:` export on the host.
+4. `podman run` the live image with the export, the payload store and the
+   `storage.conf` mounted, and inside it run
+   `CONTAINERS_STORAGE_CONF=/tmp/storage.conf skopeo copy` from the export into
+   `containers-storage:`, exactly as `build-iso.sh` does. The harness then
+   checks that `payload-store/<driver>/` exists, so a vfs row cannot silently
+   measure an overlay store.
+5. Copy the payload store into `usr/lib/containers/storage` of the squashfs
+   root and `mksquashfs` it with the strategy's compression and block size.
+6. `du` the squashfs and the uncompressed root; emit one JSON row. A failed
+   step or a non-integer size aborts the run without rewriting the evidence.
 
 A hardlink dedupe row additionally scans the squashfs root and the embedded
 store for identical files and hardlinks the store copies onto the root copies,

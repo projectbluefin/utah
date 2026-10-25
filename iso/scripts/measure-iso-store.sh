@@ -114,8 +114,9 @@ cp -a "${MOUNT}/." "${SQUASHFS_ROOT}/"
 
 mkdir -p "${PAYLOAD_STORE}"
 # driver = overlay keeps one directory per layer; driver = vfs keeps a full
-# flattened copy per layer. The vendor drop-in in the image sets overlay, but
-# this run overrides CONTAINERS_STORAGE_CONF, so the driver here is real.
+# flattened copy per layer. build-iso.sh notes a vendor drop-in
+# (/usr/share/containers/storage.conf.d/00-vendor.conf) that forces overlay, so
+# the store layout is checked after the copy below instead of being assumed.
 printf '[storage]\ndriver = "%s"\nrunroot = "/tmp/cs-runroot"\ngraphroot = "/payload-store"\n' "${driver}" > "${STORAGE_CONF}"
 
 payload_source="containers-storage:${PAYLOAD_IMAGE}"
@@ -130,6 +131,10 @@ podman run --rm --privileged \
     -v "${PAYLOAD_STORE}:/payload-store" \
     -v "${STORAGE_CONF}:/tmp/storage.conf:ro" \
     "${LIVE_IMAGE}" sh -c 'mkdir -p /tmp/cs-runroot /var/tmp && CONTAINERS_STORAGE_CONF=/tmp/storage.conf skopeo copy --preserve-digests dir:/payload "containers-storage:$1"' sh "${PAYLOAD_IMAGE}"
+if [[ ! -d "${PAYLOAD_STORE}/${driver}" ]]; then
+    echo "payload store has no ${driver}/ directory; the requested driver was not applied" >&2
+    exit 1
+fi
 mkdir -p "${SQUASHFS_ROOT}/usr/lib/containers/storage"
 cp -a "${PAYLOAD_STORE}/." "${SQUASHFS_ROOT}/usr/lib/containers/storage/"
 
@@ -170,7 +175,9 @@ build_live_image() { # NAME IMAGE -> localhost/utah-live:NAME
   local NAME="$1"
   local IMAGE="$2"
   local LIVE_IMAGE="localhost/utah-live:${NAME}"
-  echo "Building live image for ${NAME} from ${IMAGE}"
+  # Progress and build output go to stderr: stdout is captured by the caller
+  # and must carry only the image reference.
+  echo "Building live image for ${NAME} from ${IMAGE}" >&2
   if ! podman image exists "${LIVE_IMAGE}"; then
     podman build --layers \
       --cap-add sys_admin --security-opt label=disable \
@@ -178,7 +185,7 @@ build_live_image() { # NAME IMAGE -> localhost/utah-live:NAME
       --build-arg TARGET_IMAGE="${IMAGE}" \
       --build-arg DEBUG="0" \
       --tag "${LIVE_IMAGE}" \
-      --file iso/live/Containerfile iso/live
+      --file iso/live/Containerfile iso/live >&2
   fi
   echo "${LIVE_IMAGE}"
 }
@@ -201,7 +208,14 @@ for i in "${!_flavors[@]}"; do
   LIVE_IMAGE="$(build_live_image "${NAME}" "${IMAGE}")"
   for row in "${STRATEGIES[@]}"; do
     IFS='|' read -r name driver level block dedupe <<< "${row}"
-    read -r squashfs_bytes rootfs_bytes <<< "$(measure_strategy "${LIVE_IMAGE}" "${IMAGE}" "${driver}" "${level}" "${block}" "${dedupe}")"
+    # Assign first so a failed assembly aborts here (set -e); a here-string
+    # around "$(...)" would discard the exit status and record empty fields.
+    result="$(measure_strategy "${LIVE_IMAGE}" "${IMAGE}" "${driver}" "${level}" "${block}" "${dedupe}")"
+    read -r squashfs_bytes rootfs_bytes <<< "${result}"
+    if [[ ! "${squashfs_bytes}" =~ ^[0-9]+$ || ! "${rootfs_bytes}" =~ ^[0-9]+$ ]]; then
+      echo "${NAME}/${name}: expected two byte counts, got '${result}'" >&2
+      exit 1
+    fi
     echo "  ${NAME}/${name}: squashfs ${squashfs_bytes} B (rootfs ${rootfs_bytes} B uncompressed)"
     _json_add "${NAME}" "${name}" "${driver}" "${level}" "${block}" "${dedupe}" "${squashfs_bytes}" "${rootfs_bytes}"
   done

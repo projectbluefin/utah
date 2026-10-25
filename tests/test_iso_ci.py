@@ -608,10 +608,47 @@ class MeasureIsoStoreTests(unittest.TestCase):
             p.chmod(0o755)
             return p
 
-        write("podman", "#!/usr/bin/env bash\ncase \"$1\" in\n image)\n  case \"$2\" in\n   mount) printf '%s\\n' \"$MOUNT_DIR\" ;;\n   exists) exit 0 ;;\n  esac ;;\n unshare) shift; exec \"$@\" ;;\n run) exit 0 ;;\nesac\nexit 0\n")
+        # The fake podman rejects a multi-line or empty image reference the way
+        # real podman does, and `run` creates <graphroot>/<driver> from the
+        # mounted storage.conf so the harness's driver check sees a real store.
+        write("podman", r"""#!/usr/bin/env bash
+check_ref() {
+  case "$1" in
+    ""|*$'\n'*) echo "invalid reference format: '$1'" >&2; exit 125 ;;
+  esac
+}
+case "$1" in
+ image)
+  case "$2" in
+   mount) check_ref "$3"; printf '%s\n' "$MOUNT_DIR" ;;
+   exists) exit 0 ;;
+  esac ;;
+ unshare) shift; exec "$@" ;;
+ build) echo "STEP 1/1: FROM fake" ;;
+ run)
+  shift; store=""; conf=""; image=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -v)
+        case "$2" in
+          *:/payload-store) store="${2%:/payload-store}" ;;
+          *:/tmp/storage.conf:ro) conf="${2%:/tmp/storage.conf:ro}" ;;
+        esac
+        shift 2 ;;
+      --*) shift ;;
+      *) image="$1"; break ;;
+    esac
+  done
+  check_ref "$image"
+  driver="$(sed -n 's/^driver = "\(.*\)"$/\1/p' "$conf")"
+  mkdir -p "$store/$driver" ;;
+esac
+exit 0
+""")
         write("skopeo", "#!/usr/bin/env bash\nexit 0\n")
         write("mksquashfs",
-              "#!/usr/bin/env bash\n: > \"$2\"\nprintf '%s\\n' \"$*\" >> \"$RECORD_FILE\"\nexit 0\n")
+              "#!/usr/bin/env bash\n[[ -z \"${MKSQUASHFS_FAIL:-}\" ]] || exit 1\n"
+              ": > \"$2\"\nprintf '%s\\n' \"$*\" >> \"$RECORD_FILE\"\nexit 0\n")
         write("du", "#!/usr/bin/env bash\nprintf '%s\\t%s\\n' \"$DU_BYTES\" \"$2\"\n")
         env = dict(os.environ)
         env["PATH"] = f"{bin}:{env.get('PATH','')}"
@@ -668,7 +705,7 @@ class MeasureIsoStoreTests(unittest.TestCase):
                     ["bash", str(self.SCRIPT), "main=ghcr.io/projectbluefin/utah:testing"],
                     capture_output=True, text=True, env=env)
                 self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(result.stderr, "", result.stderr)
+                self.assertNotIn("Building live image", result.stdout)
 
                 data = json.loads(self.EVIDENCE.read_text())
                 self.assertEqual(data["issue"], "projectbluefin/utah#875")
@@ -689,6 +726,24 @@ class MeasureIsoStoreTests(unittest.TestCase):
                 self.assertIn("-comp zstd", log)
                 self.assertIn("-Xcompression-level 3", log)
                 self.assertIn("-Xcompression-level 15", log)
+        finally:
+            self.EVIDENCE.write_text(original)
+
+
+    def test_measure_harness_fails_when_a_strategy_fails(self):
+        # A failed assembly must abort the run and leave the committed evidence
+        # untouched rather than writing empty (invalid JSON) byte fields.
+        original = self.EVIDENCE.read_text()
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                tmp = Path(td)
+                env = self._stubs(tmp, tmp / "mksquashfs.log")
+                env["MKSQUASHFS_FAIL"] = "1"
+                result = subprocess.run(
+                    ["bash", str(self.SCRIPT), "main=ghcr.io/projectbluefin/utah:testing"],
+                    capture_output=True, text=True, env=env)
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertEqual(self.EVIDENCE.read_text(), original)
         finally:
             self.EVIDENCE.write_text(original)
 
