@@ -136,11 +136,10 @@ intended to prove live desktop boot first; bootc-installer/offline payload
 integration is the next ISO milestone. `luks-e2e.sh`'s live-boot gate asserts
 the `UTAH_LIVE_READY` marker on the serial console in addition to
 `graphical.target`, because the marker is written only by the
-`utah-live-ready.service` oneshot that runs after
-`display-manager.service` has started. `just boot-iso` boots it with
-QEMU-for-Docker and exposes the noVNC console at the printed URL (comment
-above `boot-iso` in `Justfile`), with TPM, UEFI, and `-snapshot` so nothing
-persists.
+`utah-live-ready.service` oneshot that runs after `display-manager.service`
+has started. `just boot-iso` boots it with QEMU-for-Docker and exposes the
+noVNC console at the printed URL (comment above `boot-iso` in `Justfile`),
+with TPM, UEFI, and `-snapshot` so nothing persists.
 
 ### Units that must stand down on live media
 
