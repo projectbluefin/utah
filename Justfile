@@ -646,10 +646,12 @@ iso stream="testing" debug="0":
 # NOT assemble the ISO or boot it. Pass NAME=IMAGE pairs; defaults to the two
 # largest flavors:
 #   just measure-iso main=ghcr.io/projectbluefin/utah:testing
-measure-iso:
+measure-iso *flavors:
     #!/usr/bin/env bash
     set -euo pipefail
-    bash iso/scripts/measure-iso-store.sh "${@:-main=ghcr.io/{{ repo_organization }}/utah:testing nvidia-gaming=ghcr.io/{{ repo_organization }}/utah-nvidia-gaming:testing}"
+    flavors=({{ flavors }})
+    [[ ${#flavors[@]} -gt 0 ]] || flavors=(main=ghcr.io/{{ repo_organization }}/utah:testing nvidia-gaming=ghcr.io/{{ repo_organization }}/utah-nvidia-gaming:testing)
+    bash iso/scripts/measure-iso-store.sh "${flavors[@]}"
 
 # Fast live ISO via tacklebox for any flavors.json flavor, including variants
 # this project publishes no ISO for. Two stages: a rootless Flatpak bake

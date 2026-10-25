@@ -25,6 +25,10 @@
 #
 # Requires podman, skopeo, mksquashfs, and the source image pulled locally.
 set -euo pipefail
+# Keep set -e inside the command substitutions below (measure_strategy runs in
+# "$(...)"): without inherit_errexit bash ignores set -e there, so a failed
+# skopeo copy or mksquashfs would be silently turned into a fabricated row.
+shopt -s inherit_errexit
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT}"
@@ -61,6 +65,8 @@ _json_end() { _JSON+="
 # Assembles one squashfs root for one strategy and prints "squashfs_bytes
 # rootfs_uncompressed_bytes". Reuses build-iso.sh's exact skopeo + storage.conf
 # + podman-run + mksquashfs commands so the number is comparable to a real ISO.
+# The whole assembly runs inside `podman unshare` so rootless Podman accepts
+# `image mount`, exactly as build-iso.sh does.
 measure_strategy() { # LIVE_IMAGE PAYLOAD_IMAGE driver level block dedupe
   local LIVE_IMAGE="$1" PAYLOAD_IMAGE="$2" driver="$3" level="$4" block="$5" dedupe="$6"
   local WORK SQUASHFS_ROOT PAYLOAD_EXPORT PAYLOAD_STORE STORAGE_CONF
@@ -69,62 +75,94 @@ measure_strategy() { # LIVE_IMAGE PAYLOAD_IMAGE driver level block dedupe
   PAYLOAD_EXPORT="${WORK}/utah-payload"
   PAYLOAD_STORE="${WORK}/payload-store"
   STORAGE_CONF="${WORK}/payload-storage.conf"
-  trap 'rm -rf "${WORK}"' EXIT
+  # Bake WORK and LIVE_IMAGE into the trap string (double quotes) so the EXIT
+  # trap still sees them when it fires inside the command-substitution
+  # subshell: a bare "${WORK}" there is already unset, printing
+  # "WORK: unbound variable" and skipping cleanup (leaking ~13 GiB trees).
+  trap "rm -rf '${WORK}'; podman image unmount '${LIVE_IMAGE}' >/dev/null 2>&1 || true" EXIT
 
-  local MOUNT
-  MOUNT="$(podman image mount "${LIVE_IMAGE}")"
-  mkdir -p "${SQUASHFS_ROOT}"
-  cp -a "${MOUNT}/." "${SQUASHFS_ROOT}/"
+  # build-iso.sh runs its whole mount/copy/skopeo/podman-run/squashfs assembly
+  # inside `podman unshare` so rootless Podman accepts `image mount`; mirror it
+  # here. The "squashfs_bytes rootfs_bytes" line is the only output that
+  # escapes back to this function's stdout.
+  podman unshare bash -s -- \
+    "${LIVE_IMAGE}" "${PAYLOAD_IMAGE}" "${driver}" "${level}" "${block}" \
+    "${dedupe}" "${WORK}" "${SQUASHFS_ROOT}" "${PAYLOAD_EXPORT}" \
+    "${PAYLOAD_STORE}" "${STORAGE_CONF}" <<'ASSEMBLY'
+set -euo pipefail
+LIVE_IMAGE="$1"
+PAYLOAD_IMAGE="$2"
+driver="$3"
+level="$4"
+block="$5"
+dedupe="$6"
+WORK="$7"
+SQUASHFS_ROOT="$8"
+PAYLOAD_EXPORT="${9}"
+PAYLOAD_STORE="${10}"
+STORAGE_CONF="${11}"
+cleanup() {
+    set +e
+    podman image unmount "${LIVE_IMAGE}" >/dev/null 2>&1
+    rm -rf "${WORK}"
+}
+trap cleanup EXIT
 
-  mkdir -p "${PAYLOAD_STORE}"
-  # driver = overlay keeps one directory per layer; driver = vfs keeps a full
-  # flattened copy per layer. The vendor drop-in in the image sets overlay, but
-  # this run overrides CONTAINERS_STORAGE_CONF, so the driver here is real.
-  printf '[storage]\ndriver = "%s"\nrunroot = "/tmp/cs-runroot"\ngraphroot = "/payload-store"\n' "${driver}" > "${STORAGE_CONF}"
+MOUNT="$(podman image mount "${LIVE_IMAGE}")"
+mkdir -p "${SQUASHFS_ROOT}"
+cp -a "${MOUNT}/." "${SQUASHFS_ROOT}/"
 
-  local payload_source="containers-storage:${PAYLOAD_IMAGE}"
-  local copy_flags=(--remove-signatures)
-  if [[ "${PAYLOAD_IMAGE}" == *@sha256:* ]]; then
+mkdir -p "${PAYLOAD_STORE}"
+# driver = overlay keeps one directory per layer; driver = vfs keeps a full
+# flattened copy per layer. The vendor drop-in in the image sets overlay, but
+# this run overrides CONTAINERS_STORAGE_CONF, so the driver here is real.
+printf '[storage]\ndriver = "%s"\nrunroot = "/tmp/cs-runroot"\ngraphroot = "/payload-store"\n' "${driver}" > "${STORAGE_CONF}"
+
+payload_source="containers-storage:${PAYLOAD_IMAGE}"
+copy_flags=(--remove-signatures)
+if [[ "${PAYLOAD_IMAGE}" == *@sha256:* ]]; then
     payload_source="docker://${PAYLOAD_IMAGE}"
     copy_flags+=(--preserve-digests)
-  fi
-  skopeo copy "${copy_flags[@]}" "${payload_source}" "dir:${PAYLOAD_EXPORT}"
-  podman run --rm --privileged \
+fi
+skopeo copy "${copy_flags[@]}" "${payload_source}" "dir:${PAYLOAD_EXPORT}"
+podman run --rm --privileged \
     -v "${PAYLOAD_EXPORT}:/payload:ro" \
     -v "${PAYLOAD_STORE}:/payload-store" \
     -v "${STORAGE_CONF}:/tmp/storage.conf:ro" \
     "${LIVE_IMAGE}" sh -c 'mkdir -p /tmp/cs-runroot /var/tmp && CONTAINERS_STORAGE_CONF=/tmp/storage.conf skopeo copy --preserve-digests dir:/payload "containers-storage:$1"' sh "${PAYLOAD_IMAGE}"
-  mkdir -p "${SQUASHFS_ROOT}/usr/lib/containers/storage"
-  cp -a "${PAYLOAD_STORE}/." "${SQUASHFS_ROOT}/usr/lib/containers/storage/"
+mkdir -p "${SQUASHFS_ROOT}/usr/lib/containers/storage"
+cp -a "${PAYLOAD_STORE}/." "${SQUASHFS_ROOT}/usr/lib/containers/storage/"
 
-  # dedupe=hardlink: replace store files of identical content with a hardlink to
-  # the rootfs copy. squashfs already dedups content, so this should read ~0; it
-  # exists to confirm that, not to shrink further. Hash only files under 16 MiB
-  # to keep the scan cheap (huge blobs barely change % size).
-  if [[ "${dedupe}" == "hardlink" ]]; then
-    local -A HASH=()
+# dedupe=hardlink: replace store files of identical content with a hardlink to
+# the rootfs copy. squashfs already dedups content, so this should read ~0; it
+# exists to confirm that, not to shrink further. Hash only files under 16 MiB
+# to keep the scan cheap (huge blobs barely change % size). The map is seeded
+# from the rootfs EXCLUDING the store we are about to dedupe, and the second
+# pass walks the store that actually lands in the squashfs root -- so the
+# hardlinks really change what mksquashfs compresses.
+if [[ "${dedupe}" == "hardlink" ]]; then
+    declare -A HASH=()
     while IFS= read -r -d '' f; do
-      local h; h="$(sha256sum "${f}" | cut -d' ' -f1)"
-      HASH["${h}"]="${f}"
-    done < <(find "${SQUASHFS_ROOT}" -type f -size -16M -print0)
+        h="$(sha256sum "${f}" | cut -d' ' -f1)"
+        HASH["${h}"]="${f}"
+    done < <(find "${SQUASHFS_ROOT}" -path "${SQUASHFS_ROOT}/usr/lib/containers/storage" -prune -o -type f -size -16M -print0)
     while IFS= read -r -d '' f; do
-      local h; h="$(sha256sum "${f}" | cut -d' ' -f1)"
-      if [[ -n "${HASH[${h}]:-}" ]]; then
-        rm -f "${f}"
-        ln "${HASH[${h}]}" "${f}" 2>/dev/null || true
-      fi
-    done < <(find "${PAYLOAD_STORE}" -type f -size -16M -print0)
-  fi
+        h="$(sha256sum "${f}" | cut -d' ' -f1)"
+        if [[ -n "${HASH[${h}]:-}" ]]; then
+            rm -f "${f}"
+            ln "${HASH[${h}]}" "${f}" 2>/dev/null || true
+        fi
+    done < <(find "${SQUASHFS_ROOT}/usr/lib/containers/storage" -type f -size -16M -print0)
+fi
 
-  local rootfs_bytes
-  rootfs_bytes="$(du -sb "${SQUASHFS_ROOT}" | cut -f1)"
-  local SQUASHFS="${WORK}/squashfs.img"
-  mksquashfs "${SQUASHFS_ROOT}" "${SQUASHFS}" \
+rootfs_bytes="$(du -sb "${SQUASHFS_ROOT}" | cut -f1)"
+SQUASHFS="${WORK}/squashfs.img"
+mksquashfs "${SQUASHFS_ROOT}" "${SQUASHFS}" \
     -noappend -comp zstd -Xcompression-level "${level}" -b "${block}" -processors 4 \
     -wildcards -e 'proc/*' -e 'sys/*' -e 'dev/*' -e run -e tmp
-  local squashfs_bytes
-  squashfs_bytes="$(du -b "${SQUASHFS}" | cut -f1)"
-  echo "${squashfs_bytes} ${rootfs_bytes}"
+squashfs_bytes="$(du -b "${SQUASHFS}" | cut -f1)"
+echo "${squashfs_bytes} ${rootfs_bytes}"
+ASSEMBLY
 }
 
 # ---- build one flavor's live image -----------------------------------------
@@ -174,11 +212,12 @@ mkdir -p "$(dirname "${OUTPUT_JSON}")"
 cat > "${OUTPUT_JSON}" <<EOF
 {
   "issue": "projectbluefin/utah#875",
-  "note": "Squashfs-root sizes per strategy. Baselines (production settings) are recorded here; strategy rows are filled by running 'just measure-iso'.", 
-  "baselines": [
-    {"flavor": "main", "strategy": "production", "driver": "overlay", "comp_level": 3, "block_size": 131072, "dedupe": "none", "squashfs_bytes": null, "rootfs_uncompressed_bytes": null},
-    {"flavor": "nvidia-gaming", "strategy": "production", "driver": "overlay", "comp_level": 3, "block_size": 131072, "dedupe": "none", "squashfs_bytes": null, "rootfs_uncompressed_bytes": null}
-  ],
+  "note": "Squashfs-root sizes per strategy. The baseline row (production settings) is the reference; strategy rows are filled by running 'just measure-iso'.",
+  "full_iso_reference": {
+    "note": "Full ISO sizes from CI for context; the harness measures the squashfs root only.",
+    "main": { "bytes": 7288455168, "gib": 6.79, "source": "post-testing E2E run 40107791411, 2026-10-24" },
+    "nvidia-gaming": { "bytes": null, "source": "pending measurement" }
+  },
   "strategies": ${_JSON}
 }
 EOF

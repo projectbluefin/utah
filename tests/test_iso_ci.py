@@ -592,6 +592,9 @@ class MeasureIsoStoreTests(unittest.TestCase):
         axis; `du` returns a fixed byte count for both -b and -sb."""
         mount_dir = tmp / "mount"
         mount_dir.mkdir()
+        # UTAH_ISO_WORKDIR must exist so the harness's mktemp -d succeeds;
+        # without it measure_strategy aborts and emits no table.
+        (tmp / "work").mkdir()
         (mount_dir / "var").mkdir()
         (mount_dir / "etc").mkdir()
         (mount_dir / "etc").joinpath("utah").write_text("utah\n")
@@ -605,7 +608,7 @@ class MeasureIsoStoreTests(unittest.TestCase):
             p.chmod(0o755)
             return p
 
-        write("podman", "#!/usr/bin/env bash\ncase \"$1\" in\n image)\n  case \"$2\" in\n   mount) printf '%s\\n' \"$MOUNT_DIR\" ;;\n   exists) exit 0 ;;\n  esac ;;\n run) exit 0 ;;\nesac\nexit 0\n")
+        write("podman", "#!/usr/bin/env bash\ncase \"$1\" in\n image)\n  case \"$2\" in\n   mount) printf '%s\\n' \"$MOUNT_DIR\" ;;\n   exists) exit 0 ;;\n  esac ;;\n unshare) shift; exec \"$@\" ;;\n run) exit 0 ;;\nesac\nexit 0\n")
         write("skopeo", "#!/usr/bin/env bash\nexit 0\n")
         write("mksquashfs",
               "#!/usr/bin/env bash\n: > \"$2\"\nprintf '%s\\n' \"$*\" >> \"$RECORD_FILE\"\nexit 0\n")
@@ -637,17 +640,19 @@ class MeasureIsoStoreTests(unittest.TestCase):
     def test_evidence_file_has_the_harness_schema(self):
         data = json.loads(self.EVIDENCE.read_text())
         self.assertEqual(data["issue"], "projectbluefin/utah#875")
-        self.assertIn("baselines", data)
         self.assertIn("strategies", data)
-        for entry in data["baselines"]:
+        for entry in data["strategies"]:
             for key in ("flavor", "strategy", "driver", "comp_level",
                         "block_size", "dedupe", "squashfs_bytes",
                         "rootfs_uncompressed_bytes"):
                 self.assertIn(key, entry)
+        # full_iso_reference is emitted by the harness heredoc, so it must stay
+        # in the committed file (finding #1545-7: the harness used to drop it).
+        self.assertIn("full_iso_reference", data)
 
     def test_justfile_wires_the_measure_recipe(self):
         just = (ROOT / "Justfile").read_text()
-        self.assertRegex(just, re.compile(r"^measure-iso:", re.MULTILINE))
+        self.assertRegex(just, re.compile(r"^measure-iso\s*\*flavors:", re.MULTILINE))
         self.assertIn("iso/scripts/measure-iso-store.sh", just)
 
     def test_measure_harness_runs_and_emits_a_valid_table(self):
@@ -663,6 +668,7 @@ class MeasureIsoStoreTests(unittest.TestCase):
                     ["bash", str(self.SCRIPT), "main=ghcr.io/projectbluefin/utah:testing"],
                     capture_output=True, text=True, env=env)
                 self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stderr, "", result.stderr)
 
                 data = json.loads(self.EVIDENCE.read_text())
                 self.assertEqual(data["issue"], "projectbluefin/utah#875")
