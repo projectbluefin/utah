@@ -650,7 +650,11 @@ measure-iso *flavors:
     #!/usr/bin/env bash
     set -euo pipefail
     flavors=({{ flavors }})
-    [[ ${#flavors[@]} -gt 0 ]] || flavors=(main=ghcr.io/{{ repo_organization }}/utah:testing nvidia-gaming=ghcr.io/{{ repo_organization }}/utah-nvidia-gaming:testing)
+    if [[ ${#flavors[@]} -eq 0 ]]; then
+      for f in main nvidia-gaming; do
+        flavors+=("$f=ghcr.io/{{ repo_organization }}/$(python3 scripts/flavors.py image "$f"):testing")
+      done
+    fi
     bash iso/scripts/measure-iso-store.sh "${flavors[@]}"
 
 # Fast live ISO via tacklebox for any flavors.json flavor, including variants

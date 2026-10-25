@@ -12,7 +12,7 @@
 #   [OUTPUT_JSON=path] measure-iso-store.sh NAME=IMAGE [NAME=IMAGE ...]
 #     NAME=IMAGE   one flavor to measure, e.g.
 #                  main=ghcr.io/projectbluefin/utah:testing
-#                  nvidia-gaming=ghcr.io/projectbluefin/utah-nvidia-gaming:testing
+#                  nvidia-gaming=ghcr.io/projectbluefin/$(flavors.py image nvidia-gaming):testing
 #     OUTPUT_JSON  environment variable naming the results file
 #                  (default: evidence/iso-size.json)
 #
