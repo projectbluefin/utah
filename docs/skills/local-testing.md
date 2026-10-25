@@ -329,8 +329,9 @@ the terminal autostart release via a trigger file so `installed-desktop.png`
 captures a clean desktop state before `installed-fastfetch.png` captures the
 terminal overlay, preventing duplicate verification evidence (#240). CI sets
 `UTAH_E2E_REQUIRE_FASTFETCH=1` to require OCR of its completion marker and
-kernel output, and `UTAH_E2E_REQUIRE_SCREENSHOTS=1` to reject missing PNGs.
-CI retains the tested commit/image digest and proposes evidence updates in a
+kernel output, and `UTAH_E2E_REQUIRE_SCREENSHOTS=1` to reject missing PNGs and
+blank or flat-colour frames: a solid-black or frozen screen would otherwise pass
+the non-empty check and be published as proof a session started (#786). CI retains the tested commit/image digest and proposes evidence updates in a
 documentation PR only after all flavors pass. See [ci-workflows.md](ci-workflows.md).
 
 Ghostty is the only terminal the harness's fastfetch capture can show, and

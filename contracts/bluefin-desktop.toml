@@ -148,6 +148,9 @@ files = [
 # by ublue-firstboot-date.service instead of inferring age from /var/log.
 "/usr/share/ublue-os/fastfetch.jsonc" = [
   "/var/lib/ublue-os/install-date",
+  # The community stats come from bluefin-stats-refresh.service's cache (#860).
+  "cat /var/cache/bluefin-stats/fastfetch-user-count 2>/dev/null || cat /usr/share/ublue-os/fastfetch-user-count",
+  "cat /var/cache/bluefin-stats/bazaar-install-count 2>/dev/null || cat /usr/share/ublue-os/bazaar-install-count",
 ]
 # Dakota parity (#675): ublue-image-info.sh reads the booted tag through
 # Common's ublue-booted-image reader, which falls back to the boot-time

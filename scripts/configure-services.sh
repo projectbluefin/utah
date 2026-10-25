@@ -107,6 +107,24 @@ if [ -f "${FASTFETCH_JSONC}" ]; then
         exit 1
     fi
 fi
+# Community stats for fastfetch: read what bluefin-stats-refresh.service last
+# fetched, and fall back to the build-time placeholder until it has run once.
+# Common reads only the /usr/share/ublue-os copy, which is read-only at runtime,
+# so without this the banner shows the placeholder forever (#860).
+STATS_CACHE=/var/cache/bluefin-stats
+if [ -f "${FASTFETCH_JSONC}" ]; then
+    if grep -qF "${STATS_CACHE}/" "${FASTFETCH_JSONC}"; then
+        : already patched
+    elif grep -qF '"cat /usr/share/ublue-os/fastfetch-user-count"' "${FASTFETCH_JSONC}" \
+        && grep -qF '"cat /usr/share/ublue-os/bazaar-install-count"' "${FASTFETCH_JSONC}"; then
+        for stat in fastfetch-user-count bazaar-install-count; do
+            sed -i "s#\"cat /usr/share/ublue-os/${stat}\"#\"cat ${STATS_CACHE}/${stat} 2>/dev/null || cat /usr/share/ublue-os/${stat}\"#" "${FASTFETCH_JSONC}"
+        done
+    else
+        echo "ERROR: ${FASTFETCH_JSONC} changed upstream -- re-fit the community-stats patch (see bluefin-stats-refresh.service)" >&2
+        exit 1
+    fi
+fi
 # Booted image tag for fastfetch: Common's image-info script asks
 # /usr/libexec/ublue-booted-image, which falls back to the boot-time snapshot
 # ublue-booted-image.service writes when unprivileged `bootc status` fails

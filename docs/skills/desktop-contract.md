@@ -89,8 +89,9 @@ The TOML's sections are the contract's table of contents:
   The last two units are Dakota parity (#675): install-date stamping and the
   booted-image snapshot Common's `/usr/libexec/ublue-booted-image` falls back
   to (fastfetch image line). `configure-services.sh` enables them, patches
-  Common's fastfetch and `uwelcome.sh` configuration (non-interactive shells
-  skip the welcome greeting), and fails if that image-info fallback drops. Wallpaper rotation is
+  Common's fastfetch ([stats](desktop-contract/references/stats-refresh.md)) and
+  `uwelcome.sh` configuration (non-interactive shells skip the welcome greeting),
+  and fails if that image-info fallback drops. Wallpaper rotation is
   deliberately NOT Dakota parity: Common's per-user `bluefin-dynamic-wallpaper`
   timer is hemisphere-aware and rotates live at month boundaries, while
   Dakota's boot-time month symlink is northern-only and stale until reboot, so

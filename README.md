@@ -3,7 +3,7 @@
 <!-- BEGIN E2E VERIFICATION -->
 [![Verified ISO desktop](docs/verification/screenshots/installed-fastfetch.png)](docs/verification/README.md)
 
-*LUKS ISO test passed for commit `c840e304dbbe`. [CI run](https://github.com/projectbluefin/utah/actions/runs/38979313784); [screenshots and provenance](docs/verification/README.md).*
+*LUKS ISO test passed for commit `d0f7361a65a1`. [CI run](https://github.com/projectbluefin/utah/actions/runs/40133928234); [screenshots and provenance](docs/verification/README.md).*
 <!-- END E2E VERIFICATION -->
 
 †Utahraptor ostrommaysi
@@ -53,7 +53,7 @@ Like Bluefin, Utah builds four hardware flavors (`utah`, `utah-nvidia`,
 | Tag | Stream | Status |
 | ---: | ---: | :--- |
 | `:testing` | Testing | Published at `ghcr.io/projectbluefin/utah:testing` after end-to-end ISO validation passes. |
-| `:stable` | Stable | Planned; promoted from `:testing` once ready. |
+| `:stable` | Stable | Rolling tag, moved from `:testing` on each promotion to `main` after the release gate passes on the exact candidate digests. Pre-alpha like everything here. |
 
 ## Package parity with Bluefin
 

@@ -770,5 +770,97 @@ class FwupdRefreshDropInTests(unittest.TestCase):
             )
 
 
+class StatsRefreshCacheTests(unittest.TestCase):
+    """fastfetch must be able to read what bluefin-stats-refresh.service fetched.
+
+    The unit used DynamicUser=yes, which always puts CacheDirectory= under
+    /var/cache/private (mode 0700), and Common's fastfetch.jsonc only read
+    the read-only /usr/share/ublue-os placeholders, so the banner showed the
+    placeholder forever (#860).
+    """
+
+    UNIT = ROOT / "system_files/shared/usr/lib/systemd/system/bluefin-stats-refresh.service"
+    SYSUSERS = ROOT / "system_files/shared/usr/lib/sysusers.d/utah-bluefin-stats.conf"
+    SCRIPT = ROOT / "system_files/shared/usr/libexec/bluefin-refresh-stats"
+    CACHE = "/var/cache/bluefin-stats"
+    STATS = ("fastfetch-user-count", "bazaar-install-count")
+
+    @staticmethod
+    def directives(path):
+        return [
+            line.strip() for line in path.read_text().splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+
+    def test_unit_cache_is_public_and_owned_by_a_static_user(self):
+        lines = self.directives(self.UNIT)
+        for required in (
+            "DynamicUser=no",
+            "User=bluefin-stats",
+            "Group=bluefin-stats",
+            "CacheDirectory=bluefin-stats",
+            "CacheDirectoryMode=0755",
+            # Implied by DynamicUser=yes, not by DynamicUser=no.
+            "NoNewPrivileges=yes",
+            "PrivateTmp=yes",
+            "RemoveIPC=yes",
+            "RestrictSUIDSGID=yes",
+            "ProtectSystem=strict",
+        ):
+            with self.subTest(directive=required):
+                self.assertIn(required, lines)
+        self.assertNotIn("DynamicUser=yes", lines)
+        # Reusing "bluefin" would make systemd rename the existing
+        # /var/cache/private/bluefin back on upgraded machines.
+        self.assertNotIn("CacheDirectory=bluefin", lines)
+
+    def test_sysusers_allocates_the_unit_user(self):
+        active = self.directives(self.SYSUSERS)
+        self.assertEqual(len(active), 1)
+        fields = active[0].split(None, 3)
+        self.assertEqual(fields[:3], ["u", "bluefin-stats", "-"])
+
+    def test_script_writes_where_fastfetch_reads(self):
+        script = self.SCRIPT.read_text()
+        self.assertIn(f"${{CACHE_DIRECTORY:-{self.CACHE}}}", script)
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        wanted = contract["configuration"]["file_contains"]["/usr/share/ublue-os/fastfetch.jsonc"]
+        for stat in self.STATS:
+            with self.subTest(stat=stat):
+                self.assertIn(f"write_stat {stat} ", script)
+                self.assertIn(
+                    f"cat {self.CACHE}/{stat} 2>/dev/null || cat /usr/share/ublue-os/{stat}",
+                    wanted,
+                )
+
+    def test_fastfetch_patch_rewrites_common_lines_once(self):
+        import re
+        import subprocess
+
+        services = (ROOT / "scripts/configure-services.sh").read_text()
+        block = re.search(r"^STATS_CACHE=.*?^fi$", services, re.S | re.M).group(0)
+        common = "\n".join(
+            f'      "text": "cat /usr/share/ublue-os/{stat}",' for stat in self.STATS
+        ) + "\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            jsonc = Path(tmp) / "fastfetch.jsonc"
+            jsonc.write_text(common)
+            script = f"FASTFETCH_JSONC={jsonc}\n{block}\n"
+            for _ in range(2):
+                subprocess.run(["bash", "-euo", "pipefail", "-c", script], check=True)
+            patched = jsonc.read_text()
+            for stat in self.STATS:
+                with self.subTest(stat=stat):
+                    self.assertEqual(
+                        patched.count(f"cat {self.CACHE}/{stat} 2>/dev/null || cat /usr/share/ublue-os/{stat}"),
+                        1,
+                    )
+
+            jsonc.write_text('      "text": "cat /somewhere/else",\n')
+            result = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("re-fit the community-stats patch", result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
