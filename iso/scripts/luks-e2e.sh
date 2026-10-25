@@ -641,7 +641,23 @@ echo "  gnome-shell: running as liveuser"
 
 live_session_type="$(ssh_live "loginctl show-session \$(loginctl show-user liveuser -p Display --value) -p Type --value" 2>/dev/null || true)"
 echo "  live session type: ${live_session_type:-unknown}"
-shot live-desktop "${MONITOR_LIVE}"
+# gnome-shell's process appears before it has drawn anything, so a frame grabbed
+# the moment pgrep succeeds can be flat black. The end-of-run blank-frame gate
+# (#786) would then fail a healthy boot on a timing accident. Retake until the
+# frame has content (up to ~60s); the gate still fails the run if it never does.
+shot_until_drawn() {
+    local label="$1" sock="$2" attempt
+    for attempt in $(seq 1 12); do
+        shot "${label}" "${sock}"
+        if [[ -s "${SHOTS}/${label}.png" ]] \
+            && ( screenshot_not_blank "${SHOTS}/${label}.png" ) >/dev/null 2>&1; then
+            return 0
+        fi
+        echo "  ${label}: frame not drawn yet (attempt ${attempt}/12); retaking"
+        sleep 5
+    done
+}
+shot_until_drawn live-desktop "${MONITOR_LIVE}"
 
 echo "=== Phase 3/7: install onto an encrypted disk ==="
 # An empty "image" with a "targetImgref" is the offline shape: fisherman then

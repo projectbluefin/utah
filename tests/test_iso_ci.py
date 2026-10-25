@@ -472,6 +472,44 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(skipped.returncode, 0, skipped.stderr)
         self.assertNotIn("present offline", skipped.stdout)
 
+    def test_live_desktop_is_retaken_until_the_frame_is_drawn(self):
+        # The live-desktop shot is grabbed as soon as gnome-shell's process
+        # exists, which can be before anything is drawn. A flat frame there must
+        # be retaken, not left for the end-of-run gate to fail a healthy boot;
+        # a frame that never draws must still be left blank for that gate.
+        script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
+        blank_fn = "screenshot_not_blank() {" + script.split(
+            "screenshot_not_blank() {", 1)[1].split("\n}\n", 1)[0] + "\n}\n"
+        retake_fn = "shot_until_drawn() {" + script.split(
+            "shot_until_drawn() {", 1)[1].split("\n}\n", 1)[0] + "\n}\n"
+
+        def drive(blank_shots):
+            with tempfile.TemporaryDirectory() as td:
+                td = Path(td)
+                self._make_png(td / "blank.png", True)
+                self._make_png(td / "real.png", False)
+                harness = (
+                    f"SHOTS={td}\ncalls=0\nsleep() {{ :; }}\n"
+                    "shot() { calls=$((calls+1)); "
+                    f"if [ $calls -le {blank_shots} ]; then cp {td}/blank.png \"$SHOTS/$1.png\"; "
+                    f"else cp {td}/real.png \"$SHOTS/$1.png\"; fi; }}\n"
+                    + blank_fn + retake_fn
+                    + "shot_until_drawn live-desktop sock\n"
+                    "echo calls=$calls\n"
+                    "if ( screenshot_not_blank \"$SHOTS/live-desktop.png\" ) >/dev/null 2>&1; "
+                    "then echo final=drawn; else echo final=blank; fi\n")
+                return subprocess.run(["bash", "-eu", "-c", harness],
+                                      capture_output=True, text=True)
+
+        early = drive(3)
+        self.assertEqual(early.returncode, 0, early.stderr)
+        self.assertIn("calls=4", early.stdout)
+        self.assertIn("final=drawn", early.stdout)
+        never = drive(99)
+        self.assertEqual(never.returncode, 0, never.stderr)
+        self.assertIn("calls=12", never.stdout)
+        self.assertIn("final=blank", never.stdout)
+
     def test_setup_unit_checks_reject_non_success_results(self):
         # systemd's Result= is success/exit-code/signal/timeout/...; it is never
         # "failed" (that is an ActiveState). A setup unit that exited non-zero
