@@ -2,9 +2,11 @@
 # Validate bootc upgrade and rollback lifecycle in QEMU.
 #
 # Lifecycle Phases:
-#   1. Boot a known Utah deployment, verify desktop session and baseline digest
+#   1. Boot a known Utah deployment, verify desktop session and baseline digest;
+#      when its SELinux store is writable, make four persistent SELinux changes
 #   2. Stage upgrade to a candidate digest using bootc / uupd policy
-#   3. Reboot into the upgraded deployment, verify graphical desktop and identity
+#   3. Reboot into the upgraded deployment, verify graphical desktop and identity,
+#      and that persistent SELinux changes work and survived the update (#551)
 #   4. Roll back to the previous deployment and reboot
 #   5. Verify the restored deployment boots successfully to graphical desktop
 #
@@ -162,6 +164,27 @@ verify_boot_files() {
     # argument. Preserve guest output even when a file or SSH check fails.
     ssh_target_sudo bash -c "${checker}" > "${EVIDENCE}/boot-files-${phase}.txt" 2>&1 \
         || diagnose_failure "Kernel/initrd file validation failed (${phase}); see boot-files-${phase}.txt"
+}
+
+# Persistent SELinux changes (#551): the candidate must keep its policy store
+# under writable /etc/selinux, and ostree's policy rebuild in the new
+# deployment must carry local changes forward while the image's own policy
+# still takes effect. Modes: probe, apply, verify, reject, remove; stdout and stderr
+# land in evidence/selinux-<mode>-<phase>.txt. Returns the checker's status.
+selinux_check() {
+    local phase="$1" mode="$2" checker
+    checker="$(< "${ROOT}/iso/scripts/verify-selinux-store.sh")"
+    ssh_target_sudo bash -c "${checker}" utah-selinux "${mode}" \
+        > "${EVIDENCE}/selinux-${mode}-${phase}.txt" 2>&1
+}
+
+# Prints `persistent` or `immutable`. Never calls diagnose_failure itself:
+# callers run it in a command substitution, where the report would be
+# swallowed, so they test its status instead.
+selinux_probe() {
+    local phase="$1"
+    selinux_check "${phase}" probe || return 1
+    tail -n 1 "${EVIDENCE}/selinux-probe-${phase}.txt"
 }
 
 lifecycle_helper() {
@@ -572,6 +595,23 @@ verify_boot_files baseline
 
 verify_bootmgr_entries "${WORK}/baseline-status.json" baseline booted
 
+# A baseline that already keeps its store under /etc gets the four sample
+# changes now, so Phase 3 proves they survive the update. A baseline from
+# before the store moved cannot persist anything; Phase 3 then proves the
+# update alone makes it possible (a machine installed earlier gains it by
+# updating, no reinstall or migration step).
+SELINUX_LOCAL_CHANGES=0
+BASELINE_SELINUX="$(selinux_probe baseline)" \
+    || diagnose_failure "Could not probe the SELinux store layout on the baseline deployment; see selinux-probe-baseline.txt"
+if [[ "${BASELINE_SELINUX}" == "persistent" ]]; then
+    selinux_check baseline apply \
+        || diagnose_failure "Persistent SELinux changes failed on the baseline deployment; see selinux-apply-baseline.txt"
+    SELINUX_LOCAL_CHANGES=1
+    echo "  [Phase 1] SELinux: four local policy changes applied; they must survive the upgrade"
+else
+    echo "  [Phase 1] SELinux: baseline keeps its policy store under read-only /usr; the upgrade must make persistent changes possible"
+fi
+
 python3 "${ROOT}/scripts/bootc_lifecycle.py" record-diagnostics \
     --output-dir "${EVIDENCE}" \
     --phase baseline \
@@ -682,6 +722,31 @@ verify_boot_files upgraded
 # failed to (re)write the rollback slot's BLS entry -- the booted entry
 # necessarily exists since the guest booted from it.
 verify_bootmgr_entries "${WORK}/upgraded-status.json" upgraded "booted,rollback"
+
+# The candidate must make persistent SELinux changes work. With changes made
+# in Phase 1 they must all be in effect after the reboot, together with the
+# new image's policy; otherwise the tools must work for the first time here.
+# Removal exercises the fourth tool path and leaves the deployment clean.
+UPGRADED_SELINUX="$(selinux_probe upgraded)" \
+    || diagnose_failure "Could not probe the SELinux store layout on the upgraded deployment; see selinux-probe-upgraded.txt"
+[[ "${UPGRADED_SELINUX}" == "persistent" ]] \
+    || diagnose_failure "Upgraded deployment keeps its SELinux policy store under read-only /usr; setsebool -P, semanage and semodule cannot work (#551)"
+if [[ "${SELINUX_LOCAL_CHANGES}" == 1 ]]; then
+    selinux_check upgraded verify \
+        || diagnose_failure "Local SELinux changes made before the upgrade are not in effect after it, or the image's policy is not; see selinux-verify-upgraded.txt"
+    echo "  [Phase 3] SELinux: local changes survived the upgrade alongside the image's policy"
+else
+    selinux_check upgraded apply \
+        || diagnose_failure "Persistent SELinux changes failed on the upgraded deployment; see selinux-apply-upgraded.txt"
+    echo "  [Phase 3] SELinux: persistent changes work on the upgraded deployment"
+fi
+# A module the policy compiler refuses must leave the store, the running
+# policy, the local changes and the labels untouched.
+selinux_check upgraded reject \
+    || diagnose_failure "A rejected local SELinux module changed the policy state on the upgraded deployment; see selinux-reject-upgraded.txt"
+echo "  [Phase 3] SELinux: invalid local module rejected without disturbing the policy"
+selinux_check upgraded remove \
+    || diagnose_failure "Removing the local SELinux changes failed on the upgraded deployment; see selinux-remove-upgraded.txt"
 
 python3 "${ROOT}/scripts/bootc_lifecycle.py" record-diagnostics \
     --output-dir "${EVIDENCE}" \

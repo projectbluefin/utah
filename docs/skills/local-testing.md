@@ -1,7 +1,7 @@
 ---
 name: local-testing
 version: "1.0"
-last_updated: "2026-10-11"
+last_updated: "2026-10-13"
 id: local-testing
 one_line_purpose: Build, install, and boot Utah locally in a VM or live ISO.
 entry_point: docs/skills/local-testing.md
@@ -387,38 +387,33 @@ baseline digest.
 Phase-keyed diagnostics (`evidence/lifecycle-*.json`, `lifecycle-summary.json`)
 and screendumps identify the active deployment and digest at every phase.
 
-After each lifecycle phase the harness also captures the BLS Type #1
-entries under the Fedora/bootc layout's BLS root `/boot/loader/entries/`
-(ostree writes them here per the sysroot deploy) and any
-`/boot/efi/loader/entries/` if present, then runs `validate-bootmgr`
-against them.
-This is the surface that an `ostree-finalize-staged` regression could
-silently leave behind: `bootc status` would still report the new
-deployment as queued, but the boot manager would have no entry to chain
-to it and the next reboot would boot the old kernel set. The validator
-parses the `ostree=/ostree/boot.N/<stateroot>/<bootcsum>/<serial>` path
-from each BLS entry's `options` line, groups both the expected
-deployments and the captured entries by their `(stateroot,
-deploy_serial)` tuple, and requires the count of entries in each group
-to be at least the count of deployments. A purely-by-serial match would
-let one BLS entry satisfy two deployments (ostree allocates
-`deployserial` per `(osname, commit)`, so two commits with no prior
-deployment at that commit both receive serial 0) and silently miss a
-missing-entry regression; the count check forces a failure in that
-case. The `<bootcsum>` segment in the path is the kernel+initramfs
-layout hash (ostree's `ostree_deployment_get_bootcsum`), NOT the
-commit checksum the deployment exposes as `ostree.checksum`, and is
-intentionally not used as a match key -- bootc's `BootEntryOstree`
-JSON does not expose it. Phase 3 (post-upgrade) and phase 4
-(post-rollback) both check the `booted` and `rollback` slots so a
-missing entry for the non-booted slot is caught even though the guest
-necessarily booted from the `booted` entry that already exists. The
-validator then confirms each matched entry carries a `linux` line and
-at least one of `initrd` or `options`. Evidence is written to
+After each lifecycle phase the harness also captures the BLS Type #1 entries
+under the Fedora/bootc layout's BLS root `/boot/loader/entries/` (ostree writes
+them here per the sysroot deploy) and any `/boot/efi/loader/entries/` if
+present, then runs `validate-bootmgr` against them. This is the surface that an
+`ostree-finalize-staged` regression could silently leave behind: `bootc status`
+would still report the new deployment as queued, but the boot manager would have
+no entry to chain to it and the next reboot would boot the old kernel set. The
+validator parses the `ostree=/ostree/boot.N/<stateroot>/<bootcsum>/<serial>`
+path from each BLS entry's `options` line, groups both the expected deployments
+and the captured entries by their `(stateroot, deploy_serial)` tuple, and
+requires the count of entries in each group to be at least the count of
+deployments. A purely-by-serial match would let one BLS entry satisfy two
+deployments (ostree allocates `deployserial` per `(osname, commit)`, so two
+commits with no prior deployment at that commit both receive serial 0) and
+silently miss a missing-entry regression; the count check forces a failure in
+that case. The `<bootcsum>` segment in the path is the kernel+initramfs layout
+hash (ostree's `ostree_deployment_get_bootcsum`), NOT the commit checksum the
+deployment exposes as `ostree.checksum`, and is intentionally not used as a
+match key -- bootc's `BootEntryOstree` JSON does not expose it. Phase 3
+(post-upgrade) and phase 4 (post-rollback) both check the `booted` and
+`rollback` slots so a missing entry for the non-booted slot is caught even
+though the guest necessarily booted from the `booted` entry that already exists.
+The validator then confirms each matched entry carries a `linux` line and at
+least one of `initrd` or `options`. Evidence is written to
 `evidence/loader-entries-<phase>.txt` (the raw BLS listing) and
-`evidence/bootmgr-<phase>.json` (which slot matched which entry,
-which slots had no entry, and any entries whose `ostree=` karg did not
-parse).
+`evidence/bootmgr-<phase>.json` (which slot matched which entry, which slots had
+no entry, and any entries whose `ostree=` karg did not parse).
 
 Each phase also runs `iso/scripts/verify-boot-files.sh` as root in the guest
 and saves `evidence/boot-files-<phase>.txt`. For every published OSTree BLS
@@ -432,6 +427,13 @@ entry/files are published during shutdown finalization and checked after reboot.
 This file gate complements deployment-to-entry matching (issue #361 / PR #571);
 it does not itself prove which deployment an entry represents. Fixture tests
 run the same guest checker via `python3 -m unittest discover -s tests -p test_boot_files.py`.
+
+Phases 1 and 3 also run `iso/scripts/verify-selinux-store.sh` in the guest (#551;
+evidence `selinux-<mode>-<phase>.txt`). `probe` reports whether the store is under
+`/etc/selinux` (`persistent`) or `/usr` (`immutable`). Phase 1 makes sample local
+changes; Phase 3 checks they survive the reboot along with the new image's policy,
+`/var/home` labels and `Enforcing`, then `reject` offers an invalid CIL module and
+`remove` cleans up. Mechanism: `containerfile.md`.
 
 The baseline image (default `ghcr.io/projectbluefin/utah:testing`, the target
 ref `just iso testing` builds with) is the ref a live ISO installs its offline
