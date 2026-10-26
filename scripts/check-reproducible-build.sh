@@ -47,7 +47,7 @@ VERSION="${VERSION:-reproducibility-probe}"
 SHA_HEAD_SHORT="${SHA_HEAD_SHORT:-probe}"
 REPO_ORGANIZATION="${REPO_ORGANIZATION:-projectbluefin}"
 # Hold the source commit epoch constant across both uncached builds.
-SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct -- Containerfile packages system_files scripts config .gitmodules)}"
+SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct -- Containerfile packages system_files scripts config .gitmodules docs/agent)}"
 
 # scripts/flavors.py owns the flavor roster and the published image name for
 # each flavor, as it does for build-ghcr. Building under any other IMAGE_NAME

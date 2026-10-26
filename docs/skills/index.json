@@ -56,6 +56,23 @@
       "doc_type": "policy"
     },
     {
+      "id": "diagnosis",
+      "name": "diagnosis",
+      "one_line_purpose": "Route running-machine diagnosis to the shipped Utah guidance.",
+      "entry_point": "docs/skills/diagnosis.md",
+      "category": "contracts",
+      "status": "active",
+      "tags": [
+        "diagnosis",
+        "on-device",
+        "agent"
+      ],
+      "description": "Diagnose a running Utah machine using its shipped context and installed tool inventory.",
+      "version": "1.0",
+      "last_updated": "2026-10-26",
+      "doc_type": "procedure"
+    },
+    {
       "id": "docs-parity",
       "name": "docs-parity",
       "one_line_purpose": "Reconcile Utah's README with the docs.projectbluefin.io/utah page before deleting duplicate prose.",

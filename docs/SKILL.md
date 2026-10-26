@@ -18,6 +18,7 @@ next to the code, and the skills cite them.
 
 | I need to... | Read |
 |---|---|
+| Diagnose a running machine or maintain the shipped context | [`skills/diagnosis.md`](skills/diagnosis.md) |
 | Build the image locally (quickstart) | [`building.md`](building.md#build-locally) |
 | Add, remove, or debug packages, or fix parity/check-repos failures | [`skills/package-contract.md`](skills/package-contract.md) |
 | Add, remove, or retire an image flavor | [`skills/flavors.md`](skills/flavors.md) |

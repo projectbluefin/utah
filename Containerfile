@@ -71,6 +71,11 @@ RUN set -eu; \
 
 # Stage source origins without committing their COPY mtimes to the runtime image.
 FROM scratch AS inputs
+COPY docs/agent /usr/share/utah/agent
+COPY Containerfile /usr/share/utah/agent/build-source.Containerfile
+COPY .gitmodules /usr/share/utah/agent/gitmodules
+COPY config/flavors.json /usr/share/utah/agent/flavors.json
+COPY scripts/build-gnome-extensions.sh /usr/share/utah/agent/build-gnome-extensions.sh.txt
 COPY packages/bluefin.toml packages/utah.toml contracts/bluefin-desktop.toml /usr/share/utah/
 COPY packages/hummingbird.repo packages/nvidia-container.repo packages/utah-packages.repo /etc/yum.repos.d/
 COPY packages/RPM-GPG-KEY-redhat-release-2 /etc/pki/rpm-gpg/

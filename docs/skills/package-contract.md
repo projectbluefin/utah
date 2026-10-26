@@ -16,6 +16,7 @@ description: >-
   firmware, [unavailable] rules, repository policy (on-image reposdir
   scan). Use when adding, removing,
   or debugging packages or parity/check-repos failures.
+on_device: docs/agent/skills/package-contract.md
 metadata:
   type: policy
 ---

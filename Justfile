@@ -155,6 +155,7 @@ check:
     bash scripts/check-skill-frontmatter.sh
     bash scripts/check-skill-index.sh
     python3 scripts/generate_skill_index.py --check
+    python3 scripts/generate_agent_context.py --check
     # Neither workflows nor the Justfile may carry their own copy of the flavor
     # list or flavored image names. That drift is what config/flavors.json and
     # scripts/flavors.py exist to stop: narrowing the build matrix while
@@ -460,10 +461,10 @@ build-ghcr base_name stream flavor kernel_pin="":
       hb_revision="$(date -u -d "@${hb_revision}" +%Y-%m-%d)"
     fi
     echo "Hummingbird repository day: ${hb_revision}"
-    # Epoch follows commits to build inputs, so documentation-only commits
-    # retain the cache key. The layer helper rejects any newer RPM payload
+    # Epoch follows commits to build inputs, including shipped device docs;
+    # other documentation-only commits retain the cache key. The layer helper rejects any newer RPM payload
     # before timestamp rewriting could invalidate its Python caches.
-    source_date_epoch="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct -- Containerfile packages system_files scripts config .gitmodules)}"
+    source_date_epoch="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct -- Containerfile packages system_files scripts config .gitmodules docs/agent)}"
     mapfile -t epoch_args < <(scripts/podman-epoch-args.sh "${source_date_epoch}" rewrite)
     podman build \
       "${epoch_args[@]}" \
@@ -501,7 +502,7 @@ build-local stream="testing" package_image="localhost/utah-packages:local-merged
     }
     version="local-{{ stream }}-$(git rev-parse --short HEAD)"
     # Same build-input epoch and guarded export policy as build-ghcr.
-    source_date_epoch="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct -- Containerfile packages system_files scripts config .gitmodules)}"
+    source_date_epoch="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct -- Containerfile packages system_files scripts config .gitmodules docs/agent)}"
     mapfile -t epoch_args < <(scripts/podman-epoch-args.sh "${source_date_epoch}" rewrite)
     podman build \
       "${epoch_args[@]}" \

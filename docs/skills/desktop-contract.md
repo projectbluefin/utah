@@ -15,12 +15,12 @@ description: >-
   The runtime desktop contract in contracts/bluefin-desktop.toml and its
   in-image verifiers. Use when changing branding, os-release, service
   presets, GNOME extensions, or first-boot Flatpak behavior.
+on_device: docs/agent/skills/desktop-contract.md
 metadata:
   type: policy
 ---
 
 # Desktop Contract
-
 `contracts/bluefin-desktop.toml` is the runtime contract for Utah's
 Bluefin-derived desktop experience on top of Hummingbird. It is intentionally
 separate from `packages/bluefin.toml`: package parity proves RPMs; this file

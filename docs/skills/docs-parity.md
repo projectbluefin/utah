@@ -16,6 +16,7 @@ description: >-
   is rendered at build time. Use when the README changes touch what the docs
   page shows, when the docs page gains a live component, or when reconciling
   the two for a release.
+on_device: docs/agent/skills/docs-parity.md
 metadata:
   type: procedure
 ---

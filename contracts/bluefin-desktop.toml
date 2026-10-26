@@ -5,6 +5,22 @@
 
 [branding]
 files = [
+  # Version-matched on-device agent guidance.
+  "/usr/share/utah/agent/AGENTS.md",
+  "/usr/share/utah/agent/SKILL.md",
+  "/usr/share/utah/agent/index.json",
+  "/usr/share/utah/agent/repo-map.md",
+  "/usr/share/utah/agent/build-source.Containerfile",
+  "/usr/share/utah/agent/gitmodules",
+  "/usr/share/utah/agent/flavors.json",
+  "/usr/share/utah/agent/build-gnome-extensions.sh.txt",
+  "/usr/share/utah/agent/skills/desktop-contract.md",
+  "/usr/share/utah/agent/skills/diagnosis.md",
+  "/usr/share/utah/agent/skills/docs-parity.md",
+  "/usr/share/utah/agent/skills/flavors.md",
+  "/usr/share/utah/agent/skills/package-contract.md",
+  "/usr/share/utah/agent/skills/setup-hooks.md",
+
   "/usr/share/ublue-os/bluefin-logos/bluefin.png",
   "/usr/share/pixmaps/bluefin-gdm-logo.png",
   # Control Center has compile-time logo paths, independent of os-release.
