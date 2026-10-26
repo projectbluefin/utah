@@ -105,6 +105,8 @@ build() {
     if [ -n "${PACKAGE_IMAGE_REF:-}" ]; then
         base_args+=(--build-arg PACKAGE_IMAGE_REF="${PACKAGE_IMAGE_REF}")
     fi
+    local gnome_extension_provenance
+    gnome_extension_provenance="$(python3 scripts/verify-gnome-extensions.py --print-provenance)"
     "${PODMAN}" build \
         --no-cache \
         "${epoch_args[@]}" \
@@ -115,7 +117,7 @@ build() {
         --build-arg IMAGE_VENDOR="${REPO_ORGANIZATION}" \
         --build-arg VERSION="${VERSION}" \
         --build-arg SHA_HEAD="$(git rev-parse HEAD)" \
-        --build-arg GNOME_EXTENSION_PROVENANCE="$(python3 scripts/verify-gnome-extensions.py --print-provenance)" \
+        --build-arg GNOME_EXTENSION_PROVENANCE="${gnome_extension_provenance}" \
         --build-arg SHA_HEAD_SHORT="${SHA_HEAD_SHORT}" \
         --build-arg ENABLE_SSHD=0 \
         --build-arg UTAH_REWRITE_TIMESTAMPS=1 \

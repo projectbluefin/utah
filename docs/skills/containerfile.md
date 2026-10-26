@@ -340,7 +340,10 @@ add or remove bytes, or do the edit in the layer that first writes the file.
 Canonical build recipes pass the full Utah commit and extension provenance
 through late build arguments. `verify-gnome-extensions.py --print-provenance`
 resolves each installed UUID to `.gitmodules` and the index gitlink, rejecting
-mismatched or modified checkouts. Two Bluefin Bling extensions share one pin.
+mismatched or modified checkouts. Resolve this in a standalone shell assignment
+before invoking the build engine, so `set -e` stops on a failed pin check;
+command substitutions inside build arguments do not propagate their failure.
+Two Bluefin Bling extensions share one pin.
 Release-archive extensions record the verified download URL and SHA256 as
 well as their reference source commit; that commit does not identify the
 archive's built bytes.

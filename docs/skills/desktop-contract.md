@@ -260,23 +260,23 @@ contract-only check validates source metadata, not the installed verifier; a
 full image build must verify pins before merge. Edit `.gitmodules` directly
 for source URL or tracked-branch changes; automation advances existing pins.
 Search Light was dropped: GNOME 51 removed `set_shader_source`, which its shader code calls, so it failed ISO tests.
+`scripts/verify-gnome-extensions.py` checks GNOME 51 support and provenance:
 
-`scripts/verify-gnome-extensions.py` asserts every one declares GNOME 51 in
-its `metadata.json`. It runs in two modes from the same script:
+- **Source mode** — `--source` checks the submodule metadata and indexed
+  gitlinks in the working tree; this is what `just check` runs.
+- **Installed mode** — checks `/usr/share/gnome-shell/extensions` under an image
+  root. The Containerfile runs
+  `/usr/local/libexec/utah-verify-gnome-extensions --record-provenance` after
+  `utah-build-gnome-extensions`. Files must be world-readable and not
+  group/world-writable: release zips kept `0600` metadata, so gnome-shell hit
+  "Permission denied". The build normalizes with `chmod -R u+rwX,go+rX,go-w`.
+- **Provenance** — `--print-provenance` (host, build recipes) resolves UUIDs to
+  `.gitmodules` entries and indexed gitlinks; `--source` runs the same check.
+  `--record-provenance` (image) writes `/usr/share/utah/provenance.json`.
+  See [Image provenance](containerfile.md#image-provenance).
 
-- **Source mode** — `--source` checks the submodule checkouts in the working
-  tree; this is what `just check` runs.
-- **Installed mode** — the default checks `/usr/share/gnome-shell/extensions`
-  under an image root; this is what runs in the Containerfile as
-  `/usr/local/libexec/utah-verify-gnome-extensions`, right after
-  `utah-build-gnome-extensions`. It also fails on any extension file that is
-  not world-readable or is group/world-writable: release zips kept `0600`
-  metadata, so gnome-shell hit "Permission denied". The build script
-  normalizes the tree with `chmod -R u+rwX,go+rX,go-w`.
-
-Building GSConnect runs meson install; `scripts/build-gnome-extensions.sh` disables GSConnect's
-`update_desktop_database` hook because `desktop-file-utils` is not published by Hummingbird or
-Utah's repository. MIME and schema databases are handled by the system and glib-compile-schemas.
+GSConnect's meson install skips `update_desktop_database`: Hummingbird and Utah
+lack `desktop-file-utils`. The system and glib-compile-schemas handle databases.
 
 Declaring GNOME 51 in `metadata.json` is necessary, not sufficient: both
 failures below passed the metadata check, built cleanly, and only showed up
