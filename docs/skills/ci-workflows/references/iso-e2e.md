@@ -197,6 +197,20 @@ a mutable tag before running the container. Updating only the builder default
 leaves verification executing unrelated code with root privileges; keep both
 consumers on this same file.
 
+### Tacklebox builder provenance
+
+Digest-locking stops a tag move but not an untrusted digest landing in the
+pin, so both consumers also verify the image before the pull (utah#918).
+`iso/scripts/verify-tacklebox-attestation.sh` checks the image read from
+`config/tacklebox-image` (or a digest-pinned `TACKLEBOX_IMAGE` override); it
+does not hold the pin itself. It installs the version-pinned cosign binary
+(verified against a pinned SHA-256) and runs
+`cosign verify-attestation --type=https://slsa.dev/provenance/v1` with the
+Fulcio identity pinned to the tacklebox `release-image.yml` workflow on
+`refs/heads/main` or a `refs/tags/v*` tag (the upstream release triggers), so
+an unsigned image or one attested by any other workflow or repository is
+rejected before each Renovate-driven digest bump can run privileged.
+
 ## Testsuite reporting (exact-digest VM suites)
 
 `post-testing-e2e.yml` runs the `testsuite` job asynchronously against each

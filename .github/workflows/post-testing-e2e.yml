@@ -203,6 +203,9 @@ jobs:
           set -euo pipefail
           tacklebox_image=$(< config/tacklebox-image)
           [[ "$tacklebox_image" =~ ^[^[:space:]@]+@sha256:[a-f0-9]{64}$ ]] || exit 1
+          # Verify the builder image's SLSA provenance before running it
+          # privileged (utah#918).
+          sudo TACKLEBOX_IMAGE="$tacklebox_image" bash iso/scripts/verify-tacklebox-attestation.sh
           sudo podman pull "$tacklebox_image"
           sudo podman run --rm --privileged --security-opt label=disable \
             -v /dev:/dev -v "$PWD/output:/out:ro" "$tacklebox_image" \
