@@ -350,8 +350,15 @@ archive's built bytes.
 
 After extension installation, `--record-provenance` writes
 `/usr/share/utah/provenance.json`, including installed metadata versions and
-the image references actually passed to the build. Local unpinned image
-references have a null digest rather than borrowing the production pin.
+the image references actually passed to the build. For kernel flavors,
+`build-ghcr` and `check-reproducible-build.sh` replace `BASE_IMAGE` with the
+cosign-verified kernel cache, so `base_image` identifies `utah-kernel-cache`,
+not the Hummingbird pin declared at the top of the Containerfile. The declared
+Hummingbird pin is not recorded separately in this file; inspect
+`Containerfile.kernel` at the recorded Utah commit (`utah.commit`) to find it.
+The `main` flavor uses the declared Hummingbird base unless explicitly
+overridden. Local unpinned image references have a null digest rather than
+borrowing the production pin.
 The `built` timestamp uses `SOURCE_DATE_EPOCH` (the reproducible build-input
 time), not wall-clock time. Keep this in the existing desktop RUN before
 mtime normalization. Direct Containerfile callers must provide `SHA_HEAD`
