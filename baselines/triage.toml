@@ -19,37 +19,12 @@ status = "planned"
 area = "wifi"
 issue = "#262"
 
-[package.openvpn]
-status = "planned"
-area = "wifi"
-issue = "#262"
-
-[package.openconnect]
-status = "planned"
-area = "wifi"
-issue = "#262"
-
-[package.vpnc]
-status = "planned"
-area = "wifi"
-issue = "#262"
-
 [package.usb_modeswitch]
 status = "planned"
 area = "wifi"
 issue = "#262"
 
-[package.gnome-tour]
-status = "planned"
-area = "first-boot"
-issue = "#261"
-
 [package.ifuse]
-status = "planned"
-area = "files-devices"
-issue = "#263"
-
-[package.exfatprogs]
 status = "planned"
 area = "files-devices"
 issue = "#263"
@@ -64,79 +39,14 @@ status = "planned"
 area = "files-devices"
 issue = "#263"
 
-[package.f2fs-tools]
-status = "planned"
-area = "files-devices"
-issue = "#263"
-
 [package.mtools]
 status = "planned"
 area = "files-devices"
 issue = "#263"
 
-[package.ipp-usb]
-status = "planned"
-area = "printing"
-issue = "#263"
-
-[package.hplip]
-status = "planned"
-area = "printing"
-issue = "#263"
-
-[package.gutenprint]
-status = "planned"
-area = "printing"
-issue = "#263"
-
-[package.gutenprint-cups]
-status = "planned"
-area = "printing"
-issue = "#263"
-
-[package.foo2zjs]
-status = "planned"
-area = "printing"
-issue = "#263"
-
-[package.system-config-printer-libs]
-status = "planned"
-area = "printing"
-issue = "#263"
-
-[package.system-config-printer-udev]
-status = "planned"
-area = "printing"
-issue = "#263"
-
-[package.sane-backends]
-status = "planned"
-area = "printing"
-issue = "#263"
-
-[package.sane-airscan]
-status = "planned"
-area = "printing"
-issue = "#263"
-
 [package.paps]
 status = "planned"
 area = "printing"
-issue = "#263"
-
-[package.mpage]
-status = "planned"
-area = "printing"
-issue = "#263"
-
-[package.libieee1284]
-status = "planned"
-area = "printing"
-issue = "#263"
-
-[package.bolt]
-status = "planned"
-area = "hardware-power"
 issue = "#263"
 
 [package.tuned]
@@ -151,55 +61,15 @@ area = "hardware-power"
 issue = "#263"
 reason = "Published by the factory (#388) but uninstallable: Requires tuned (see tuned). Bluefin runs tuned-ppd instead of power-profiles-daemon, so the latter is not installed as a stand-in"
 
-[package.thermald]
-status = "planned"
-area = "hardware-power"
-issue = "#263"
-
-[package.intel-lpmd]
-status = "planned"
-area = "hardware-power"
-issue = "#263"
-
-[package.powertop]
-status = "planned"
-area = "hardware-power"
-issue = "#263"
-
 [package.smartmontools]
 status = "planned"
 area = "hardware-power"
 issue = "#263"
 reason = "Not published: the factory run behind sha256:d3b5bac2 still lists smartmontools under its failed builds (libblockdev-smartmontools is published, the daemon is not)"
 
-[package.nvme-cli]
-status = "planned"
-area = "hardware-power"
-issue = "#263"
-
-[package.usbutils]
-status = "planned"
-area = "hardware-power"
-issue = "#263"
-
 [package.kernel-tools]
 status = "planned"
 area = "hardware-power"
-issue = "#263"
-
-[package.hdparm]
-status = "planned"
-area = "hardware-power"
-issue = "#263"
-
-[package.lshw]
-status = "planned"
-area = "hardware-power"
-issue = "#263"
-
-[package.brltty]
-status = "planned"
-area = "accessibility-input"
 issue = "#263"
 
 [package.ibus-anthy]
@@ -257,50 +127,15 @@ status = "planned"
 area = "accessibility-input"
 issue = "#263"
 
-[package.gnome-disk-utility]
-status = "planned"
-area = "desktop-apps"
-issue = "#263"
-
 [package.gnome-system-monitor]
 status = "waived"
 reason = "Flatpak-first: Utah ships Mission Center (io.missioncenter.MissionCenter) in contracts/bluefin-desktop.toml; the factory builds gnome-system-monitor (utah-packages#542) but Utah does not install a duplicate"
-
-[package.gnome-color-manager]
-status = "planned"
-area = "desktop-apps"
-issue = "#263"
-
-[package.gnome-remote-desktop]
-status = "planned"
-area = "desktop-apps"
-issue = "#263"
-
-[package.gnome-user-share]
-status = "planned"
-area = "desktop-apps"
-issue = "#263"
-
-[package.gnome-browser-connector]
-status = "planned"
-area = "desktop-apps"
-issue = "#263"
 
 [package.papers-previewer]
 status = "waived"
 reason = "Flatpak-first: it is a standalone previewer application (papers-previewer binary and desktop entry); Utah ships org.gnome.NautilusPreviewer as the Flatpak previewer. The host-side integration, papers-libs, papers-thumbnailer and papers-nautilus, is installed"
 
-[package.papers-thumbnailer]
-status = "planned"
-area = "desktop-apps"
-issue = "#263"
-
 [package.gst-thumbnailers]
-status = "planned"
-area = "desktop-apps"
-issue = "#263"
-
-[package.gnome-epub-thumbnailer]
 status = "planned"
 area = "desktop-apps"
 issue = "#263"
@@ -360,16 +195,6 @@ status = "planned"
 area = "vm-guests"
 issue = "#263"
 
-[package.pinentry]
-status = "planned"
-area = "auth-security"
-issue = "#263"
-
-[package.pinentry-gnome3]
-status = "planned"
-area = "auth-security"
-issue = "#263"
-
 [package.yubikey-manager]
 status = "planned"
 area = "auth-security"
@@ -410,11 +235,6 @@ status = "planned"
 area = "auth-security"
 issue = "#263"
 
-[package.gssproxy]
-status = "planned"
-area = "auth-security"
-issue = "#263"
-
 [package.sssd-common]
 status = "planned"
 area = "auth-security"
@@ -440,94 +260,9 @@ status = "planned"
 area = "auth-security"
 issue = "#263"
 
-[package.samba-winbind]
-status = "planned"
-area = "network-fs"
-issue = "#263"
-
-[package.samba-winbind-clients]
-status = "planned"
-area = "network-fs"
-issue = "#263"
-
-[package.cifs-utils]
-status = "planned"
-area = "network-fs"
-issue = "#263"
-
-[package.cifs-utils-info]
-status = "planned"
-area = "network-fs"
-issue = "#263"
-
-[package.nfs-utils]
-status = "planned"
-area = "network-fs"
-issue = "#263"
-
-[package.nfs-common-utils]
-status = "planned"
-area = "network-fs"
-issue = "#263"
-
-[package.nfsv3-client-utils]
-status = "planned"
-area = "network-fs"
-issue = "#263"
-
-[package.nfsv4-client-utils]
-status = "planned"
-area = "network-fs"
-issue = "#263"
-
-[package.rpcbind]
-status = "planned"
-area = "network-fs"
-issue = "#263"
-
-[package.autofs]
-status = "planned"
-area = "network-fs"
-issue = "#263"
-
 [package.davfs2]
 status = "planned"
 area = "network-fs"
-issue = "#263"
-
-[package.rsync]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
-
-[package.tmux]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
-
-[package.nano]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
-
-[package.htop]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
-
-[package.lsof]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
-
-[package.tree]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
-
-[package.pv]
-status = "planned"
-area = "cli-tools"
 issue = "#263"
 
 [package.time]
@@ -545,26 +280,6 @@ status = "planned"
 area = "cli-tools"
 issue = "#263"
 reason = "Not published: the factory run behind sha256:d3b5bac2 still lists traceroute under its failed builds"
-
-[package.mtr]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
-
-[package.tcpdump]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
-
-[package.ethtool]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
-
-[package.bc]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
 
 [package.wget2]
 status = "planned"
@@ -596,11 +311,6 @@ status = "planned"
 area = "cli-tools"
 issue = "#263"
 
-[package.borgbackup]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
-
 [package.cryfs]
 status = "planned"
 area = "cli-tools"
@@ -621,22 +331,7 @@ status = "planned"
 area = "cli-tools"
 issue = "#263"
 
-[package.pinfo]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
-
-[package.fpaste]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
-
 [package.lsb_release]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
-
-[package.xdg-utils]
 status = "planned"
 area = "cli-tools"
 issue = "#263"
@@ -666,11 +361,6 @@ status = "planned"
 area = "cli-tools"
 issue = "#263"
 
-[package.dbus-daemon]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
-
 [package.dbus-x11]
 status = "waived"
 reason = "X11 session helper; Utah ships the Wayland session only"
@@ -691,26 +381,9 @@ reason = "Bluefin ships it; Utah deliberately offers the standard GNOME session 
 status = "waived"
 reason = "GRUB is excluded from the factory repo until utah-packages#238 (see utah.toml)"
 
-[package.httpd]
-status = "waived"
-reason = "Pulled in by gnome-user-share's WebDAV in Bluefin; tracked with gnome-user-share"
-
-[package.httpd-core]
-status = "waived"
-reason = "Pulled in by gnome-user-share's WebDAV in Bluefin; tracked with gnome-user-share"
-
-[package.httpd-tools]
-status = "waived"
-reason = "Pulled in by gnome-user-share's WebDAV in Bluefin; tracked with gnome-user-share"
-
 [package.initscripts-service]
 status = "waived"
 reason = "Legacy SysV service shim"
-
-[package.ptyxis]
-status = "planned"
-area = "desktop"
-issue = "#263"
 
 [package.qemu-user-static-aarch64]
 status = "waived"
@@ -738,16 +411,6 @@ status = "planned"
 area = "cli-tools"
 issue = "#263"
 
-[package.argyllcms]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
-
-[package.avahi-tools]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
-
 [package.b43-fwcutter]
 status = "planned"
 area = "cli-tools"
@@ -763,42 +426,12 @@ status = "planned"
 area = "cli-tools"
 issue = "#263"
 
-[package.capstone]
-status = "planned"
-area = "system-tools"
-issue = "#263"
-
-[package.dnf5daemon-server]
-status = "planned"
-area = "system-tools"
-issue = "#263"
-
-[package.dnsmasq]
-status = "planned"
-area = "networking"
-issue = "#263"
-
 [package.flex]
 status = "planned"
 area = "cli-tools"
 issue = "#263"
 
-[package.gamemode]
-status = "planned"
-area = "desktop"
-issue = "#263"
-
-[package.gdbm]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
-
 [package.gst-editing-services]
-status = "planned"
-area = "media"
-issue = "#263"
-
-[package.gstreamer1-plugins-bad-free]
 status = "planned"
 area = "media"
 issue = "#263"
@@ -823,11 +456,6 @@ status = "planned"
 area = "cli-tools"
 issue = "#263"
 
-[package.lcms]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
-
 [package.libavc1394]
 status = "planned"
 area = "cli-tools"
@@ -843,11 +471,6 @@ status = "planned"
 area = "cli-tools"
 issue = "#263"
 
-[package.libuser]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
-
 [package.libwnck3]
 status = "planned"
 area = "desktop"
@@ -859,11 +482,6 @@ area = "cli-tools"
 issue = "#263"
 
 [package.lrzsz]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
-
-[package.m4]
 status = "planned"
 area = "cli-tools"
 issue = "#263"
@@ -888,29 +506,9 @@ status = "planned"
 area = "files-devices"
 issue = "#263"
 
-[package.openal-soft]
-status = "planned"
-area = "media"
-issue = "#263"
-
 [package.passwdqc-utils]
 status = "planned"
 area = "cli-tools"
-issue = "#263"
-
-[package.powerstat]
-status = "planned"
-area = "hardware-power"
-issue = "#263"
-
-[package.python-unversioned-command]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
-
-[package.python3-charset-normalizer]
-status = "planned"
-area = "python-libraries"
 issue = "#263"
 
 [package.python3-email-validator]
@@ -919,11 +517,6 @@ area = "python-libraries"
 issue = "#263"
 
 [package.python3-html2text]
-status = "planned"
-area = "python-libraries"
-issue = "#263"
-
-[package.python3-idna]
 status = "planned"
 area = "python-libraries"
 issue = "#263"
@@ -958,16 +551,6 @@ status = "planned"
 area = "python-libraries"
 issue = "#263"
 
-[package.qt6-qtbase]
-status = "planned"
-area = "desktop"
-issue = "#263"
-
-[package.quota]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
-
 [package.serd]
 status = "planned"
 area = "cli-tools"
@@ -983,21 +566,6 @@ status = "planned"
 area = "hardware-power"
 issue = "#263"
 
-[package.soundtouch]
-status = "planned"
-area = "media"
-issue = "#263"
-
-[package.sysstat]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
-
-[package.tcl]
-status = "planned"
-area = "system-tools"
-issue = "#263"
-
 [package.tslib]
 status = "planned"
 area = "cli-tools"
@@ -1008,27 +576,12 @@ status = "planned"
 area = "cli-tools"
 issue = "#263"
 
-[package.unbound-anchor]
-status = "planned"
-area = "system-tools"
-issue = "#263"
-
 [package.uresourced]
 status = "planned"
 area = "system-daemons"
 issue = "#263"
 
-[package.uriparser]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
-
 [package.usbip]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
-
-[package.usermode]
 status = "planned"
 area = "cli-tools"
 issue = "#263"
@@ -1046,11 +599,6 @@ issue = "#263"
 status = "waived"
 reason = "X11 client tool; Utah ships the Wayland session only"
 
-[package.xmlsec1]
-status = "planned"
-area = "cli-tools"
-issue = "#263"
-
 [package.xrandr]
 status = "waived"
 reason = "X11 client tool; Utah ships the Wayland session only"
@@ -1058,4 +606,3 @@ reason = "X11 client tool; Utah ships the Wayland session only"
 [package.xset]
 status = "waived"
 reason = "X11 client tool; Utah ships the Wayland session only"
-
