@@ -130,6 +130,15 @@ fi
 # on bootc >= 1.14 and the baked tag is the compose-time one.
 IMAGE_INFO_SH=/usr/bin/ublue-image-info.sh
 if [ -f "${IMAGE_INFO_SH}" ]; then
+    # Common's legacy lock glyph probes rpm-ostree, which Hummingbird does
+    # not ship. It is not a bootc signature check; omit the whole glyph block
+    # rather than hide its stderr or imply the image is unlocked (#931).
+    # Newer Common versions already omit it, so this is safe to repeat.
+    sed -i '/^if \[\[ "$(rpm-ostree status --booted)" =~ "signed" \]\]; then$/,/^fi$/d' "${IMAGE_INFO_SH}"
+    if grep -qF 'rpm-ostree' "${IMAGE_INFO_SH}"; then
+        echo "ERROR: ${IMAGE_INFO_SH} changed upstream -- re-fit the rpm-ostree removal" >&2
+        exit 1
+    fi
     if grep -qF '/run/ublue-os/booted-image' "${IMAGE_INFO_SH}"; then
         : already patched
     elif grep -qF '.status.booted.image.image.image' "${IMAGE_INFO_SH}"; then
