@@ -292,6 +292,14 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
 # the global pin's value: a global ARG is only in scope for FROM lines, and
 # without this the label baked empty (#371 follow-up).
 ARG PACKAGE_IMAGE_SHA
+ARG BASE_IMAGE
+ARG PACKAGE_IMAGE_REF
+ARG COMMON_IMAGE
+ARG COMMON_IMAGE_SHA
+ARG BREW_IMAGE
+ARG BREW_IMAGE_SHA
+ARG WALLPAPERS_IMAGE
+ARG WALLPAPERS_IMAGE_SHA
 ARG IMAGE_NAME=utah
 # Canonical OS identity, distinct from the repository name a flavor publishes
 # under. Always utah; never flavored.
@@ -300,6 +308,8 @@ ARG IMAGE_FLAVOR=main
 ARG IMAGE_VENDOR=projectbluefin
 ARG VERSION=testing
 ARG SHA_HEAD_SHORT=unknown
+ARG SHA_HEAD
+ARG GNOME_EXTENSION_PROVENANCE
 # Production images keep SSH closed; local VM diagnostics can opt in with
 # ENABLE_SSHD=1, following tunaOS's debug-image convention.
 ARG ENABLE_SSHD=0
@@ -344,7 +354,7 @@ RUN --mount=type=bind,from=common,source=/system_files/bluefin/usr/share/pixmaps
     echo "${UUPD_SERVICE_SHA256}  /tmp/uupd/uupd.service" | sha256sum --check --strict && \
     echo "${UUPD_TIMER_SHA256}  /tmp/uupd/uupd.timer" | sha256sum --check --strict && \
     /usr/local/libexec/utah-build-gnome-extensions && \
-    /usr/local/libexec/utah-verify-gnome-extensions && \
+    /usr/local/libexec/utah-verify-gnome-extensions --record-provenance && \
     glib-compile-schemas /usr/share/glib-2.0/schemas && \
     ENABLE_SSHD="${ENABLE_SSHD}" /usr/local/libexec/utah-configure-services && \
     /usr/local/libexec/utah-configure-branding && \

@@ -334,3 +334,22 @@ it, so the diff cannot miss the change and the build fails closed if the
 added bytes go missing (`tests/test_package_resolution.py`). Apply the same
 rule to any future `sed -i` on a file an earlier layer already committed:
 add or remove bytes, or do the edit in the layer that first writes the file.
+
+### Image provenance
+
+Canonical build recipes pass the full Utah commit and extension provenance
+through late build arguments. `verify-gnome-extensions.py --print-provenance`
+resolves each installed UUID to `.gitmodules` and the index gitlink, rejecting
+mismatched or modified checkouts. Two Bluefin Bling extensions share one pin.
+Release-archive extensions record the verified download URL and SHA256 as
+well as their reference source commit; that commit does not identify the
+archive's built bytes.
+
+After extension installation, `--record-provenance` writes
+`/usr/share/utah/provenance.json`, including installed metadata versions and
+the image references actually passed to the build. Local unpinned image
+references have a null digest rather than borrowing the production pin.
+The `built` timestamp uses `SOURCE_DATE_EPOCH` (the reproducible build-input
+time), not wall-clock time. Keep this in the existing desktop RUN before
+mtime normalization. Direct Containerfile callers must provide `SHA_HEAD`
+and `GNOME_EXTENSION_PROVENANCE`; missing provenance fails the build.
