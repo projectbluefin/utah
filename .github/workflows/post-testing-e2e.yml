@@ -311,7 +311,7 @@ jobs:
       fail-fast: false
       matrix:
         include: ${{ fromJSON(needs.resolve.outputs.suites) }}
-    uses: projectbluefin/testsuite/.github/workflows/e2e.yml@b5ec20c584485b2c95a407fc5e8425d79ff0901f # v1
+    uses: projectbluefin/testsuite/.github/workflows/e2e.yml@d55a7947aecce09c1107393a759f8a2f664b81c4 # v1
     with:
       image: ${{ fromJSON(needs.resolve.outputs.digests)[matrix.image] }}
       compose_image: false
