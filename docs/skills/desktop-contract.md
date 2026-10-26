@@ -260,6 +260,7 @@ contract-only check validates source metadata, not the installed verifier; a
 full image build must verify pins before merge. Edit `.gitmodules` directly
 for source URL or tracked-branch changes; automation advances existing pins.
 Search Light was dropped: GNOME 51 removed `set_shader_source`, which its shader code calls, so it failed ISO tests.
+
 `scripts/verify-gnome-extensions.py` checks GNOME 51 support and provenance:
 
 - **Source mode** — `--source` checks the submodule metadata and indexed
@@ -495,6 +496,5 @@ lifecycle. The pairing is asserted by `FwupdRefreshDropInTests` in
 
 ## Verification
 
-The source-only contract check runs in `just check`; the
-[verifier reference](desktop-contract/references/verifiers.md) describes the
+The source-only contract check runs in `just check`; the [verifier reference](desktop-contract/references/verifiers.md) describes the
 image-build and installed-image checks.
