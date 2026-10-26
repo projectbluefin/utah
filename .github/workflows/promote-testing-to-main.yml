@@ -32,7 +32,7 @@ jobs:
 
   promote:
     needs: variants
-    uses: projectbluefin/actions/.github/workflows/reusable-promote-squash.yml@d18642a8b4b325c2551eabd9a65c1ad12b4ebb30 # v1
+    uses: projectbluefin/actions/.github/workflows/reusable-promote-squash.yml@209517dda44829f126e25da28f11245c34458ac3 # v1
     with:
       registry: ghcr.io/${{ github.repository_owner }}
       variants: ${{ needs.variants.outputs.list }}
