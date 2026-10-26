@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -53,8 +54,6 @@ class ShellVersionReportTests(unittest.TestCase):
             )
 
     def test_every_submodule_maps_to_verifier_metadata(self) -> None:
-        import subprocess
-
         paths = subprocess.run(
             ["git", "config", "--file", ".gitmodules", "--get-regexp", r"^submodule\..*\.path$"],
             cwd=MODULE.REPO_ROOT, capture_output=True, text=True, check=True,
@@ -70,14 +69,52 @@ class ShellVersionReportTests(unittest.TestCase):
             (extension / "metadata.json").write_text(
                 '{"shell-version": ["51|oops", "52`\\nrow"]}'
             )
-            self.assertEqual(MODULE.shell_versions(extension), "?")
+            with self.assertRaises(ValueError):
+                MODULE.shell_versions(extension)
 
-    def test_missing_or_invalid_metadata_is_unknown(self) -> None:
+    def test_missing_or_invalid_metadata_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             extension = Path(tmp)
-            self.assertEqual(MODULE.shell_versions(extension), "?")
+            with self.assertRaises(ValueError):
+                MODULE.shell_versions(extension)
             (extension / "metadata.json").write_text("not json")
-            self.assertEqual(MODULE.shell_versions(extension), "?")
+            with self.assertRaises(ValueError):
+                MODULE.shell_versions(extension)
+
+    def test_cli_fails_without_report_for_unreadable_metadata(self) -> None:
+        for content in (None, b"not json", b"\xff", b"[]",
+                        b'{"shell-version": []}', b'{"shell-version": ["51|oops"]}'):
+            with self.subTest(content=content), tempfile.TemporaryDirectory() as tmp:
+                if content is not None:
+                    (Path(tmp) / "metadata.json").write_bytes(content)
+                result = subprocess.run(
+                    ["python3", str(SCRIPT), tmp], capture_output=True, text=True,
+                )
+                self.assertEqual(result.returncode, 1)
+                self.assertEqual(result.stdout, "")
+                self.assertIn("Cannot propose extension bump:", result.stderr)
+
+    def test_metadata_failure_stops_workflow_before_proposal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            result = subprocess.run(
+                ["bash", "-c",
+                 'set -euo pipefail; { ver=$(python3 "$1" "$2"); '
+                 'printf "%s" "$ver"; }; echo proposed',
+                 "workflow", str(SCRIPT), tmp],
+                capture_output=True, text=True,
+            )
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.stdout, "")
+
+    def test_missing_member_of_multi_extension_submodule_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            extension = base / "tmp/bluefin-bling"
+            metadata = extension / "extensions/syncthing-toggle/metadata.json"
+            metadata.parent.mkdir(parents=True)
+            metadata.write_text('{"shell-version": ["51"]}')
+            with self.assertRaises(ValueError):
+                MODULE.shell_versions(extension, base)
 
 
 if __name__ == "__main__":

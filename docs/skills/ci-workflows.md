@@ -94,6 +94,10 @@ post-build verification workflows, not the complete workflow inventory:
   paths in `scripts/verify-gnome-extensions.py` (`SOURCE_EXTENSIONS`); update
   that map when adding an extension. Paths are passed as argv and
   shell-version values are allow-listed before entering the Markdown table.
+  The metadata helper exits nonzero for missing, unreadable, or invalid
+  metadata (including any missing member of a multi-extension submodule).
+  Keep its report assignment under `set -e` so the bump step fails before
+  proposing those heads; do not replace failures with an unknown-value marker.
   Its dispatch uses `contract_only=true`, so it runs source contract checks
   only: it does not build an image or run the image-side extension verifier.
   A trusted full image build remains necessary before merge. No automated

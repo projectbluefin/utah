@@ -74,6 +74,8 @@ jobs:
               if [ "$old" = "$new" ]; then
                 ver="(unchanged)"
               else
+                # A metadata error exits this step under set -e, before a PR
+                # can propose an unreadable or retired upstream head.
                 ver=$(python3 scripts/gnome-extension-shell-versions.py "$p")
               fi
               # shellcheck disable=SC2016

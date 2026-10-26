@@ -48,28 +48,28 @@ def metadata_files(extension: Path, base: Path = EXTENSIONS_BASE) -> list[tuple[
 def read_versions(metadata: Path) -> str:
     try:
         data = json.loads(metadata.read_text().replace("@PACKAGE_VERSION@", "0"))
-    except (OSError, json.JSONDecodeError):
-        return "?"
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"cannot read metadata {metadata}: {exc}") from exc
     if not isinstance(data, dict):
-        return "?"
+        raise ValueError(f"metadata {metadata} must be a JSON object")
 
     versions = data.get("shell-version")
-    if not isinstance(versions, list) or not all(
+    if not isinstance(versions, list) or not versions or not all(
         isinstance(item, str) and re.fullmatch(r"\d+(?:\.\d+)*", item)
         for item in versions
     ):
-        return "?"
+        raise ValueError(f"metadata {metadata} has invalid shell-version values")
 
     # Shell API versions are numeric. Reject anything else because this value
     # is rendered into a Markdown table in a write-enabled automation job.
-    return ", ".join(versions) or "?"
+    return ", ".join(versions)
 
 
 def shell_versions(extension: Path, base: Path = EXTENSIONS_BASE) -> str:
     """Read the extension's metadata and escape values for a Markdown table."""
     files = metadata_files(extension, base)
     if not files:
-        return "?"
+        raise ValueError(f"no metadata found for extension {extension}")
     if len(files) == 1:
         return read_versions(files[0][1])
     # UUIDs come from the trusted in-repo map, not upstream content.
@@ -80,7 +80,12 @@ def main() -> int:
     if len(sys.argv) != 2:
         print("usage: gnome-extension-shell-versions.py EXTENSION_PATH", file=sys.stderr)
         return 2
-    print(shell_versions(Path(sys.argv[1])))
+    try:
+        versions = shell_versions(Path(sys.argv[1]))
+    except ValueError as exc:
+        print(f"Cannot propose extension bump: {exc}", file=sys.stderr)
+        return 1
+    print(versions)
     return 0
 
 
