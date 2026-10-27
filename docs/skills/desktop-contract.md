@@ -87,10 +87,10 @@ The TOML's sections are the contract's table of contents:
   Switchers can also manually verify or mask them if a local `/etc` symlink was preserved.
 
   The last two units are Dakota parity (#675): install-date stamping and the
-  booted-image snapshot fastfetch reads. `configure-services.sh` enables them
-  and patches Common's fastfetch ([stats](desktop-contract/references/stats-refresh.md)),
-  image-info ([bootc compatibility](desktop-contract/references/image-info.md)) and `uwelcome.sh`; non-interactive shells skip the greeting. Wallpaper rotation is
-  deliberately NOT Dakota parity: Common's per-user `bluefin-dynamic-wallpaper`
+  booted-image snapshot Common's `/usr/libexec/ublue-booted-image` falls back to.
+  `configure-services.sh` enables them, patches Common's fastfetch ([stats](desktop-contract/references/stats-refresh.md))
+  and `uwelcome.sh` (non-interactive shells skip the greeting), and checks image-info ([bootc compatibility](desktop-contract/references/image-info.md)).
+  Wallpaper rotation is deliberately NOT Dakota parity: Common's per-user `bluefin-dynamic-wallpaper`
   timer is hemisphere-aware and rotates live at month boundaries, while
   Dakota's boot-time month symlink is northern-only and stale until reboot, so
   repointing the default would stand the better rotator down (#675 decision).
