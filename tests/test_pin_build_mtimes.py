@@ -2,8 +2,10 @@
 import importlib.util
 import os
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 
 spec = importlib.util.spec_from_file_location(
@@ -63,3 +65,57 @@ class PinBuildMtimesTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "payload.py"):
             pin.check_rewrite_epoch({"/usr/lib/payload.py": 2000}, 1000)
         pin.check_rewrite_epoch({"/usr/lib/payload.py": 2000}, 2000)
+
+
+MOUNTINFO = (
+    "22 1 0:21 / / rw,relatime - overlay overlay rw\n"
+    "36 22 98:0 / /tmp/utah-build-tools ro,relatime - ext4 /dev/root ro\n"
+    "37 22 98:0 / /run/my\\040inputs rw,relatime - tmpfs tmpfs rw\n"
+)
+
+
+class MainTests(unittest.TestCase):
+    """main() is what every image layer runs: rpm query -> mounts -> normalize."""
+
+    def run_main(self, rpm_stdout, env=None):
+        result = subprocess.CompletedProcess([], 0, stdout=rpm_stdout, stderr="")
+        with mock.patch.dict(os.environ, env or {}, clear=False), \
+                mock.patch.object(pin.subprocess, "run", return_value=result) as run, \
+                mock.patch.object(pin.Path, "read_text", return_value=MOUNTINFO), \
+                mock.patch.object(pin, "normalize") as normalize:
+            for name in ("SOURCE_DATE_EPOCH", "UTAH_REWRITE_TIMESTAMPS"):
+                if name not in (env or {}):
+                    os.environ.pop(name, None)
+            pin.main()
+        return run, normalize
+
+    def test_rpm_payload_times_and_bind_mounts_reach_normalize(self):
+        run, normalize = self.run_main(
+            "/usr/bin/bash\t1700000000\n/usr/share/a\tb\t1600000000\n")
+        args, kwargs = run.call_args
+        self.assertEqual(args[0][:2], ["rpm", "-qa"])
+        self.assertTrue(kwargs["check"], "a failed rpm query must abort the layer")
+        root, packaged, epoch, mounts = normalize.call_args.args
+        self.assertEqual(root, Path("/"))
+        self.assertEqual(packaged, {"/usr/bin/bash": 1700000000, "/usr/share/a\tb": 1600000000})
+        self.assertEqual(epoch, 1704067200)
+        self.assertEqual(mounts, {Path("/"), Path("/tmp/utah-build-tools"), Path("/run/my inputs")})
+
+    def test_source_date_epoch_overrides_the_default(self):
+        _, normalize = self.run_main("/usr/bin/bash\t1700000000\n",
+                                     {"SOURCE_DATE_EPOCH": "1710000000"})
+        self.assertEqual(normalize.call_args.args[2], 1710000000)
+
+    def test_empty_rpm_database_refuses_before_touching_the_tree(self):
+        with self.assertRaisesRegex(RuntimeError, "no payload mtimes"):
+            self.run_main("")
+
+    def test_rewrite_mode_refuses_an_epoch_older_than_a_payload(self):
+        with self.assertRaisesRegex(RuntimeError, "/usr/bin/new"):
+            self.run_main("/usr/bin/new\t1800000000\n", {
+                "SOURCE_DATE_EPOCH": "1704067200", "UTAH_REWRITE_TIMESTAMPS": "1"})
+
+    def test_epoch_check_only_runs_in_rewrite_mode(self):
+        _, normalize = self.run_main("/usr/bin/new\t1800000000\n",
+                                     {"SOURCE_DATE_EPOCH": "1704067200"})
+        normalize.assert_called_once()
