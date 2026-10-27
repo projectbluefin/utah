@@ -129,10 +129,12 @@ files = [
   "/usr/lib/systemd/system/ublue-firstboot-date.service",
   "/usr/lib/systemd/system/ublue-booted-image.service",
   "/usr/bin/ublue-booted-image-sync",
-  # Common files configure-services.sh patches for Dakota parity. file_contains
-  # skips missing files, so list them here to fail the build if Common drops one.
+  # Common files configure-services.sh patches or checks for Dakota parity.
+  # file_contains skips missing files, so list them here to fail the build if
+  # Common drops one.
   "/usr/share/ublue-os/fastfetch.jsonc",
   "/usr/bin/ublue-image-info.sh",
+  "/usr/libexec/ublue-booted-image",
   "/etc/profile.d/uwelcome.sh",
   # Common's Red Hat signature policy uses the unsuffixed key path. The pinned
   # Hummingbird base carries that key; Utah also stages its repository copy.
@@ -166,10 +168,14 @@ files = [
   "cat /var/cache/bluefin-stats/fastfetch-user-count 2>/dev/null || cat /usr/share/ublue-os/fastfetch-user-count",
   "cat /var/cache/bluefin-stats/bazaar-install-count 2>/dev/null || cat /usr/share/ublue-os/bazaar-install-count",
 ]
-# Dakota parity (#675): ublue-image-info.sh prefers the boot-time snapshot
-# ublue-booted-image.service writes, since unprivileged bootc status fails on
-# bootc >= 1.14.
+# Dakota parity (#675): ublue-image-info.sh reads the booted tag through
+# Common's ublue-booted-image reader, which falls back to the boot-time
+# snapshot ublue-booted-image.service writes, since unprivileged bootc status
+# fails on bootc >= 1.14.
 "/usr/bin/ublue-image-info.sh" = [
+  "/usr/libexec/ublue-booted-image",
+]
+"/usr/libexec/ublue-booted-image" = [
   "/run/ublue-os/booted-image",
 ]
 # Dakota parity (#675): GDM's non-interactive login shell sources
