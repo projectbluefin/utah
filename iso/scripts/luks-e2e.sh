@@ -124,6 +124,13 @@ gnome_extension_info() {
     local uuid="$1"
     ssh_target "uid=\$(id -u); env BASH_ENV=/dev/null XDG_RUNTIME_DIR=/run/user/\$uid DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/\$uid/bus bash --noprofile --norc -c \"gnome-extensions info '${uuid}'\""
 }
+# The error text the shell recorded when an extension failed to enable.
+# `gnome-extensions info` reports only the state, and the message is not
+# reliably in the user journal (#969), so ask the shell for it directly.
+gnome_extension_errors() {
+    local uuid="$1"
+    ssh_target "uid=\$(id -u); env BASH_ENV=/dev/null XDG_RUNTIME_DIR=/run/user/\$uid DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/\$uid/bus bash --noprofile --norc -c \"gdbus call --session --dest org.gnome.Shell.Extensions --object-path /org/gnome/Shell/Extensions --method org.gnome.Shell.Extensions.GetExtensionErrors '${uuid}'\""
+}
 scp_target() {
     sshpass -p "${TEST_PASSWORD}" scp "${SSH_OPTS[@]}" \
         -P "${SSH_PORT_INSTALLED}" "$@"
@@ -1097,6 +1104,8 @@ if [[ -n "${EXT_CHECK}" ]]; then
         fi
         if ! extension_state_is_active "${state}"; then
             echo "  extension ${uuid}: state=${state}" >&2
+            echo "  extension ${uuid}: shell-reported errors:" >&2
+            { gnome_extension_errors "${uuid}" 2>&1 || true; } | head -20 | sed 's/^/    /' >&2 || true
             ssh_target "env BASH_ENV=/dev/null bash --noprofile --norc -c \"journalctl --user -b --no-pager 2>/dev/null | grep -F '${uuid}' | grep -iE 'Error|TypeError|Exception|not a function' | tail -5\"" >&2 2>/dev/null || true
             shot "installed-ext-error-${uuid%%@*}" "${MONITOR_INSTALLED}" || true
             ext_failures+=("${uuid}: state=${state}")
