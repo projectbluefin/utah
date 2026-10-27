@@ -484,6 +484,64 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(skipped.returncode, 0, skipped.stderr)
         self.assertNotIn("present offline", skipped.stdout)
 
+    def test_extension_error_prints_the_shell_reported_error(self):
+        # #969: GSConnect intermittently reached state=ERROR at first login
+        # and the journal grep printed nothing, so the reason was lost. Drive
+        # the real extension check with a stubbed guest and assert the error
+        # text the shell recorded is printed, and that the run still fails.
+        script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
+        helper = "gnome_extension_errors() {" + script.split(
+            "gnome_extension_errors() {", 1)[1].split("\n}\n", 1)[0] + "\n}\n"
+        start = script.index('EXT_CHECK="${UTAH_E2E_EXTENSIONS')
+        end = script.index("\nfi\n", script.index("did not reach ACTIVE", start)) + len("\nfi\n")
+        block = script[start:end]
+
+        def run(state, errors_rc=0):
+            harness = (
+                f"source {ROOT / 'iso/scripts/extension-state.sh'}\n"
+                "sleep() { :; }\n"
+                "shot() { :; }\n"
+                "gnome_extension_info() { printf 'State: %s\\n' \"$STATE\"; }\n"
+                "ssh_target() {\n"
+                "  case \"$1\" in\n"
+                "    *GetExtensionErrors*) echo \"$1\" >> \"$CALLS\";\n"
+                "      printf \"(['TypeError: boom'],)\\n\"; return \"$ERRORS_RC\";;\n"
+                "  esac\n"
+                "}\n"
+                "fail() { echo \"FAIL: $*\" >&2; exit 1; }\n"
+                + helper + block
+            )
+            with tempfile.TemporaryDirectory() as td:
+                calls = Path(td) / "calls"
+                calls.touch()
+                env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+                       "STATE": state, "ERRORS_RC": str(errors_rc),
+                       "CALLS": str(calls), "MONITOR_INSTALLED": "mon",
+                       "UTAH_E2E_EXTENSIONS": "gsconnect@andyholmes.github.io"}
+                result = subprocess.run(["bash", "-eu", "-o", "pipefail", "-c", harness],
+                                        capture_output=True, text=True, env=env)
+                return result, calls.read_text()
+
+        failed, calls = run("ERROR")
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertIn("state=ERROR", failed.stderr)
+        self.assertIn("    (['TypeError: boom'],)", failed.stderr)
+        self.assertIn("did not reach ACTIVE", failed.stderr)
+        # Same session-bus environment as gnome_extension_info, or gdbus
+        # cannot reach the shell from an SSH login.
+        self.assertIn("DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/", calls)
+        self.assertIn("XDG_RUNTIME_DIR=/run/user/", calls)
+        self.assertIn("gsconnect@andyholmes.github.io", calls)
+
+        # A failing error query is a diagnostic, not a new verdict: the run
+        # still reports the extension's state and fails for it, not for gdbus.
+        probe_failed, _ = run("ERROR", errors_rc=1)
+        self.assertIn("FAIL: 1 extension(s) did not reach ACTIVE", probe_failed.stderr)
+
+        active, calls = run("ACTIVE")
+        self.assertEqual(active.returncode, 0, active.stderr)
+        self.assertEqual(calls, "")
+
     def test_live_desktop_is_retaken_until_the_frame_is_drawn(self):
         # The live-desktop shot is grabbed as soon as gnome-shell's process
         # exists, which can be before anything is drawn. A flat frame there must
