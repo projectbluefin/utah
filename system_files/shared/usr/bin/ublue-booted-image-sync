@@ -1,10 +1,10 @@
 #!/usr/bin/bash
-# Record the booted bootc image ref where unprivileged consumers (fastfetch's
-# ublue-image-info.sh) can read it. `bootc status` requires root on bootc
-# >= 1.14, so the live query is dead in user sessions, and the baked image tag
-# is the compose-time tag. The booted ref cannot change within a boot, so one
-# write per boot is always accurate. Parity with Dakota
-# (projectbluefin/utah#675).
+# Record the booted bootc image ref where unprivileged consumers (Common's
+# /usr/libexec/ublue-booted-image, used by fastfetch's ublue-image-info.sh)
+# can read it. `bootc status` requires root on bootc >= 1.14, so the live
+# query is dead in user sessions, and the baked image tag is the compose-time
+# tag. The booted ref cannot change within a boot, so one write per boot is
+# always accurate. Parity with Dakota (projectbluefin/utah#675).
 set -euo pipefail
 
 bootc_json="$(bootc status --json 2>/dev/null || true)"
