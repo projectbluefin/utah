@@ -29,7 +29,7 @@ Known hang (Utah #354): on some hardware GNOME Shell stops responding while
 someone types into the Wi-Fi password dialog. The journal shows NetworkManager
 `need-auth` for the network, then `at-spi2-registryd` reporting
 `Disabling unresponsive app` for the Shell's PID; the kernel keeps logging.
-Connect without the dialog: `sudo nmcli device wifi connect SSID --ask`, from
+Connect without the dialog: `sudo nmcli --ask device wifi connect SSID`, from
 a terminal, a text console (Ctrl+Alt+F3) or SSH. Collect the stacks below
 before restarting the Shell and attach them to that issue.
 
