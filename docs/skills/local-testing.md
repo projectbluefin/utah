@@ -428,19 +428,19 @@ This file gate complements deployment-to-entry matching (issue #361 / PR #571);
 it does not itself prove which deployment an entry represents. Fixture tests
 run the same guest checker via `python3 -m unittest discover -s tests -p test_boot_files.py`.
 
-Phases 1, 3 and 4 run `iso/scripts/verify-selinux-store.sh` in the guest (#551; evidence
-`selinux-<mode>-<phase>.txt`). `probe`: store under `/etc/selinux` (`persistent`) or `/usr`. Phase 1
-makes sample local changes. Phase 3 first runs `image-policy` (types and TE rules equal the candidate's
-compiled policy), then checks the changes, `/var/home` labels and `Enforcing`, `reject`s an invalid CIL
-module and `remove`s; Phase 4 re-runs `probe`/`image-policy` on the rollback. See `containerfile.md`.
+Phases 1, 3 and 4 run `iso/scripts/verify-selinux-store.sh` (#551; evidence
+`selinux-<mode>-<phase>.txt`): store location, sample local changes, the running
+policy against the candidate's compiled policy rule by rule, then the rollback.
+Modes are in the script header; the store design is in `containerfile.md`.
 
-The baseline image (default `ghcr.io/projectbluefin/utah:testing`, the target ref `just iso
-testing` builds with) is the ref a live ISO installs its offline payload under, and phase 1 fails
-unless the booted deployment tracks it. The candidate is what gets staged, so it has no default:
-with the `bootc` policy it must be a different ref from the baseline, since `bootc switch` to the
-ref already booted stages nothing. The staged slot is checked against that candidate, not against
-itself: it must come from the candidate's repository, and a digest-pinned candidate must stage
-exactly that digest.
+The baseline image (default `ghcr.io/projectbluefin/utah:testing`, the target
+ref `just iso testing` builds with) is the ref a live ISO installs its offline
+payload under, and phase 1 fails unless the booted deployment tracks it. The
+candidate is what gets staged, so it has no default: with the `bootc` policy it
+must be a different ref from the baseline, since `bootc switch` to the ref
+already booted stages nothing. The staged slot is checked against that
+candidate, not against itself: it must come from the candidate's repository,
+and a digest-pinned candidate must stage exactly that digest.
 
 The default `bootc` policy stages the candidate with `bootc switch`, so the
 candidate may come from any repository. `UTAH_LIFECYCLE_POLICY=uupd` instead
