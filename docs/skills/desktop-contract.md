@@ -301,12 +301,12 @@ in a booted session's journal (`journalctl _UID=1000 | grep -i extension`).
 `tests/test_gnome_extensions.py` covers both pinned sources. On a booted VM,
 copy the changed tree under `bootc usr-overlay`, restart `gdm`, then verify
 `gnome-extensions info <uuid>` reports `State: ACTIVE`; inspect the session
-journal for load errors. The journal does not always carry them (#969): for
-an extension in `ERROR`, ask the shell for the text it recorded with
-`gdbus call --session --dest org.gnome.Shell.Extensions --object-path
-/org/gnome/Shell/Extensions --method
-org.gnome.Shell.Extensions.GetExtensionErrors <uuid>`, which
-`iso/scripts/luks-e2e.sh` prints on every extension failure. SSH probes must
+journal for load errors. At first login, poll for `ACTIVE` within the retry
+budget; see [extension startup states](ci-workflows/references/iso-e2e.md#extension-startup-states).
+For a persistent failure, query `org.gnome.Shell.Extensions.GetExtensionErrors`
+with `gdbus call --session --dest org.gnome.Shell.Extensions --object-path
+/org/gnome/Shell/Extensions --method` and the UUID (#969); the LUKS test
+prints this diagnostic because the journal can miss it. SSH probes must
 set `XDG_RUNTIME_DIR=/run/user/<uid>`
 and `DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/<uid>/bus`, because SSH does
 not inherit the graphical session's D-Bus environment. Extension dconf
