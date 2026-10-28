@@ -726,6 +726,27 @@ class GdmGreeterLogoTests(unittest.TestCase):
         self.assertEqual(len(active_lines), 2, f"unexpected active lines: {active_lines}")
 
 
+class AboutLogoContractTests(unittest.TestCase):
+    OLD = ("fedora_logo_med.png", "fedora_whitelogo_med.png",
+           "fedora-logo.png", "system-logo-white.png")
+
+    def test_contract_asserts_bluefin_artwork_logos(self):
+        data = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        files = data["branding"]["files"]
+        for name in ("bluefin-logo-light.png", "bluefin-logo-dark.png"):
+            self.assertIn(f"/usr/share/bluefin-artwork-logos/{name}", files)
+        for name in self.OLD:
+            self.assertNotIn(f"/usr/share/pixmaps/{name}", files)
+
+    def test_branding_does_not_restore_unread_fedora_pixmaps(self):
+        script = (ROOT / "scripts/configure-branding.sh").read_text()
+        containerfile = (ROOT / "Containerfile").read_text()
+        self.assertNotIn("utah-bluefin-pixmaps", script)
+        self.assertNotIn("utah-bluefin-pixmaps", containerfile)
+        for name in self.OLD:
+            self.assertNotIn(name, script)
+
+
 class FwupdRefreshDropInTests(unittest.TestCase):
     """fwupd-refresh.service ships with DynamicUser=yes and CacheDirectory=fwupdmgr
     on Fedora/Hummingbird. The combination triggers a pre-existing-public ->
