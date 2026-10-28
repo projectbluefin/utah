@@ -107,26 +107,25 @@ The four requested overrides and `ffmpegthumbnailer` are in `[factory].parity`;
 their installed releases must carry `.bfin` to prevent base substitution.
 Check new names with `just check-repos` and the image's `package-origins.txt`.
 
-`gstreamer1-plugins-bad-free` and `totem-pl-parser` stay out of the install
-request until their dependency closures publish (`soundtouch`, `faad2`,
-`openal-soft`, `libsrtp`, `uchardet` — tracked by #383). Do not list them
-under `[unavailable]`; after publication, re-verify with `just check-repos`
-against the reviewed pinned inputs before restoring either request.
+The pinned factory `sha256:688e2137` publishes `openh264` 2.7.0 and
+`gstreamer1-plugin-openh264` 1.28.6, plus `totem-pl-parser` and `uchardet`.
+Utah requests the plugin, real codec, and playlist parser by name and asserts
+their factory release identity. The plugin's library requirement alone is insufficient: older
+factory pins offered the `noopenh264` compatibility library instead of a
+working decoder. Recheck the digest-pinned repodata before carrying forward
+an older publication blocker.
 
+Utah also consumes libav, dav1d, bad-free and ugly-free GStreamer plugins,
+`ffmpegthumbnailer`, `gnome-epub-thumbnailer`, and the Papers thumbnailer.
 Package installation does not prove codec functionality. On Intel hardware,
 run `vainfo` against the render device and confirm the iHD driver loads and
 advertises the expected decode profiles. Inspect `avdec_h264`, `openh264dec`,
 and `vah264dec` with `gst-inspect-1.0`, then test a known H.264 sample.
-The audit pin published `gstreamer1-plugin-openh264` but only `noopenh264`;
-resolving that library dependency is not proof of a working decoder.
+The decoder-load probe in PR #919 failed for H.264 despite libav being installed.
 
-Remaining #383 gaps: `gstreamer1-plugin-libav` (blocked on the gstreamer1
-family bump), `papers-thumbnailer` (needs published `libspelling` or another
-native PDF provider), and `gst-thumbnailers` (needs the Rust crate stack,
-see factory #527). `ffmpegthumbnailer` is consumed; ugly-free, plugin-dav1d, and the
-epub thumbnailer are still not in the factory and stay out until
-utah-packages publishes them (#383). Full FFmpeg (not `-free`) is the decided
-direction; keep #383 open for hardware and codec proof.
+Remaining #383 gaps include full FFmpeg (the decided direction, replacing
+`-free`) and `gst-thumbnailers` (factory #527); neither is published in this
+pin. Keep #383 open for those factory deliveries and hardware/codec proof.
 
 ## Repository policy
 
@@ -363,7 +362,7 @@ Raise the overlay change as its own pull request against `main`; the bump PR
 then picks the fix up on its next rebuild.
 
 Current counts, per the README "Package parity" section: 61 Bluefin contract
-packages installed, 251 Utah additions (GNOME 51, base-image parity, device
+packages installed, 254 Utah additions (GNOME 51, base-image parity, device
 firmware, desktop services), 7 genuinely unavailable. `scripts/check-doc-counts.py` (part of
 `just check`) recomputes these from the manifests and fails if either
 document drifts from `site/data/packages.json`.
