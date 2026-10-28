@@ -23,11 +23,9 @@ files = [
 
   "/usr/share/ublue-os/bluefin-logos/bluefin.png",
   "/usr/share/pixmaps/bluefin-gdm-logo.png",
-  # Control Center has compile-time logo paths, independent of os-release.
-  "/usr/share/pixmaps/fedora_logo_med.png",
-  "/usr/share/pixmaps/fedora_whitelogo_med.png",
-  "/usr/share/pixmaps/fedora-logo.png",
-  "/usr/share/pixmaps/system-logo-white.png",
+  # Control Center's About logo paths are compile-time, independent of os-release.
+  "/usr/share/bluefin-artwork-logos/bluefin-logo-light.png",
+  "/usr/share/bluefin-artwork-logos/bluefin-logo-dark.png",
   "/usr/share/icons/hicolor/scalable/actions/ublue-logo-symbolic.svg",
   "/usr/share/icons/hicolor/icon-theme.cache",
   # The os-release LOGO icon; common ships Bluefin's raptor under this name.

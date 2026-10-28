@@ -1079,14 +1079,15 @@ if [[ -n "${EXT_CHECK}" ]]; then
         # for "Error" also catches an extension's own deliberate warnings (the
         # GSConnect guard logs one when it degrades the clipboard portal), so
         # trust the state and only surface journal lines as diagnostics.
-        # gnome-extensions asks the shell over D-Bus, and the shell answers
-        # only once it has finished loading extensions -- which is strictly
-        # after the gnome-shell process appears. Polling here rather than
-        # reading once is the difference between a real verdict and a blank.
+        # The shell answers D-Bus queries while extensions are still loading.
+        # loadExtension() starts at ERROR before awaiting initialization, and
+        # activation can also appear as UNKNOWN to gnome-extensions (#969).
+        # Wait for ACTIVE within the retry budget, not just a non-empty state.
+        # Never re-enable an extension here: a persistent failure must stay red.
         state=""
         for _ in $(seq 1 24); do
             state="$(gnome_extension_info "${uuid}" 2>/dev/null | extension_state_from_info || true)"
-            [[ -n "${state}" ]] && break
+            extension_state_is_active "${state}" && break
             sleep 5
         done
         if [[ -z "${state}" ]]; then

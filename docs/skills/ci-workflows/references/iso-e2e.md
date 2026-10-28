@@ -225,3 +225,13 @@ come from `needs.resolve.outputs.digests` and the suite mappings from
 This job surfaces scenario results, fastfetch OCR logs, and screenshots directly
 in GitHub Actions without gating `:testing` tag promotion, keeping deployments
 unblocked while maintaining visible QA signal across flavors.
+
+## Extension startup states
+
+At first login, poll for `ACTIVE` (or the older `ENABLED` spelling) within
+the test's retry budget, rather than accepting the first non-empty state.
+GNOME Shell's `loadExtension()` initially sets `ERROR` before awaiting
+initialization; an activation state may also print as `UNKNOWN`. In #969,
+E2E runs 40635543943 and 40700004838 saw these states with an empty
+`GetExtensionErrors` result. A persistent non-active state must still fail,
+with diagnostics preserved; do not toggle the extension to make it pass.

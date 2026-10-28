@@ -512,12 +512,17 @@ class EvidenceTests(unittest.TestCase):
         end = script.index("\nfi\n", script.index("did not reach ACTIVE", start)) + len("\nfi\n")
         block = script[start:end]
 
-        def run(state, errors_rc=0):
+        def run(states, errors_rc=0):
             harness = (
                 f"source {ROOT / 'iso/scripts/extension-state.sh'}\n"
                 "sleep() { :; }\n"
                 "shot() { :; }\n"
-                "gnome_extension_info() { printf 'State: %s\\n' \"$STATE\"; }\n"
+                "gnome_extension_info() {\n"
+                "  n=$(cat \"$PROBES\"); n=$((n+1)); echo \"$n\" > \"$PROBES\";\n"
+                "  total=$(wc -l < \"$STATES\"); if [ $n -gt $total ]; then n=$total; fi;\n"
+                "  state=$(sed -n \"${n}p\" \"$STATES\");\n"
+                "  if [ -n \"$state\" ]; then printf 'State: %s\\n' \"$state\"; fi;\n"
+                "}\n"
                 "ssh_target() {\n"
                 "  case \"$1\" in\n"
                 "    *GetExtensionErrors*) echo \"$1\" >> \"$CALLS\";\n"
@@ -530,15 +535,21 @@ class EvidenceTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as td:
                 calls = Path(td) / "calls"
                 calls.touch()
+                probes = Path(td) / "probes"
+                probes.write_text("0")
+                state_file = Path(td) / "states"
+                state_file.write_text("\n".join(states) + "\n")
                 env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"),
-                       "STATE": state, "ERRORS_RC": str(errors_rc),
+                       "STATES": str(state_file), "PROBES": str(probes),
+                       "ERRORS_RC": str(errors_rc),
                        "CALLS": str(calls), "MONITOR_INSTALLED": "mon",
                        "UTAH_E2E_EXTENSIONS": "gsconnect@andyholmes.github.io"}
                 result = subprocess.run(["bash", "-eu", "-o", "pipefail", "-c", harness],
                                         capture_output=True, text=True, env=env)
-                return result, calls.read_text()
+                return result, calls.read_text(), int(probes.read_text())
 
-        failed, calls = run("ERROR")
+        failed, calls, probes = run(["ERROR"])
+        self.assertEqual(probes, 24)
         self.assertNotEqual(failed.returncode, 0)
         self.assertIn("state=ERROR", failed.stderr)
         self.assertIn("    (['TypeError: boom'],)", failed.stderr)
@@ -551,12 +562,32 @@ class EvidenceTests(unittest.TestCase):
 
         # A failing error query is a diagnostic, not a new verdict: the run
         # still reports the extension's state and fails for it, not for gdbus.
-        probe_failed, _ = run("ERROR", errors_rc=1)
+        probe_failed, _, _ = run(["ERROR"], errors_rc=1)
         self.assertIn("FAIL: 1 extension(s) did not reach ACTIVE", probe_failed.stderr)
 
-        active, calls = run("ACTIVE")
+        active, calls, probes = run(["ACTIVE"])
+        self.assertEqual(probes, 1)
         self.assertEqual(active.returncode, 0, active.stderr)
         self.assertEqual(calls, "")
+
+        # GNOME answers while initialization/activation is in progress.
+        # Probe counts live in a file because each read runs in a subshell.
+        for states in (["ERROR", "UNKNOWN", "ACTIVATING", "ACTIVE"],
+                       ["", "INITIALIZED", "ENABLED"]):
+            settled, calls, probes = run(states)
+            self.assertEqual(settled.returncode, 0, settled.stderr)
+            self.assertEqual(probes, len(states))
+            self.assertEqual(calls, "")
+        for state in ("UNKNOWN", "INACTIVE", "OUT_OF_DATE", "ACTIVATING"):
+            stuck, calls, probes = run([state])
+            self.assertNotEqual(stuck.returncode, 0, state)
+            self.assertEqual(probes, 24)
+            self.assertIn(f"state={state}", stuck.stderr)
+            self.assertIn("GetExtensionErrors", calls)
+        unreadable, _, probes = run([""])
+        self.assertNotEqual(unreadable.returncode, 0)
+        self.assertIn("state could not be read", unreadable.stderr)
+        self.assertEqual(probes, 25)  # final raw diagnostic probe
 
     def test_live_desktop_is_retaken_until_the_frame_is_drawn(self):
         # The live-desktop shot is grabbed as soon as gnome-shell's process

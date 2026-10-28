@@ -2,14 +2,13 @@
 
 The About page's OS name is separate from its artwork. GNOME 51's
 `setup_os_logo` uses `DISTRIBUTOR_LOGO` and `DARK_MODE_DISTRIBUTOR_LOGO` before
-consulting os-release `LOGO`; Utah's spec configures Fedora's
-`fedora_logo_med.png`/`fedora_whitelogo_med.png` paths, or the RHEL
-`fedora-logo.png`/`system-logo-white.png` pair. Common ships Bluefin artwork
-under all four names, but the logos-RPM swap erases the early overlay.
-The desktop RUN bind-mounts Common's pinned pixmaps and branding restores
-those four files after the RPM transaction without adding a COPY layer.
-The package installer checks for residual distro artwork before this restore;
-the desktop contract then checks the restored Bluefin assets.
+consulting os-release `LOGO`; the packaged gnome-control-center configures
+`/usr/share/bluefin-artwork-logos/bluefin-logo-light.png` and
+`bluefin-logo-dark.png`, shipped by `bluefin-artwork-logos` (a
+gnome-control-center dependency). Branding no longer restores Common's
+`fedora_logo_med.png`, `fedora_whitelogo_med.png`, `fedora-logo.png` and
+`system-logo-white.png`: nothing in the image reads them. The desktop contract
+checks the two `bluefin-artwork-logos` PNGs.
 
 The pinned command-menu extension creates `St.Icon` from `menuicon-setting`.
 Keep the icon *name* `ublue-logo-symbolic`, and the command labels/order/
@@ -27,7 +26,7 @@ Wallpapers: `/usr/share/backgrounds/bluefin/*` and
 Containerfile skill). `01-bluefin.xml` and `06-bluefin.xml` are contract files.
 The mascot the live installer shows is the Utah black-outline art, staged into
 `iso/live/src/images/utahraptor.png` by the ISO builders; the os-release `LOGO`
-raptor (`fedora-logo-icon.png`) and the About-page pixmaps remain Common's.
+raptor (`fedora-logo-icon.png`) remains Common's.
 
 ## GDM greeter logo
 
