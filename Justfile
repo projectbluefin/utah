@@ -132,6 +132,8 @@ check:
     # Every executable release asset fetched during composition must be pinned
     # and verified; no build may resolve a mutable latest release.
     python3 scripts/check-download-integrity.py
+    # Reject unpinned Python installs before running the rest of the suite.
+    python3 tests/test_python_install_pins.py
     # The status page's package grid is generated from the manifests; a stale
     # committed copy would publish a list the image no longer installs.
     python3 scripts/generate-site-data.py --check
@@ -151,7 +153,6 @@ check:
          <(grep -m1 '^ARG BASE_IMAGE=' Containerfile.kernel)
     python3 scripts/flavors.py list >/dev/null
     python3 scripts/check_workflow_outputs.py
-    pip install --quiet jsonschema 2>/dev/null || true
     bash scripts/check-skill-frontmatter.sh
     bash scripts/check-skill-index.sh
     python3 scripts/generate_skill_index.py --check

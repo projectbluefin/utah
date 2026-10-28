@@ -144,6 +144,12 @@ chunkah layer order: `scripts/check-reproducible-build.sh` compares native
 
 ## Verification
 
+Python packages installed by CI must use exact `==` versions, directly or
+through a pinned requirements file. `just check` enforces this for workflow
+run steps and Justfile recipes with `tests/test_python_install_pins.py`; see
+[the contract gate](ci-workflows/references/contract-gate.md#python-install-pins)
+for supported command forms and requirements-file rules.
+
 ```bash
 just check
 ~/.local/bin/pre-commit run actionlint --all-files
