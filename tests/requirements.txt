@@ -11,5 +11,5 @@
 #             (tests/test_check_workflow_outputs.py)
 # jsonschema  scripts/generate_skill_index.py validates the generated index
 #             against its schema. (tests/test_generate_skill_index.py)
-pyyaml
-jsonschema
+pyyaml==6.0.3
+jsonschema==4.26.0
