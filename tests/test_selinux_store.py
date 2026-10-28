@@ -236,6 +236,124 @@ class GuestCheckerTests(unittest.TestCase):
                 self.fail(f"grep -q must not consume a pipe: {line.strip()}")
 
 
+class ImagePolicyCheckTests(unittest.TestCase):
+    """`image-policy` against fake SELinux tools.
+
+    The fakes answer from `<name>-image` when given the pristine compiled
+    policy and from `<name>-running` otherwise, as seinfo and sesearch read
+    the running policy when no policy file is named.
+    """
+
+    TYPES = "Types: 3\n   init_t\n   httpd_t\n   user_home_dir_t\n"
+    RULES = (
+        "allow httpd_t httpd_sys_content_t:file { getattr open read };\n"
+        "type_transition init_t httpd_exec_t:process httpd_t;\n"
+    )
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.dir = Path(self.temp.name)
+        self.conf = self.dir / "semanage.conf"
+        self.conf.write_text(CONF_HEAD + NEW_LINE + "\n")
+        self.store = self.dir / "pristine"
+        (self.store / "policy").mkdir(parents=True)
+        (self.store / "policy/policy.35").write_bytes(b"compiled")
+        (self.store / "active/modules/100/apache").mkdir(parents=True)
+        self.bin = self.dir / "bin"
+        self.bin.mkdir()
+        for tool in ("seinfo", "sesearch"):
+            self.fake(tool, f"""for arg; do
+    if [[ "$arg" == "{self.store}/policy/policy.35" ]]; then
+        exec cat "{self.dir}/{tool}-image"
+    fi
+done
+exec cat "{self.dir}/{tool}-running"
+""")
+        self.fake("getenforce", "echo Enforcing\n")
+        self.fake("semodule", "printf 'apache\\nutah_e2e\\n'\n")
+        self.write("seinfo-image", self.TYPES)
+        self.write("sesearch-image", self.RULES)
+
+    def fake(self, name, body):
+        path = self.bin / name
+        path.write_text("#!/usr/bin/bash\n" + body)
+        path.chmod(0o755)
+
+    def write(self, name, text):
+        (self.dir / name).write_text(text)
+
+    def run_check(self):
+        env = dict(
+            os.environ,
+            PATH=f"{self.bin}:{os.environ['PATH']}",
+            UTAH_SEMANAGE_CONF=str(self.conf),
+            UTAH_PRISTINE_STORE=str(self.store),
+        )
+        return subprocess.run(
+            ["bash", str(CHECKER), "image-policy"],
+            capture_output=True, text=True, check=False, env=env,
+        )
+
+    def test_image_policy_plus_the_sample_module_passes(self):
+        self.write("seinfo-running", self.TYPES + "   utah_e2e_t\n")
+        self.write("sesearch-running", self.RULES + "allow utah_e2e_t utah_e2e_t:file read;\n")
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("PASS", result.stdout)
+
+    def test_changed_allow_rule_with_identical_names_fails(self):
+        """hanthor's #894 finding: name sets alone miss a changed rule."""
+        self.write("seinfo-running", self.TYPES)
+        self.write("sesearch-running", self.RULES.replace(" open read", " read"))
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("TE rules differ", result.stderr)
+        self.assertIn("image only: allow httpd_t", result.stderr)
+        self.assertIn("running only: allow httpd_t", result.stderr)
+
+    def test_type_the_image_dropped_but_still_running_fails(self):
+        self.write("seinfo-running", self.TYPES + "   old_t\n")
+        self.write("sesearch-running", self.RULES)
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("types differ", result.stderr)
+        self.assertIn("running only: old_t", result.stderr)
+
+    def test_empty_tool_output_fails_instead_of_comparing_equal(self):
+        self.write("seinfo-image", "")
+        self.write("seinfo-running", "")
+        self.write("sesearch-running", self.RULES)
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("seinfo cannot list the types", result.stderr)
+
+    def test_many_differences_report_instead_of_dying_on_sigpipe(self):
+        self.write("seinfo-running", self.TYPES)
+        self.write("sesearch-running", "".join(
+            f"allow t{i}_t t{i}_t:file read;\n" for i in range(20000)
+        ))
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("TE rules differ", result.stderr)
+
+    def test_missing_pristine_module_fails(self):
+        (self.store / "active/modules/100/extra").mkdir()
+        self.write("seinfo-running", self.TYPES)
+        self.write("sesearch-running", self.RULES)
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("missing from the active store: extra", result.stderr)
+
+    def test_immutable_store_compares_rules_without_listing_modules(self):
+        self.conf.write_text(CONF_HEAD + OLD_LINE + "\n")
+        self.fake("semodule", "exit 1\n")
+        self.write("seinfo-running", self.TYPES)
+        self.write("sesearch-running", self.RULES)
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+
 class LifecycleHarnessTests(unittest.TestCase):
     def test_harness_applies_before_and_verifies_after_the_upgrade(self):
         text = LIFECYCLE.read_text()
@@ -253,6 +371,21 @@ class LifecycleHarnessTests(unittest.TestCase):
         self.assertLess(upgraded_apply, upgraded_reject)
         self.assertLess(upgraded_reject, upgraded_remove)
         self.assertLess(upgraded_remove, rollback)
+
+    def test_candidate_policy_is_checked_before_anything_rebuilds_it(self):
+        text = LIFECYCLE.read_text()
+        image_policy = text.index("selinux_check upgraded image-policy")
+        self.assertLess(text.index('ACTIVE_PHASE="upgraded"'), image_policy)
+        for rebuild in ("verify", "apply", "reject", "remove"):
+            self.assertLess(image_policy, text.index(f"selinux_check upgraded {rebuild}"), rebuild)
+
+    def test_rollback_checks_the_restored_selinux_state(self):
+        text = LIFECYCLE.read_text()
+        rollback = text.index('ACTIVE_PHASE="rollback"')
+        complete = text.index('ACTIVE_PHASE="complete"')
+        section = text[rollback:complete]
+        self.assertIn('[[ "${ROLLBACK_SELINUX}" == "${BASELINE_SELINUX}" ]]', section)
+        self.assertIn("selinux_check rollback image-policy", section)
 
     def test_upgraded_deployment_must_have_a_writable_store(self):
         text = LIFECYCLE.read_text()

@@ -428,11 +428,11 @@ This file gate complements deployment-to-entry matching (issue #361 / PR #571);
 it does not itself prove which deployment an entry represents. Fixture tests
 run the same guest checker via `python3 -m unittest discover -s tests -p test_boot_files.py`.
 
-Phases 1 and 3 also run `iso/scripts/verify-selinux-store.sh` in the guest (#551; evidence
-`selinux-<mode>-<phase>.txt`). `probe` reports whether the store is under `/etc/selinux`
-(`persistent`) or `/usr` (`immutable`). Phase 1 makes sample local changes; Phase 3 checks they
-survive the reboot along with the new image's policy, `/var/home` labels and `Enforcing`, then
-`reject` offers an invalid CIL module and `remove` cleans up. Mechanism: `containerfile.md`.
+Phases 1, 3 and 4 run `iso/scripts/verify-selinux-store.sh` in the guest (#551; evidence
+`selinux-<mode>-<phase>.txt`). `probe`: store under `/etc/selinux` (`persistent`) or `/usr`. Phase 1
+makes sample local changes. Phase 3 first runs `image-policy` (types and TE rules equal the candidate's
+compiled policy), then checks the changes, `/var/home` labels and `Enforcing`, `reject`s an invalid CIL
+module and `remove`s; Phase 4 re-runs `probe`/`image-policy` on the rollback. See `containerfile.md`.
 
 The baseline image (default `ghcr.io/projectbluefin/utah:testing`, the target ref `just iso
 testing` builds with) is the ref a live ISO installs its offline payload under, and phase 1 fails

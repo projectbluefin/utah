@@ -169,7 +169,7 @@ verify_boot_files() {
 # Persistent SELinux changes (#551): the candidate must keep its policy store
 # under writable /etc/selinux, and ostree's policy rebuild in the new
 # deployment must carry local changes forward while the image's own policy
-# still takes effect. Modes: probe, apply, verify, reject, remove; stdout and stderr
+# still takes effect. Modes: probe, apply, image-policy, verify, reject, remove; stdout and stderr
 # land in evidence/selinux-<mode>-<phase>.txt. Returns the checker's status.
 selinux_check() {
     local phase="$1" mode="$2" checker
@@ -731,6 +731,12 @@ UPGRADED_SELINUX="$(selinux_probe upgraded)" \
     || diagnose_failure "Could not probe the SELinux store layout on the upgraded deployment; see selinux-probe-upgraded.txt"
 [[ "${UPGRADED_SELINUX}" == "persistent" ]] \
     || diagnose_failure "Upgraded deployment keeps its SELinux policy store under read-only /usr; setsebool -P, semanage and semodule cannot work (#551)"
+# Before apply, reject or remove rebuild the policy, the policy the upgraded
+# deployment booted with must be the candidate's own, rule for rule; a later
+# rebuild would otherwise hide an update that never took effect.
+selinux_check upgraded image-policy \
+    || diagnose_failure "The upgraded deployment is not running the candidate image's SELinux policy; see selinux-image-policy-upgraded.txt"
+echo "  [Phase 3] SELinux: running policy matches the candidate image's policy"
 if [[ "${SELINUX_LOCAL_CHANGES}" == 1 ]]; then
     selinux_check upgraded verify \
         || diagnose_failure "Local SELinux changes made before the upgrade are not in effect after it, or the image's policy is not; see selinux-verify-upgraded.txt"
@@ -793,6 +799,16 @@ verify_boot_files rollback
 # Checking only `booted` would miss the regression where the rollback slot
 # BLS entry went missing after `bootc rollback`.
 verify_bootmgr_entries "${WORK}/rollback-status.json" rollback "booted,rollback"
+
+# The restored baseline keeps its own store layout and runs its own image's
+# policy again (with its own /etc's local changes), not the candidate's.
+ROLLBACK_SELINUX="$(selinux_probe rollback)" \
+    || diagnose_failure "Could not probe the SELinux store layout after rollback; see selinux-probe-rollback.txt"
+[[ "${ROLLBACK_SELINUX}" == "${BASELINE_SELINUX}" ]] \
+    || diagnose_failure "Rollback deployment reports a ${ROLLBACK_SELINUX} SELinux store; the baseline had ${BASELINE_SELINUX}"
+selinux_check rollback image-policy \
+    || diagnose_failure "The restored baseline is not running its own image's SELinux policy after rollback; see selinux-image-policy-rollback.txt"
+echo "  [Phase 4] SELinux: restored baseline runs its own image's policy"
 
 python3 "${ROOT}/scripts/bootc_lifecycle.py" record-diagnostics \
     --output-dir "${EVIDENCE}" \

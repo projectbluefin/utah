@@ -13,9 +13,14 @@
 #   apply    make the four sample changes; fail if any tool fails or the
 #            change is not in effect afterwards.
 #   verify   the four changes are in effect, the store is listable, SELinux
-#            is enforcing, home directories keep their labels, and every
-#            type and module of the image's own policy is part of the
-#            running policy (a local change must not hold the policy back).
+#            is enforcing, home directories keep their labels, and the
+#            running policy is the image's own (see image-policy) with every
+#            module of the image's store active (a local change must not
+#            hold the policy back).
+#   image-policy
+#            SELinux is enforcing and the running policy is the image's own
+#            compiled policy plus the local changes, compared rule by rule.
+#            Run it first after a reboot, before anything rebuilds the policy.
 #   reject   offer semodule a module it must refuse (invalid CIL); the install
 #            must fail and leave the store, the running policy and the local
 #            changes exactly as they were, so the machine stays bootable.
@@ -100,18 +105,54 @@ require_home_labels() {
     echo "home labels: ${HOME_ROOT} home_root_t, ${HOME_ROOT}/<user> user_home_dir_t"
 }
 
+# Types and TE rules (allow, type_transition, ...) of a policy, sorted, one
+# per line; without an argument, of the running policy. The sample module
+# only declares its type, so dropping that type leaves the image's own part.
+policy_types() {
+    seinfo "$@" -t | tail -n +2 | sed 's/^ *//' | { grep -vx -- "$MODULE_TYPE" || true; } | LC_ALL=C sort
+}
+
+policy_rules() {
+    sesearch "$@" -A -T | { grep -vw -- "$MODULE_TYPE" || true; } | LC_ALL=C sort
+}
+
+# Fail with the first differing lines unless the image's and the running
+# sorted lists are equal. `|| true`: head closing the pipe trips pipefail.
+require_same() {
+    local what="$1" image="$2" running="$3" differences
+    differences=$(LC_ALL=C comm -3 <(printf '%s\n' "$image") <(printf '%s\n' "$running") \
+        | sed $'s/^\t/  running only: /; t; s/^/  image only: /' | head -n 5 || true)
+    [[ -z "$differences" ]] || fail "${what} differ between the image's policy and the running policy:"$'\n'"${differences}"
+}
+
 # The image's own policy must be the running policy, with the local changes
-# on top: every type of the pristine compiled policy under /usr/etc and
-# every module shipped in the pristine store must be present. A machine
-# whose local store held back the new image's policy fails here.
+# on top: the types and TE rules of the pristine compiled policy under
+# /usr/etc must equal the running ones, and every module shipped in the
+# pristine store must be active. Comparing rules, not only names, catches a
+# candidate that changes an allow rule in an existing module while the old
+# compiled policy keeps running. A machine whose local store held back the
+# new image's policy fails here.
 require_image_policy() {
-    local pristine_policy missing name active_modules
+    local pristine_policy image running missing name active_modules
     pristine_policy=$(find "${PRISTINE_STORE}/policy" -maxdepth 1 -name 'policy.*' 2>/dev/null | sort -V | tail -n 1)
     [[ -n "$pristine_policy" ]] || fail "no compiled policy under ${PRISTINE_STORE}/policy"
-    missing=$(comm -23 \
-        <(seinfo "$pristine_policy" -t | tail -n +2 | sed 's/^ *//' | sort) \
-        <(seinfo -t | tail -n +2 | sed 's/^ *//' | sort))
-    [[ -z "$missing" ]] || fail "types of the image's policy are missing from the running policy: $(echo "$missing" | head -n 5 | tr '\n' ' ')"
+    # An empty list means the tool failed; it must not compare equal.
+    image=$(policy_types "$pristine_policy") || image=""
+    running=$(policy_types) || running=""
+    [[ -n "$image" ]] || fail "seinfo cannot list the types of ${pristine_policy}"
+    [[ -n "$running" ]] || fail "seinfo cannot list the types of the running policy"
+    require_same types "$image" "$running"
+    image=$(policy_rules "$pristine_policy") || image=""
+    running=$(policy_rules) || running=""
+    [[ -n "$image" ]] || fail "sesearch cannot list the TE rules of ${pristine_policy}"
+    [[ -n "$running" ]] || fail "sesearch cannot list the TE rules of the running policy"
+    require_same "TE rules" "$image" "$running"
+    # An immutable store cannot even be listed (semodule cannot take its
+    # lock), and nothing local can hold its modules back.
+    if ! store_is_persistent; then
+        echo "image policy: types and TE rules of ${pristine_policy} match the running policy"
+        return
+    fi
     missing=""
     active_modules=$(semodule -l)
     for dir in "${PRISTINE_STORE}"/active/modules/*/*/; do
@@ -122,7 +163,7 @@ require_image_policy() {
         fi
     done
     [[ -z "$missing" ]] || fail "modules of the image's store are missing from the active store:${missing}"
-    echo "image policy: every pristine type and module is in the running policy"
+    echo "image policy: types and TE rules of ${pristine_policy} match the running policy; every pristine module is active"
 }
 
 report_finalize_log() {
@@ -164,9 +205,15 @@ case "$mode" in
         require_enforcing
         echo "PASS: four local SELinux changes applied and in effect"
         ;;
+    image-policy)
+        require_enforcing
+        require_image_policy
+        echo "PASS: the running SELinux policy is the image's own, plus local changes"
+        ;;
     verify)
         store_is_persistent || fail "store-root in ${SEMANAGE_CONF} is not /etc/selinux"
         require_enforcing
+        require_image_policy
         report_finalize_log
         run semodule -l >/dev/null
         run semanage boolean -l >/dev/null
@@ -177,7 +224,6 @@ case "$mode" in
         port_listed || fail "port ${PORT}/tcp is not labelled ${PORT_TYPE}"
         module_listed || fail "module ${MODULE} is not listed by semodule -l"
         type_in_running_policy || fail "${MODULE_TYPE} is not in the running policy"
-        require_image_policy
         require_home_labels
         echo "PASS: local SELinux changes in effect alongside the image's policy"
         ;;
@@ -221,7 +267,7 @@ case "$mode" in
         echo "PASS: invalid local module rejected; store, policy and labels unchanged"
         ;;
     *)
-        echo "Usage: $0 probe|apply|verify|reject|remove" >&2
+        echo "Usage: $0 probe|apply|image-policy|verify|reject|remove" >&2
         exit 2
         ;;
 esac
