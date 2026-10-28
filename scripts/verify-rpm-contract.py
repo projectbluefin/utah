@@ -30,6 +30,7 @@ import re
 import shlex
 import subprocess
 import sys
+import tempfile
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -977,6 +978,42 @@ def resolve_build_timestamp(environ: dict[str, str] | None = None) -> tuple[str 
         return None, "unusable"
 
 
+# Probe software decoders only: these must load without a GPU in the image
+# build. Hardware profiles and actual sample playback remain hardware tests.
+MEDIA_DECODERS = {
+    "gstreamer1-plugin-libav": "avdec_h264",
+    "gstreamer1-plugin-dav1d": "dav1ddec",
+}
+
+
+def verify_media_capabilities(packages: set[str]) -> list[str]:
+    """Require the contracted GStreamer decoder elements to load on-image."""
+    errors: list[str] = []
+    with tempfile.TemporaryDirectory(prefix="utah-gstreamer-") as directory:
+        env = os.environ.copy()
+        # Rebuild the registry from installed plugins, never a cached success.
+        env["GST_REGISTRY"] = str(Path(directory) / "registry.bin")
+        env["GST_PLUGIN_PATH"] = ""
+        env["GST_PLUGIN_PATH_1_0"] = ""
+        for package, element in MEDIA_DECODERS.items():
+            if package not in packages:
+                continue
+            try:
+                result = subprocess.run(
+                    ["/usr/bin/gst-inspect-1.0", element],
+                    capture_output=True, text=True, timeout=30, env=env,
+                )
+            except (OSError, subprocess.TimeoutExpired) as err:
+                errors.append(f"Media decoder '{element}' ({package}) could not be inspected: {err}")
+                continue
+            if result.returncode != 0:
+                detail = result.stderr.strip() or result.stdout.strip()
+                errors.append(
+                    f"Media decoder '{element}' ({package}) failed to load: {detail}"
+                )
+    return errors
+
+
 def read_factory_pin(repo_file: Path = Path(FACTORY_REPO_PATH)) -> str | None:
     """The package factory digest stamped into the pinned repository file.
 
@@ -1338,6 +1375,8 @@ def main() -> int:
     )
     attestation_errors.extend(verify_parity_origin(parity, installed, factory_parity))
 
+    attestation_errors.extend(verify_media_capabilities(set(expected)))
+
     if attestation_errors:
         print(
             f"ERROR: {len(attestation_errors)} supply-chain / repository contract violation(s):",
@@ -1424,7 +1463,7 @@ def main() -> int:
             return 1
     print(
         f"All {len(expected)} contract packages verified (GNOME versions, factory rebuilds, "
-        "parity origin)."
+        "parity origin, software media decoders)."
     )
     if report is None:
         print("Skipped provenance report retention (--no-report).")

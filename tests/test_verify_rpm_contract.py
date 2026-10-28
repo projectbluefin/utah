@@ -2954,5 +2954,54 @@ class UsageTests(unittest.TestCase):
         self.assertIn("manifest", result.stderr)
 
 
+
+class MediaCapabilityTests(unittest.TestCase):
+    """Installed codec RPMs must also expose usable decoder elements."""
+
+    def setUp(self):
+        self.module = load_module()
+
+    def test_decoders_load_with_fresh_registry(self):
+        registry_paths = []
+
+        def inspect(command, **kwargs):
+            self.assertEqual(command[0], "/usr/bin/gst-inspect-1.0")
+            registry = Path(kwargs["env"]["GST_REGISTRY"])
+            self.assertTrue(registry.parent.is_dir())
+            self.assertFalse(registry.exists())
+            self.assertEqual(kwargs["env"]["GST_PLUGIN_PATH_1_0"], "")
+            registry_paths.append(registry)
+            return subprocess.CompletedProcess(command, 0, "Factory Details", "")
+
+        with patch.object(self.module.subprocess, "run", side_effect=inspect) as run:
+            errors = self.module.verify_media_capabilities(set(self.module.MEDIA_DECODERS))
+        self.assertEqual(errors, [])
+        self.assertEqual([call.args[0][1] for call in run.call_args_list],
+                         ["avdec_h264", "dav1ddec"])
+        self.assertTrue(all(not path.parent.exists() for path in registry_paths))
+
+    def test_missing_element_fails_even_when_package_is_installed(self):
+        result = subprocess.CompletedProcess([], 255, "", "No such element avdec_h264")
+        with patch.object(self.module.subprocess, "run", return_value=result):
+            errors = self.module.verify_media_capabilities({"gstreamer1-plugin-libav"})
+        self.assertEqual(len(errors), 1)
+        self.assertIn("avdec_h264", errors[0])
+        self.assertIn("No such element", errors[0])
+
+    def test_missing_tool_and_hung_probe_fail(self):
+        for error in (FileNotFoundError("gst-inspect missing"),
+                      subprocess.TimeoutExpired("gst-inspect-1.0", 30)):
+            with self.subTest(error=error):
+                with patch.object(self.module.subprocess, "run", side_effect=error):
+                    errors = self.module.verify_media_capabilities({"gstreamer1-plugin-libav"})
+                self.assertEqual(len(errors), 1)
+                self.assertIn("could not be inspected", errors[0])
+
+    def test_uncontracted_plugins_are_not_required(self):
+        with patch.object(self.module.subprocess, "run") as run:
+            self.assertEqual(self.module.verify_media_capabilities({"bash"}), [])
+        run.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
