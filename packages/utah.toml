@@ -187,7 +187,12 @@ packages = [
     "intel-mediasdk",
     "intel-vpl-gpu-rt",
     "libvpl",
-    # Totem stays omitted: uchardet is unpublished (#383).
+    # Playlist parsing and software H.264 decoding now have their dependency
+    # closures in the pinned factory (#383). Request the real codec explicitly
+    # so a noopenh264 compatibility library cannot satisfy the plugin alone.
+    "totem-pl-parser",
+    "gstreamer1-plugin-openh264",
+    "openh264",
     # Locale and fonts
     "langpacks-en",
     "langpacks-fonts-en",
@@ -877,6 +882,9 @@ parity = [
     "intel-mediasdk",
     "intel-vpl-gpu-rt",
     "ffmpegthumbnailer",
+    "totem-pl-parser",
+    "gstreamer1-plugin-openh264",
+    "openh264",
     # Bluefin tools consumed from the pinned factory (#263, #388, #392).
     "thermald",
     "intel-lpmd",
