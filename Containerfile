@@ -3,7 +3,7 @@ ARG BASE_IMAGE=quay.io/hummingbird-community/os-minimal:latest@sha256:9f2b4bf74d
 # Keep this pin in Utah so an image build is reproducible and can be reviewed
 # against the exact package set it consumes.
 ARG PACKAGE_IMAGE=ghcr.io/projectbluefin/utah-packages
-ARG PACKAGE_IMAGE_SHA=sha256:710195827218db354cd1d0033d68db8b96efec97f1aaf3f45f8973479c6e7215
+ARG PACKAGE_IMAGE_SHA=sha256:ceee359f8a3d02a5112ee34a9a6764ff9be77a6e61305a90e0da9878f9fa888e
 # CI keeps PACKAGE_IMAGE_SHA pinned. PACKAGE_IMAGE_REF supports a local image
 # in containers-storage, where no registry digest is available.
 ARG PACKAGE_IMAGE_REF=${PACKAGE_IMAGE}@${PACKAGE_IMAGE_SHA}
