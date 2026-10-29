@@ -87,21 +87,15 @@ post-build verification workflows, not the complete workflow inventory:
   against an unmerged, unchanged bump branch does not re-dispatch for
   nothing.
 - `.github/workflows/update-gnome-extensions.yml` -- weekly and manual
-  submodule updates. Each `.gitmodules` branch must name a real remote branch;
-  `git submodule update --remote` cannot follow a tag written as a branch.
-  The generated report reads upstream metadata through
-  `scripts/gnome-extension-shell-versions.py`, which reuses the metadata
-  paths in `scripts/verify-gnome-extensions.py` (`SOURCE_EXTENSIONS`); update
-  that map when adding an extension. Paths are passed as argv and
-  shell-version values are allow-listed before entering the Markdown table.
-  The metadata helper exits nonzero for missing, unreadable, or invalid
-  metadata (including any missing member of a multi-extension submodule).
-  Keep its report assignment under `set -e` so the bump step fails before
-  proposing those heads; do not replace failures with an unknown-value marker.
-  Its dispatch uses `contract_only=true`, so it runs source contract checks
-  only: it does not build an image or run the image-side extension verifier.
-  A trusted full image build remains necessary before merge. No automated
-  merge is enabled.
+  submodule updates. `prepare-gnome-extension-bumps.py` validates each
+  tracked-branch head; missing or invalid metadata keeps that source pinned,
+  warns in the run summary, and does not block other candidates. It uses the
+  metadata paths in `scripts/verify-gnome-extensions.py`
+  (`SOURCE_EXTENSIONS`); update that map when adding an extension. Paths are
+  passed as argv and `shell-version` values are allow-listed in the report.
+  The dispatch uses `contract_only=true`: source contract checks only, not an
+  image build or the image-side extension verifier. A trusted full image build
+  remains necessary before merge. No automated merge is enabled.
 - `.github/workflows/post-testing-e2e.yml` -- successful non-PR testing builds
   explicitly dispatch this, or manually supply a successful testing build run ID.
   Its `promote-to-testing` job records per-digest E2E evidence as commit

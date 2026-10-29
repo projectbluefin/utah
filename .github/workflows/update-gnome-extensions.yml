@@ -26,62 +26,11 @@ jobs:
           persist-credentials: false
           submodules: true
 
-      - name: Bump extension submodules to tracked-branch heads
-        id: bump
+      - name: Prepare safe extension bump report
         run: |
-          set -euo pipefail
-          # create-pull-request runs even on an empty diff so a reversion can
-          # close the stale bump PR. It still needs a body file on that path.
-          : > "$RUNNER_TEMP/gnome-extensions-pr.md"
-          paths=$(git config --file .gitmodules --get-regexp '^submodule\..*\.path' | cut -d' ' -f2)
-          # Word-splitting intended: one path per line, no spaces in tree.
-          # shellcheck disable=SC2086
-          echo "$paths" | xargs git submodule update --init --depth 1 --
-          # A shallow submodule checkout fetches only the remote default
-          # branch. Fetch each configured branch explicitly before selecting
-          # it, since some extensions track a non-default release branch.
-          git config --file .gitmodules --get-regexp '^submodule\..*\.path$' |
-            while read -r key path; do
-              name=${key#submodule.}
-              name=${name%.path}
-              branch=$(git config --file .gitmodules --get "submodule.$name.branch" || true)
-              if [ -n "$branch" ]; then
-                git -C "$path" fetch --depth=1 origin \
-                  "+refs/heads/$branch:refs/remotes/origin/$branch"
-                git -C "$path" checkout --detach "refs/remotes/origin/$branch"
-              else
-                git submodule update --remote --depth 1 -- "$path"
-              fi
-            done
-          {
-            echo "# GNOME extension bumps"
-            echo
-            echo "Moves each extension submodule to the head of its tracked branch."
-            echo "This workflow dispatches contract-only CI on the proposed branch."
-            echo "It does not run the image-side extension verifier or build an image."
-            echo
-            echo "This PR intentionally does not auto-merge; a new upstream"
-            echo "head can break the GNOME 51 support range or the build"
-            echo "script's assumptions (paths, schemas, meson targets)."
-            echo
-            echo "## Heads"
-            echo
-            echo "| extension | old | new | GNOME shell-version |"
-            echo "|---|---|---|---|"
-            while read -r p; do
-              old=$(git ls-tree HEAD "$p" | cut -f1 | cut -d' ' -f3)
-              new=$(git -C "$p" rev-parse HEAD)
-              if [ "$old" = "$new" ]; then
-                ver="(unchanged)"
-              else
-                # A metadata error exits this step under set -e, before a PR
-                # can propose an unreadable or retired upstream head.
-                ver=$(python3 scripts/gnome-extension-shell-versions.py "$p")
-              fi
-              # shellcheck disable=SC2016
-              printf '| `%s` | `%s` | `%s` | %s |\n' "$p" "${old:0:12}" "${new:0:12}" "$ver"
-            done <<< "$paths"
-          } > "$RUNNER_TEMP/gnome-extensions-pr.md"
+          python3 .github/scripts/prepare-gnome-extension-bumps.py \
+            --root "$GITHUB_WORKSPACE" \
+            --report "$RUNNER_TEMP/gnome-extensions-pr.md"
           # Always run create-pull-request, including on an empty diff, so it
           # can close a stale automation PR after an upstream reversion.
 
