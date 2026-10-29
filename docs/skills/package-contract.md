@@ -107,7 +107,7 @@ The four requested overrides and `ffmpegthumbnailer` are in `[factory].parity`;
 their installed releases must carry `.bfin` to prevent base substitution.
 Check new names with `just check-repos` and the image's `package-origins.txt`.
 
-The pinned factory `sha256:688e2137` publishes `openh264` 2.7.0 and
+The pinned factory (`ARG PACKAGE_IMAGE_SHA` in `Containerfile`) publishes `openh264` 2.7.0 and
 `gstreamer1-plugin-openh264` 1.28.6, plus `totem-pl-parser` and `uchardet`.
 Utah requests the plugin, real codec, and playlist parser by name and asserts
 their factory release identity. The plugin's library requirement alone is insufficient: older
