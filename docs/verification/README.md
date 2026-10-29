@@ -8,9 +8,9 @@ the check beside it passed.
 
 | | |
 | --- | --- |
-| Captured | 2026-10-29T01:39:38Z |
+| Captured | 2026-10-29T04:16:20Z |
 | Live ISO | `utah-live.iso`, 5.2G |
-| Installed image | `ghcr.io/projectbluefin/utah@sha256:9e0c8a923871c1cb50cc25876eb4d6461da2e570d1bcb20bb9996c8cc78295f0` |
+| Installed image | `ghcr.io/projectbluefin/utah@sha256:b2a5a546fda7d278d0ec0fbbb00c6047727fd3ef879e0cd7aa9d052c6369fb45` |
 | Root filesystem | btrfs on LUKS2, passphrase unlock |
 | Live session | GNOME, wayland |
 | Installed session | GNOME, wayland, user `utahtest` |
