@@ -233,6 +233,47 @@ promotes the OGC kernel for gaming flavors, rebuilds that release's initramfs,
 and verifies early microcode plus the installed TPM/passkey/smart-card unlock
 modules before the image can commit.
 
+## The SELinux module store lives under `/etc/selinux`
+
+Hummingbird's base relocates the libsemanage store to `/usr/lib/selinux` and
+appends `store-root=/usr/lib/selinux` to `/etc/selinux/semanage.conf`, so
+the store is image-managed and immutable. On a booted bootc system `/usr` is
+read-only, so every tool that writes -- or even locks -- the store fails:
+`setsebool -P` exits 255 with no message, `semanage` and `semodule -l` cannot
+take the read lock. Users could not persist a boolean, add a file context or
+port label, or load a local module, all of which work on Bluefin (#551).
+
+`utah-relocate-selinux-store` (`scripts/relocate-selinux-store.sh`) moves
+`targeted/active` and `final` to `/etc/selinux` and rewrites `store-root`,
+the layout Fedora atomic and Bluefin use. It runs inside the package
+transaction RUN, immediately before `utah-fix-home-labels`, so that script's
+`semodule -n -B` rebuilds into the store's final location. The compiled
+policy the kernel loads was always at `/etc/selinux/targeted/policy`; only
+the module store moves. The script fails the build rather than guess when
+`semanage.conf` names a different root or anything other than those two
+entries remains under `/usr/lib/selinux`, and is a no-op when the store is
+already under `/etc` (`tests/test_selinux_store.py`).
+
+Why updates still deliver policy: ostree rebuilds the policy in every new
+deployment after the 3-way `/etc` merge (`semodule -N --refresh` in
+`ostree-finalize-staged`, ostree >= 2022.3, ostreedev/ostree#2569). The merge
+carries the machine's local modules, booleans, file contexts and port labels
+forward and the refresh combines them with the new image's modules. The
+trade-off accepted in #551: about 18 MB and some 1,300 files join the `/etc`
+merge, and a local module the new policy cannot resolve fails the refresh,
+so ostree leaves the machine on its current deployment -- `bootc status`
+keeps showing the old image and `journalctl -b -1 -u
+ostree-finalize-staged.service` names the failure. Recovery is
+`semodule -r <module>` or restoring the pristine store from
+`/usr/etc/selinux`; both are documented for users in `README.md`.
+
+The lifecycle harness proves this on a booted guest
+(`iso/scripts/verify-selinux-store.sh`, see `local-testing.md`). A
+`switch` from a pre-#551 image, whose `/etc/selinux` has no `active/`,
+takes the new image's store whole; a machine switched in from Bluefin
+carries whatever store files it changed there, which become live again at
+its first update -- they are kept, not promised to work.
+
 ## Clean and lint share a layer
 
 Everything above writes build-time residue that bootc lint rejects: dnf logs
