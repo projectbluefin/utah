@@ -128,6 +128,25 @@
       "doc_type": "reference"
     },
     {
+      "id": "lifecycle-e2e",
+      "name": "lifecycle-e2e",
+      "one_line_purpose": "Run the QEMU lifecycle harness and validate bootc upgrade, rollback, and BLS boot files.",
+      "entry_point": "docs/skills/lifecycle-e2e.md",
+      "category": "testing",
+      "status": "active",
+      "tags": [
+        "qemu",
+        "bootc",
+        "lifecycle",
+        "iso",
+        "e2e"
+      ],
+      "description": "Atomic bootc lifecycle transitions between two immutable Utah digests in QEMU: baseline, staging, reboot, and rollback. BLS boot-file and boot-manager checks, verify-boot-files.sh, uupd versus bootc staging, and the e2e harness.",
+      "version": "1.0",
+      "last_updated": "2026-10-29",
+      "doc_type": "runbook"
+    },
+    {
       "id": "local-testing",
       "name": "local-testing",
       "one_line_purpose": "Build, install, and boot Utah locally in a VM or live ISO.",
@@ -143,7 +162,7 @@
       ],
       "description": "Local validation loop: build-ghcr, bootc install to-disk, QEMU/noVNC boot, live ISO boot paths, and Secure Boot strategy. Use when validating changes end-to-end or debugging boot, GDM, or live-session failures.",
       "version": "1.0",
-      "last_updated": "2026-10-11",
+      "last_updated": "2026-10-29",
       "doc_type": "runbook"
     },
     {
