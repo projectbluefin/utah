@@ -249,16 +249,15 @@ for the live image's own `installer-local` remote.
 ## GNOME extensions are pinned submodules
 
 Utah deliberately differs from Bluefin Classic's RPM path: selected GNOME Shell
-extensions are pinned as Git submodules and built into the image. `.gitmodules`
+extensions are pinned Git submodules and built into the image. `.gitmodules`
 has 16 trees under `system_files/shared/usr/share/gnome-shell/extensions/`;
-gitlinks pin exact commits. Submodule URLs and branches feed the weekly update
-workflow; only matching Utah submodules represent an extension, not full
-package-backlog parity. Do not add RPM recipes for an extension already covered
-by a Utah submodule. `.github/workflows/update-gnome-extensions.yml` opens or
-updates review PRs with old/new commits and declared Shell versions. Its
-contract-only check validates source metadata, not the installed verifier; a
-full image build must verify pins before merge. Edit `.gitmodules` directly
-for source URL or tracked-branch changes; automation advances existing pins.
+gitlinks pin exact commits. Weekly automation proposes valid tracked-branch
+heads; missing or invalid metadata keeps that source pinned and does not block
+other candidates. Only matching Utah submodules represent extensions; do not
+add RPM recipes for an extension already covered here. Contract-only CI checks
+source metadata, not the image-side verifier; full image build and runtime
+review remain required. No automated merge is enabled. Edit `.gitmodules` for
+source URL or branch changes; automation advances existing pins.
 Search Light was dropped: GNOME 51 removed `set_shader_source`, which its shader code calls, so it failed ISO tests.
 
 `scripts/verify-gnome-extensions.py` checks GNOME 51 support and provenance:
