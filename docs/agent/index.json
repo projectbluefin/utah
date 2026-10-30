@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0",
+  "skills": [
+    {
+      "id": "desktop-contract",
+      "entry_point": "skills/desktop-contract.md",
+      "description": "Maintain Bluefin Utah identity, Bluefin desktop defaults, and first-boot Flatpak policy."
+    },
+    {
+      "id": "diagnosis",
+      "entry_point": "skills/diagnosis.md",
+      "description": "Route running-machine diagnosis to the shipped Utah guidance."
+    },
+    {
+      "id": "docs-parity",
+      "entry_point": "skills/docs-parity.md",
+      "description": "Reconcile Utah's README with the docs.projectbluefin.io/utah page before deleting duplicate prose."
+    },
+    {
+      "id": "flavors",
+      "entry_point": "skills/flavors.md",
+      "description": "Add, remove, or retire an image flavor safely."
+    },
+    {
+      "id": "package-contract",
+      "entry_point": "skills/package-contract.md",
+      "description": "Maintain Bluefin package parity and Utah's overlay manifest."
+    },
+    {
+      "id": "setup-hooks",
+      "entry_point": "skills/setup-hooks.md",
+      "description": "Change a first-boot setup hook without breaking the once-only contract."
+    }
+  ]
+}

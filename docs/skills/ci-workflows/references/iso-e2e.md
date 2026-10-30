@@ -139,7 +139,11 @@ screenshot-refresh PR too, not just testing-tag promotion — a LUKS-only
 concern in `docs/verification` still has to wait on the whole matrix
 composing cleanly. It updates only the README evidence block and
 `docs/verification/`, preserving the current README's other content. The
-repository must allow Actions to create pull requests; a denied write fails
+README links to the whole run, which also holds the independent testsuite legs;
+those do not gate the record and may still be running or red, so the README
+says so without predicting either outcome. The evidence update requires the
+LUKS and production-ISO jobs to pass.
+The repository must allow Actions to create pull requests; a denied write fails
 this job visibly, without deleting test artifacts. It does not auto-merge
 the evidence PR or imply a fresh pass for a different commit.
 
@@ -197,6 +201,20 @@ a mutable tag before running the container. Updating only the builder default
 leaves verification executing unrelated code with root privileges; keep both
 consumers on this same file.
 
+### Tacklebox builder provenance
+
+Digest-locking stops a tag move but not an untrusted digest landing in the
+pin, so both consumers also verify the image before the pull (utah#918).
+`iso/scripts/verify-tacklebox-attestation.sh` checks the image read from
+`config/tacklebox-image` (or a digest-pinned `TACKLEBOX_IMAGE` override); it
+does not hold the pin itself. It installs the version-pinned cosign binary
+(verified against a pinned SHA-256) and runs
+`cosign verify-attestation --type=https://slsa.dev/provenance/v1` with the
+Fulcio identity pinned to the tacklebox `release-image.yml` workflow on
+`refs/heads/main` or a `refs/tags/v*` tag (the upstream release triggers), so
+an unsigned image or one attested by any other workflow or repository is
+rejected before each Renovate-driven digest bump can run privileged.
+
 ## Testsuite reporting (exact-digest VM suites)
 
 `post-testing-e2e.yml` runs the `testsuite` job asynchronously against each
@@ -207,3 +225,13 @@ come from `needs.resolve.outputs.digests` and the suite mappings from
 This job surfaces scenario results, fastfetch OCR logs, and screenshots directly
 in GitHub Actions without gating `:testing` tag promotion, keeping deployments
 unblocked while maintaining visible QA signal across flavors.
+
+## Extension startup states
+
+At first login, poll for `ACTIVE` (or the older `ENABLED` spelling) within
+the test's retry budget, rather than accepting the first non-empty state.
+GNOME Shell's `loadExtension()` initially sets `ERROR` before awaiting
+initialization; an activation state may also print as `UNKNOWN`. In #969,
+E2E runs 40635543943 and 40700004838 saw these states with an empty
+`GetExtensionErrors` result. A persistent non-active state must still fail,
+with diagnostics preserved; do not toggle the extension to make it pass.

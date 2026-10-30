@@ -1,7 +1,7 @@
 ---
 name: kernel-cache
 version: "1.0"
-last_updated: "2026-09-19"
+last_updated: "2026-10-14"
 id: kernel-cache
 one_line_purpose: Understand and rebuild the OGC kernel and NVIDIA module cache image.
 entry_point: docs/skills/kernel-cache.md
@@ -172,11 +172,22 @@ open, and the gaming flavors failed the ISO test on a black screen with
 kernel, came up through `simpledrm`. The script enables `SYSFB_SIMPLEFB` and
 `DRM_SIMPLEDRM` (the firmware framebuffer as a KMS device on any hardware),
 plus `DRM_VIRTIO_GPU` and `DRM_BOCHS` for VMs, and gates on `DRM_SIMPLEDRM`
-like the filesystem options. Native drivers for real gaming GPUs (amdgpu, xe)
-are not enabled yet: they need linux-firmware in the image, which the install
-set does not carry (projectbluefin/utah#97). When diagnosing a black live
-session, compare `live-serial.log` for `[drm] Initialized` lines between the
-`main` and `gaming` diagnostics artifacts before reading GDM logs.
+like the filesystem options.
+
+Native GPU drivers for real gaming hardware are built as modules: `DRM_AMDGPU`
+(with Display Core, `DRM_AMD_DC`) for AMD GPUs and `DRM_XE` for Intel Arc and
+Battlemage, both gated in `required_config`. `DRM_NOUVEAU` is omitted because
+the NVIDIA flavors use the proprietary open module. `DRM_CLIENT_SELECTION` and
+`DRM_FBDEV_EMULATION` are enabled so `drm_fb_helper` exports
+`drm_fb_helper_set_suspend_unlocked`, maintaining build compatibility with the
+out-of-tree NVIDIA driver module when `DRM_TTM_HELPER` is selected by amdgpu/xe.
+At runtime, these drivers require their corresponding firmware (`amd-gpu-firmware`,
+`intel-gpu-firmware`), which the image carries via `linux-firmware` in `packages/utah.toml`.
+When diagnosing display issues on real hardware, verify that the installed gaming
+flavor initializes its native driver (`[drm] Initialized amdgpu` in the journal)
+rather than falling back to `simpledrm`. When diagnosing a black live session,
+compare `live-serial.log` for `[drm] Initialized` lines between the `main` and `gaming`
+diagnostics artifacts before reading GDM logs.
 
 ```bash
 just kernel-cache-tag

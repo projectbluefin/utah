@@ -6,7 +6,10 @@
   "customManagers": [
     {
       "customType": "regex",
-      "managerFilePatterns": ["/^Containerfile$/", "/^packages/utah-packages\\.repo$/"],
+      "managerFilePatterns": [
+        "/^Containerfile$/",
+        "/^packages/utah-packages\\.repo$/"
+      ],
       "matchStrings": [
         "(?:^|\\r?\\n)(?:ARG PACKAGE_IMAGE_SHA=|# factory-pin: )(?<currentDigest>sha256:[a-f0-9]{64})(?:\\r?\\n|$)"
       ],
@@ -17,21 +20,47 @@
     },
     {
       "customType": "regex",
-      "managerFilePatterns": ["/^config/tacklebox-image$/"],
+      "managerFilePatterns": [
+        "/^config/tacklebox-image$/"
+      ],
       "matchStrings": [
         "(?<depName>ghcr\\.io/tuna-os/tacklebox):(?<currentValue>latest)@(?<currentDigest>sha256:[a-f0-9]{64})"
       ],
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/(post-testing-e2e|execute-release)\\.yml$/"
+      ],
+      "matchStrings": [
+        "\\s(?:gate_)?test_ref: (?<currentDigest>[0-9a-f]{40}) # (?<currentValue>v1)\\s"
+      ],
+      "depNameTemplate": "projectbluefin/testsuite",
+      "packageNameTemplate": "https://github.com/projectbluefin/testsuite",
+      "datasourceTemplate": "git-refs"
     }
   ],
   "packageRules": [
     {
-      "matchManagers": ["custom.regex"],
-      "matchDepNames": ["ghcr.io/projectbluefin/utah-packages"],
-      "matchUpdateTypes": ["digest"],
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchDepNames": [
+        "ghcr.io/projectbluefin/utah-packages"
+      ],
+      "matchUpdateTypes": [
+        "digest"
+      ],
       "groupName": "utah package factory",
       "automerge": false
+    },
+    {
+      "matchDepNames": [
+        "projectbluefin/testsuite"
+      ],
+      "groupName": "projectbluefin/testsuite"
     }
   ]
 }

@@ -84,7 +84,7 @@ class EvidenceTests(unittest.TestCase):
         for required in ["OVERLAY_FS", "SQUASHFS", "SQUASHFS_ZSTD", "EROFS_FS",
                          "BTRFS_FS", "BLK_DEV_LOOP", "DM_SNAPSHOT", "DM_CRYPT",
                          "CRYPTO_XTS", "FUSE_FS", "FS_VERITY", "SYSFB_SIMPLEFB",
-                         "DRM_SIMPLEDRM", "VIDEO_DEV"]:
+                         "DRM_SIMPLEDRM", "VIDEO_DEV", "DRM_AMDGPU", "DRM_XE"]:
             self.assertIn(required, names)
             self.assertRegex(script, rf"--(?:enable|module) {required}(?:\s|$)")
         self.assertEqual(script.count("verify_config /usr/lib/utah/ogc-kernel.config"), 2)
@@ -222,6 +222,21 @@ class EvidenceTests(unittest.TestCase):
         self.assertRegex(validated, r"^[0-9a-f]{40}$")
         self.assertEqual(gated, validated)
 
+    def test_testsuite_checkout_matches_the_pinned_workflow_commit(self):
+        # Workflow logic and checked-out tests must come from one testsuite
+        # revision (#946); Renovate moves the uses: digest and test refs together.
+        import yaml
+        e2e = yaml.safe_load((ROOT / ".github/workflows/post-testing-e2e.yml").read_text())
+        job = e2e["jobs"]["testsuite"]
+        workflow_sha = job["uses"].rpartition("@")[2]
+        self.assertEqual(job["with"]["test_ref"], workflow_sha)
+        manager = next(m for m in json.loads((ROOT / "renovate.json").read_text())["customManagers"]
+                       if m.get("depNameTemplate") == "projectbluefin/testsuite")
+        for name in ["post-testing-e2e", "execute-release"]:
+            text = (ROOT / f".github/workflows/{name}.yml").read_text()
+            pattern = re.sub(r"\(\?<(\w+)>", "(?P<\\1>", manager["matchStrings"][0])
+            self.assertEqual(re.search(pattern, text)["currentDigest"], workflow_sha, name)
+
     def test_build_explicitly_dispatches_iso_after_both_image_jobs(self):
         import yaml
         build = yaml.safe_load((ROOT / ".github/workflows/build.yml").read_text())
@@ -243,6 +258,9 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(update(result, proof), result)
         self.assertIn("Keep this paragraph.", result)
         self.assertIn("actions/runs/123", result)
+        self.assertIn("independent desktop tests that do not gate this record", result)
+        self.assertNotIn("failure", result)
+        self.assertIn("the LUKS and production ISO jobs passed", result)
 
     def test_production_iso_artifacts_follow_the_full_luks_matrix(self):
         import yaml
@@ -481,6 +499,95 @@ class EvidenceTests(unittest.TestCase):
         skipped = run("org.a", "")
         self.assertEqual(skipped.returncode, 0, skipped.stderr)
         self.assertNotIn("present offline", skipped.stdout)
+
+    def test_extension_error_prints_the_shell_reported_error(self):
+        # #969: GSConnect intermittently reached state=ERROR at first login
+        # and the journal grep printed nothing, so the reason was lost. Drive
+        # the real extension check with a stubbed guest and assert the error
+        # text the shell recorded is printed, and that the run still fails.
+        script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
+        helper = "gnome_extension_errors() {" + script.split(
+            "gnome_extension_errors() {", 1)[1].split("\n}\n", 1)[0] + "\n}\n"
+        start = script.index('EXT_CHECK="${UTAH_E2E_EXTENSIONS')
+        end = script.index("\nfi\n", script.index("did not reach ACTIVE", start)) + len("\nfi\n")
+        block = script[start:end]
+
+        def run(states, errors_rc=0):
+            harness = (
+                f"source {ROOT / 'iso/scripts/extension-state.sh'}\n"
+                "sleep() { :; }\n"
+                "shot() { :; }\n"
+                "gnome_extension_info() {\n"
+                "  n=$(cat \"$PROBES\"); n=$((n+1)); echo \"$n\" > \"$PROBES\";\n"
+                "  total=$(wc -l < \"$STATES\"); if [ $n -gt $total ]; then n=$total; fi;\n"
+                "  state=$(sed -n \"${n}p\" \"$STATES\");\n"
+                "  if [ -n \"$state\" ]; then printf 'State: %s\\n' \"$state\"; fi;\n"
+                "}\n"
+                "ssh_target() {\n"
+                "  case \"$1\" in\n"
+                "    *GetExtensionErrors*) echo \"$1\" >> \"$CALLS\";\n"
+                "      printf \"(['TypeError: boom'],)\\n\"; return \"$ERRORS_RC\";;\n"
+                "  esac\n"
+                "}\n"
+                "fail() { echo \"FAIL: $*\" >&2; exit 1; }\n"
+                + helper + block
+            )
+            with tempfile.TemporaryDirectory() as td:
+                calls = Path(td) / "calls"
+                calls.touch()
+                probes = Path(td) / "probes"
+                probes.write_text("0")
+                state_file = Path(td) / "states"
+                state_file.write_text("\n".join(states) + "\n")
+                env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+                       "STATES": str(state_file), "PROBES": str(probes),
+                       "ERRORS_RC": str(errors_rc),
+                       "CALLS": str(calls), "MONITOR_INSTALLED": "mon",
+                       "UTAH_E2E_EXTENSIONS": "gsconnect@andyholmes.github.io"}
+                result = subprocess.run(["bash", "-eu", "-o", "pipefail", "-c", harness],
+                                        capture_output=True, text=True, env=env)
+                return result, calls.read_text(), int(probes.read_text())
+
+        failed, calls, probes = run(["ERROR"])
+        self.assertEqual(probes, 24)
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertIn("state=ERROR", failed.stderr)
+        self.assertIn("    (['TypeError: boom'],)", failed.stderr)
+        self.assertIn("did not reach ACTIVE", failed.stderr)
+        # Same session-bus environment as gnome_extension_info, or gdbus
+        # cannot reach the shell from an SSH login.
+        self.assertIn("DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/", calls)
+        self.assertIn("XDG_RUNTIME_DIR=/run/user/", calls)
+        self.assertIn("gsconnect@andyholmes.github.io", calls)
+
+        # A failing error query is a diagnostic, not a new verdict: the run
+        # still reports the extension's state and fails for it, not for gdbus.
+        probe_failed, _, _ = run(["ERROR"], errors_rc=1)
+        self.assertIn("FAIL: 1 extension(s) did not reach ACTIVE", probe_failed.stderr)
+
+        active, calls, probes = run(["ACTIVE"])
+        self.assertEqual(probes, 1)
+        self.assertEqual(active.returncode, 0, active.stderr)
+        self.assertEqual(calls, "")
+
+        # GNOME answers while initialization/activation is in progress.
+        # Probe counts live in a file because each read runs in a subshell.
+        for states in (["ERROR", "UNKNOWN", "ACTIVATING", "ACTIVE"],
+                       ["", "INITIALIZED", "ENABLED"]):
+            settled, calls, probes = run(states)
+            self.assertEqual(settled.returncode, 0, settled.stderr)
+            self.assertEqual(probes, len(states))
+            self.assertEqual(calls, "")
+        for state in ("UNKNOWN", "INACTIVE", "OUT_OF_DATE", "ACTIVATING"):
+            stuck, calls, probes = run([state])
+            self.assertNotEqual(stuck.returncode, 0, state)
+            self.assertEqual(probes, 24)
+            self.assertIn(f"state={state}", stuck.stderr)
+            self.assertIn("GetExtensionErrors", calls)
+        unreadable, _, probes = run([""])
+        self.assertNotEqual(unreadable.returncode, 0)
+        self.assertIn("state could not be read", unreadable.stderr)
+        self.assertEqual(probes, 25)  # final raw diagnostic probe
 
     def test_live_desktop_is_retaken_until_the_frame_is_drawn(self):
         # The live-desktop shot is grabbed as soon as gnome-shell's process

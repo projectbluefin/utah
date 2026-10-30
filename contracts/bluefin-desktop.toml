@@ -5,13 +5,27 @@
 
 [branding]
 files = [
+  # Version-matched on-device agent guidance.
+  "/usr/share/utah/agent/AGENTS.md",
+  "/usr/share/utah/agent/SKILL.md",
+  "/usr/share/utah/agent/index.json",
+  "/usr/share/utah/agent/repo-map.md",
+  "/usr/share/utah/agent/build-source.Containerfile",
+  "/usr/share/utah/agent/gitmodules",
+  "/usr/share/utah/agent/flavors.json",
+  "/usr/share/utah/agent/build-gnome-extensions.sh.txt",
+  "/usr/share/utah/agent/skills/desktop-contract.md",
+  "/usr/share/utah/agent/skills/diagnosis.md",
+  "/usr/share/utah/agent/skills/docs-parity.md",
+  "/usr/share/utah/agent/skills/flavors.md",
+  "/usr/share/utah/agent/skills/package-contract.md",
+  "/usr/share/utah/agent/skills/setup-hooks.md",
+
   "/usr/share/ublue-os/bluefin-logos/bluefin.png",
   "/usr/share/pixmaps/bluefin-gdm-logo.png",
-  # Control Center has compile-time logo paths, independent of os-release.
-  "/usr/share/pixmaps/fedora_logo_med.png",
-  "/usr/share/pixmaps/fedora_whitelogo_med.png",
-  "/usr/share/pixmaps/fedora-logo.png",
-  "/usr/share/pixmaps/system-logo-white.png",
+  # Control Center's About logo paths are compile-time, independent of os-release.
+  "/usr/share/bluefin-artwork-logos/bluefin-logo-light.png",
+  "/usr/share/bluefin-artwork-logos/bluefin-logo-dark.png",
   "/usr/share/icons/hicolor/scalable/actions/ublue-logo-symbolic.svg",
   "/usr/share/icons/hicolor/icon-theme.cache",
   # The os-release LOGO icon; common ships Bluefin's raptor under this name.
@@ -113,10 +127,12 @@ files = [
   "/usr/lib/systemd/system/ublue-firstboot-date.service",
   "/usr/lib/systemd/system/ublue-booted-image.service",
   "/usr/bin/ublue-booted-image-sync",
-  # Common files configure-services.sh patches for Dakota parity. file_contains
-  # skips missing files, so list them here to fail the build if Common drops one.
+  # Common files configure-services.sh patches or checks for Dakota parity.
+  # file_contains skips missing files, so list them here to fail the build if
+  # Common drops one.
   "/usr/share/ublue-os/fastfetch.jsonc",
   "/usr/bin/ublue-image-info.sh",
+  "/usr/libexec/ublue-booted-image",
   "/etc/profile.d/uwelcome.sh",
   # Common's Red Hat signature policy uses the unsuffixed key path. The pinned
   # Hummingbird base carries that key; Utah also stages its repository copy.
@@ -150,10 +166,14 @@ files = [
   "cat /var/cache/bluefin-stats/fastfetch-user-count 2>/dev/null || cat /usr/share/ublue-os/fastfetch-user-count",
   "cat /var/cache/bluefin-stats/bazaar-install-count 2>/dev/null || cat /usr/share/ublue-os/bazaar-install-count",
 ]
-# Dakota parity (#675): ublue-image-info.sh prefers the boot-time snapshot
-# ublue-booted-image.service writes, since unprivileged bootc status fails on
-# bootc >= 1.14.
+# Dakota parity (#675): ublue-image-info.sh reads the booted tag through
+# Common's ublue-booted-image reader, which falls back to the boot-time
+# snapshot ublue-booted-image.service writes, since unprivileged bootc status
+# fails on bootc >= 1.14.
 "/usr/bin/ublue-image-info.sh" = [
+  "/usr/libexec/ublue-booted-image",
+]
+"/usr/libexec/ublue-booted-image" = [
   "/run/ublue-os/booted-image",
 ]
 # Dakota parity (#675): GDM's non-interactive login shell sources
@@ -336,4 +356,12 @@ disabled = [
   "openvpn-server@.service",
   "saned.socket",
   "ipp-usb.service",
+  # Apache httpd is pulled in by gnome-user-share's WebDAV, but Utah never runs
+  # the system daemon: WebDAV starts its own per-session httpd, so port 80 must
+  # stay closed. It ships disabled already; this asserts it stays off so a
+  # future enablement fails image verification. See #948.
+  "httpd.service",
+  "httpd.socket",
+  "httpd@.service",
+  "htcacheclean.service",
 ]

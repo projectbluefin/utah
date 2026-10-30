@@ -275,6 +275,10 @@ elif [[ "${TACKLEBOX_FROM_SOURCE:-0}" == "1" ]]; then
     TB=("$CACHE/tacklebox")
 else
     echo "==> Using tacklebox image: ${TACKLEBOX_IMAGE}"
+    # Verify the published image's SLSA provenance before running it
+    # privileged (utah#918): reject anything not attested by the tuna-os/tacklebox
+    # release-image.yml workflow.
+    TACKLEBOX_IMAGE="$TACKLEBOX_IMAGE" bash iso/scripts/verify-tacklebox-attestation.sh
     podman pull "$TACKLEBOX_IMAGE" >/dev/null
     # --privileged for loop devices; the out dir is mounted at the same path
     # so the absolute live_customize path in the recipe resolves inside too.

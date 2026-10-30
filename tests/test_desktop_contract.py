@@ -457,6 +457,7 @@ class ServiceMaskParityTests(unittest.TestCase):
         for path in (
             "/usr/share/ublue-os/fastfetch.jsonc",
             "/usr/bin/ublue-image-info.sh",
+            "/usr/libexec/ublue-booted-image",
             "/etc/profile.d/uwelcome.sh",
         ):
             with self.subTest(path=path):
@@ -521,6 +522,30 @@ class ServiceMaskParityTests(unittest.TestCase):
         masked = contract.get("services", {}).get("masked", [])
         self.assertIn("bootc-fetch-apply-updates.timer", masked)
         self.assertIn("bootc-fetch-apply-updates.service", masked)
+
+    def test_desktop_contract_holds_httpd_disabled(self):
+        # Apache httpd ships via gnome-user-share's WebDAV but the system units
+        # must never run; #948 asserts they stay off in the contract so a future
+        # enablement fails image verification instead of landing undetected.
+        import tomllib
+
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        disabled = contract.get("services", {}).get("disabled", [])
+        for unit in (
+            "httpd.service",
+            "httpd.socket",
+            "httpd@.service",
+            "htcacheclean.service",
+        ):
+            self.assertIn(unit, disabled, f"{unit} must be held disabled")
+
+    def test_httpd_disabled_units_named_in_skill_doc(self):
+        # A disabled unit added to the contract without the doc following leaves
+        # the assertion unexplained; the reason travels with the #948 note.
+        skill_doc = (ROOT / "docs/skills/desktop-contract.md").read_text()
+        for unit in ("httpd.service", "httpd.socket", "httpd@.service"):
+            self.assertIn(unit, skill_doc, f"{unit} must be named in the skill doc")
+        self.assertIn("#948", skill_doc)
 
     def test_desktop_contract_services_listed_in_skill_doc(self):
         # The [services] section of the skill doc enumerates the units the
@@ -699,6 +724,27 @@ class GdmGreeterLogoTests(unittest.TestCase):
         self.assertNotIn("fedora-gdm-logo", active)
         self.assertNotIn("/usr/share/pixmaps/fedora", active)
         self.assertEqual(len(active_lines), 2, f"unexpected active lines: {active_lines}")
+
+
+class AboutLogoContractTests(unittest.TestCase):
+    OLD = ("fedora_logo_med.png", "fedora_whitelogo_med.png",
+           "fedora-logo.png", "system-logo-white.png")
+
+    def test_contract_asserts_bluefin_artwork_logos(self):
+        data = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        files = data["branding"]["files"]
+        for name in ("bluefin-logo-light.png", "bluefin-logo-dark.png"):
+            self.assertIn(f"/usr/share/bluefin-artwork-logos/{name}", files)
+        for name in self.OLD:
+            self.assertNotIn(f"/usr/share/pixmaps/{name}", files)
+
+    def test_branding_does_not_restore_unread_fedora_pixmaps(self):
+        script = (ROOT / "scripts/configure-branding.sh").read_text()
+        containerfile = (ROOT / "Containerfile").read_text()
+        self.assertNotIn("utah-bluefin-pixmaps", script)
+        self.assertNotIn("utah-bluefin-pixmaps", containerfile)
+        for name in self.OLD:
+            self.assertNotIn(name, script)
 
 
 class FwupdRefreshDropInTests(unittest.TestCase):

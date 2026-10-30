@@ -128,6 +128,12 @@ Before marking work done:
 - [ ] Skill file updated (or created)?
 - [ ] Committed in this same PR?
 
+## Installed agent guidance
+
+Running images ship a separate, device-focused entry point at
+`/usr/share/utah/agent/AGENTS.md`, sourced from `docs/agent/`. See the
+[diagnosis skill](docs/skills/diagnosis.md) for its catalog and maintenance gate.
+
 ## See also
 
 - [`README.md`](README.md) — user-facing overview and honest gap list.

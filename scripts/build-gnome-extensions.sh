@@ -66,10 +66,17 @@ glib-compile-schemas --strict /usr/share/gnome-shell/extensions/BudsLink-Compani
 # Tailscale Quick Settings
 mv /usr/share/gnome-shell/extensions/tmp/tailscale-gnome-qs/tailscale-gnome-qs@tailscale-qs.github.io /usr/share/gnome-shell/extensions/tailscale-gnome-qs@tailscale-qs.github.io
 
-# Bluefin Bling (Syncthing Toggle & Power Status Color)
-mv /usr/share/gnome-shell/extensions/tmp/bluefin-bling/extensions/syncthing-toggle /usr/share/gnome-shell/extensions/syncthing-toggle@projectbluefin.io
-glib-compile-schemas --strict /usr/share/gnome-shell/extensions/syncthing-toggle@projectbluefin.io/schemas
-mv /usr/share/gnome-shell/extensions/tmp/bluefin-bling/extensions/power-status-color /usr/share/gnome-shell/extensions/power-status-color@projectbluefin.io
+# Bluefin Bling: install every upstream extension, without enabling any.
+# Keep UUID validation aligned with bling_extensions in the source verifier.
+for extension in /usr/share/gnome-shell/extensions/tmp/bluefin-bling/extensions/*/; do
+    uuid=$(jq -er '.uuid | strings | select(test("\\A[A-Za-z0-9_.+-]+@[A-Za-z0-9_.-]+\\z"))' "${extension}/metadata.json")
+    destination="/usr/share/gnome-shell/extensions/${uuid}"
+    test ! -e "${destination}"
+    mv -T "${extension}" "${destination}"
+    if [ -d "${destination}/schemas" ]; then
+        glib-compile-schemas --strict "${destination}/schemas"
+    fi
+done
 
 # Curated release archive extensions (verified against pinned SHA256 digests)
 # Tiling Shell

@@ -132,6 +132,8 @@ check:
     # Every executable release asset fetched during composition must be pinned
     # and verified; no build may resolve a mutable latest release.
     python3 scripts/check-download-integrity.py
+    # Reject unpinned Python installs before running the rest of the suite.
+    python3 tests/test_python_install_pins.py
     # The status page's package grid is generated from the manifests; a stale
     # committed copy would publish a list the image no longer installs.
     python3 scripts/generate-site-data.py --check
@@ -151,10 +153,10 @@ check:
          <(grep -m1 '^ARG BASE_IMAGE=' Containerfile.kernel)
     python3 scripts/flavors.py list >/dev/null
     python3 scripts/check_workflow_outputs.py
-    pip install --quiet jsonschema 2>/dev/null || true
     bash scripts/check-skill-frontmatter.sh
     bash scripts/check-skill-index.sh
     python3 scripts/generate_skill_index.py --check
+    python3 scripts/generate_agent_context.py --check
     # Neither workflows nor the Justfile may carry their own copy of the flavor
     # list or flavored image names. That drift is what config/flavors.json and
     # scripts/flavors.py exist to stop: narrowing the build matrix while
@@ -460,11 +462,12 @@ build-ghcr base_name stream flavor kernel_pin="":
       hb_revision="$(date -u -d "@${hb_revision}" +%Y-%m-%d)"
     fi
     echo "Hummingbird repository day: ${hb_revision}"
-    # Epoch follows commits to build inputs, so documentation-only commits
-    # retain the cache key. The layer helper rejects any newer RPM payload
+    # Epoch follows commits to build inputs, including shipped device docs;
+    # other documentation-only commits retain the cache key. The layer helper rejects any newer RPM payload
     # before timestamp rewriting could invalidate its Python caches.
-    source_date_epoch="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct -- Containerfile packages system_files scripts config .gitmodules)}"
+    source_date_epoch="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct -- Containerfile packages system_files scripts config .gitmodules docs/agent)}"
     mapfile -t epoch_args < <(scripts/podman-epoch-args.sh "${source_date_epoch}" rewrite)
+    gnome_extension_provenance="$(python3 scripts/verify-gnome-extensions.py --print-provenance)"
     podman build \
       "${epoch_args[@]}" \
       --build-arg SOURCE_DATE_EPOCH="${source_date_epoch}" \
@@ -477,6 +480,8 @@ build-ghcr base_name stream flavor kernel_pin="":
       --build-arg IMAGE_FLAVOR={{ flavor }} \
       --build-arg IMAGE_VENDOR={{ repo_organization }} \
       --build-arg VERSION="$version" \
+      --build-arg SHA_HEAD="$(git rev-parse HEAD)" \
+      --build-arg GNOME_EXTENSION_PROVENANCE="${gnome_extension_provenance}" \
       --build-arg SHA_HEAD_SHORT="$(git rev-parse --short HEAD)" \
       --build-arg ENABLE_SSHD="${ENABLE_SSHD:-0}" \
       --tag "localhost/$image_name:{{ stream }}" \
@@ -501,8 +506,9 @@ build-local stream="testing" package_image="localhost/utah-packages:local-merged
     }
     version="local-{{ stream }}-$(git rev-parse --short HEAD)"
     # Same build-input epoch and guarded export policy as build-ghcr.
-    source_date_epoch="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct -- Containerfile packages system_files scripts config .gitmodules)}"
+    source_date_epoch="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct -- Containerfile packages system_files scripts config .gitmodules docs/agent)}"
     mapfile -t epoch_args < <(scripts/podman-epoch-args.sh "${source_date_epoch}" rewrite)
+    gnome_extension_provenance="$(python3 scripts/verify-gnome-extensions.py --print-provenance)"
     podman build \
       "${epoch_args[@]}" \
       --build-arg SOURCE_DATE_EPOCH="${source_date_epoch}" \
@@ -513,6 +519,8 @@ build-local stream="testing" package_image="localhost/utah-packages:local-merged
       --build-arg IMAGE_FLAVOR=main \
       --build-arg IMAGE_VENDOR="{{ repo_organization }}" \
       --build-arg VERSION="$version" \
+      --build-arg SHA_HEAD="$(git rev-parse HEAD)" \
+      --build-arg GNOME_EXTENSION_PROVENANCE="${gnome_extension_provenance}" \
       --build-arg SHA_HEAD_SHORT="$(git rev-parse --short HEAD)" \
       --build-arg ENABLE_SSHD="${ENABLE_SSHD:-1}" \
       --tag "localhost/{{ image }}:{{ stream }}" \

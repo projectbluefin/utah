@@ -47,7 +47,7 @@ VERSION="${VERSION:-reproducibility-probe}"
 SHA_HEAD_SHORT="${SHA_HEAD_SHORT:-probe}"
 REPO_ORGANIZATION="${REPO_ORGANIZATION:-projectbluefin}"
 # Hold the source commit epoch constant across both uncached builds.
-SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct -- Containerfile packages system_files scripts config .gitmodules)}"
+SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct -- Containerfile packages system_files scripts config .gitmodules docs/agent)}"
 
 # scripts/flavors.py owns the flavor roster and the published image name for
 # each flavor, as it does for build-ghcr. Building under any other IMAGE_NAME
@@ -105,6 +105,8 @@ build() {
     if [ -n "${PACKAGE_IMAGE_REF:-}" ]; then
         base_args+=(--build-arg PACKAGE_IMAGE_REF="${PACKAGE_IMAGE_REF}")
     fi
+    local gnome_extension_provenance
+    gnome_extension_provenance="$(python3 scripts/verify-gnome-extensions.py --print-provenance)"
     "${PODMAN}" build \
         --no-cache \
         "${epoch_args[@]}" \
@@ -114,6 +116,8 @@ build() {
         --build-arg IMAGE_FLAVOR="${FLAVOR}" \
         --build-arg IMAGE_VENDOR="${REPO_ORGANIZATION}" \
         --build-arg VERSION="${VERSION}" \
+        --build-arg SHA_HEAD="$(git rev-parse HEAD)" \
+        --build-arg GNOME_EXTENSION_PROVENANCE="${gnome_extension_provenance}" \
         --build-arg SHA_HEAD_SHORT="${SHA_HEAD_SHORT}" \
         --build-arg ENABLE_SSHD=0 \
         --build-arg UTAH_REWRITE_TIMESTAMPS=1 \

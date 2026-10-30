@@ -125,24 +125,26 @@ if [ -f "${FASTFETCH_JSONC}" ]; then
         exit 1
     fi
 fi
-# Booted image tag for fastfetch: prefer the boot-time snapshot
-# ublue-booted-image.service writes, since unprivileged `bootc status` fails
-# on bootc >= 1.14 and the baked tag is the compose-time one.
+# Booted image tag for fastfetch: Common's image-info script asks
+# /usr/libexec/ublue-booted-image, which falls back to the boot-time snapshot
+# ublue-booted-image.service writes when unprivileged `bootc status` fails
+# (bootc >= 1.14). Nothing to patch; fail if Common drops that fallback.
 IMAGE_INFO_SH=/usr/bin/ublue-image-info.sh
+BOOTED_IMAGE_BIN=/usr/libexec/ublue-booted-image
 if [ -f "${IMAGE_INFO_SH}" ]; then
-    if grep -qF '/run/ublue-os/booted-image' "${IMAGE_INFO_SH}"; then
-        : already patched
-    elif grep -qF '.status.booted.image.image.image' "${IMAGE_INFO_SH}"; then
-        sed -i '/^case "${BOOTED_REF}" in/i\
-\
-# Utah parity with Dakota (#675): prefer the boot-time snapshot written by\
-# ublue-booted-image.service. Unprivileged bootc status fails on bootc >= 1.14,\
-# and the baked image tag is the compose-time tag.\
-if [[ -r /run/ublue-os/booted-image ]]; then\
-\tread -r BOOTED_REF < /run/ublue-os/booted-image\
-fi' "${IMAGE_INFO_SH}"
-    else
-        echo "ERROR: ${IMAGE_INFO_SH} changed upstream -- re-fit the booted-image patch (see ublue-booted-image.service)" >&2
+    # Common's legacy lock glyph probes rpm-ostree, which Hummingbird does
+    # not ship. It is not a bootc signature check; omit the whole glyph block
+    # rather than hide its stderr or imply the image is unlocked (#931).
+    # Newer Common versions already omit it, so this is safe to repeat.
+    sed -i '/^if \[\[ "$(rpm-ostree status --booted)" =~ "signed" \]\]; then$/,/^fi$/d' "${IMAGE_INFO_SH}"
+    if grep -qF 'rpm-ostree' "${IMAGE_INFO_SH}"; then
+        echo "ERROR: ${IMAGE_INFO_SH} changed upstream -- re-fit the rpm-ostree removal" >&2
+        exit 1
+    fi
+    if ! grep -qF "${BOOTED_IMAGE_BIN}" "${IMAGE_INFO_SH}" \
+        || [ ! -x "${BOOTED_IMAGE_BIN}" ] \
+        || ! grep -qF '/run/ublue-os/booted-image' "${BOOTED_IMAGE_BIN}"; then
+        echo "ERROR: ${IMAGE_INFO_SH} or ${BOOTED_IMAGE_BIN} changed upstream -- re-check the booted-image snapshot fallback (see ublue-booted-image.service)" >&2
         exit 1
     fi
 fi

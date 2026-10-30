@@ -203,6 +203,9 @@ jobs:
           set -euo pipefail
           tacklebox_image=$(< config/tacklebox-image)
           [[ "$tacklebox_image" =~ ^[^[:space:]@]+@sha256:[a-f0-9]{64}$ ]] || exit 1
+          # Verify the builder image's SLSA provenance before running it
+          # privileged (utah#918).
+          sudo TACKLEBOX_IMAGE="$tacklebox_image" bash iso/scripts/verify-tacklebox-attestation.sh
           sudo podman pull "$tacklebox_image"
           sudo podman run --rm --privileged --security-opt label=disable \
             -v /dev:/dev -v "$PWD/output:/out:ro" "$tacklebox_image" \
@@ -311,13 +314,15 @@ jobs:
       fail-fast: false
       matrix:
         include: ${{ fromJSON(needs.resolve.outputs.suites) }}
-    uses: projectbluefin/testsuite/.github/workflows/e2e.yml@d55a7947aecce09c1107393a759f8a2f664b81c4 # v1
+    uses: projectbluefin/testsuite/.github/workflows/e2e.yml@d9299fc8dcf271c016cabad5fc9b2e09c18daee5 # v1
     with:
       image: ${{ fromJSON(needs.resolve.outputs.digests)[matrix.image] }}
       compose_image: false
       suites: ${{ matrix.suites }}
       test_repository: projectbluefin/testsuite
-      test_ref: f690d22e4dfb8f71a3cdb7e56c20fb1f9e88066a
+      # The tests checked out must be the commit the e2e.yml above comes from,
+      # or workflow and tests drift apart (#946). Renovate bumps both together.
+      test_ref: d9299fc8dcf271c016cabad5fc9b2e09c18daee5 # v1
 
   # :testing is a ratchet over commits, not a mirror of the branch tip. The
   # tested digests become :testing when their commit is the promoted commit or

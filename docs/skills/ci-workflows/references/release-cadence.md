@@ -38,7 +38,9 @@ The cadence is RFC'd in #336. What runs today:
   runs `run_release_gate: true` over `smoke,common` against the exact
   candidate digests, with no scenarios excluded. `gate_test_ref` pins the
   gate to the testsuite commit `post-testing-e2e.yml` validated (`test_ref`,
-  #773); bump both together, a test enforces it. If a scenario group goes red
+  #773), which is the same commit as the pinned testsuite
+  `e2e.yml` workflow (#946); Renovate bumps all three together and a test
+  enforces it. If a scenario group goes red
   for a reason outside this repo, scope it with `gate_extra_tags`
   (actions#655) plus the matching `extra-tags` in `post-testing-e2e.yml` and a
   tracking issue; never switch the whole gate off. A scheduled run whose

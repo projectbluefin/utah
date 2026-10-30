@@ -15,6 +15,7 @@ description: >-
   config/flavors.json is the single source for build, promote, and release
   matrices. Use when changing the flavor set or debugging a matrix that
   names an image nothing builds.
+on_device: docs/agent/skills/flavors.md
 metadata:
   type: procedure
 ---

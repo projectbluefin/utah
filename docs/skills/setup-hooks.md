@@ -15,6 +15,7 @@ description: >-
   First-boot setup hooks stamp completion through libsetup.sh. Use when editing
   a hook, migrating one off the legacy `version-script` gate, or debugging a
   hook that never runs or runs every boot.
+on_device: docs/agent/skills/setup-hooks.md
 metadata:
   type: procedure
 ---

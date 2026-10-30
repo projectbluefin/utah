@@ -54,7 +54,8 @@ required_config=(SCHED_CLASS_EXT NTSYNC ANDROID_BINDERFS
                  BLK_DEV_LOOP ISO9660_FS BLK_DEV_DM DM_SNAPSHOT DM_CRYPT
                  CRYPTO_XTS FUSE_FS FS_VERITY
                  SYSFB_SIMPLEFB DRM_SIMPLEDRM VIDEO_DEV USER_NS TUN
-                 INPUT_UINPUT ZRAM)
+                 INPUT_UINPUT ZRAM
+                 DRM_AMDGPU DRM_XE)
 verify_config() {
   local config="$1" symbol
   for symbol in "${required_config[@]}"; do
@@ -153,12 +154,18 @@ scripts/config --module OVERLAY_FS --module SQUASHFS --enable SQUASHFS_ZSTD \
                --enable FS_VERITY
 # The firmware framebuffer as a KMS device (see required_config above), plus
 # the two paravirtual GPUs QEMU offers, so a VM gets a proper display rather
-# than the boot framebuffer. Native GPU drivers for real gaming hardware
-# (amdgpu, xe) are a separate decision: they need linux-firmware in the image,
-# which the install set does not carry yet (projectbluefin/utah#97).
+# than the boot framebuffer. Native GPU drivers for real gaming hardware:
+# amdgpu (with Display Core) for AMD GPUs and xe for Intel Arc / Battlemage,
+# backed by linux-firmware in packages/utah.toml. DRM_NOUVEAU is omitted
+# because the nvidia flavors use the proprietary open module.
+# DRM_CLIENT_SELECTION and DRM_FBDEV_EMULATION are enabled so drm_fb_helper
+# exports drm_fb_helper_set_suspend_unlocked, which the out-of-tree NVIDIA
+# kernel module builds against when DRM_TTM_HELPER is selected by amdgpu/xe.
 scripts/config --enable SYSFB --enable SYSFB_SIMPLEFB \
                --enable DRM --enable DRM_SIMPLEDRM \
-               --module DRM_VIRTIO_GPU --module DRM_BOCHS
+               --module DRM_VIRTIO_GPU --module DRM_BOCHS \
+               --module DRM_AMDGPU --enable DRM_AMD_DC --module DRM_XE \
+               --enable DRM_CLIENT_SELECTION --enable DRM_FBDEV_EMULATION
 # GNOME's Flatpak sandbox needs unprivileged user namespaces, and Tailscale
 # needs the TUN device. x86_64_defconfig leaves both off in the OGC kernel.
 scripts/config --enable NAMESPACES --enable USER_NS --module TUN
@@ -202,6 +209,10 @@ require_config '^CONFIG_SCHED_CLASS_EXT=y$' CONFIG_SCHED_CLASS_EXT
 require_config '^CONFIG_NTSYNC=(y|m)$' CONFIG_NTSYNC
 require_config '^CONFIG_ANDROID_BINDERFS=y$' CONFIG_ANDROID_BINDERFS
 require_config '^CONFIG_DRM_SIMPLEDRM=y$' CONFIG_DRM_SIMPLEDRM
+require_config '^CONFIG_DRM_AMDGPU=(y|m)$' CONFIG_DRM_AMDGPU
+require_config '^CONFIG_DRM_AMD_DC=y$' CONFIG_DRM_AMD_DC
+require_config '^CONFIG_DRM_XE=(y|m)$' CONFIG_DRM_XE
+require_config '^CONFIG_DRM_FBDEV_EMULATION=y$' CONFIG_DRM_FBDEV_EMULATION
 require_config '^CONFIG_INPUT_UINPUT=(y|m)$' CONFIG_INPUT_UINPUT
 require_config '^CONFIG_ZRAM=(y|m)$' CONFIG_ZRAM
 verify_config .config

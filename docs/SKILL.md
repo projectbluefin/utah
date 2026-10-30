@@ -18,12 +18,14 @@ next to the code, and the skills cite them.
 
 | I need to... | Read |
 |---|---|
+| Diagnose a running machine or maintain the shipped context | [`skills/diagnosis.md`](skills/diagnosis.md) |
 | Build the image locally (quickstart) | [`building.md`](building.md#build-locally) |
 | Add, remove, or debug packages, or fix parity/check-repos failures | [`skills/package-contract.md`](skills/package-contract.md) |
 | Add, remove, or retire an image flavor | [`skills/flavors.md`](skills/flavors.md) |
 | Work on the OGC kernel or NVIDIA module cache | [`skills/kernel-cache.md`](skills/kernel-cache.md) |
 | Edit the `Containerfile`, add a script, or investigate build time | [`skills/containerfile.md`](skills/containerfile.md) |
 | Validate changes end-to-end in a VM or live ISO | [`skills/local-testing.md`](skills/local-testing.md) |
+| Validate bootc upgrade, rollback, and BLS boot files in the QEMU lifecycle harness | [`skills/lifecycle-e2e.md`](skills/lifecycle-e2e.md) |
 | Change branding, desktop defaults, or first-boot Flatpak policy | [`skills/desktop-contract.md`](skills/desktop-contract.md) |
 | Change `.github/workflows/` or debug a red run | [`skills/ci-workflows.md`](skills/ci-workflows.md) |
 | Edit a first-boot setup hook or its once-only stamp | [`skills/setup-hooks.md`](skills/setup-hooks.md) |
