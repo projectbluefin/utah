@@ -236,9 +236,17 @@ token cache during image build.
 The live ISO installer configuration (`iso/live/src/etc/bootc-installer/recipe.json`,
 `images.json`, and dynamically generated recipes in `configure-live.sh` and
 `iso/scripts/luks-e2e.sh`) defaults `composefs` and `composeFsBackend` to `true`
-(#882). This configures fisherman to install Utah deployments with composefs
-enabled by default, providing read-only root integrity verification and file
-deduplication on disk.
+(#882). This configures fisherman to install Utah deployments with the
+composefs backend by default: a read-only composefs root with content-addressed
+file deduplication. This change does not set up sealed images or signed
+fs-verity enforcement, so do not cite it as boot-time integrity verification.
+The installer no longer
+offers xfs (no fs-verity); btrfs and ext4 remain.
+
+`luks-e2e.sh` installs with the composefs backend unless
+`UTAH_E2E_COMPOSEFS_BACKEND=0`. `lifecycle-e2e.sh` ISO mode sets that to pin the
+ostree backend, because `verify-boot-files.sh` and `scripts/bootc_lifecycle.py`
+gate on `ostree=` BLS entries that composefs-backend installs do not write.
 
 ## Tacklebox ISOs (unpublished variants)
 

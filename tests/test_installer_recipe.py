@@ -107,8 +107,19 @@ class InstallerComposefsBackendTests(unittest.TestCase):
 
     def test_luks_e2e_recipe_configures_composefs_payload(self):
         script = LUKS_E2E.read_text()
-        self.assertIn('"composeFsBackend": true', script)
-        self.assertIn('"image": "containers-storage:${PAYLOAD_IMAGE}"', script)
+        self.assertIn('RECIPE_COMPOSEFS_BACKEND=true', script)
+        self.assertIn('RECIPE_IMAGE="containers-storage:${PAYLOAD_IMAGE}"', script)
+        self.assertIn('"composeFsBackend": ${RECIPE_COMPOSEFS_BACKEND}', script)
+        self.assertIn('"image": "${RECIPE_IMAGE}"', script)
+
+    def test_lifecycle_iso_install_pins_ostree_backend(self):
+        """verify-boot-files.sh and bootc_lifecycle.py gate on ostree= BLS
+        entries, which composefs-backend installs do not write."""
+        script = LUKS_E2E.with_name("lifecycle-e2e.sh").read_text()
+        self.assertIn('UTAH_E2E_COMPOSEFS_BACKEND=0 bash "${ROOT}/iso/scripts/luks-e2e.sh"', script)
+        luks = LUKS_E2E.read_text()
+        self.assertIn('if [[ "${UTAH_E2E_COMPOSEFS_BACKEND:-1}" == 0 ]]; then', luks)
+        self.assertIn('RECIPE_COMPOSEFS_BACKEND=false', luks)
 
 
 if __name__ == "__main__":

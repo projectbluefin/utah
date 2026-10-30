@@ -500,9 +500,12 @@ if [[ "${DISK_OR_ISO}" == *.iso ]]; then
     # luks-e2e.sh writes its installed disk under its own work directory, which
     # defaults somewhere else entirely. Pin it to a directory this script owns so
     # the disk is where the next phase looks for it.
+    #
+    # Pinned to the ostree backend: verify-boot-files.sh and bootc_lifecycle.py
+    # gate on ostree= BLS entries, which composefs-backend installs lack.
     INSTALL_WORK="${UTAH_E2E_WORK:-${WORK}/install}"
     mkdir -p "${INSTALL_WORK}"
-    UTAH_E2E_WORK="${INSTALL_WORK}" bash "${ROOT}/iso/scripts/luks-e2e.sh" \
+    UTAH_E2E_WORK="${INSTALL_WORK}" UTAH_E2E_COMPOSEFS_BACKEND=0 bash "${ROOT}/iso/scripts/luks-e2e.sh" \
         "${DISK_OR_ISO}" "${BASELINE_REF}" "${PASSPHRASE}"
     DISK_SOURCE="${INSTALL_WORK}/install.qcow2"
 else

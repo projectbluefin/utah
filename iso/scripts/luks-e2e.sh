@@ -682,19 +682,32 @@ echo "=== Phase 3/7: install onto an encrypted disk ==="
 # (containers-storage:...) to export to an OCI directory layout before running
 # bootc install. targetImgref is preserved for day-2 updates.
 #
+# UTAH_E2E_COMPOSEFS_BACKEND=0 keeps the ostree backend: an empty "image" with
+# a "targetImgref" is the offline ostree shape, installing from
+# containers-storage without pulling. lifecycle-e2e.sh sets it because its
+# boot-file and BLS gates still require ostree= entries.
+#
 # The user block is what phase 6 logs in as. Without it the installed system
 # has no account at all and the greeter has nobody to offer.
 #
 # Deliberately no scratch disk mounted at /var/lib/containers: Bluefin's ISO
 # pulls the payload from a registry and needs real space for it; Utah's ISO
 # carries the image in the squashfs, and mounting over that path hides it.
+if [[ "${UTAH_E2E_COMPOSEFS_BACKEND:-1}" == 0 ]]; then
+    RECIPE_IMAGE=""
+    RECIPE_COMPOSEFS_BACKEND=false
+else
+    RECIPE_IMAGE="containers-storage:${PAYLOAD_IMAGE}"
+    RECIPE_COMPOSEFS_BACKEND=true
+fi
+echo "  install backend: $([[ "${RECIPE_COMPOSEFS_BACKEND}" == true ]] && echo composefs || echo ostree)"
 cat > "${WORK}/recipe.json" <<EOF
 {
   "disk": "/dev/vda",
   "filesystem": "btrfs",
-  "image": "containers-storage:${PAYLOAD_IMAGE}",
+  "image": "${RECIPE_IMAGE}",
   "targetImgref": "${PAYLOAD_IMAGE}",
-  "composeFsBackend": true,
+  "composeFsBackend": ${RECIPE_COMPOSEFS_BACKEND},
   "bootloader": "grub2",
   "hostname": "utah-luks-test",
   "encryption": {"type": "luks-passphrase", "passphrase": "${PASSPHRASE}"},
