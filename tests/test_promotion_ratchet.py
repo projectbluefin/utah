@@ -49,8 +49,23 @@ def digest(name: str) -> str:
 class World:
     """A registry plus a GitHub repository, behind subprocess-shaped calls."""
 
+    # Committer dates order commits that share no ancestry: under testing ->
+    # squash -> main a squashed-away baseline is 'diverged', not 'behind', so
+    # the ratchet must compare dates to decide which side of the divergence wins.
+    _DATES = {
+        "base": "2026-10-24T00:00:00Z",
+        "older": "2026-10-24T01:00:00Z",
+        "promoted": "2026-10-24T02:00:00Z",
+        "tested": "2026-10-24T03:00:00Z",
+        "tip": "2026-10-24T04:00:00Z",
+        # fork branches off base, so it is older than everything above base but
+        # its line never reached main -- a diverged, older off-line commit.
+        "fork": "2026-10-24T00:30:00Z",
+    }
+
     def __init__(self):
         self.parents: dict[str, list[str]] = {}
+        self.dates: dict[str, str] = {}
         self.tags: dict[str, str] = {}  # "ghcr.io/o/image:tag" -> digest
         self.labels: dict[str, dict] = {}  # digest -> labels
         self.statuses: dict[str, list[dict]] = {}
@@ -61,8 +76,10 @@ class World:
 
     # -- graph ---------------------------------------------------------
     def commit(self, name: str, *parents: str) -> str:
-        self.parents[sha(name)] = [sha(p) for p in parents]
-        return sha(name)
+        key = sha(name)
+        self.parents[key] = [sha(p) for p in parents]
+        self.dates[key] = self._DATES[name]
+        return key
 
     def ancestors(self, tip: str) -> set[str]:
         seen, queue = {tip}, deque([tip])
@@ -170,7 +187,19 @@ class World:
             hits = [c for c in self.parents if c.startswith(prefix_sha)]
             if len(hits) != 1:
                 return "", f"No commit found for SHA: {prefix_sha}", 1
-            return hits[0] + "\n", "", 0
+            full = hits[0]
+            commit = {"sha": full, "commit": {"committer": {"date": self.dates.get(full)}}}
+            # Simulate `gh api ... --jq <filter>`: the real command extracts one
+            # field from this response, so return the extracted value, not JSON.
+            # full_sha reads .sha; committed_at reads .commit.committer.date.
+            if "--jq" not in args:
+                raise AssertionError(f"commits/ call missing --jq: {args}")
+            jq = args[args.index("--jq") + 1]
+            if jq == ".sha":
+                return commit["sha"] + "\n", "", 0
+            if jq == ".commit.committer.date":
+                return commit["commit"]["committer"]["date"] + "\n", "", 0
+            raise AssertionError(f"unexpected jq filter {jq!r}")
         raise AssertionError(f"unexpected api path {path}")
 
 
@@ -231,10 +260,47 @@ class DecideTests(unittest.TestCase):
         self.assertIn("::warning", joined)
         self.assertIn("older than", joined)
 
-    def test_a_diverged_commit_is_refused_and_fails_the_job(self):
-        action, code, lines = decide(self.w, "fork")
-        self.assertEqual((action, code), ("refuse", 1))
-        self.assertIn("::error", "\n".join(lines))
+    def test_a_ghost_baseline_is_rebaselined_to_the_verified_main_head(self):
+        """A :testing commit whose line was rewritten out of main (a ghost) must
+        not freeze the ratchet: move :testing to the current verified main HEAD."""
+        w = world_with_history()
+        # :testing points at a commit (fork) whose line is not reachable from
+        # the current main HEAD "tip" -- structurally a ghost rewritten out of
+        # history, exactly like 33ed66a in projectbluefin/utah#1033.
+        for image in FLAVORS:
+            w.promote(image, w.publish(image, "fork"))
+        action, code, lines = decide(w, "tip")
+        self.assertEqual((action, code), ("promote", 0))
+        joined = "\n".join(lines)
+        self.assertIn("supersedes it", joined)
+        self.assertNotIn("::error", joined)
+
+    def test_a_diverged_older_commit_refuses_and_never_moves_back(self):
+        """The mirror of the ghost case: a diverged commit tested late (or an old
+        build replayed by hand) must not drag :testing backward onto older
+        content. Only the newer side of a divergence may win."""
+        w = world_with_history()
+        # :testing points at the newer main HEAD "tip"; the tested commit "fork"
+        # is off main's line AND older than it, so it cannot promote.
+        for image in FLAVORS:
+            w.promote(image, w.publish(image, "tip"))
+        action, code, lines = decide(w, "fork")
+        self.assertEqual((action, code), ("refuse", 0))
+        joined = "\n".join(lines)
+        self.assertIn("Out-of-order", joined)
+        self.assertNotIn("::error", joined)
+
+    def test_a_behind_flavor_refuses_even_when_another_is_a_ghost(self):
+        """The out-of-order ('behind') case refuses over a ghost re-baseline, so
+        a stale tested commit can never move any flavor backward."""
+        w = world_with_history()
+        # utah-nvidia's :testing points at a ghost (fork, off main's line).
+        w.promote("utah-nvidia", w.publish("utah-nvidia", "fork"))
+        # utah's :testing points at a commit newer than the tested_sha.
+        w.promote("utah", w.publish("utah", "tip"))
+        action, code, lines = decide(w, "promoted")
+        self.assertEqual((action, code), ("refuse", 0))
+        self.assertIn("Out-of-order", "\n".join(lines))
 
     def test_the_same_digests_are_an_idempotent_noop(self):
         matrix = {"include": [self.w.entry(i, self.w.tags[f"{PREFIX}/{i}:testing"]) for i in FLAVORS]}

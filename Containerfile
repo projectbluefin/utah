@@ -1,14 +1,14 @@
-ARG BASE_IMAGE=quay.io/hummingbird-community/os-minimal:latest@sha256:dd526cb8878608e5af4789e922be5e02b51944de86d65fd7178ceb976b9e4580
+ARG BASE_IMAGE=quay.io/hummingbird-community/os-minimal:latest@sha256:5fc532f69535e88101974a41d1fb599ede64ad60f31b89603ef5e871e6fbcd71
 # The package factory publishes a complete, digest-addressable RPM repository.
 # Keep this pin in Utah so an image build is reproducible and can be reviewed
 # against the exact package set it consumes.
 ARG PACKAGE_IMAGE=ghcr.io/projectbluefin/utah-packages
-ARG PACKAGE_IMAGE_SHA=sha256:d9039ceb5830c5545b2113f74ea4b5d47bdedd33b2cd974c0076da957d07818a
+ARG PACKAGE_IMAGE_SHA=sha256:8a99cc25bd592ebbf596cf876719bb79de258315aab0b4c5cabc6b6eaf3b33bc
 # CI keeps PACKAGE_IMAGE_SHA pinned. PACKAGE_IMAGE_REF supports a local image
 # in containers-storage, where no registry digest is available.
 ARG PACKAGE_IMAGE_REF=${PACKAGE_IMAGE}@${PACKAGE_IMAGE_SHA}
 ARG COMMON_IMAGE=ghcr.io/projectbluefin/common
-ARG COMMON_IMAGE_SHA=sha256:bac49b023752b9cd73f339d687ad7bb4946a2f54ad3153c85945f576adab0269
+ARG COMMON_IMAGE_SHA=sha256:9aab4ebf443d3a3f8c89e86fd0d1016c37382fa2a840d779767dbf4aaf2866b2
 ARG BREW_IMAGE=ghcr.io/ublue-os/brew
 ARG BREW_IMAGE_SHA=sha256:b3425199be750618562faad58b9944629805e0e1cac8bf60b18d6bc132a56909
 # Bluefin wallpapers, taken straight from the artwork repository's own image

@@ -68,8 +68,40 @@ jobs:
             echo "suites=$suites_json"
           } >> "$GITHUB_OUTPUT"
 
-  luks:
+  # Before the privileged luks and tacklebox-iso jobs pull the new image, prove
+  # its SLSA provenance was produced by the reusable build workflow in
+  # projectbluefin/actions on utah/testing (utah#1018). The promotion release
+  # gate checks the cosign signature's identity; this checks the provenance
+  # attestation itself, so an image attested by any other workflow or repo -- or
+  # forged under this identity -- is rejected before those privileged jobs
+  # touch it. Gate luks and tacklebox-iso on it so the check must pass first.
+  # (testsuite pulls the same digests without waiting on this job by design; it
+  # only surfaces results and never gates :testing promotion.)
+  verify-provenance:
     needs: resolve
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          persist-credentials: false
+      - name: Verify the image's SLSA provenance
+        env:
+          IMAGE_REF: ${{ matrix.ref }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          bash iso/scripts/verify-image-provenance.sh "$IMAGE_REF" 2>&1 | tee evidence/provenance.log
+  luks:
+    needs: [resolve, verify-provenance]
     runs-on: ubuntu-26.04
     timeout-minutes: 180
     permissions:
@@ -168,7 +200,7 @@ jobs:
   # This is a DEBUG=1 build (test sshd/password), so unlike production-iso
   # below the ISO itself is never uploaded -- diagnostics only.
   tacklebox-iso:
-    needs: resolve
+    needs: [resolve, verify-provenance]
     runs-on: ubuntu-26.04
     timeout-minutes: 240
     permissions:
@@ -326,8 +358,9 @@ jobs:
 
   # :testing is a ratchet over commits, not a mirror of the branch tip. The
   # tested digests become :testing when their commit is the promoted commit or
-  # a descendant of it, however far main has moved meanwhile; an older or
-  # diverged commit never moves it backwards. See scripts/promotion-ratchet.py.
+  # a descendant of it, however far main has moved meanwhile; an older commit,
+  # or a diverged one that is not strictly newer, refuses so nothing ever moves
+  # :testing backwards. See scripts/promotion-ratchet.py.
   #
   # This job is the only writer of :testing. The workflow-level concurrency
   # group (utah-iso-e2e, cancel-in-progress: false) runs one E2E at a time, so
