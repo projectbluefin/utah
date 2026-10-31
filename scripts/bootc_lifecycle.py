@@ -29,6 +29,7 @@ class DeploymentInfo:
     ostree_checksum: str | None = None
     stateroot: str | None = None
     deploy_serial: int | None = None
+    composefs_digest: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -107,6 +108,20 @@ def _extract_slot_deployment(slot_name: str, entry: dict[str, Any] | None) -> De
             except (TypeError, ValueError):
                 deploy_serial = None
 
+    # A composefs deployment carries its identity in the `composefs` object
+    # instead of the `ostree` one: `BootEntryComposefs.verity` is the
+    # deployment's fsverity digest, which bootc writes into the BLS entry's
+    # `composefs=<hex>` karg (see _parse_composefs_karg_path). Match on that
+    # digest rather than the (absent) stateroot/deploy_serial.
+    composefs_obj = entry.get("composefs")
+    if not isinstance(composefs_obj, dict):
+        composefs_obj = entry.get("Composefs") if isinstance(entry.get("Composefs"), dict) else None
+    composefs_digest: str | None = None
+    if isinstance(composefs_obj, dict):
+        verity_raw = composefs_obj.get("verity") or composefs_obj.get("Verity")
+        if verity_raw:
+            composefs_digest = str(verity_raw)
+
     return DeploymentInfo(
         slot=slot_name,
         image=str(image_name),
@@ -118,6 +133,7 @@ def _extract_slot_deployment(slot_name: str, entry: dict[str, Any] | None) -> De
         ostree_checksum=ostree_checksum,
         stateroot=stateroot,
         deploy_serial=deploy_serial,
+        composefs_digest=composefs_digest,
     )
 
 
@@ -379,6 +395,77 @@ def _parse_ostree_karg_path(options: str) -> tuple[str, int] | None:
     return None
 
 
+def _parse_composefs_karg_path(options: str) -> str | None:
+    """Extract the composefs verity digest from the BLS `options` line.
+
+    composefs writes a `composefs=<hex>` kernel argument into every BLS
+    entry it generates, and newer bootc also emits a
+    `composefs.digest=v<N>-sha512-12:<hex>` companion plus a
+    `composefs=?<hex>` (insecure) spelling. Whatever the spelling, the
+    value is the deployment's fsverity digest, which bootc's
+    `BootEntryComposefs.verity` JSON exposes verbatim -- so this is the
+    match key against `bootc status`. Returns the raw hex digest, or
+    `None` if no composefs karg is present.
+    """
+    for token in options.split():
+        key, sep, value = token.partition("=")
+        if sep != "=":
+            continue
+        if key == "composefs":
+            # `composefs=<hex>` or the insecure `composefs=?<hex>`: the
+            # digest is the value, with an optional leading '?' stripped.
+            digest = value.lstrip("?")
+            return digest or None
+        if key == "composefs.digest":
+            # `composefs.digest=v1-sha512-12:<hex>`: the digest follows the
+            # format-version prefix; fall back to the whole value if that
+            # prefix is absent.
+            digest = value.split("-sha512-12:", 1)[-1]
+            return digest or None
+    return None
+
+
+def _deployment_match_key(dep: DeploymentInfo) -> tuple[str, ...] | None:
+    """Return the (stateroot, deploy_serial) or composefs-verity key.
+
+    ostree deployments are anchored by the `(stateroot, deploy_serial)`
+    tuple the boot-manager writes into the BLS `ostree=` karg; composefs
+    deployments have neither, so they are anchored by their fsverity
+    digest instead. Returns `None` when the deployment carries neither
+    key and cannot be matched to a BLS entry.
+    """
+    if dep.stateroot is not None and dep.deploy_serial is not None:
+        return ("ostree", dep.stateroot, dep.deploy_serial)
+    if dep.composefs_digest:
+        return ("composefs", dep.composefs_digest)
+    return None
+
+
+def _entry_match_key(entry: LoaderEntry) -> tuple[str, ...] | None:
+    """Return the match key parsed from a BLS entry's `options` line.
+
+    ostree entries carry `ostree=/ostree/boot.N/<stateroot>/<serial>`;
+    composefs entries carry `composefs=<hex>`. The two return keys that
+    pair with `_deployment_match_key` so an entry and its deployment
+    compare equal. Returns `None` when neither karg is present.
+    """
+    ostree = _parse_ostree_karg_path(entry.fields.get("options", ""))
+    if ostree is not None:
+        return ("ostree", ostree[0], ostree[1])
+    composefs = _parse_composefs_karg_path(entry.fields.get("options", ""))
+    if composefs is not None:
+        return ("composefs", composefs)
+    return None
+
+
+def _format_match_key(key: tuple[str, ...]) -> str:
+    """Render a match key for human-readable diagnostics."""
+    if key[0] == "ostree":
+        _, stateroot, serial = key  # type: ignore[misc]
+        return f"stateroot={stateroot}, deploy_serial={serial}"
+    return f"composefs digest={key[1]}"
+
+
 def validate_bootmgr_entries(
     status_data: str | dict[str, Any],
     listing_text: str,
@@ -386,25 +473,28 @@ def validate_bootmgr_entries(
 ) -> tuple[bool, str, dict[str, Any]]:
     """Validate systemd-boot entries against bootc status.
 
-    Match the deployment's BLS entry by the `(stateroot, deploy_serial)`
-    tuple ostree writes into every BLS entry it generates
-    (`ostree=/ostree/boot.N/<stateroot>/<bootcsum>/<serial>` karg;
-    see _parse_ostree_karg_path). The `<bootcsum>` segment is the
-    kernel+initramfs layout hash and is intentionally NOT used as a match
-    key -- bootc's `BootEntryOstree` JSON does not expose it.
+    Anchor each deployment to its BLS entry by the key the backend writes
+    into the entry: ostree deployments use the `(stateroot, deploy_serial)`
+    tuple in the `ostree=/ostree/boot.N/<stateroot>/<bootcsum>/<serial>`
+    karg (see _parse_ostree_karg_path), and composefs deployments use the
+    `composefs=<hex>` karg matched against `bootc status`'s
+    `BootEntryComposefs.verity` (see _parse_composefs_karg_path). The
+    `<bootcsum>` segment is the kernel+initramfs layout hash and is
+    intentionally NOT used as a match key -- bootc's JSON does not expose
+    it.
 
     ostree allocates `deployserial` per (osname, commit), so two
     deployments with distinct commits but no prior deployment at that
-    commit both receive serial 0. Matching purely by `(stateroot,
-    deploy_serial)` would let one BLS entry satisfy two deployments and
-    silently miss a missing-entry regression. The validator therefore
-    groups both the expected deployments and the captured BLS entries by
-    their `(stateroot, deploy_serial)` tuple and requires the count of
-    entries in each group to be at least the count of deployments; each
-    deployment then claims a unique entry from its group (greedy in slot
-    order). Entries that cannot be parsed (no `ostree=` karg) are surfaced
-    as malformed regardless of how many well-formed entries exist, since
-    any unparseable BLS file on the ESP is a defect.
+    commit both receive serial 0. Matching purely by that tuple would let
+    one BLS entry satisfy two deployments and silently miss a
+    missing-entry regression. The validator therefore groups both the
+    expected deployments and the captured BLS entries by their key and
+    requires the count of entries in each group to be at least the count
+    of deployments; each deployment then claims a unique entry from its
+    group (greedy in slot order). Entries that cannot be parsed (no
+    `ostree=` and no `composefs=` karg) are surfaced as unparseable
+    regardless of how many well-formed entries exist, since any
+    unparseable BLS file on the ESP is a defect.
 
     Each claimed entry is also checked to carry `linux` (kernel) and at
     least one of `initrd` or `options` (the loader will silently skip an
@@ -431,11 +521,11 @@ def validate_bootmgr_entries(
 
     failures: list[str] = []
 
-    # Index entries by the (stateroot, deploy_serial) tuple ostree
-    # writes into each BLS entry's `options` line.
-    entry_index: dict[tuple[str, int], list[LoaderEntry]] = {}
+    # Index entries by the match key they expose on their `options` line
+    # (ostree (stateroot, serial) or composefs verity digest).
+    entry_index: dict[tuple[str, ...], list[LoaderEntry]] = {}
     for entry in entries:
-        parsed = _parse_ostree_karg_path(entry.fields.get("options", ""))
+        parsed = _entry_match_key(entry)
         if parsed is None:
             diag["unparseable"].append(entry.to_dict())
             continue
@@ -445,34 +535,33 @@ def validate_bootmgr_entries(
         names = ", ".join(e["filename"] for e in diag["unparseable"])
         failures.append(
             f"{len(diag['unparseable'])} BLS entries have no parseable "
-            f"ostree= karg and cannot be matched: {names}"
+            f"ostree= or composefs= karg and cannot be matched: {names}"
         )
 
-    # Group expected deployments by (stateroot, deploy_serial). Slots
-    # without a deployment (e.g. empty rollback after rollback) are PASS
-    # without consuming an entry, matching the per-slot semantics the
-    # harness expects.
-    expected_by_key: dict[tuple[str, int], list[tuple[str, DeploymentInfo]]] = {}
+    # Group expected deployments by their match key. Slots without a
+    # deployment (e.g. empty rollback after rollback) are PASS without
+    # consuming an entry, matching the per-slot semantics the harness
+    # expects.
+    expected_by_key: dict[tuple[str, ...], list[tuple[str, DeploymentInfo]]] = {}
     for slot in expected_slots:
         diag["matches"][slot] = None
         dep = deployments.get(slot)
         if dep is None:
             continue
-        if dep.stateroot is None or dep.deploy_serial is None:
+        key = _deployment_match_key(dep)
+        if key is None:
             failures.append(
-                f"{slot} deployment is missing stateroot or deploy_serial "
+                f"{slot} deployment has neither an ostree "
+                f"(stateroot/deploy_serial) nor a composefs verity digest "
                 f"and cannot be anchored to a BLS entry "
                 f"(digest {dep.digest or 'unknown'})"
             )
             continue
-        expected_by_key.setdefault(
-            (dep.stateroot, dep.deploy_serial), []
-        ).append((slot, dep))
+        expected_by_key.setdefault(key, []).append((slot, dep))
 
     # Validate counts per group, then greedily assign each expected
     # deployment a unique entry from its group.
     for key, deps_in_key in expected_by_key.items():
-        stateroot, serial = key
         have_entries = entry_index.get(key, [])
         need = len(deps_in_key)
         have = len(have_entries)
@@ -480,18 +569,20 @@ def validate_bootmgr_entries(
             for slot, dep in deps_in_key:
                 failures.append(
                     f"No BLS entry found for {slot} deployment "
-                    f"(stateroot={stateroot}, deploy_serial={serial}, "
+                    f"({_format_match_key(key)}, "
                     f"image digest {dep.digest or 'unknown'}; "
                     f"have {have} BLS entries, need {need})"
                 )
-                diag["missing"].append(
-                    {
-                        "slot": slot,
-                        "stateroot": stateroot,
-                        "deploy_serial": serial,
-                        "digest": dep.digest,
-                    }
-                )
+                missing: dict[str, Any] = {
+                    "slot": slot,
+                    "digest": dep.digest,
+                }
+                if key[0] == "ostree":
+                    missing["stateroot"] = key[1]
+                    missing["deploy_serial"] = key[2]  # type: ignore[index]
+                else:
+                    missing["composefs_digest"] = key[1]  # type: ignore[index]
+                diag["missing"].append(missing)
             continue
         # have >= need: assign each expected slot a unique entry in slot
         # order. The chosen entry's bootcsum on disk belongs to one of the
@@ -508,8 +599,7 @@ def validate_bootmgr_entries(
             if chosen_idx is None:
                 failures.append(
                     f"Could not assign a unique BLS entry to {slot} "
-                    f"deployment (stateroot={stateroot}, "
-                    f"deploy_serial={serial})"
+                    f"deployment ({_format_match_key(key)})"
                 )
                 continue
             claimed.add(chosen_idx)
