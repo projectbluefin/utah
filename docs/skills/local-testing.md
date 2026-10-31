@@ -225,20 +225,28 @@ calling the verifier there on an installed system fails with exit 127.
 so no target dependencies).
 
 `iso/live/src/install-flatpaks.sh` pins the bootc-installer Flatpak bundle to
-a specific `tuna-os/bootc-installer` release rather than resolving
-`/releases/latest/download/` the way dakota-iso does: the bundle installs
-system-wide with `--no-gpg-verify`, so the version pin is the whole trust
-story, and a fixed tag keeps ISO composition reproducible. Its releases are
-tagged by build date + commit sha (e.g. `v2026.09.19-cee9ba29`), not semver,
-so there is no tag-name continuity to lean on when bumping it.
-`UTAH_INSTALLER_VERSION` and `UTAH_INSTALLER_SHA256` must move together —
-take the digest from that release's `org.bootcinstaller.Installer.flatpak`
-asset (`digest` field of `gh api repos/tuna-os/bootc-installer/releases/tags/<tag>`,
-or download and `sha256sum` it) rather than guessing or reusing an old value.
-`install-flatpaks.sh` also shims the container-build environment: a machine id,
-a session bus (only OCI remotes reach for either), and `/var/tmp` (flatpak's OCI
-token cache, hardcoded, ignoring `$TMPDIR`; tmpfiles creates it on boot, but an
-image build never boots). All three bite only the OCI `tuna-os` remote.
+a specific `tuna-os/bootc-installer` release with `--no-gpg-verify`; a fixed tag
+keeps ISO composition reproducible. For operator guidance on bumping the pin and
+asset digest, see [iso-review](local-testing/references/iso-review.md#bumping-bootc-installer).
+`install-flatpaks.sh` also shims machine id, session bus, and the `/var/tmp`
+token cache during image build.
+
+### Installer configuration and composefs backend
+
+The live ISO installer configuration (`iso/live/src/etc/bootc-installer/recipe.json`,
+`images.json`, and dynamically generated recipes in `configure-live.sh` and
+`iso/scripts/luks-e2e.sh`) defaults `composefs` and `composeFsBackend` to `true`
+(#882). This configures fisherman to install Utah deployments with the
+composefs backend by default: a read-only composefs root with content-addressed
+file deduplication. This change does not set up sealed images or signed
+fs-verity enforcement, so do not cite it as boot-time integrity verification.
+The installer no longer
+offers xfs (no fs-verity); btrfs and ext4 remain.
+
+`luks-e2e.sh` installs with the composefs backend unless
+`UTAH_E2E_COMPOSEFS_BACKEND=0`. `lifecycle-e2e.sh` ISO mode sets that to pin the
+ostree backend, because `verify-boot-files.sh` and `scripts/bootc_lifecycle.py`
+gate on `ostree=` BLS entries that composefs-backend installs do not write.
 
 ## Tacklebox ISOs (unpublished variants)
 
