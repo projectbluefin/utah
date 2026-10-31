@@ -1,0 +1,115 @@
+name: Update armed pull requests
+
+# Strict required-check freshness stays enabled. Only PRs already approved for
+# native auto-merge get main merged into their head; this never arms or merges PRs.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    # Catch auto-merge armed after the last push and asynchronous mergeability.
+    - cron: '17,47 * * * *'
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.repository }}-update-armed-prs
+  cancel-in-progress: true
+
+jobs:
+  update:
+    if: github.repository_owner == 'projectbluefin' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - name: Get repository-scoped mergeraptor token
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          client-id: ${{ secrets.MERGERAPTOR_APP_ID }}
+          private-key: ${{ secrets.MERGERAPTOR_PRIVATE_KEY }}
+          # No owner: the action defaults to the current repository only.
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      # No checkout: only trusted inline code processes PR metadata as data.
+      # Unlike GITHUB_TOKEN, App-authenticated updates trigger pull_request CI.
+      - name: Merge main into armed behind pull requests
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+
+          repository = os.environ["REPOSITORY"]
+          owner, name = repository.split("/", 1)
+          query = """
+          query($owner: String!, $name: String!, $endCursor: String) {
+            repository(owner: $owner, name: $name) {
+              pullRequests(states: OPEN, baseRefName: "main", first: 100, after: $endCursor) {
+                pageInfo { hasNextPage endCursor }
+                nodes {
+                  number isDraft mergeStateStatus headRefOid
+                  autoMergeRequest { enabledAt }
+                  labels(first: 100) {
+                    pageInfo { hasNextPage }
+                    nodes { name }
+                  }
+                }
+              }
+            }
+          }
+          """
+          # A discovery/authentication failure fails the job; only individual
+          # update failures are recoverable. Paginate rather than cap the PR list.
+          response = subprocess.run(
+              ["gh", "api", "graphql", "--paginate", "--slurp",
+               "-f", f"query={query}", "-F", f"owner={owner}", "-F", f"name={name}"],
+              check=True, capture_output=True, text=True,
+          )
+          pages = json.loads(response.stdout)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write("## Armed pull request freshness\n\n")
+              attempted = 0
+              for page in pages:
+                  for pr in page["data"]["repository"]["pullRequests"]["nodes"]:
+                      if pr["isDraft"] or pr["autoMergeRequest"] is None:
+                          continue
+                      labels = {label["name"].lower() for label in pr["labels"]["nodes"]}
+                      if any(label in {"hold", "do-not-merge"} or label.startswith("do-not-merge/")
+                             for label in labels):
+                          continue
+                      number = pr["number"]
+                      # Fail closed if a hold could be outside the returned label page.
+                      if pr["labels"]["pageInfo"]["hasNextPage"]:
+                          summary.write(f"- #{number}: skipped; cannot inspect every hold label.\n")
+                          continue
+                      # DIRTY, UNKNOWN and every other state are deliberately untouched.
+                      # A later scheduled run can pick up asynchronously computed BEHIND.
+                      if pr["mergeStateStatus"] != "BEHIND":
+                          continue
+                      attempted += 1
+                      # update-branch merges the base, never rebases. The expected head
+                      # rejects a race with an author push instead of updating a new tip.
+                      result = subprocess.run(
+                          ["gh", "api", "--method", "PUT",
+                           f"repos/{repository}/pulls/{number}/update-branch",
+                           "-f", f"expected_head_sha={pr['headRefOid']}"],
+                          capture_output=True, text=True,
+                      )
+                      if result.returncode == 0:
+                          summary.write(f"- #{number}: merge update requested; PR CI will run again.\n")
+                      else:
+                          # Do not echo API/PR-controlled text or credentials to logs.
+                          summary.write(
+                              f"- #{number}: update failed (gh exit {result.returncode}); "
+                              "check head movement, conflicts and maintainer edit permissions "
+                              "on the PR. Other PRs continue; a later run can retry.\n"
+                          )
+              if not attempted:
+                  summary.write("No eligible armed BEHIND pull requests to update.\n")
+          PY
