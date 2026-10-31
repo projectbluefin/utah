@@ -1,7 +1,7 @@
 ---
 name: ci-workflows
-version: "1.2"
-last_updated: "2026-10-25"
+version: "1.3"
+last_updated: "2026-10-31"
 id: ci-workflows
 one_line_purpose: Navigate Utah's build, promote, and sync workflow topology.
 entry_point: docs/skills/ci-workflows.md
@@ -24,9 +24,13 @@ metadata:
 This overview covers the build, promotion, branch-sync, parity-sync, and
 post-build verification workflows, not the complete workflow inventory:
 
-- `.github/workflows/build.yml` -- pull requests, pushes to `testing`, a
-  manual dispatch. Top-level `permissions: {}`; each job
-  grants its own. Cancels in-progress runs per workflow and ref. A dispatch
+- `.github/workflows/build.yml` -- pull requests, merge queue groups
+  (`merge_group`), pushes to `testing`, a manual dispatch. Top-level
+  `permissions: {}`; each job grants its own. Cancels in-progress runs per
+  workflow and ref for pull requests only. A merge group runs `contract` and
+  nothing else: `kernel_cache`, `build_main` and `build_kernel` carry
+  `github.event_name != 'merge_group'`, because they push and sign (see
+  `merge-queue.yml` below). A dispatch
   with `contract_only=true` skips the publication jobs and `dispatch-iso`.
   Publishing dispatches (`contract_only=false`) must target `testing`; a
   dispatch from any other ref, including the Actions UI default `main`,
@@ -43,6 +47,22 @@ post-build verification workflows, not the complete workflow inventory:
   fails. This path has read-only registry access and never publishes or signs
   the review image. For kernel-cache consumers, first build the matching signed
   cache through the normal pipeline.
+- `.github/workflows/merge-queue.yml` -- `merge_group` only. The `main`
+  ruleset requires `contract` and `build_main / Check all testing builds
+  successful`; the merge queue waits for both on its own commit. The second
+  name is normally the aggregate of `build.yml`'s call to the pinned
+  `projectbluefin/actions` reusable build, which pushes, signs, attests and
+  opens issues for every event other than `pull_request`, so it must never
+  run on a queue ref. This workflow reports the same name from a matrix of
+  `just build-ghcr utah testing <flavor>` over `scripts/flavors.py list-main`,
+  the local path `review_vm` uses, with `REGISTRY_CACHE_WRITE=0` and a token
+  limited to `contents: read` and `packages: read`. It is a separate file
+  because a skipped job of the same name in `build.yml` would report a second
+  `build_main / Check all testing builds successful` on every pull request.
+  Rechunking, SBOM and signatures are publication steps and stay on
+  `testing`. `tests/test_merge_queue.py` holds the name, the trigger, the
+  read-only permissions, and the absence of any push, sign, attest, issue or
+  dispatch step.
 - `.github/workflows/promote-testing-to-main.yml` -- pushes to `testing`, a
   nightly cron, and manual dispatch. Maintains the `testing` -> `main` squash
   PR; it never moves image tags and keeps `run_e2e: false` (the pinned reusable
@@ -127,6 +147,70 @@ Both Utah image jobs explicitly set `rechunk: "true"`, opting the testing
 stream into those steps (#226; actions#557). This does not settle published
 chunkah layer order: `scripts/check-reproducible-build.sh` compares native
 `RootFS.Layers`, not the post-rechunk image (#313; actions#591).
+
+## Merge queue
+
+Both required checks report on `merge_group`, so the ruleset's strict "branch
+must be up to date" policy can be replaced by a merge queue: the queue tests
+each pull request on top of `main` and the entries ahead of it instead of
+making every open pull request rebase and rebuild after each merge.
+
+Automations that merge into `main`, and what each needs under a required
+queue:
+
+| Automation | How it merges | Under a required merge queue |
+| --- | --- | --- |
+| `prow.yml` (tide, `cncf/prow-github-actions` v3.4.0; `tide.merge_queue: auto`, `merge_method: squash` in `projectbluefin/.project/prow.yaml`) | On `lgtm` + `approved`, enqueues with `enqueuePullRequest` on the job's `GITHUB_TOKEN` (no `token` secret is passed) | At risk: GitHub starts no workflow for an event `GITHUB_TOKEN` caused, so a group prow enqueues may get no `merge_group` runs and time out (prow's own docs say this is "being verified live"). Pass prow a GitHub App `token` that may enqueue, or have a maintainer click "Merge when ready" |
+| Renovate (`renovate.json`, `local>projectbluefin/renovate-config` = `config:recommended`) | No automerge; the `utah-packages` digest group sets `automerge: false` | A maintainer (or prow) enqueues |
+| `update-bluefin-parity.yml`, `update-gnome-extensions.yml`, `promote-testing-to-main.yml` | Open or maintain pull requests only | A maintainer (or prow) enqueues |
+| `sync-main-to-testing.yml` | Pushes `testing`, not `main` | Unaffected |
+
+Queue activation also requires the App's permissions, not just its secrets.
+`mergeraptor` currently grants contents, issues, pull requests and workflows
+write access, but neither commit statuses nor Actions access. Replacing Prow's
+single token requires `statuses:write` for exact-head LGTM binding and
+`actions:write` for `/test`, `/retest` and `/ok-to-test`. Only the App owner can
+add these permissions and approve the installation update. Do not request
+ungranted permissions or activate a required queue while this is unresolved.
+Keep the existing command path and strict freshness until the App-enqueued
+`merge_group` run has been observed.
+
+## Unattended landing with strict freshness
+
+Arm GitHub's **native auto-merge** on a PR to land it unattended: Hive, a
+Renovate rule with platform automerge enabled, or a maintainer can do this.
+Merely opening a PR does not arm it. Required checks, reviews and the strict
+up-to-date rule still apply; this automation does not bypass or relax them.
+
+`.github/workflows/update-armed-prs.yml` runs on every push to `main`, manual
+dispatch on `main`, and at minutes 17 and 47 each hour. It paginates open PRs
+targeting `main` and requests a **merge update**, never a rebase, only when
+native auto-merge is armed and `mergeStateStatus` is `BEHIND`. It skips drafts,
+`hold`, `do-not-merge` and `do-not-merge/*` labels, conflicted (`DIRTY`) PRs
+and other merge states. The fallback schedule catches auto-merge armed after
+the last push and mergeability still `UNKNOWN` when a push run inspected it.
+A newer run cancels its predecessor in a repository-wide concurrency group.
+
+Updates use a mergeraptor App installation token, not `GITHUB_TOKEN`: App
+updates trigger PR CI, whereas `GITHUB_TOKEN` updates suppress that event.
+The organization must expose `MERGERAPTOR_APP_ID` and
+`MERGERAPTOR_PRIVATE_KEY` to this repository and install the App with contents
+and pull-request write access. The workflow requests only those permissions,
+explicitly scopes the token to this repository (no organization-wide
+`owner`), leaves the job's `GITHUB_TOKEN` permissions empty, and lets the
+pinned token action revoke the token afterward. Only trusted main triggers
+can mint it; there is **no checkout or execution of PR code**, and PR metadata
+is handled as data by inline code, not interpolated into a shell command.
+
+The update API receives the observed head SHA, so an intervening author push
+rejects the stale request. One PR's update failure, including a fork that
+disallows maintainer edits, is recorded in the job summary without blocking
+other PRs. Discovery/authentication failure still fails the job. Conflicts,
+fork access and persistent update failures need the author or Hive to resolve;
+this job neither resolves conflicts nor arms auto-merge or merges a PR.
+Strict freshness stays on. Behavioral coverage lives in
+`tests/test_update_armed_prs.py`, which executes the workflow body against a
+fake API client without using live credentials.
 
 ## Detailed workflow references
 - [Package snapshot proof](ci-workflows/references/package-snapshot.md)
