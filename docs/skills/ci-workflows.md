@@ -165,6 +165,53 @@ queue:
 | `update-bluefin-parity.yml`, `update-gnome-extensions.yml`, `promote-testing-to-main.yml` | Open or maintain pull requests only | A maintainer (or prow) enqueues |
 | `sync-main-to-testing.yml` | Pushes `testing`, not `main` | Unaffected |
 
+Queue activation also requires the App's permissions, not just its secrets.
+`mergeraptor` currently grants contents, issues, pull requests and workflows
+write access, but neither commit statuses nor Actions access. Replacing Prow's
+single token requires `statuses:write` for exact-head LGTM binding and
+`actions:write` for `/test`, `/retest` and `/ok-to-test`. Only the App owner can
+add these permissions and approve the installation update. Do not request
+ungranted permissions or activate a required queue while this is unresolved.
+Keep the existing command path and strict freshness until the App-enqueued
+`merge_group` run has been observed.
+
+## Unattended landing with strict freshness
+
+Arm GitHub's **native auto-merge** on a PR to land it unattended: Hive, a
+Renovate rule with platform automerge enabled, or a maintainer can do this.
+Merely opening a PR does not arm it. Required checks, reviews and the strict
+up-to-date rule still apply; this automation does not bypass or relax them.
+
+`.github/workflows/update-armed-prs.yml` runs on every push to `main`, manual
+dispatch on `main`, and at minutes 17 and 47 each hour. It paginates open PRs
+targeting `main` and requests a **merge update**, never a rebase, only when
+native auto-merge is armed and `mergeStateStatus` is `BEHIND`. It skips drafts,
+`hold`, `do-not-merge` and `do-not-merge/*` labels, conflicted (`DIRTY`) PRs
+and other merge states. The fallback schedule catches auto-merge armed after
+the last push and mergeability still `UNKNOWN` when a push run inspected it.
+A newer run cancels its predecessor in a repository-wide concurrency group.
+
+Updates use a mergeraptor App installation token, not `GITHUB_TOKEN`: App
+updates trigger PR CI, whereas `GITHUB_TOKEN` updates suppress that event.
+The organization must expose `MERGERAPTOR_APP_ID` and
+`MERGERAPTOR_PRIVATE_KEY` to this repository and install the App with contents
+and pull-request write access. The workflow requests only those permissions,
+explicitly scopes the token to this repository (no organization-wide
+`owner`), leaves the job's `GITHUB_TOKEN` permissions empty, and lets the
+pinned token action revoke the token afterward. Only trusted main triggers
+can mint it; there is **no checkout or execution of PR code**, and PR metadata
+is handled as data by inline code, not interpolated into a shell command.
+
+The update API receives the observed head SHA, so an intervening author push
+rejects the stale request. One PR's update failure, including a fork that
+disallows maintainer edits, is recorded in the job summary without blocking
+other PRs. Discovery/authentication failure still fails the job. Conflicts,
+fork access and persistent update failures need the author or Hive to resolve;
+this job neither resolves conflicts nor arms auto-merge or merges a PR.
+Strict freshness stays on. Behavioral coverage lives in
+`tests/test_update_armed_prs.py`, which executes the workflow body against a
+fake API client without using live credentials.
+
 ## Detailed workflow references
 - [Package snapshot proof](ci-workflows/references/package-snapshot.md)
 - [Contract gate](ci-workflows/references/contract-gate.md)
