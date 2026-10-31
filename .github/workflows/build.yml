@@ -2,6 +2,12 @@ name: Build Utah
 
 on:
   pull_request:
+  # The merge queue runs only `contract` here (a required check). The pinned
+  # reusable build pushes, signs, attests and opens issues for every event
+  # that is not pull_request, so no image job may run on a queue ref; the
+  # required `build_main / Check all testing builds successful` check comes
+  # from merge-queue.yml, which builds locally and publishes nothing.
+  merge_group:
   push:
     branches: [testing]
   # Nightly scheduling lives in sync-main-to-testing so signatures and E2E
@@ -149,8 +155,9 @@ jobs:
   kernel_cache:
     needs: contract
     # Only the OGC and NVIDIA flavors unpack this. While the matrix is main-only
-    # it is 45 minutes spent on an image nothing consumes.
-    if: needs.contract.outputs.needs_kernel == 'true' && !inputs.contract_only
+    # it is 45 minutes spent on an image nothing consumes. Never on a merge
+    # group: this job pushes and signs (see the merge_group trigger).
+    if: github.event_name != 'merge_group' && needs.contract.outputs.needs_kernel == 'true' && !inputs.contract_only
     runs-on: ubuntu-26.04
     # cosign reads the Docker keychain (${DOCKER_CONFIG}/config.json); it never
     # looks at podman's default authfile under ${XDG_RUNTIME_DIR}/containers.
@@ -266,7 +273,7 @@ jobs:
   # a cache miss cost main the same twenty minutes it cost nvidia-gaming.
   build_main:
     needs: contract
-    if: needs.contract.outputs.main_flavors != '[]' && !inputs.contract_only
+    if: github.event_name != 'merge_group' && needs.contract.outputs.main_flavors != '[]' && !inputs.contract_only
     uses: projectbluefin/actions/.github/workflows/reusable-build.yml@d0abf8999cf9fe16d2ef5bdc2a42a91ce8809645 # v1
     permissions:
       contents: read
@@ -316,7 +323,7 @@ jobs:
   # digest artifact, which post-testing-e2e matches by glob.
   build_kernel:
     needs: [contract, kernel_cache]
-    if: ${{ !cancelled() && !inputs.contract_only && needs.contract.result == 'success' && needs.kernel_cache.result == 'success' && needs.kernel_cache.outputs.available == 'true' && needs.contract.outputs.kernel_flavors != '[]' }}
+    if: ${{ github.event_name != 'merge_group' && !cancelled() && !inputs.contract_only && needs.contract.result == 'success' && needs.kernel_cache.result == 'success' && needs.kernel_cache.outputs.available == 'true' && needs.contract.outputs.kernel_flavors != '[]' }}
     uses: projectbluefin/actions/.github/workflows/reusable-build.yml@d0abf8999cf9fe16d2ef5bdc2a42a91ce8809645 # v1
     permissions:
       contents: read
