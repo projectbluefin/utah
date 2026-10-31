@@ -73,6 +73,45 @@ class TestBootcStatusParsing(unittest.TestCase):
         with self.assertRaises(ValueError):
             bootc_lifecycle.parse_bootc_status(123)  # type: ignore
 
+    def test_parse_composefs_verity(self):
+        # A composefs deployment carries its identity in the `composefs`
+        # object (BootEntryComposefs.verity), not the `ostree` object. The
+        # verity is the digest the BLS entry's `composefs=` karg carries.
+        raw = {
+            "status": {
+                "booted": {
+                    "image": {
+                        "image": "ghcr.io/projectbluefin/utah",
+                        "transport": "registry",
+                        "imageDigest": "sha256:" + "c" * 64,
+                    },
+                    "composefs": {
+                        "verity": "c" * 128,
+                        "boot_type": "bls",
+                        "bootloader": "systemd",
+                    },
+                }
+            }
+        }
+        deployments = bootc_lifecycle.parse_bootc_status(raw)
+        self.assertEqual(deployments["booted"].composefs_digest, "c" * 128)
+        self.assertIsNone(deployments["booted"].stateroot)
+
+    def test_parse_composefs_digest_all_karg_forms(self):
+        # The digest the karg parser returns must equal the verity the
+        # deployment exposes, for every spelling bootc emits.
+        digest = "d" * 128
+        for karg in (
+            f"composefs={digest}",
+            f"composefs.digest=v1-sha512-12:{digest}",
+            f"composefs=?{digest}",
+        ):
+            with self.subTest(karg=karg):
+                self.assertEqual(
+                    bootc_lifecycle._parse_composefs_karg_path(karg),
+                    digest,
+                )
+
 
 class TestLifecyclePhaseTransitions(unittest.TestCase):
     def setUp(self):
@@ -859,6 +898,192 @@ class TestBootmgrValidation(unittest.TestCase):
         self.assertIn("/vmlinuz-utah", msg)
         reasons = [r["reason"] for r in diag["malformed"]]
         self.assertIn("missing on disk", reasons)
+
+
+class TestComposefsBootmgrValidation(unittest.TestCase):
+    """composefs-backend installs: match BLS entries by `composefs=` verity.
+
+    PR #938 proposes installing Utah with the composefs backend by default;
+    this validator supports that backend without changing the default itself.
+    composefs deployments write a `composefs=<hex>` karg
+    into every BLS entry instead of an `ostree=` path, and `bootc status`
+    exposes that same digest as `BootEntryComposefs.verity`.
+    """
+
+    v_base = "c" * 128
+    v_cand = "e" * 128
+
+    def _status(self, slots, *, serial_map=None):
+        # composefs deployments expose their verity under `composefs`, not
+        # `ostree`; stateroot/deploy_serial are absent by design.
+        def entry(slot, verity):
+            return {
+                "image": {
+                    "image": "ghcr.io/projectbluefin/utah",
+                    "transport": "registry",
+                    "imageDigest": f"sha256:img-{slot:0>60}",
+                },
+                "composefs": {
+                    "verity": verity,
+                    "boot_type": "bls",
+                    "bootloader": "systemd",
+                },
+                "pinned": False,
+            }
+
+        return {"status": {slot: entry(slot, verity) for slot, verity in slots.items()}}
+
+    def _entry(self, verity, *, linux_path="/vmlinuz-utah", initrd_path="/initramfs-utah.img", karg=None):
+        # composefs writes the verity into the `options` line's `composefs=`
+        # karg rather than an `ostree=/ostree/boot.N/...` path.
+        karg = karg or f"composefs={verity}"
+        return (
+            f"title Utah {verity[:8]}\n"
+            "version 0\n"
+            "machine-id 0123456789abcdef0123456789abcdef\n"
+            f"linux {linux_path}\n"
+            f"initrd {initrd_path}\n"
+            f"options root=UUID=0000 rw {karg}\n"
+        )
+
+    def _listing(self, entries):
+        parts = []
+        for filename, content in entries:
+            parts.append(f"=== ENTRY {filename} ===\n{content}\n=== END ===\n")
+        return "".join(parts)
+
+    def test_composefs_entries_match_by_verity(self):
+        status = self._status({"booted": self.v_base, "staged": self.v_cand})
+        listing = self._listing([
+            (
+                f"/boot/loader/entries/composefs-utah-{self.v_base[:8]}.conf",
+                self._entry(self.v_base),
+            ),
+            (
+                f"/boot/loader/entries/composefs-utah-{self.v_cand[:8]}.conf",
+                self._entry(self.v_cand, linux_path="/vmlinuz-staged"),
+            ),
+        ])
+        ok, msg, diag = bootc_lifecycle.validate_bootmgr_entries(status, listing)
+        self.assertTrue(ok, msg)
+        self.assertEqual(
+            diag["matches"]["booted"]["filename"],
+            f"/boot/loader/entries/composefs-utah-{self.v_base[:8]}.conf",
+        )
+        self.assertEqual(
+            diag["matches"]["staged"]["filename"],
+            f"/boot/loader/entries/composefs-utah-{self.v_cand[:8]}.conf",
+        )
+
+    def test_composefs_missing_entry_fails(self):
+        status = self._status({"booted": self.v_base, "staged": self.v_cand})
+        listing = self._listing([
+            (
+                f"/boot/loader/entries/composefs-utah-{self.v_base[:8]}.conf",
+                self._entry(self.v_base),
+            ),
+        ])
+        ok, msg, diag = bootc_lifecycle.validate_bootmgr_entries(status, listing)
+        self.assertFalse(ok)
+        self.assertIn("staged", msg)
+        self.assertEqual(diag["missing"][0]["slot"], "staged")
+        self.assertEqual(diag["missing"][0]["composefs_digest"], self.v_cand)
+
+    def test_composefs_unparseable_entry_fails(self):
+        # An entry with neither ostree= nor composefs= cannot be matched,
+        # regardless of how many well-formed entries exist.
+        status = self._status({"booted": self.v_base})
+        listing = self._listing([
+            (
+                "/boot/loader/entries/other.conf",
+                "title Other\nversion 0\nlinux /other/vmlinuz\ninitrd /other/initramfs\noptions root=UUID=xxx\n",
+            ),
+        ])
+        ok, msg, diag = bootc_lifecycle.validate_bootmgr_entries(status, listing)
+        self.assertFalse(ok)
+        self.assertIn("cannot be matched", msg)
+        self.assertEqual(diag["unparseable"][0]["filename"], "/boot/loader/entries/other.conf")
+
+    def test_composefs_all_karg_forms_match(self):
+        # Every spelling bootc emits for the verity must still match the
+        # deployment; the harness must not care which one is present.
+        for karg in (
+            f"composefs={self.v_base}",
+            f"composefs.digest=v1-sha512-12:{self.v_base}",
+            f"composefs=?{self.v_base}",
+        ):
+            with self.subTest(karg=karg):
+                status = self._status({"booted": self.v_base})
+                listing = self._listing([
+                    (
+                        f"/boot/loader/entries/composefs-utah-{self.v_base[:8]}.conf",
+                        self._entry(self.v_base, karg=karg),
+                    ),
+                ])
+                ok, msg, _ = bootc_lifecycle.validate_bootmgr_entries(
+                    status, listing, expected_slots=("booted",)
+                )
+                self.assertTrue(ok, f"{karg}: {msg}")
+
+    def test_composefs_missing_linux_fails(self):
+        status = self._status({"booted": self.v_base})
+        listing = self._listing([
+            (
+                f"/boot/loader/entries/composefs-utah-{self.v_base[:8]}.conf",
+                f"title Utah {self.v_base[:8]}\nversion 0\noptions root=UUID=0000 rw composefs={self.v_base}\n",
+            ),
+        ])
+        ok, msg, diag = bootc_lifecycle.validate_bootmgr_entries(status, listing)
+        self.assertFalse(ok)
+        self.assertIn("linux", msg)
+        self.assertEqual(diag["malformed"][0]["slot"], "booted")
+
+    def test_ostree_and_composefs_entries_coexist(self):
+        # A mixed listing (an old ostree entry beside the composefs one) must
+        # match each deployment against its own backend's key.
+        csum = "1.0" + "a" * 62
+        status = {
+            "status": {
+                "booted": {
+                    "image": {
+                        "image": "ghcr.io/projectbluefin/utah",
+                        "imageDigest": "sha256:" + "9" * 64,
+                    },
+                    "composefs": {"verity": self.v_base, "boot_type": "bls"},
+                },
+                "rollback": {
+                    "image": {
+                        "image": "ghcr.io/projectbluefin/utah",
+                        "imageDigest": "sha256:" + "8" * 64,
+                    },
+                    "ostree": {
+                        "checksum": csum,
+                        "stateroot": "utah",
+                        "deploySerial": 0,
+                    },
+                },
+            }
+        }
+        listing = self._listing([
+            (
+                f"/boot/loader/entries/composefs-utah-{self.v_base[:8]}.conf",
+                self._entry(self.v_base),
+            ),
+            (
+                f"/boot/loader/entries/ostree-utah-{csum[:8]}.conf",
+                (
+                    f"title Utah {csum[:8]}\nversion 0\n"
+                    f"linux /vmlinuz\ninitrd /initramfs\n"
+                    f"options root=UUID=0000 ro ostree=/ostree/boot.0/utah/{csum[:62]}/0\n"
+                ),
+            ),
+        ])
+        ok, msg, diag = bootc_lifecycle.validate_bootmgr_entries(
+            status, listing, expected_slots=("booted", "rollback")
+        )
+        self.assertTrue(ok, msg)
+        self.assertTrue(diag["matches"]["booted"])
+        self.assertTrue(diag["matches"]["rollback"])
 
 
 class TestBootmgrCli(unittest.TestCase):

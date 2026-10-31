@@ -63,13 +63,25 @@ validator then confirms each matched entry carries a `linux` line and
 at least one of `initrd` or `options`. Evidence is written to
 `evidence/loader-entries-<phase>.txt` (the raw BLS listing) and
 `evidence/bootmgr-<phase>.json` (which slot matched which entry,
-which slots had no entry, and any entries whose `ostree=` karg did not
-parse).
+which slots had no entry, and any entries whose backend kernel argument did
+not parse).
+For composefs-backed deployments, the match key is `composefs.verity` from
+`bootc status`, paired with the digest in `composefs=<hex>`,
+`composefs=?<hex>`, or `composefs.digest=v<N>-sha512-12:<hex>`. Backend-qualified
+keys keep OSTree and composefs entries distinct; both require enough entries
+to assign a unique one to every expected deployment.
+
+Supporting these entries does not change the installer default. The composefs
+default proposal is tracked separately in #882 / PR #938. Synthetic fixtures
+prove validator behavior, not emitted bootc formats or successful installation,
+upgrade, and rollback; retain actual status, BLS, and boot evidence for those
+claims.
 
 Each phase also runs `iso/scripts/verify-boot-files.sh` as root in the guest
-and saves `evidence/boot-files-<phase>.txt`. For every published OSTree BLS
-Type #1 entry, `linux` and every repeated `initrd` directive must reference a
-nonempty regular file on the **same ESP/XBOOTLDR filesystem as the entry**.
+and saves `evidence/boot-files-<phase>.txt`. For every published bootc BLS
+Type #1 entry (OSTree or composefs), `linux` and every repeated `initrd`
+directive must reference a nonempty regular file on the **same ESP/XBOOTLDR
+filesystem as the entry**.
 A BLS `/ostree/...` path is partition-relative, not relative to the guest's
 `/` or the harness host; do not satisfy it from a different mounted partition.
 Missing directives, missing files, and an empty entry set fail the phase.

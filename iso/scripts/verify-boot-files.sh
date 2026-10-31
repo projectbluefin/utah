@@ -14,20 +14,26 @@ for root in "$@"; do
     for entry in "${root}"/loader/entries/*.conf; do
         linux=()
         initrd=()
-        ostree=0
+        bootc=0
         while read -r key value; do
             case "$key" in
                 linux) linux+=("$value") ;;
                 initrd) initrd+=("$value") ;;
                 options)
-                    if [[ " $value " == *" ostree="* ]]; then
-                        ostree=1
+                    # bootc writes an ostree= karg (ostree backend) or a
+                    # composefs= karg (composefs backend) into every Type #1 entry.
+                    # PR #938 proposes composefs as the install default;
+                    # validate either backend regardless of that choice.
+                    if [[ " $value " == *" ostree="* \
+                       || " $value " == *" composefs="* \
+                       || " $value " == *" composefs.digest="* ]]; then
+                        bootc=1
                     fi
                     ;;
             esac
         done < "$entry"
         # Other operating systems and UKIs are outside this bootc Type #1 gate.
-        [[ "$ostree" == 1 ]] || continue
+        [[ "$bootc" == 1 ]] || continue
         checked=$((checked + 1))
         printf 'ENTRY %s\n' "$entry"
         if [[ ${#linux[@]} -eq 0 || ${#initrd[@]} -eq 0 ]]; then
@@ -49,7 +55,7 @@ for root in "$@"; do
     done
 done
 if [[ "$checked" == 0 ]]; then
-    echo 'FAIL: no OSTree BLS Type #1 entries found'
+    echo 'FAIL: no bootc BLS Type #1 entries found'
     failed=1
 fi
 exit "$failed"
