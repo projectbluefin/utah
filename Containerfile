@@ -8,7 +8,7 @@ ARG PACKAGE_IMAGE_SHA=sha256:ef20cb7ee8d09d5251ca36bc6aa167fa9570160da5af8b856c8
 # in containers-storage, where no registry digest is available.
 ARG PACKAGE_IMAGE_REF=${PACKAGE_IMAGE}@${PACKAGE_IMAGE_SHA}
 ARG COMMON_IMAGE=ghcr.io/projectbluefin/common
-ARG COMMON_IMAGE_SHA=sha256:cdec6c17779d8a5a1bb91f8305496d9bf7c51e0aea95da2ccec5265a895acce0
+ARG COMMON_IMAGE_SHA=sha256:e092e83e253cf5ca40203f64fb3416e811aebb09c23c9d5fccc6c38bdfd7f5fd
 ARG BREW_IMAGE=ghcr.io/ublue-os/brew
 ARG BREW_IMAGE_SHA=sha256:b3425199be750618562faad58b9944629805e0e1cac8bf60b18d6bc132a56909
 # Bluefin wallpapers, taken straight from the artwork repository's own image
