@@ -70,8 +70,9 @@ The TOML's sections are the contract's table of contents:
   supplies that key (fingerprint `567E…1D51`) alongside Utah's
   `RPM-GPG-KEY-redhat-release-2`, so no policy weakening or alias is needed.
 - **`[flatpak]`** — first-boot policy: the Flathub and TunaOS remotes,
-  the Bazaar and Ghostty preinstalls, the `99-flatpaks.sh` hook, and the
-  system-flatpaks Brewfile whose app list the contract enumerates.
+  the Bazaar, NautilusPreviewer (spacebar previews in Files) and Ghostty
+  preinstalls, the `99-flatpaks.sh` hook, and the system-flatpaks Brewfile
+  whose app list the contract enumerates.
 - **`[services]`** — systemd units the preset must enable: `gdm.service`, `avahi-daemon.service`,
   `avahi-daemon.socket`, `switcheroo-control.service`, `bluetooth.service`,
   `ublue-system-setup.service`, `flatpak-preinstall.service`, `flatpak-nuke-fedora.service`,
