@@ -10,7 +10,7 @@ ARG PACKAGE_IMAGE_REF=${PACKAGE_IMAGE}@${PACKAGE_IMAGE_SHA}
 ARG COMMON_IMAGE=ghcr.io/projectbluefin/common
 ARG COMMON_IMAGE_SHA=sha256:863874ddd12d9ca7491f55607ee892ad73ebfdb90bd2d14edbf155c5ef157145
 ARG BREW_IMAGE=ghcr.io/ublue-os/brew
-ARG BREW_IMAGE_SHA=sha256:b3425199be750618562faad58b9944629805e0e1cac8bf60b18d6bc132a56909
+ARG BREW_IMAGE_SHA=sha256:974ce5e4d6d5fceb6151910957515a42c0eefced4ea386fdfadb0fbad84499a5
 # Bluefin wallpapers, taken straight from the artwork repository's own image
 # rather than only through Common's pin of it, so wallpaper freshness does not
 # wait on a Common release. It is the multi-arch index digest: the contents are
