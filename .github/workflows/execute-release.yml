@@ -99,7 +99,7 @@ jobs:
   execute:
     needs: [check-trigger, e2e-evidence]
     if: needs.check-trigger.outputs.is-promotion == 'true'
-    uses: projectbluefin/actions/.github/workflows/reusable-execute-release.yml@d0abf8999cf9fe16d2ef5bdc2a42a91ce8809645 # v1
+    uses: projectbluefin/actions/.github/workflows/reusable-execute-release.yml@cbf1ce09363db6a09bfaae16fde95c7b8c2874bf # v1
     permissions:
       actions: read
       contents: write
