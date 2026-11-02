@@ -255,10 +255,13 @@ has 16 trees under `system_files/shared/usr/share/gnome-shell/extensions/`;
 gitlinks pin exact commits. Weekly automation proposes valid tracked-branch
 heads; missing or invalid metadata keeps that source pinned and does not block
 other candidates. Only matching Utah submodules represent extensions; do not
-add RPM recipes for an extension already covered here. Contract-only CI checks
-source metadata, not the image-side verifier; full image build and runtime
-review remain required. No automated merge is enabled. Edit `.gitmodules` for
-source URL or branch changes; automation advances existing pins.
+add RPM recipes for an extension already covered here. A repository-scoped
+App token is minted on trusted `main` only, after the preparer validates each
+pin; that App opens or updates the proposal, so the normal `pull_request`
+contract and image-build CI run on its exact head instead of a contract-only
+dispatch. Hive review, required checks and the normal merge policy still
+govern landing, and no automated merge is enabled. Source metadata alone does
+not prove GNOME 51 runtime compatibility. Edit `.gitmodules` for source URL or branch changes; automation advances existing pins.
 Search Light was dropped: GNOME 51 removed `set_shader_source`, which its shader code calls, so it failed ISO tests.
 
 `scripts/verify-gnome-extensions.py` checks GNOME 51 support and provenance:
