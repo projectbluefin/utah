@@ -76,8 +76,9 @@ For composefs-backed deployments, the match key is `composefs.verity` from
 keys keep OSTree and composefs entries distinct; both require enough entries
 to assign a unique one to every expected deployment.
 
-Supporting these entries does not change the installer default. The composefs
-default proposal is tracked separately in #882 / PR #938. Synthetic fixtures
+The ISO installs the composefs backend by default (PR #938), and ISO-mode
+lifecycle runs exercise that default; set `UTAH_E2E_COMPOSEFS_BACKEND=0` to opt
+out to the ostree backend. Synthetic fixtures
 prove validator behavior, not emitted bootc formats or successful installation,
 upgrade, and rollback; retain actual status, BLS, and boot evidence for those
 claims.

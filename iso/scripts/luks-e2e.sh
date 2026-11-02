@@ -682,10 +682,10 @@ echo "=== Phase 3/7: install onto an encrypted disk ==="
 # (containers-storage:...) to export to an OCI directory layout before running
 # bootc install. targetImgref is preserved for day-2 updates.
 #
-# UTAH_E2E_COMPOSEFS_BACKEND=0 keeps the ostree backend: an empty "image" with
-# a "targetImgref" is the offline ostree shape, installing from
-# containers-storage without pulling. lifecycle-e2e.sh sets it because its
-# boot-file and BLS gates still require ostree= entries.
+# UTAH_E2E_COMPOSEFS_BACKEND=0 opts out to the ostree backend: an empty "image"
+# with a "targetImgref" is the offline ostree shape, installing from
+# containers-storage without pulling. It is an explicit caller opt-out only;
+# the composefs default is exercised otherwise, including by lifecycle-e2e.sh.
 #
 # The user block is what phase 6 logs in as. Without it the installed system
 # has no account at all and the greeter has nobody to offer.
