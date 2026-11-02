@@ -112,11 +112,13 @@ class InstallerComposefsBackendTests(unittest.TestCase):
         self.assertIn('"composeFsBackend": ${RECIPE_COMPOSEFS_BACKEND}', script)
         self.assertIn('"image": "${RECIPE_IMAGE}"', script)
 
-    def test_lifecycle_iso_install_pins_ostree_backend(self):
-        """verify-boot-files.sh and bootc_lifecycle.py gate on ostree= BLS
-        entries, which composefs-backend installs do not write."""
+    def test_lifecycle_iso_install_exercises_composefs_default(self):
+        """lifecycle-e2e.sh must not pin the ostree backend: the ISO installs
+        the composefs default and the boot-file/BLS gates handle it. The
+        UTAH_E2E_COMPOSEFS_BACKEND=0 opt-out stays available in luks-e2e.sh."""
         script = LUKS_E2E.with_name("lifecycle-e2e.sh").read_text()
-        self.assertIn('UTAH_E2E_COMPOSEFS_BACKEND=0 bash "${ROOT}/iso/scripts/luks-e2e.sh"', script)
+        self.assertIn('UTAH_E2E_WORK="${INSTALL_WORK}" bash "${ROOT}/iso/scripts/luks-e2e.sh"', script)
+        self.assertNotIn('UTAH_E2E_COMPOSEFS_BACKEND=0 bash', script)
         luks = LUKS_E2E.read_text()
         self.assertIn('if [[ "${UTAH_E2E_COMPOSEFS_BACKEND:-1}" == 0 ]]; then', luks)
         self.assertIn('RECIPE_COMPOSEFS_BACKEND=false', luks)
