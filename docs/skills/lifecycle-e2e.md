@@ -33,6 +33,11 @@ baseline digest.
 Phase-keyed diagnostics (`evidence/lifecycle-*.json`, `lifecycle-summary.json`)
 and screendumps identify the active deployment and digest at every phase.
 
+ISO mode installs with `UTAH_E2E_COMPOSEFS_BACKEND=0`, pinning the ostree
+backend because the BLS checks below match only `ostree=` kargs; ISO-mode
+results therefore do not cover the composefs backend the ISO installs by
+default (see `local-testing.md`).
+
 After each lifecycle phase the harness also captures the BLS Type #1
 entries under the Fedora/bootc layout's BLS root `/boot/loader/entries/`
 (ostree writes them here per the sysroot deploy) and any

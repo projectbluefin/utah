@@ -99,7 +99,7 @@ done
 
 # Start with the live image filesystem, then add the target OCI image as a VFS
 # containers-storage graphroot. This is Dakota's offline-payload design adapted
-# for Utah's conventional bootc (non-composefs) install path.
+# for Utah's bootc install path.
 SQUASHFS_ROOT="${WORK}/squashfs-root"
 mkdir -p "${SQUASHFS_ROOT}"
 cp -a "${MOUNT}/." "${SQUASHFS_ROOT}/"

@@ -6,7 +6,7 @@
   "imgref": "ghcr.io/projectbluefin/utah:testing",
   "local_imgref": "containers-storage:ghcr.io/projectbluefin/utah:testing",
   "bootloader": "grub2",
-  "composeFsBackend": false,
+  "composeFsBackend": true,
   "filesystem": "btrfs",
   "tour": {
     "welcome": {
