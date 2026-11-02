@@ -113,9 +113,17 @@ post-build verification workflows, not the complete workflow inventory:
   metadata paths in `scripts/verify-gnome-extensions.py`
   (`SOURCE_EXTENSIONS`); update that map when adding an extension. Paths are
   passed as argv and `shell-version` values are allow-listed in the report.
-  The dispatch uses `contract_only=true`: source contract checks only, not an
-  image build or the image-side extension verifier. A trusted full image build
-  remains necessary before merge. No automated merge is enabled.
+  Trusted `main` alone may mint a repository-scoped Mergeraptor App token,
+  with contents and pull-request write permissions, after metadata preparation.
+  The token creates or updates the proposal and is revoked afterward; it is
+  never passed to extension code. App-authenticated PR events start the normal
+  contract and image-build workflows, unlike the old `GITHUB_TOKEN` proposal
+  followed by a contract-only dispatch (#1073). Do not dispatch a publishing
+  build on the candidate branch or fabricate required-check statuses.
+  Hive's authenticated review, required checks, holds and soak still govern
+  landing; this producer does not arm native auto-merge or relax those gates.
+  A successful image build is not proof of a reported rendering/CPU fix:
+  retain #992/#997 until actual runtime evidence addresses them.
 - `.github/workflows/post-testing-e2e.yml` -- successful non-PR testing builds
   explicitly dispatch this, or manually supply a successful testing build run ID.
   Its `promote-to-testing` job records per-digest E2E evidence as commit

@@ -13,11 +13,10 @@ concurrency:
 
 jobs:
   update:
+    if: github.repository_owner == 'projectbluefin' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-26.04
     permissions:
-      contents: write
-      pull-requests: write
-      actions: write
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -34,10 +33,23 @@ jobs:
           # Always run create-pull-request, including on an empty diff, so it
           # can close a stale automation PR after an upstream reversion.
 
+      # App-created PR events run the real contract and image-build checks.
+      # Mint only after trusted main's preparer has validated the gitlinks.
+      - name: Get repository-scoped mergeraptor token
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          client-id: ${{ secrets.MERGERAPTOR_APP_ID }}
+          private-key: ${{ secrets.MERGERAPTOR_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
+
       - name: Propose GNOME extension update
         id: propose
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
         with:
+          token: ${{ steps.app-token.outputs.token }}
           branch: automation/gnome-extension-bumps
           title: 'ci(extensions): bump pinned GNOME extensions'
           commit-message: 'ci(extensions): bump pinned GNOME extensions'
@@ -45,15 +57,3 @@ jobs:
           # One directory covers future extension additions; only gitlinks change.
           add-paths: |
             system_files/shared/usr/share/gnome-shell/extensions
-
-      - name: Start the contract checks on the bump branch explicitly
-        if: contains(fromJSON('["created", "updated"]'), steps.propose.outputs.pull-request-operation)
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
-        # contract_only: a dispatch is not a pull_request event, so a full
-        # build here would push and sign testing images from unreviewed
-        # upstream extension heads. Run the contract gates only.
-        run: |
-          gh workflow run build.yml --repo "$REPOSITORY" --ref automation/gnome-extension-bumps \
-            -f contract_only=true
