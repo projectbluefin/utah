@@ -1,0 +1,4 @@
+[Flatpak Preinstall org.gnome.NautilusPreviewer]
+Branch=stable
+IsRuntime=false
+CollectionID=org.flathub.Stable

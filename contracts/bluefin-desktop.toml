@@ -231,6 +231,8 @@ files = [
   "/etc/flatpak/remotes.d/flathub.flatpakrepo",
   "/usr/share/flatpak/preinstall.d/bazaar.preinstall",
   "/usr/share/flatpak/preinstall.d/ghostty.preinstall",
+  # Spacebar file previews in Files (Sushi), from Flathub (#1015).
+  "/usr/share/flatpak/preinstall.d/nautilus-previewer.preinstall",
   "/etc/flatpak/remotes.d/tuna-os.flatpakrepo",
   "/usr/share/ublue-os/privileged-setup.hooks.d/99-flatpaks.sh",
   "/usr/share/ublue-os/homebrew/system-flatpaks.Brewfile",
