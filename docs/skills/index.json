@@ -218,6 +218,24 @@
       "version": "1.0",
       "last_updated": "2026-10-07",
       "doc_type": "policy"
+    },
+    {
+      "id": "upstream-audit",
+      "name": "upstream-audit",
+      "one_line_purpose": "Audit declared upstream pins without changing Utah's checkout.",
+      "entry_point": "docs/skills/upstream-audit.md",
+      "category": "ci-ops",
+      "status": "active",
+      "tags": [
+        "upstreams",
+        "freshness",
+        "dependencies",
+        "audit"
+      ],
+      "description": "Read-only just audit-upstreams report for OCI inputs, Actions, submodules, Bluefin parity and pinned release tools, with explicit incomplete coverage.",
+      "version": "1.0",
+      "last_updated": "2026-11-02",
+      "doc_type": "procedure"
     }
   ]
 }

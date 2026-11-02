@@ -275,6 +275,10 @@ baselines bluefin="ghcr.io/ublue-os/bluefin:stable" utah="ghcr.io/projectbluefin
     python3 scripts/image-baseline.py dakota "$run" baselines/dakota
     python3 scripts/image-baseline.py gap
 
+# Report live upstream freshness without pulling images or changing the checkout.
+audit-upstreams *args:
+    @python3 scripts/audit-upstreams.py {{args}}
+
 # Partition every Bluefin package Utah lacks by where it could come from:
 # hummingbird-available / factory-built / nowhere. The 2026-09-30 bare-metal
 # audit (#382) ran this pipeline by hand against the OCI image feeds. This
