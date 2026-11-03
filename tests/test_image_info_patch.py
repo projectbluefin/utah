@@ -66,6 +66,29 @@ class ImageInfoPatchTests(unittest.TestCase):
         self.snapshot.write_text('ghcr.io/projectbluefin/utah@sha256:abc\n')
         self.assertEqual(self.run_info().stdout, 'utah:latest')
 
+    def test_guarded_rpm_ostree_block_removed(self):
+        # Newer Common wraps the glyph in a `command -v rpm-ostree` guard with
+        # a tab-indented inner block and a comment that names rpm-ostree.
+        guarded = IMAGE_INFO.split('if [[ "$(rpm-ostree', 1)[0] + (
+            '\n# bootc-only images (Dakota, Utah) ship no rpm-ostree; print no marker there.\n'
+            'if command -v rpm-ostree >/dev/null 2>&1; then\n'
+            '\tif [[ "$(rpm-ostree status --booted)" =~ "signed" ]]; then\n'
+            '\t\techo -n " 🔐"\n'
+            '\telse\n'
+            '\t\techo -n -e " \\033[5m🔓\\033[0m"\n'
+            '\tfi\n'
+            'fi\n')
+        self.info.write_text(guarded.replace('@READER@', str(self.reader)))
+        for _ in range(2):
+            result = self.patch()
+            self.assertEqual(result.returncode, 0, result.stderr)
+        code = [line for line in self.info.read_text().splitlines()
+                if not line.lstrip().startswith('#')]
+        self.assertFalse([line for line in code if 'rpm-ostree' in line])
+        self.assertNotIn('🔐', self.info.read_text())
+        result = self.run_info()
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, 'utah:latest', ''))
+
     def test_unknown_rpm_ostree_probe_fails_build(self):
         self.info.write_text(self.info.read_text().replace('rpm-ostree status --booted', 'rpm-ostree status --json'))
         result = self.patch()

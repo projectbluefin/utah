@@ -3,8 +3,10 @@
 `configure-services.sh` checks Common's `/usr/bin/ublue-image-info.sh`.
 It removes the legacy rpm-ostree lock glyph (#931): Hummingbird does not
 ship rpm-ostree, and that probe does not describe bootc signature verification.
-The removal is repeatable and fails the build if an unfamiliar rpm-ostree
-call remains, so a changed upstream script requires review.
+It strips the block whether Common ships it bare or wrapped in a
+`command -v rpm-ostree` guard. The removal is repeatable and fails the build
+if an unfamiliar rpm-ostree call remains outside a comment, so a changed
+upstream script requires review.
 
 Common's script asks `/usr/libexec/ublue-booted-image` for the tag, and that
 reader falls back to the boot-time snapshot (`/run/ublue-os/booted-image`) when
