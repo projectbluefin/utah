@@ -29,6 +29,16 @@ status = "planned"
 area = "files-devices"
 issue = "#263"
 
+[package.udftools]
+status = "planned"
+area = "files-devices"
+issue = "#263"
+
+[package.xfsprogs]
+status = "planned"
+area = "files-devices"
+issue = "#263"
+
 [package.mtools]
 status = "planned"
 area = "files-devices"
@@ -461,6 +471,11 @@ status = "planned"
 area = "cli-tools"
 issue = "#263"
 
+[package.libwnck3]
+status = "planned"
+area = "desktop"
+issue = "#263"
+
 [package.lockdev]
 status = "planned"
 area = "cli-tools"
@@ -484,6 +499,11 @@ issue = "#263"
 [package.mkpasswd]
 status = "planned"
 area = "cli-tools"
+issue = "#263"
+
+[package.nilfs-utils]
+status = "planned"
+area = "files-devices"
 issue = "#263"
 
 [package.passwdqc-utils]
@@ -547,6 +567,11 @@ area = "hardware-power"
 issue = "#263"
 
 [package.tslib]
+status = "planned"
+area = "cli-tools"
+issue = "#263"
+
+[package.uchardet]
 status = "planned"
 area = "cli-tools"
 issue = "#263"
