@@ -678,10 +678,14 @@ echo "  live session type: ${live_session_type:-unknown}"
 shot_until_drawn live-desktop "${MONITOR_LIVE}"
 
 echo "=== Phase 3/7: install onto an encrypted disk ==="
-# An empty "image" with a "targetImgref" is the offline shape: fisherman then
-# installs from containers-storage rather than pulling, which is the only way
-# the ISO's embedded payload gets used. Naming the image directly makes it
-# pull, and the image this ISO carries was never published to a registry.
+# In composefs mode, fisherman requires an explicit source reference
+# (containers-storage:...) to export to an OCI directory layout before running
+# bootc install. targetImgref is preserved for day-2 updates.
+#
+# UTAH_E2E_COMPOSEFS_BACKEND=0 opts out to the ostree backend: an empty "image"
+# with a "targetImgref" is the offline ostree shape, installing from
+# containers-storage without pulling. It is an explicit caller opt-out only;
+# the composefs default is exercised otherwise, including by lifecycle-e2e.sh.
 #
 # The user block is what phase 6 logs in as. Without it the installed system
 # has no account at all and the greeter has nobody to offer.
@@ -689,13 +693,21 @@ echo "=== Phase 3/7: install onto an encrypted disk ==="
 # Deliberately no scratch disk mounted at /var/lib/containers: Bluefin's ISO
 # pulls the payload from a registry and needs real space for it; Utah's ISO
 # carries the image in the squashfs, and mounting over that path hides it.
+if [[ "${UTAH_E2E_COMPOSEFS_BACKEND:-1}" == 0 ]]; then
+    RECIPE_IMAGE=""
+    RECIPE_COMPOSEFS_BACKEND=false
+else
+    RECIPE_IMAGE="containers-storage:${PAYLOAD_IMAGE}"
+    RECIPE_COMPOSEFS_BACKEND=true
+fi
+echo "  install backend: $([[ "${RECIPE_COMPOSEFS_BACKEND}" == true ]] && echo composefs || echo ostree)"
 cat > "${WORK}/recipe.json" <<EOF
 {
   "disk": "/dev/vda",
   "filesystem": "btrfs",
-  "image": "",
+  "image": "${RECIPE_IMAGE}",
   "targetImgref": "${PAYLOAD_IMAGE}",
-  "composeFsBackend": false,
+  "composeFsBackend": ${RECIPE_COMPOSEFS_BACKEND},
   "bootloader": "grub2",
   "hostname": "utah-luks-test",
   "encryption": {"type": "luks-passphrase", "passphrase": "${PASSPHRASE}"},

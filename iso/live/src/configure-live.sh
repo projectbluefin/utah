@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Configure the Utah live ISO after Flatpaks are baked in. This is the
-# non-composefs/bootcDirect branch of Dakota's installer integration.
+# Configure the Utah live ISO after Flatpaks are baked in. Mirrors Dakota's
+# composefs-backend installer integration (#882).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -79,7 +79,7 @@ WantedBy=local-fs.target
 EOF
 systemctl enable var-tmp.mount || true
 
-# Utah is a conventional bootc image rather than Dakota's composefs runtime.
+# Utah installs with composefs by default (#882).
 # The ISO builder embeds its OCI payload into /usr/lib/containers/storage, the
 # image store this platform already resolves to.
 #
@@ -121,10 +121,10 @@ for path in (Path("/etc/bootc-installer/images.json"), Path("${SCRIPT_DIR}/etc/b
     else:
         data["imgref"] = ref
         data["targetImgref"] = ref
-        data["image"] = ""
+        data["image"] = f"containers-storage:{ref}"
         data["local_imgref"] = f"containers-storage:{ref}"
         data["bootloader"] = "grub2"
-        data["composeFsBackend"] = False
+        data["composeFsBackend"] = True
     Path("/etc/bootc-installer" , path.name).write_text(json.dumps(data, indent=2) + "\n")
 PY
 touch /etc/bootc-installer/live-iso-mode
