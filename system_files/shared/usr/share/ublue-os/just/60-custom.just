@@ -71,22 +71,3 @@ enroll-secure-boot-key:
     echo 'Utah does not yet ship a kernel-module signing key to enroll.' >&2
     echo 'Secure Boot module signing and enrollment are tracked at https://github.com/projectbluefin/utah/issues/395' >&2
     exit 1
-# Override Common's `ujust report` so bug reports land in projectbluefin/utah
-# instead of falling through to common (projectbluefin/utah#446). Common's
-# ublue-image-repo does not list utah* in its routing grammar, so its
-# hard-coded --default projectbluefin/common wins; the local
-# utah-image-repo shim short-circuits utah* to projectbluefin/utah and
-# forwards every other name to common's authoritative grammar.
-# BONEDIGGER_BRAND rebrands the prompt for Utah; Common's
-# BONEDIGGER_VERSION is intentionally not forwarded because
-# bonedigger-report never reads it and the variable is not in scope here.
-#
-# Keep the blank line above: just uses only the comment line immediately
-# preceding a recipe as its `--list` description.
-
-# Collect a previewed, privacy-respecting report and create an issue directly with gh.
-[group('System')]
-report *args:
-    UBLUE_IMAGE_REPO_BIN="/usr/local/libexec/utah-image-repo" \
-    BONEDIGGER_BRAND="🐦 Utah Bug Report" \
-    /usr/libexec/bonedigger-report {{ args }}

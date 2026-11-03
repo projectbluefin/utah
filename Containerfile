@@ -96,7 +96,6 @@ COPY scripts/install-packages.py \
      scripts/regenerate-initramfs.sh \
      iso/scripts/live-kernel.py \
      scripts/install-v4l2loopback.sh \
-     scripts/image-repo.sh \
      /tmp/utah-scripts/
 COPY --from=common /system_files/shared /tmp/utah-common
 COPY --from=common /system_files/bluefin /tmp/utah-bluefin
@@ -211,8 +210,7 @@ RUN --mount=type=bind,from=v4l2loopback,source=/out,target=/tmp/utah-v4l2loopbac
                 fix-home-labels.sh:utah-fix-home-labels \
                 regenerate-initramfs.sh:utah-regenerate-initramfs \
                 live-kernel.py:utah-live-kernel \
-                install-v4l2loopback.sh:utah-install-v4l2loopback \
-                image-repo.sh:utah-image-repo; do \
+                install-v4l2loopback.sh:utah-install-v4l2loopback; do \
       install -Dm 0755 "/tmp/utah-inputs/tmp/utah-scripts/${pair%%:*}" "/usr/local/libexec/${pair##*:}" || exit 1; \
     done && \
     cp -a /tmp/utah-inputs/tmp/utah-common/. / && \

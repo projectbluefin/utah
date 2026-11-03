@@ -3,7 +3,6 @@
 import json
 import os
 from pathlib import Path
-import re
 import shutil
 import subprocess
 import tempfile
@@ -120,8 +119,7 @@ class UjustOverridesTests(unittest.TestCase):
         # Utah wraps that entry point to make its override import shallower.
         original = self.root / "default.just"
         original.write_text("device-info:\n    exit 99\nchangelogs:\n    exit 99\n"
-                            "enroll-secure-boot-key:\n    exit 99\n"
-                            "report:\n    exit 99\n")
+                            "enroll-secure-boot-key:\n    exit 99\n")
         common = self.root / "00-common.just"
         common.write_text('set allow-duplicate-recipes\n_default:\n    @echo common-default\n'
                           'unrelated:\n    @echo common-unrelated\n'
@@ -233,103 +231,6 @@ class UjustOverridesTests(unittest.TestCase):
         self.assertIn("does not yet ship", result.stderr)
         self.assertIn("https://github.com/projectbluefin/utah/issues/395", result.stderr)
         self.assertEqual(self.calls(), "")
-
-    def test_report_override_keeps_a_user_facing_list_description(self):
-        # just uses only the comment line immediately preceding a recipe as
-        # its description, so an implementation comment block ending right
-        # above `[group('System')]` would replace Common's user-facing text
-        # in `ujust --list` with a fragment like "...authoritative grammar.".
-        result = subprocess.run([self.just, "--justfile", str(self.entry), "--list"],
-                                env=self.env, text=True, capture_output=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        line = next((l for l in result.stdout.splitlines()
-                     if l.strip().startswith("report ")), None)
-        self.assertIsNotNone(line, f"report missing from --list; got {result.stdout!r}")
-        self.assertIn("# Collect a previewed, privacy-respecting report", line)
-        for fragment in ("authoritative grammar", "ublue-image-repo", "#446",
-                         "BONEDIGGER"):
-            self.assertNotIn(fragment, line,
-                             "ujust --list must not surface implementation comments")
-
-    def test_report_override_runs_bonedigger_with_utah_image_repo(self):
-        # projectbluefin/utah#446: ujust report on Utah was falling through
-        # common's routing grammar and landing in projectbluefin/common.
-        # Utah overrides `report` in 60-custom.just so bonedigger-report
-        # routes through the local utah-image-repo shim. Run the recipe
-        # end-to-end through the entry point with the absolute path the
-        # recipe calls replaced by a tmp-dir stub; the stub records the
-        # UBLUE_IMAGE_REPO_BIN env that the recipe set, which proves the
-        # shim path is what bonedigger sees at runtime, not the default
-        # ublue-image-repo from common. The entry point resolves `report`
-        # to Utah's override because the shallower import wins duplicate
-        # handling on just >= 1.56; the staged default.just defines a
-        # competing `report: exit 99` so an override that lost duplicate
-        # resolution fails loudly instead of passing trivially.
-        bonedigger_stub = self.root / "usr-libexec-bonedigger-report"
-        bonedigger_stub.write_text(
-            "#!/usr/bin/bash\n"
-            'echo "bonedigger $*" >> "$CALLS"\n'
-            'echo "${UBLUE_IMAGE_REPO_BIN:-unset}" >> "$CALLS"\n'
-        )
-        bonedigger_stub.chmod(0o755)
-        # Rewrite the entry's resolved recipe text so the absolute
-        # `/usr/libexec/bonedigger-report` calls the stub instead. The
-        # rewrite lives in a tmp copy that the entry justfile imports; the
-        # original recipe source on disk is untouched.
-        original_recipe = RECIPES.read_text()
-        patched_recipes = self.root / "60-custom.just"
-        patched_recipes.write_text(original_recipe.replace(
-            "/usr/libexec/bonedigger-report", str(bonedigger_stub)
-        ))
-        # Replace the entry's import of the live recipe with the patched copy
-        # so `just` resolves the stubbed path.
-        entry_text = self.entry.read_text()
-        self.entry.write_text(entry_text.replace(str(RECIPES), str(patched_recipes)))
-
-        # setUp pre-sets UBLUE_IMAGE_REPO_BIN for the changelogs tests; drop it
-        # here so the stub's `${UBLUE_IMAGE_REPO_BIN:-unset}` really would print
-        # `unset` if the recipe itself failed to export the shim path.
-        env = dict(self.env)
-        env.pop("UBLUE_IMAGE_REPO_BIN", None)
-        result = subprocess.run([self.just, "--justfile", str(self.entry), "report"],
-                                env=env, text=True, capture_output=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        calls = self.calls()
-        # The stub is what the recipe actually executed, so its presence in
-        # the calls log proves the recipe reached bonedigger-report (not the
-        # default ublue-image-repo path). The stub wrote the UBLUE_IMAGE_REPO_BIN
-        # env it received, so the second line proves the shim path was set
-        # for bonedigger-report at runtime, not the default from common.
-        self.assertTrue(calls.startswith("bonedigger \n"),
-                        f"bonedigger stub did not run; calls={calls!r}")
-        self.assertIn("/usr/local/libexec/utah-image-repo", calls,
-                      "ujust report must set UBLUE_IMAGE_REPO_BIN to the Utah shim")
-        self.assertNotIn("unset", calls,
-                          "UBLUE_IMAGE_REPO_BIN must be set by the recipe, "
-                          "not left to fall back to common's ublue-image-repo")
-        # Static guard: the shipped recipe text must also reference the shim
-        # path directly, so a future contributor who removes the export
-        # breaks the test before the merge claim.
-        match = re.search(
-            r"report \*args:\s*\n"
-            r"(?P<body>(?:[ \t].*\n|\s*\\\s*\n)+)",
-            original_recipe,
-        )
-        self.assertIsNotNone(
-            match,
-            "ujust report recipe must exist with a multi-line body",
-        )
-        body = match.group("body")
-        self.assertIn(
-            'UBLUE_IMAGE_REPO_BIN="/usr/local/libexec/utah-image-repo"',
-            body,
-            "ujust report must set UBLUE_IMAGE_REPO_BIN to the Utah shim",
-        )
-        self.assertIn(
-            "/usr/libexec/bonedigger-report",
-            body,
-            "ujust report must still call bonedigger-report",
-        )
 
 if __name__ == "__main__":
     unittest.main()
