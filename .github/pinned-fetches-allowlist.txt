@@ -1,0 +1,25 @@
+# Pinned-fetches gate exceptions (utah#902). One substring per line; a line
+# suppresses any finding whose printed text contains it. Keep each entry
+# next to the reason it is safe.
+
+# Digest follows the tag on the same line; the pull is digest-locked.
+os-minimal:latest@sha256:
+
+# Developer-only VNC viewer for `just try-installed`; never runs in CI or
+# ends up in an image.
+UTAH_TRY_NOVNC_IMAGE
+
+# TACKLEBOX_FROM_SOURCE path refuses without TACKLEBOX_SHA and checks out
+# exactly that commit right after the clone.
+git clone --quiet https://github.com/tuna-os/tacklebox.git .
+
+# The candidate image is the digest-pinned ref the caller passes in; the
+# rule cannot see across lines.
+iso/scripts/lifecycle-e2e.sh
+
+# rev-parse HEAD is compared to the pinned OGC_COMMIT right after the clone.
+--branch "$OGC_TAG" https://github.com/OpenGamingCollective/linux.git
+
+# The reusable workflow checks out its own scanner here; these are upstream
+# actions repository files, not Utah's build inputs.
+pinned-fetches-gate/
