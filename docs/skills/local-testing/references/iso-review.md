@@ -42,3 +42,21 @@ with `scripts/fetch-artwork.sh`, verify its sha256, stage it as
 `iso/live/src/images/utahraptor.png` (git-ignored) and remove it on exit. So an
 ISO build needs network for that fetch; `configure-live.sh` fails with a clear
 message if the file is missing. Nothing binary is committed for it.
+
+## Bumping bootc-installer
+
+`iso/live/src/install-flatpaks.sh` pins the bootc-installer Flatpak bundle to
+a specific `tuna-os/bootc-installer` release rather than resolving
+`/releases/latest/download/` the way dakota-iso does: the bundle installs
+system-wide with `--no-gpg-verify`, so the version pin is the whole trust
+story, and a fixed tag keeps ISO composition reproducible. Its releases are
+tagged by build date + commit sha (e.g. `v2026.09.19-cee9ba29`), not semver,
+so there is no tag-name continuity to lean on when bumping it.
+`UTAH_INSTALLER_VERSION` and `UTAH_INSTALLER_SHA256` must move together —
+take the digest from that release's `org.bootcinstaller.Installer.flatpak`
+asset (`digest` field of `gh api repos/tuna-os/bootc-installer/releases/tags/<tag>`,
+or download and `sha256sum` it) rather than guessing or reusing an old value.
+`install-flatpaks.sh` also shims the container-build environment: a machine id,
+a session bus (only OCI remotes reach for either), and `/var/tmp` (flatpak's OCI
+token cache, hardcoded, ignoring `$TMPDIR`; tmpfiles creates it on boot, but an
+image build never boots). All three bite only the OCI `tuna-os` remote.

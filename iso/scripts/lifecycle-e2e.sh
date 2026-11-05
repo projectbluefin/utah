@@ -500,6 +500,10 @@ if [[ "${DISK_OR_ISO}" == *.iso ]]; then
     # luks-e2e.sh writes its installed disk under its own work directory, which
     # defaults somewhere else entirely. Pin it to a directory this script owns so
     # the disk is where the next phase looks for it.
+    #
+    # The backend is not pinned: the ISO installs the composefs default, and
+    # bootc_lifecycle.py and verify-boot-files.sh handle composefs BLS entries.
+    # Callers may export UTAH_E2E_COMPOSEFS_BACKEND=0 to opt out.
     INSTALL_WORK="${UTAH_E2E_WORK:-${WORK}/install}"
     mkdir -p "${INSTALL_WORK}"
     UTAH_E2E_WORK="${INSTALL_WORK}" bash "${ROOT}/iso/scripts/luks-e2e.sh" \

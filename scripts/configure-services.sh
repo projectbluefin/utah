@@ -135,9 +135,11 @@ if [ -f "${IMAGE_INFO_SH}" ]; then
     # Common's legacy lock glyph probes rpm-ostree, which Hummingbird does
     # not ship. It is not a bootc signature check; omit the whole glyph block
     # rather than hide its stderr or imply the image is unlocked (#931).
-    # Newer Common versions already omit it, so this is safe to repeat.
-    sed -i '/^if \[\[ "$(rpm-ostree status --booted)" =~ "signed" \]\]; then$/,/^fi$/d' "${IMAGE_INFO_SH}"
-    if grep -qF 'rpm-ostree' "${IMAGE_INFO_SH}"; then
+    # Common ships it bare or wrapped in a `command -v rpm-ostree` guard;
+    # strip either form. Both deletions are safe to repeat.
+    sed -i -e '/^if command -v rpm-ostree >\/dev\/null 2>&1; then$/,/^fi$/d' \
+        -e '/^if \[\[ "$(rpm-ostree status --booted)" =~ "signed" \]\]; then$/,/^fi$/d' "${IMAGE_INFO_SH}"
+    if grep -v '^[[:space:]]*#' "${IMAGE_INFO_SH}" | grep -qF 'rpm-ostree'; then
         echo "ERROR: ${IMAGE_INFO_SH} changed upstream -- re-fit the rpm-ostree removal" >&2
         exit 1
     fi
