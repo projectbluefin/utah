@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-24",
+  "generated_at": "2026-10-28",
   "generator": "scripts/generate-site-data.py",
   "groups": [
     {
@@ -184,6 +184,7 @@
         "gssproxy",
         "gstreamer1-plugin-dav1d",
         "gstreamer1-plugin-libav",
+        "gstreamer1-plugin-openh264",
         "gstreamer1-plugins-bad-free",
         "gstreamer1-plugins-bad-free-libs",
         "gstreamer1-plugins-ugly-free",
@@ -240,6 +241,7 @@
         "nvtop",
         "openal-soft",
         "openconnect",
+        "openh264",
         "openvpn",
         "orca",
         "papers-libs",
@@ -299,6 +301,7 @@
         "tcpdump",
         "thermald",
         "tmux",
+        "totem-pl-parser",
         "tpm2-tools",
         "tree",
         "unbound-anchor",
@@ -369,7 +372,7 @@
     }
   ],
   "totals": {
-    "installed": 312,
+    "installed": 315,
     "unavailable": 7
   },
   "unavailable": [

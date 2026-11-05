@@ -83,15 +83,11 @@ if [ -f /usr/sbin/grub2-switch-to-blscfg ]; then
     sed -i 's|^EFIDIR=.*|EFIDIR="fedora"|' /usr/sbin/grub2-switch-to-blscfg
 fi
 
-# GNOME Control Center's distro builds use these compile-time PNG paths, not
-# os-release NAME/LOGO. The RPM transaction erased Common's earlier overlay
-# while swapping distro logos. Restore Bluefin's matching light/dark artwork
-# only after the transaction, from the digest-pinned Common stage bind mount.
-# install-packages.py checks FEDORA_LOGO_FILES before this restore; identical
-# paths here contain Bluefin artwork and are checked by the desktop contract.
-for logo in fedora_logo_med.png fedora_whitelogo_med.png fedora-logo.png system-logo-white.png; do
-    install -Dm0644 "/tmp/utah-bluefin-pixmaps/${logo}" "/usr/share/pixmaps/${logo}"
-done
+# GNOME Control Center's About logo comes from the compile-time
+# distributor_logo paths in the packaged build, which point at
+# /usr/share/bluefin-artwork-logos/bluefin-logo-{light,dark}.png (shipped by
+# bluefin-artwork-logos, a gnome-control-center dependency). No restore of
+# Fedora-named pixmaps is needed; the desktop contract checks the new paths.
 
 # The greeter logo is artwork's Bluefin wordmark (dark variant: white lettering
 # for the dark login screen), rasterized here because gnome-shell draws the file

@@ -1,7 +1,7 @@
 ---
 name: diagnosis
 version: "1.0"
-last_updated: "2026-10-26"
+last_updated: "2026-10-28"
 id: diagnosis
 one_line_purpose: Route running-machine diagnosis to the shipped Utah guidance.
 entry_point: docs/skills/diagnosis.md

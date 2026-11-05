@@ -101,6 +101,35 @@ class BootFilesTests(unittest.TestCase):
         self.entry("efi /EFI/Linux/other.efi\noptions quiet\n")
         self.assertNotEqual(self.run_checker().returncode, 0)
 
+    def test_composefs_entry_passes_gate(self):
+        # The composefs backend writes a `composefs=<hex>` karg instead of an
+        # `ostree=` path. Recognize it as bootc regardless of which backend
+        # the installer selects by default.
+        verity = "c" * 128
+        self.entry(
+            f"linux /boot/bootc_composefs-{verity[:16]}/vmlinuz\n"
+            f"initrd /boot/bootc_composefs-{verity[:16]}/initramfs.img\n"
+            f"options root=UUID=0000 rw composefs={verity}\n"
+        )
+        self.file("boot/bootc_composefs-" + verity[:16] + "/vmlinuz")
+        self.file("boot/bootc_composefs-" + verity[:16] + "/initramfs.img")
+        result = self.run_checker()
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("PASS:", result.stdout)
+
+    def test_composefs_missing_file_fails(self):
+        verity = "d" * 128
+        self.entry(
+            f"linux /boot/bootc_composefs-{verity[:16]}/vmlinuz\n"
+            f"initrd /boot/bootc_composefs-{verity[:16]}/initramfs.img\n"
+            f"options root=UUID=0000 rw composefs={verity}\n"
+        )
+        self.file("boot/bootc_composefs-" + verity[:16] + "/vmlinuz")
+        # initrd intentionally absent
+        result = self.run_checker()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("initramfs.img", result.stdout)
+
     def test_paths_resolve_on_entry_partition_not_other_root(self):
         other = Path(self.temp.name) / "xbootldr"
         self.entry(root=other)

@@ -124,6 +124,13 @@ gnome_extension_info() {
     local uuid="$1"
     ssh_target "uid=\$(id -u); env BASH_ENV=/dev/null XDG_RUNTIME_DIR=/run/user/\$uid DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/\$uid/bus bash --noprofile --norc -c \"gnome-extensions info '${uuid}'\""
 }
+# The error text the shell recorded when an extension failed to enable.
+# `gnome-extensions info` reports only the state, and the message is not
+# reliably in the user journal (#969), so ask the shell for it directly.
+gnome_extension_errors() {
+    local uuid="$1"
+    ssh_target "uid=\$(id -u); env BASH_ENV=/dev/null XDG_RUNTIME_DIR=/run/user/\$uid DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/\$uid/bus bash --noprofile --norc -c \"gdbus call --session --dest org.gnome.Shell.Extensions --object-path /org/gnome/Shell/Extensions --method org.gnome.Shell.Extensions.GetExtensionErrors '${uuid}'\""
+}
 scp_target() {
     sshpass -p "${TEST_PASSWORD}" scp "${SSH_OPTS[@]}" \
         -P "${SSH_PORT_INSTALLED}" "$@"
@@ -671,10 +678,14 @@ echo "  live session type: ${live_session_type:-unknown}"
 shot_until_drawn live-desktop "${MONITOR_LIVE}"
 
 echo "=== Phase 3/7: install onto an encrypted disk ==="
-# An empty "image" with a "targetImgref" is the offline shape: fisherman then
-# installs from containers-storage rather than pulling, which is the only way
-# the ISO's embedded payload gets used. Naming the image directly makes it
-# pull, and the image this ISO carries was never published to a registry.
+# In composefs mode, fisherman requires an explicit source reference
+# (containers-storage:...) to export to an OCI directory layout before running
+# bootc install. targetImgref is preserved for day-2 updates.
+#
+# UTAH_E2E_COMPOSEFS_BACKEND=0 opts out to the ostree backend: an empty "image"
+# with a "targetImgref" is the offline ostree shape, installing from
+# containers-storage without pulling. It is an explicit caller opt-out only;
+# the composefs default is exercised otherwise, including by lifecycle-e2e.sh.
 #
 # The user block is what phase 6 logs in as. Without it the installed system
 # has no account at all and the greeter has nobody to offer.
@@ -682,13 +693,21 @@ echo "=== Phase 3/7: install onto an encrypted disk ==="
 # Deliberately no scratch disk mounted at /var/lib/containers: Bluefin's ISO
 # pulls the payload from a registry and needs real space for it; Utah's ISO
 # carries the image in the squashfs, and mounting over that path hides it.
+if [[ "${UTAH_E2E_COMPOSEFS_BACKEND:-1}" == 0 ]]; then
+    RECIPE_IMAGE=""
+    RECIPE_COMPOSEFS_BACKEND=false
+else
+    RECIPE_IMAGE="containers-storage:${PAYLOAD_IMAGE}"
+    RECIPE_COMPOSEFS_BACKEND=true
+fi
+echo "  install backend: $([[ "${RECIPE_COMPOSEFS_BACKEND}" == true ]] && echo composefs || echo ostree)"
 cat > "${WORK}/recipe.json" <<EOF
 {
   "disk": "/dev/vda",
   "filesystem": "btrfs",
-  "image": "",
+  "image": "${RECIPE_IMAGE}",
   "targetImgref": "${PAYLOAD_IMAGE}",
-  "composeFsBackend": false,
+  "composeFsBackend": ${RECIPE_COMPOSEFS_BACKEND},
   "bootloader": "grub2",
   "hostname": "utah-luks-test",
   "encryption": {"type": "luks-passphrase", "passphrase": "${PASSPHRASE}"},
@@ -1072,14 +1091,15 @@ if [[ -n "${EXT_CHECK}" ]]; then
         # for "Error" also catches an extension's own deliberate warnings (the
         # GSConnect guard logs one when it degrades the clipboard portal), so
         # trust the state and only surface journal lines as diagnostics.
-        # gnome-extensions asks the shell over D-Bus, and the shell answers
-        # only once it has finished loading extensions -- which is strictly
-        # after the gnome-shell process appears. Polling here rather than
-        # reading once is the difference between a real verdict and a blank.
+        # The shell answers D-Bus queries while extensions are still loading.
+        # loadExtension() starts at ERROR before awaiting initialization, and
+        # activation can also appear as UNKNOWN to gnome-extensions (#969).
+        # Wait for ACTIVE within the retry budget, not just a non-empty state.
+        # Never re-enable an extension here: a persistent failure must stay red.
         state=""
         for _ in $(seq 1 24); do
             state="$(gnome_extension_info "${uuid}" 2>/dev/null | extension_state_from_info || true)"
-            [[ -n "${state}" ]] && break
+            extension_state_is_active "${state}" && break
             sleep 5
         done
         if [[ -z "${state}" ]]; then
@@ -1097,6 +1117,8 @@ if [[ -n "${EXT_CHECK}" ]]; then
         fi
         if ! extension_state_is_active "${state}"; then
             echo "  extension ${uuid}: state=${state}" >&2
+            echo "  extension ${uuid}: shell-reported errors:" >&2
+            { gnome_extension_errors "${uuid}" 2>&1 || true; } | head -20 | sed 's/^/    /' >&2 || true
             ssh_target "env BASH_ENV=/dev/null bash --noprofile --norc -c \"journalctl --user -b --no-pager 2>/dev/null | grep -F '${uuid}' | grep -iE 'Error|TypeError|Exception|not a function' | tail -5\"" >&2 2>/dev/null || true
             shot "installed-ext-error-${uuid%%@*}" "${MONITOR_INSTALLED}" || true
             ext_failures+=("${uuid}: state=${state}")

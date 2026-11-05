@@ -15,7 +15,8 @@ def update(text, provenance):
              "(docs/verification/README.md)\n\n"
              f"*LUKS ISO test passed for commit `{sha[:12]}`. "
              f"[CI run](https://github.com/projectbluefin/utah/actions/runs/{run}) "
-             "may show a failure in independent tests; the LUKS and production ISO jobs passed; "
+             "also runs independent desktop tests that do not gate this record; "
+             "the LUKS and production ISO jobs passed; "
              "[screenshots and provenance](docs/verification/README.md).*\n"
              f"{end}")
     pattern = re.compile(re.escape(begin) + r".*?" + re.escape(end), re.S)

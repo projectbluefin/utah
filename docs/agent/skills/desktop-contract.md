@@ -16,7 +16,10 @@ that copy, preserving the UUID and `metadata.json`. If it has schemas, run
 `glib-compile-schemas ~/.local/share/gnome-shell/extensions/UUID/schemas`.
 The user copy takes precedence at the next Shell start. On Wayland, log out
 and back in after saving work; restarting GDM terminates sessions.
-Check `gnome-extensions info UUID` and the journal for load errors.
+Check `gnome-extensions info UUID`, then the journal; if the state is ERROR
+and the journal is silent, ask the shell directly: `gdbus call --session
+--dest org.gnome.Shell.Extensions --object-path /org/gnome/Shell/Extensions
+--method org.gnome.Shell.Extensions.GetExtensionErrors UUID`.
 Remove the user copy and log in again to restore the image version.
 
 Inspect `gsettings get org.gnome.shell disable-extension-version-validation`:

@@ -107,9 +107,21 @@ The four requested overrides and `ffmpegthumbnailer` are in `[factory].parity`;
 their installed releases must carry `.bfin` to prevent base substitution.
 Check new names with `just check-repos` and the image's `package-origins.txt`.
 
-The second factory consumption wave (#871) now requests the libav H.264 plugin, dav1d AV1 plugin,
-bad-free (+ libs), ugly-free, Papers thumbnailer and EPUB thumbnailer. These requests also appear
-in `[factory].parity`; do not reuse older issue comments that describe them as unpublished.
+The pinned factory (`ARG PACKAGE_IMAGE_SHA` in `Containerfile`) publishes `openh264` 2.7.0 and
+`gstreamer1-plugin-openh264` 1.28.6, plus `totem-pl-parser` and `uchardet`.
+Utah requests the plugin, real codec, and playlist parser by name and asserts
+their factory release identity. The plugin's library requirement alone is insufficient: older
+factory pins offered the `noopenh264` compatibility library instead of a
+working decoder. Recheck the digest-pinned repodata before carrying forward
+an older publication blocker.
+
+Utah also consumes libav, dav1d, bad-free and ugly-free GStreamer plugins,
+`ffmpegthumbnailer`, `gnome-epub-thumbnailer`, and the Papers thumbnailer.
+Package installation does not prove codec functionality. On Intel hardware,
+run `vainfo` against the render device and confirm the iHD driver loads and
+advertises the expected decode profiles. Inspect `avdec_h264`, `openh264dec`,
+and `vah264dec` with `gst-inspect-1.0`, then test a known H.264 sample.
+The decoder-load probe in PR #919 failed for H.264 despite libav being installed.
 
 The on-image RPM verifier runs `gst-inspect-1.0 avdec_h264` and
 `gst-inspect-1.0 dav1ddec` when their provider packages are in the resolved
@@ -117,16 +129,9 @@ contract. A fresh temporary registry prevents cached plugin metadata from
 hiding a broken load. Missing tools, missing elements, load failures and
 probe timeouts fail the build. Off-image `--check` does not run these probes.
 
-On Intel hardware, run `vainfo` against the render device to confirm the driver
-loads and advertises the expected decode profiles, then decode a known H.264
-sample. iHD does not cover older Intel generations; package presence alone
-cannot prove hardware support. The audit pin published `gstreamer1-plugin-openh264`
-but only `noopenh264`; resolving that library is not proof of a working decoder.
-
-Keep #12 and #383 open for factory closure, full FFmpeg (not `-free`) and runtime
-playback/hardware proof. `gst-thumbnailers` needs the Rust crate stack (factory #527).
-For partial work, use `Refs #12` / `Refs #383` in PR descriptions and commits;
-reserve closing keywords for work meeting all remaining acceptance criteria.
+Remaining #383 gaps include full FFmpeg (the decided direction, replacing
+`-free`) and `gst-thumbnailers` (factory #527); neither is published in this
+pin. Keep #383 open for those factory deliveries and hardware/codec proof.
 
 ## Repository policy
 
@@ -363,7 +368,7 @@ Raise the overlay change as its own pull request against `main`; the bump PR
 then picks the fix up on its next rebuild.
 
 Current counts, per the README "Package parity" section: 61 Bluefin contract
-packages installed, 251 Utah additions (GNOME 51, base-image parity, device
+packages installed, 254 Utah additions (GNOME 51, base-image parity, device
 firmware, desktop services), 7 genuinely unavailable. `scripts/check-doc-counts.py` (part of
 `just check`) recomputes these from the manifests and fails if either
 document drifts from `site/data/packages.json`.

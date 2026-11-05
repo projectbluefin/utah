@@ -1,22 +1,22 @@
-ARG BASE_IMAGE=quay.io/hummingbird-community/os-minimal:latest@sha256:7a1982b85b89164796ee938c00fd6d892e605bddde56811ceba7b83f0d21e43f
+ARG BASE_IMAGE=quay.io/hummingbird-community/os-minimal:latest@sha256:466a0963bdb347debf3784ed6e5d37dcb09e184214c532882e2fa88af8a88fbf
 # The package factory publishes a complete, digest-addressable RPM repository.
 # Keep this pin in Utah so an image build is reproducible and can be reviewed
 # against the exact package set it consumes.
 ARG PACKAGE_IMAGE=ghcr.io/projectbluefin/utah-packages
-ARG PACKAGE_IMAGE_SHA=sha256:710195827218db354cd1d0033d68db8b96efec97f1aaf3f45f8973479c6e7215
+ARG PACKAGE_IMAGE_SHA=sha256:88d7a55ecfb729ab6f6944c0e8ebd282fe777ba7b59d1b44c7cf1a5997892d2f
 # CI keeps PACKAGE_IMAGE_SHA pinned. PACKAGE_IMAGE_REF supports a local image
 # in containers-storage, where no registry digest is available.
 ARG PACKAGE_IMAGE_REF=${PACKAGE_IMAGE}@${PACKAGE_IMAGE_SHA}
 ARG COMMON_IMAGE=ghcr.io/projectbluefin/common
-ARG COMMON_IMAGE_SHA=sha256:d2b9c6ac5e5adf9ff8054a68a0df48a4ba2513d58ad94079b2c877a114c1ebf4
+ARG COMMON_IMAGE_SHA=sha256:88e69f1baec9d2a57005b20709305d0f5518c2417aeeba0dbacaa4bb291d775c
 ARG BREW_IMAGE=ghcr.io/ublue-os/brew
-ARG BREW_IMAGE_SHA=sha256:c201bc801e4828849e8e36c4adcb5c0f38d35ac3ff9546a0ecab0fd2beabf51f
+ARG BREW_IMAGE_SHA=sha256:974ce5e4d6d5fceb6151910957515a42c0eefced4ea386fdfadb0fbad84499a5
 # Bluefin wallpapers, taken straight from the artwork repository's own image
 # rather than only through Common's pin of it, so wallpaper freshness does not
 # wait on a Common release. It is the multi-arch index digest: the contents are
 # architecture-independent. Renovate keeps it current like the pins above.
 ARG WALLPAPERS_IMAGE=ghcr.io/projectbluefin/bluefin-wallpapers-gnome
-ARG WALLPAPERS_IMAGE_SHA=sha256:820ec33dc2354e521bc915670625f8177a123d961121809b868e420f63c73ab8
+ARG WALLPAPERS_IMAGE_SHA=sha256:acaf565d5de01c8caea2bca7aa96bb71e75c94de02c6bd614f8d771a4a620969
 
 FROM ${COMMON_IMAGE}@${COMMON_IMAGE_SHA} AS common
 FROM ${BREW_IMAGE}@${BREW_IMAGE_SHA} AS brew
@@ -345,8 +345,7 @@ ARG UUPD_TIMER_SHA256=bbb5f098ec33d047bdef571e0bc112364df157e0f92d73e0febab703c4
 # own and cost forty seconds to commit a few megabytes. It lives in
 # scripts/mirror-shim.sh rather than inline, because as a bare && chain a
 # failure printed nothing at all -- see the comment at the top of that script.
-RUN --mount=type=bind,from=common,source=/system_files/bluefin/usr/share/pixmaps,target=/tmp/utah-bluefin-pixmaps,ro \
-    --mount=type=bind,from=artwork,source=/out/branding,target=/tmp/utah-artwork-branding,ro \
+RUN --mount=type=bind,from=artwork,source=/out/branding,target=/tmp/utah-artwork-branding,ro \
     mkdir -p /tmp/uupd && \
     curl -fsSL "https://github.com/ublue-os/uupd/releases/download/${UUPD_VERSION}/uupd_Linux_x86_64.tar.gz" \
       -o /tmp/uupd/uupd_Linux_x86_64.tar.gz && \
