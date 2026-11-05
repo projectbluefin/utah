@@ -65,6 +65,14 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Shared supply-chain gate: reject mutable downloads without a verification pin.
+  pinned_fetches:
+    permissions:
+      contents: read
+    uses: projectbluefin/actions/.github/workflows/reusable-pinned-fetches.yml@6453818f6279a2f2c1282919aad0009a88c01819 # v1
+    with:
+      mode: fail
+
   # Resolve the complete transaction against the same pinned inputs as the
   # image before starting the flavor matrix, including extension build tools.
   contract:
