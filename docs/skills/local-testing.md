@@ -303,6 +303,9 @@ the scope (`/token?scope=repository:projectbluefin/<name>:pull`).
 `just luks-test` runs `iso/scripts/luks-e2e.sh` against a debug live ISO
 (`just iso testing 1`). It checks the live GNOME session, installs to a
 disposable LUKS2 disk from the embedded payload, boots without the ISO,
+requires Plymouth's graphical passphrase prompt with the theme's watermark on
+screen (`iso/scripts/plymouth-prompt.py`; the text fallback fails, see
+[the boot splash](desktop-contract/references/boot-splash.md)),
 unlocks the disk, confirms `bootc status` reports the offline embedded
 payload (not a network pull) on a guest with no route out, and checks
 graphical login and extension states. A trailing check, after login,
