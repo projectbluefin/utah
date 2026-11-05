@@ -115,10 +115,12 @@ class RequiredChecksReportInTheQueueTests(unittest.TestCase):
 
 
 class TheQueueCannotPublishTests(unittest.TestCase):
-    def test_build_runs_nothing_but_contract_on_merge_group(self):
+    def test_build_runs_read_only_checks_on_merge_group(self):
         jobs = BUILD["jobs"]
-        self.assertEqual({name for name in jobs if runs_on_merge_group(jobs, name)}, {"contract"})
-        self.assertEqual(write_scopes(jobs["contract"]["permissions"]), set())
+        self.assertEqual({name for name in jobs if runs_on_merge_group(jobs, name)},
+                         {"contract", "pinned_fetches"})
+        for name in ("contract", "pinned_fetches"):
+            self.assertEqual(write_scopes(jobs[name]["permissions"]), set())
         for name in ("kernel_cache", "build_main", "build_kernel"):
             with self.subTest(job=name):
                 self.assertIn(GUARD, str(jobs[name]["if"]))
