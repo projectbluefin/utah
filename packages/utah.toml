@@ -174,10 +174,10 @@ packages = [
     # Bluetooth printer backend, published by the pinned factory (#390).
     "bluez-cups",
     # Boot splash (#461): factory-built, matching Bluefin's set (the metapackage
-    # and theme pull the libs and label/two-step plugins as dependencies).
-    # Theme selection and initramfs wiring (spinner default, dracut plymouth
-    # module) follow with the initramfs regeneration work; without them the
-    # BLS rhgb quiet entry still renders nothing.
+    # and theme pull the libs and label/two-step plugins as dependencies). The
+    # splash itself is wired elsewhere: the watermark and serial-console karg
+    # in configure-branding.sh and kargs.d, the initramfs copy checked by
+    # regenerate-initramfs.sh (docs/skills/desktop-contract.md).
     "plymouth",
     "plymouth-system-theme",
     "plymouth-theme-spinner",

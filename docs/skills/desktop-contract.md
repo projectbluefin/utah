@@ -380,10 +380,10 @@ entry for `/usr/share/pixmaps/bluefin-gdm-logo.png` in
 asset path so a stray edit that points `logo` somewhere else fails the
 build.
 
-## About artwork and the panel icon (#318)
+## About artwork, the panel icon (#318), and the boot splash (#461)
 
-See [the About artwork reference](desktop-contract/references/about-artwork.md)
-for compiled PNG paths, restoration after RPMs, and the symbolic panel icon.
+[About artwork](desktop-contract/references/about-artwork.md): PNG paths, restoration after RPMs, panel icon.
+[Boot splash](desktop-contract/references/boot-splash.md): graphical, branded Plymouth prompt and its gates.
 
 ## Services and login defaults
 

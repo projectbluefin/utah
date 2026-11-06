@@ -27,17 +27,20 @@ post-build verification workflows, not the complete workflow inventory:
 - `.github/workflows/build.yml` -- pull requests, merge queue groups
   (`merge_group`), pushes to `testing`, a manual dispatch. Top-level
   `permissions: {}`; each job grants its own. Cancels in-progress runs per
-  workflow and ref for pull requests only. A merge group runs `contract` and
-  nothing else: `kernel_cache`, `build_main` and `build_kernel` carry
-  `github.event_name != 'merge_group'`, because they push and sign (see
-  `merge-queue.yml` below). A dispatch
+  workflow and ref for pull requests only. The independent `pinned_fetches`
+  job runs the shared download-pinning gate in fail mode, including on merge
+  groups and dispatches. Its documented substring exceptions live in
+  `.github/pinned-fetches-allowlist.txt`; review them when their fetches change.
+  A merge group also runs `contract`, but `kernel_cache`, `build_main` and
+  `build_kernel` skip it because they push and sign (see `merge-queue.yml`
+  below). A dispatch
   with `contract_only=true` skips the publication jobs and `dispatch-iso`.
   Publishing dispatches (`contract_only=false`) must target `testing`; a
   dispatch from any other ref, including the Actions UI default `main`,
   fails unless `contract_only=true`. An optional `sha` input must equal the
   dispatched ref's `github.sha`, so a sync race fails closed and `testing`
   waits for the next sync or nightly run.
-  With the default `review_vm=false`, only the contract checks run. Set
+  With the default `review_vm=false`, only the source checks run. Set
   `review_vm=true` as well to build a disposable image on the runner, compose
   and boot an offline ISO, and retain test evidence; `review_iso_all_flavors`
   expands that job from main flavors to every flavor in `config/flavors.json`.

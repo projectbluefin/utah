@@ -33,30 +33,8 @@ import subprocess
 import sys
 import time
 
-
-def monitor_command(sock_path: str, command: str, settle: float = 0.5) -> str:
-    """Send one HMP command to a QEMU monitor socket and return what it said.
-
-    socat's job, without socat: it is absent from this platform's repositories
-    and Homebrew cannot bootstrap on it either. A monitor socket is a plain
-    stream socket, so this needs nothing beyond the standard library.
-    """
-    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-        client.settimeout(10)
-        client.connect(sock_path)
-        client.sendall(command.encode() + b"\n")
-        time.sleep(settle)
-        chunks = []
-        client.settimeout(1)
-        try:
-            while True:
-                data = client.recv(4096)
-                if not data:
-                    break
-                chunks.append(data)
-        except (socket.timeout, TimeoutError):
-            pass
-    return b"".join(chunks).decode(errors="replace")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from qemu_monitor import run_hmp_command
 
 
 # ── Shared constants ──────────────────────────────────────────────────────────
@@ -141,7 +119,7 @@ def qemu_screendump(sock: str, path: str) -> tuple:
       has stopped changing (Plymouth is waiting for passphrase input).
     """
     try:
-        monitor_command(sock, f"screendump {path}")
+        run_hmp_command(sock, f"screendump {path}", settle=0.5)
     except OSError:
         return -1, ""
     # Brief pause so QEMU can finish writing the PPM before we read it
@@ -173,7 +151,7 @@ def qemu_send_passphrase(sock: str, passphrase: str):
     key_map[" "] = "spc"
 
     def _sendkey(key: str):
-        monitor_command(sock, f"sendkey {key}", settle=0.05)
+        run_hmp_command(sock, f"sendkey {key}", settle=0.05)
 
     for ch in passphrase:
         key = key_map.get(ch)
@@ -473,7 +451,11 @@ def run_qemu(monitor_sock: str, passphrase: str, serial_log: str, ssh_port: int 
         else:
             gnome_stable_count = 0
 
-        if screen_changed and gnome_stable_count >= GNOME_STABLE_POLLS:
+        # With an SSH port the sshd banner above is the verdict. Plymouth's
+        # graphical splash after the unlock is a dark frame whose spinner can
+        # repeat between two polls, which this heuristic would call an
+        # emergency shell; an emergency boot is still caught on serial.
+        if not ssh_port and screen_changed and gnome_stable_count >= GNOME_STABLE_POLLS:
             if brightness > GNOME_THRESHOLD:
                 print(
                     f"[luks-unlock] RESULT: boot succeeded"
