@@ -558,12 +558,29 @@ tag-images image_name default_tag alias_tags:
     set -euo pipefail
     for tag in {{ alias_tags }}; do podman tag "localhost/{{ image_name }}:{{ default_tag }}" "localhost/{{ image_name }}:$tag"; done
 
+# The reusable build runs this under sudo, before the push. The image is in
+# rootful containers-storage, where syft's podman provider cannot reach it (no
+# podman socket on the runner), so scan the mounted image root instead. Hand
+# sbom_out back to the invoking user whatever happens: sign-and-publish later
+# writes its own SBOM there unprivileged, and a root-owned sbom_out made that
+# step fail, which skipped the build-provenance attestation. With no
+# attestation, post-testing-e2e's verify-provenance got a 404 for every flavor
+# and :testing stopped advancing.
 gen-sbom base_name stream flavor syft_cmd:
     #!/usr/bin/env bash
     set -euo pipefail
     image_name="$(python3 scripts/flavors.py image '{{ flavor }}')"
+    ref="localhost/$image_name:{{ stream }}"
+    mounted=""
+    finish() {
+        if [[ -n "$mounted" ]]; then podman image unmount "$ref" >/dev/null || true; fi
+        if [[ -n "${SUDO_UID:-}" && -d sbom_out ]]; then chown -R "$SUDO_UID:${SUDO_GID:-$SUDO_UID}" sbom_out; fi
+    }
+    trap finish EXIT
     mkdir -p "sbom_out/$image_name"
-    "{{ syft_cmd }}" "localhost/$image_name:{{ stream }}" -o json >"sbom_out/$image_name/sbom.json"
+    root="$(podman image mount "$ref")"
+    mounted=1
+    "{{ syft_cmd }}" "dir:$root" --source-name "$ref" -o json >"sbom_out/$image_name/sbom.json"
 
 # Install the locally built bootc image to a sparse disk for QEMU. This follows
 # Bluefin's bootc-to-disk path rather than trying to boot an OCI layer directly.
