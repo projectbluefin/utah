@@ -121,13 +121,8 @@ Package installation does not prove codec functionality. On Intel hardware,
 run `vainfo` against the render device and confirm the iHD driver loads and
 advertises the expected decode profiles. Inspect `avdec_h264`, `openh264dec`,
 and `vah264dec` with `gst-inspect-1.0`, then test a known H.264 sample.
-The decoder-load probe in PR #919 failed for H.264 despite libav being installed:
-the factory's `gstreamer1-plugin-libav` is built against `ffmpeg-free`, which has
-no H.264 decoder, so `avdec_h264` does not register (#1116). The supported
-software H.264 path is `openh264dec`. `[media].decoders` in
-`contracts/bluefin-desktop.toml` lists the decoders `utah-verify-desktop-contract`
-must load with `gst-inspect-1.0`; a failure blocks the image build. `avdec_h264`
-returns to the list only when the factory ships full FFmpeg.
+The PR #919 decoder-load probe failed for H.264: the factory's `gstreamer1-plugin-libav` is built against `ffmpeg-free`, so `avdec_h264` never registers (#1116); `openh264dec` is the supported software H.264 path.
+`utah-verify-desktop-contract` loads each `[media].decoders` entry in `contracts/bluefin-desktop.toml` with `gst-inspect-1.0` and blocks the image build on failure; `avdec_h264` returns only when the factory ships full FFmpeg.
 
 Remaining #383 gaps include full FFmpeg (the decided direction, replacing
 `-free`) and `gst-thumbnailers` (factory #527); neither is published in this

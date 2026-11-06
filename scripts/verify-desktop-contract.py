@@ -250,12 +250,16 @@ def main() -> int:
             errors.append(f"service must be disabled: {unit}")
 
     for element in contract.get("media", {}).get("decoders", []):
-        probe = subprocess.run(
-            ["gst-inspect-1.0", element],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
+        try:
+            probe = subprocess.run(
+                ["gst-inspect-1.0", element],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        except FileNotFoundError:
+            errors.append(f"media decoder {element!r} cannot be probed: gst-inspect-1.0 is missing")
+            continue
         if probe.returncode != 0:
             errors.append(f"media decoder {element!r} failed to load: {probe.stderr.strip()}")
 
