@@ -268,6 +268,18 @@ happened because Utah's `gen-sbom` recipe, run under `sudo`, left a root-owned
 `sbom_out/` that the unprivileged SBOM step could not write. In the build log,
 check `sign.gen-sbom` and `sign.__actions_attest-build-provenance`.
 
+### Testing freshness alarm
+
+A broken promotion gate never fails a build: `:testing` simply stops moving.
+`testing-freshness.yml` runs every six hours. It reads each flavor's
+`:testing` creation time from the registry (`scripts/testing-freshness.py`,
+`skopeo inspect`), and when any flavor is older than 36 hours it opens one
+issue labelled `kind/bug`, `area/ci` and `priority/critical-urgent` for the
+hive to pick up. The issue is refreshed on every run with the latest
+post-testing-e2e failure and closes itself once every flavor is fresh. An
+unreadable tag counts as stale. Dispatch the workflow with another
+`max_age_hours` to try a different threshold.
+
 ## Testsuite reporting (exact-digest VM suites)
 
 `post-testing-e2e.yml` runs the `testsuite` job asynchronously against each

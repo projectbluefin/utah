@@ -1,0 +1,40 @@
+name: Testing freshness
+
+# :testing advances only when post-testing-e2e promotes it, so a broken gate
+# freezes it while every build stays green. From 2026-10-30 to 11-06 a missing
+# provenance attestation did that for a week before anyone noticed. This opens
+# one issue (labelled for the hive to pick up) when any flavor's :testing image
+# is older than MAX_AGE_HOURS, keeps it refreshed with the latest
+# post-testing-e2e failure, and closes it once every flavor is fresh again.
+on:
+  schedule:
+    - cron: "41 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      max_age_hours:
+        description: Hours after which a :testing image counts as stale
+        type: string
+        default: "36"
+
+permissions: {}
+
+concurrency:
+  group: testing-freshness
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      issues: write
+      actions: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Open, refresh or close the freshness issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAX_AGE_HOURS: ${{ inputs.max_age_hours || '36' }}
+        run: python3 scripts/testing-freshness.py --max-age-hours "$MAX_AGE_HOURS"
