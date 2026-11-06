@@ -249,6 +249,16 @@ def main() -> int:
         if not unit_disabled(unit):
             errors.append(f"service must be disabled: {unit}")
 
+    for element in contract.get("media", {}).get("decoders", []):
+        probe = subprocess.run(
+            ["gst-inspect-1.0", element],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if probe.returncode != 0:
+            errors.append(f"media decoder {element!r} failed to load: {probe.stderr.strip()}")
+
     for error in errors:
         fail(error)
     if errors:
