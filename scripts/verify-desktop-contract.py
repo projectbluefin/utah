@@ -116,6 +116,22 @@ def unit_disabled(unit: str, root: Path = Path("/")) -> bool:
         return False
 
 
+def decoder_load_error(element: str) -> str | None:
+    """Return why a GStreamer element does not load, or None when it does.
+
+    Fails closed: a missing gst-inspect-1.0 is an error, not a pass.
+    """
+    try:
+        probe = subprocess.run(
+            ["gst-inspect-1.0", element], capture_output=True, text=True, check=False
+        )
+    except FileNotFoundError:
+        return f"media decoder {element!r} cannot be probed: gst-inspect-1.0 is missing"
+    if probe.returncode != 0:
+        return f"media decoder {element!r} failed to load: {probe.stderr.strip()}"
+    return None
+
+
 def validate_contract(contract: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     for section in ("branding", "configuration", "flatpak", "services"):
@@ -249,19 +265,11 @@ def main() -> int:
         if not unit_disabled(unit):
             errors.append(f"service must be disabled: {unit}")
 
-    for element in contract.get("media", {}).get("decoders", []):
-        try:
-            probe = subprocess.run(
-                ["gst-inspect-1.0", element],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-        except FileNotFoundError:
-            errors.append(f"media decoder {element!r} cannot be probed: gst-inspect-1.0 is missing")
-            continue
-        if probe.returncode != 0:
-            errors.append(f"media decoder {element!r} failed to load: {probe.stderr.strip()}")
+    decoders = contract.get("media", {}).get("decoders", [])
+    for element in decoders:
+        error = decoder_load_error(element)
+        if error:
+            errors.append(error)
 
     for error in errors:
         fail(error)
@@ -271,10 +279,11 @@ def main() -> int:
     masked_msg = f", {masked_count} masked services" if masked_count else ""
     disabled_count = len(services.get("disabled", []))
     disabled_msg = f", {disabled_count} disabled services" if disabled_count else ""
+    decoder_msg = f", {len(decoders)} media decoders" if decoders else ""
     print(
         f"Utah desktop contract passed: {len(flatpak['apps'])} Flatpaks, "
         f"{len(services.get('enabled', []))} enabled services, "
-        f"{len(services.get('user_enabled', []))} user services{masked_msg}{disabled_msg}"
+        f"{len(services.get('user_enabled', []))} user services{masked_msg}{disabled_msg}{decoder_msg}"
     )
     return 0
 

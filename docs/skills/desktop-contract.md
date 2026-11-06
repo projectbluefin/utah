@@ -65,14 +65,14 @@ The TOML's sections are the contract's table of contents:
   references Bazaar and the Bluefin background path, the custom command menu
   points at `docs.projectbluefin.io`, the keybindings set `xdg-terminal-exec`,
   the GDM keyfile declares the login-screen schema and the Bluefin asset path.
-  Common's container signature policy names
-  `/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release`; the pinned Hummingbird base
-  supplies that key (fingerprint `567E…1D51`) alongside Utah's
+  Common's container signature policy names `/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release`;
+  the pinned Hummingbird base supplies that key (fingerprint `567E…1D51`) alongside Utah's
   `RPM-GPG-KEY-redhat-release-2`, so no policy weakening or alias is needed.
-- **`[flatpak]`** — first-boot policy: the Flathub and TunaOS remotes,
-  the Bazaar, NautilusPreviewer (spacebar previews in Files) and Ghostty
-  preinstalls, the `99-flatpaks.sh` hook, and the system-flatpaks Brewfile
-  whose app list the contract enumerates.
+- **`[flatpak]`** — first-boot policy: the Flathub and TunaOS remotes, the Bazaar,
+  NautilusPreviewer (spacebar previews in Files) and Ghostty preinstalls, the `99-flatpaks.sh`
+  hook, and the system-flatpaks Brewfile whose app list the contract enumerates.
+- **`[media]`** — GStreamer decoders that must load, not merely be installed: `openh264dec`.
+  The factory libav is built on `ffmpeg-free` (no H.264), so `avdec_h264` is not asserted (#1116).
 - **`[services]`** — systemd units the preset must enable: `gdm.service`, `avahi-daemon.service`,
   `avahi-daemon.socket`, `switcheroo-control.service`, `bluetooth.service`,
   `ublue-system-setup.service`, `flatpak-preinstall.service`, `flatpak-nuke-fedora.service`,
