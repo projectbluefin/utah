@@ -80,11 +80,11 @@ EOF
 systemctl enable var-tmp.mount || true
 
 # Utah installs with the ostree backend. The composefs default (#882, #938)
-# was never exercised by the LUKS e2e before it shipped and fails every flavor
-# (#1129): fisherman's user creation runs chpasswd --root in the composefs
-# deploy directory (no PAM modules there), and the gaming flavors' bootc
-# install to-filesystem exits 126. An empty "image" with a "targetImgref" is
-# the offline ostree shape: fisherman installs from containers-storage.
+# was never exercised by the LUKS e2e before it shipped and failed every
+# flavor (#1129); it stays off until the review VM passes for every flavor
+# with review_composefs_backend (docs/skills/local-testing.md). An empty
+# "image" with a "targetImgref" is the offline ostree shape: fisherman
+# installs from containers-storage.
 # The ISO builder embeds its OCI payload into /usr/lib/containers/storage, the
 # image store this platform already resolves to.
 #

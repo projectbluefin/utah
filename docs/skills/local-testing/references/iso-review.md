@@ -3,6 +3,8 @@
 On a reviewed verification branch, dispatch `build.yml` with `contract_only`
 and `review_vm` true. Also set `review_iso_all_flavors=true` to cover every
 flavor in `config/flavors.json`; without it, the main flavor runs alone.
+`review_composefs_backend=true` installs with the composefs backend instead
+of the ostree default (`UTAH_E2E_COMPOSEFS_BACKEND=1`, #1129).
 The contract job supplies the matrix. Resolve image names with
 `scripts/flavors.py image`, never a second hardcoded image list.
 

@@ -33,6 +33,12 @@ on:
         description: zstd level for the review ISO (15 = test-only; 3 = production budget)
         type: string
         default: '15'
+      # The ISO installs with the ostree backend until composefs installs pass
+      # for every flavor (#1129). This runs the review install on composefs.
+      review_composefs_backend:
+        description: Install the review ISO with the composefs backend instead of ostree (requires review_vm and contract_only)
+        type: boolean
+        default: false
       contract_only:
         description: Run contract checks and skip image publication
         type: boolean
@@ -434,6 +440,7 @@ jobs:
           UTAH_E2E_CPUS: "2"
           UTAH_E2E_EXPECT_FLAVOR: ${{ matrix.flavor }}
           UTAH_E2E_README: none
+          UTAH_E2E_COMPOSEFS_BACKEND: ${{ inputs.review_composefs_backend && '1' || '0' }}
         run: |
           set -euo pipefail
           image_ref=$(cat evidence/image-ref.txt)

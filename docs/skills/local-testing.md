@@ -241,11 +241,24 @@ The live ISO installer configuration (`iso/live/src/etc/bootc-installer/recipe.j
 
 The composefs default (#882, #938) shipped without the LUKS e2e ever running
 on it, because the provenance gate had blocked post-testing-e2e since 10-31.
-When the e2e came back it failed on every flavor (#1129): fisherman's
-`chpasswd --root` into the composefs deploy directory finds no PAM modules, and
-the gaming flavors' `bootc install to-filesystem` exits 126. Exercise composefs
-with `UTAH_E2E_COMPOSEFS_BACKEND=1`. Flip the default back only after
-`just luks-test` passes that way for every flavor.
+When the e2e came back it failed on every flavor (#1129). Exercise composefs
+with `UTAH_E2E_COMPOSEFS_BACKEND=1`, or dispatch the review VM with
+`review_composefs_backend=true`
+([iso-review](local-testing/references/iso-review.md)). Flip the default back
+only after that passes for every flavor. Composefs installs need two things
+that ostree installs did not:
+
+- **bootc-installer v2026.11.16 or later.** fisherman runs composefs installs
+  as `podman run … bootc install to-filesystem` from an OCI layout. Older
+  fisherman let podman stage the imported blobs in the live system's
+  RAM-backed `/var/tmp`, and the review VM stalled there for 2.5 hours
+  (fisherman#345). It also set the account password with
+  `chpasswd --root <deploy dir>`, which runs PAM in a directory that holds
+  only `/etc` state ("pam_chauthtok() failed: Module is unknown";
+  fisherman#396).
+- **The OGC kernel needs `CGROUP_BPF`.** crun's cgroup-v2 device filter for
+  that container fails without it ("crun: bpf create: Invalid argument"). See
+  [kernel-cache.md](kernel-cache.md).
 
 ## Tacklebox ISOs (unpublished variants)
 

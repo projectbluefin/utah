@@ -1338,6 +1338,26 @@ class ReviewIsoBudgetMeasurementTests(unittest.TestCase):
         self.assertIn("dracut --force --reproducible --zstd --no-hostonly", live)
 
 
+class ReviewComposefsBackendTests(unittest.TestCase):
+    """The review VM can install with the composefs backend (#1129)."""
+
+    def test_input_selects_the_e2e_backend(self):
+        import yaml
+        build = yaml.safe_load((ROOT / ".github/workflows/build.yml").read_text())
+        inputs = build[True]["workflow_dispatch"]["inputs"]
+        self.assertEqual(inputs["review_composefs_backend"]["type"], "boolean")
+        self.assertIs(inputs["review_composefs_backend"]["default"], False)
+        step = next(
+            step for step in build["jobs"]["review_vm"]["steps"]
+            if "luks-e2e.sh" in step.get("run", "")
+        )
+        self.assertEqual(
+            step["env"]["UTAH_E2E_COMPOSEFS_BACKEND"],
+            "${{ inputs.review_composefs_backend && '1' || '0' }}",
+        )
+
+
+
 class ConcurrencyTests(unittest.TestCase):
     """A testing build must not be cancelled by the next one.
 
