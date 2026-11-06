@@ -291,6 +291,13 @@ wait_for_boot() {
             echo "  serial: reached graphical target"
             break
         fi
+        # Plymouth's graphical splash holds the console until GDM takes the
+        # display, so the target is usually reached with nothing on serial.
+        if ssh_target 'systemctl is-active --quiet graphical.target' 2>/dev/null; then
+            seen_target=1
+            echo "  ssh: graphical.target is active"
+            break
+        fi
         if grep -qa "Kernel panic" "${SERIAL_LOG}" 2>/dev/null; then
             diagnose_failure "Kernel panic observed on serial console during ${phase_label}"
         fi
