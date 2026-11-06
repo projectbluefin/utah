@@ -3,16 +3,16 @@ name: Testing freshness
 # :testing advances only when post-testing-e2e promotes it, so a broken gate
 # freezes it while every build stays green. From 2026-10-30 to 11-06 a missing
 # provenance attestation did that for a week before anyone noticed. This opens
-# one issue (labelled for the hive to pick up) when any flavor's :testing image
-# is older than MAX_AGE_HOURS, keeps it refreshed with the latest
-# post-testing-e2e failure, and closes it once every flavor is fresh again.
+# one issue (labelled for the hive to pick up) when :testing has not moved
+# for MAX_AGE_HOURS, keeps it refreshed with the latest
+# post-testing-e2e failure, and closes it once the tag moves again.
 on:
   schedule:
     - cron: "41 */6 * * *"
   workflow_dispatch:
     inputs:
       max_age_hours:
-        description: Hours after which a :testing image counts as stale
+        description: Hours without a :testing promotion before the issue opens
         type: string
         default: "36"
 

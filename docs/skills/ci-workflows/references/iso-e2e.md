@@ -271,14 +271,16 @@ check `sign.gen-sbom` and `sign.__actions_attest-build-provenance`.
 ### Testing freshness alarm
 
 A broken promotion gate never fails a build: `:testing` simply stops moving.
-`testing-freshness.yml` runs every six hours. It reads each flavor's
-`:testing` creation time from the registry (`scripts/testing-freshness.py`,
-`skopeo inspect`), and when any flavor is older than 36 hours it opens one
-issue labelled `kind/bug`, `area/ci` and `priority/critical-urgent` for the
-hive to pick up. The issue is refreshed on every run with the latest
-post-testing-e2e failure and closes itself once every flavor is fresh. An
-unreadable tag counts as stale. Dispatch the workflow with another
-`max_age_hours` to try a different threshold.
+`testing-freshness.yml` runs every six hours. `scripts/testing-freshness.py`
+finds the newest post-testing-e2e run whose `promote-to-testing` job actually
+ran "Move :testing to the tested digests". When that run is older than 36
+hours, or there is none in the last 60 runs, it opens one issue labelled
+`kind/bug`, `area/ci` and `priority/critical-urgent` for the hive to pick up.
+Every run refreshes the issue with the newest e2e run's failed jobs, and the
+issue closes itself once the tag moves. It does not use the image's `created`
+field: builds set that from SOURCE_DATE_EPOCH (the last build-input commit),
+not from the promotion. Dispatch the workflow with another `max_age_hours` to
+try a different threshold.
 
 ## Testsuite reporting (exact-digest VM suites)
 
