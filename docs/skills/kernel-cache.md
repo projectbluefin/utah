@@ -143,6 +143,14 @@ into a one-line diagnosis. Changes to this contract invalidate the cache
 through the existing script hash and require a real kernel rebuild plus the ISO
 boot tests.
 
+Containers need `CGROUP_BPF`. Cgroup v2 enforces device access with a BPF
+program that crun loads for every container (systemd does the same for
+`DevicePolicy=`). defconfig turns on `BPF_SYSCALL` but not `CGROUP_BPF`, so on
+the OGC kernel every `podman run` failed with `crun: bpf create: Invalid
+argument`. That included the composefs installer's containerized
+`bootc install` on the gaming flavors (#1129). The option is in
+`required_config`.
+
 The gaming desktop also depends on two OGC config options that the x86_64
 defconfig omits: Flatpak's Bubblewrap sandbox needs unprivileged user
 namespaces (`CONFIG_USER_NS`), and Tailscale needs the TUN device

@@ -244,9 +244,19 @@ The installer no longer
 offers xfs (no fs-verity); btrfs and ext4 remain.
 
 `luks-e2e.sh` installs with the composefs backend unless
-`UTAH_E2E_COMPOSEFS_BACKEND=0`. `lifecycle-e2e.sh` ISO mode sets that to pin the
-ostree backend, because `verify-boot-files.sh` and `scripts/bootc_lifecycle.py`
-gate on `ostree=` BLS entries that composefs-backend installs do not write.
+`UTAH_E2E_COMPOSEFS_BACKEND=0`; `lifecycle-e2e.sh` ISO mode follows it. Two
+things composefs installs need that ostree installs did not (#1129):
+
+- **Pass the account password pre-hashed.** fisherman sets a plaintext
+  password with `chpasswd --root <deploy dir>` on composefs, and that runs
+  PAM inside a deploy directory that holds only `/etc` state ("pam_chauthtok()
+  failed: Module is unknown"). `luks-e2e.sh` therefore sends
+  `openssl passwd -6` output, which takes `chpasswd -e` and skips PAM.
+  The GUI installer never hits this: Initial Setup creates the first account.
+- **The OGC kernel needs `CGROUP_BPF`.** fisherman runs composefs installs as
+  `podman run … bootc install to-filesystem`, and crun's cgroup-v2 device
+  filter fails without it ("crun: bpf create: Invalid argument"). See
+  [kernel-cache.md](kernel-cache.md).
 
 ## Tacklebox ISOs (unpublished variants)
 
