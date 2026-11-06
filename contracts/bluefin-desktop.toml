@@ -300,6 +300,13 @@ apps = [
   "page.tesk.Refine",
 ]
 
+# Software decoders that must load, not merely be installed (#1116). Utah's
+# supported H.264 path is openh264dec; the factory's libav plugin is built
+# against ffmpeg-free, which registers no H.264 decoder, so avdec_h264 is not
+# part of the contract.
+[media]
+decoders = ["openh264dec"]
+
 [services]
 enabled = [
   "avahi-daemon.service",
