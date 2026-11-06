@@ -40,18 +40,42 @@ class LastPromotionTests(unittest.TestCase):
             2: [promote_job(move="skipped")],  # green, but the ratchet held the tag
             1: [promote_job(at="2026-10-30T10:49:00Z")],
         }
-        when, found = freshness.last_promotion("r", [run(3), run(2), run(1)], jobs.__getitem__)
+        when, found = freshness.last_promotion([run(3), run(2), run(1)], jobs.__getitem__)
         self.assertEqual(found["id"], 1)
         self.assertEqual(when, dt.datetime(2026, 10, 30, 10, 49, tzinfo=dt.timezone.utc))
 
     def test_in_progress_runs_are_skipped(self):
         jobs = {2: [promote_job(at="2026-11-06T16:00:00Z")], 1: [promote_job()]}
-        _, found = freshness.last_promotion("r", [run(2, "in_progress"), run(1)], jobs.__getitem__)
+        _, found = freshness.last_promotion([run(2, "in_progress"), run(1)], jobs.__getitem__)
         self.assertEqual(found["id"], 1)
 
     def test_no_promotion_in_the_window_is_reported_as_none(self):
         jobs = {1: [{"name": "verify-provenance (utah)", "conclusion": "failure"}]}
-        self.assertEqual(freshness.last_promotion("r", [run(1)], jobs.__getitem__), (None, None))
+        self.assertEqual(freshness.last_promotion([run(1)], jobs.__getitem__), (None, None))
+
+
+    def test_the_move_step_time_wins_over_run_dates_and_conclusion(self):
+        # The run failed a later job and started days earlier; the tag still moved when the step ended.
+        jobs = {1: [promote_job(at="2026-11-06T09:15:00Z"), {"name": "testsuite", "conclusion": "failure"}]}
+        when, _ = freshness.last_promotion([run(1)], jobs.__getitem__)
+        self.assertEqual(when, dt.datetime(2026, 11, 6, 9, 15, tzinfo=dt.timezone.utc))
+
+    def test_a_failed_promote_job_does_not_count(self):
+        jobs = {1: [promote_job(job="failure")]}
+        self.assertEqual(freshness.last_promotion([run(1)], jobs.__getitem__), (None, None))
+
+
+class SignalSourceTests(unittest.TestCase):
+    """The names the script looks for must exist in the workflow that moves :testing.
+
+    A renamed job or step would otherwise read as "no promotion found" forever.
+    """
+
+    def test_workflow_still_has_the_promote_job_and_move_step(self):
+        workflow = (ROOT / ".github/workflows" / freshness.WORKFLOW).read_text()
+        self.assertIn(f"\n  {freshness.PROMOTE_JOB}:\n", workflow)
+        self.assertIn(f"- name: {freshness.MOVE_STEP}\n", workflow)
+        self.assertIn("docker://${ref%@*}:testing", workflow)
 
 
 class StaleTests(unittest.TestCase):
@@ -68,11 +92,22 @@ class StaleTests(unittest.TestCase):
 
 class BodyTests(unittest.TestCase):
     def test_body_carries_the_marker_and_the_failed_jobs(self):
-        latest = describe = freshness.describe_latest(run(9), [{"name": "luks (utah)", "conclusion": "failure"}])
-        text = freshness.body(None, None, NOW, 36, describe)
+        describe = freshness.describe_latest(run(9), [{"name": "luks (utah)", "conclusion": "failure"}])
+        since = NOW - MAX_AGE - freshness.RUN_SLACK
+        text = freshness.body(None, None, since, NOW, 36, describe)
         self.assertTrue(text.startswith(freshness.MARKER))
-        self.assertIn("- `luks (utah)`", latest)
-        self.assertIn("No promotion found", text)
+        self.assertIn("- `luks (utah)`", text)
+        self.assertIn("started since 2026-11-04 05:00 UTC moved the tag", text)
+
+
+class IssueLookupTests(unittest.TestCase):
+    def test_finds_the_issue_by_its_body_marker(self):
+        issues = [{"number": 7, "body": "unrelated"}, {"number": 9, "body": None},
+                  {"number": 12, "body": freshness.MARKER + "\nstale"}]
+        self.assertEqual(freshness.marked_issue(issues), 12)
+
+    def test_no_marked_issue(self):
+        self.assertIsNone(freshness.marked_issue([{"number": 7, "body": "unrelated"}]))
 
 
 if __name__ == "__main__":

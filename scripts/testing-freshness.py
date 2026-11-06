@@ -10,9 +10,19 @@ is older than the threshold, it opens (or refreshes) one issue for the hive,
 with the newest post-testing-e2e run and its failed jobs attached. When the tag
 moves again, it closes the issue.
 
-The image's own `created` field is not used: builds set it from
-SOURCE_DATE_EPOCH (the last build-input commit), so a quiet weekend of green
-promotions would read as stale, and a promotion after a long freeze as fresh.
+Why the workflow run, and not a timestamp on the image: `:testing` is moved
+with `skopeo copy --preserve-digests`, so the promoted image is byte-identical
+to the tested one and cannot carry its promotion time. Its config `created` is
+SOURCE_DATE_EPOCH (the last build-input commit; `scripts/podman-epoch-args.sh`),
+so a quiet weekend of green promotions would read as stale, and a promotion
+after a long freeze as fresh. `promote-to-testing` is the only writer of
+`:testing`, so the completion time of its move step is the promotion time.
+A run's overall conclusion is not used either: a run can promote and still
+fail a later job, or succeed while the ratchet holds the tag (move skipped).
+
+The open issue is found through the REST issues listing (label `area/ci`,
+then the body marker), not through issue search, so neither search-index lag
+nor whether search indexes HTML comments can make it open a duplicate.
 
 Usage:
   testing-freshness.py [--max-age-hours N] [--dry-run]
@@ -33,14 +43,23 @@ LABELS = ["kind/bug", "area/ci", "priority/critical-urgent"]
 WORKFLOW = "post-testing-e2e.yml"
 PROMOTE_JOB = "promote-to-testing"
 MOVE_STEP = "Move :testing to the tested digests"
-RUNS_SCANNED = 60
+# Runs are scanned back to (threshold + RUN_SLACK) before now, so a run that
+# started before the threshold window but moved the tag inside it still counts.
+# The workflow's concurrency group holds one pending run behind one running
+# one, so a day of slack outlasts any real wait plus run.
+RUN_SLACK = dt.timedelta(hours=24)
 
 
-def gh(*args: str):
+def gh_text(*args: str) -> str:
     result = subprocess.run(["gh", *args], capture_output=True, text=True, check=False)
     if result.returncode != 0:
         raise RuntimeError(f"gh {' '.join(args)} failed: {result.stderr.strip()}")
-    return json.loads(result.stdout) if result.stdout.strip() else None
+    return result.stdout
+
+
+def gh(*args: str):
+    out = gh_text(*args)
+    return json.loads(out) if out.strip() else None
 
 
 def parse_time(value: str) -> dt.datetime:
@@ -58,7 +77,7 @@ def moved_at(jobs: list[dict]) -> dt.datetime | None:
     return None
 
 
-def last_promotion(repo: str, runs: list[dict], jobs_of) -> tuple[dt.datetime | None, dict | None]:
+def last_promotion(runs: list[dict], jobs_of) -> tuple[dt.datetime | None, dict | None]:
     """Newest run (of `runs`, newest first) whose move step ran, and when it moved the tag."""
     for run in runs:
         if run.get("status") != "completed":
@@ -76,7 +95,7 @@ def is_stale(when: dt.datetime | None, now: dt.datetime, max_age: dt.timedelta) 
 
 def describe_latest(run: dict | None, jobs: list[dict]) -> str:
     if not run:
-        return "No post-testing-e2e run found."
+        return "No post-testing-e2e run started in that time."
     line = (f"Latest post-testing-e2e: [{run.get('conclusion') or run.get('status')}]"
             f"({run['html_url']}) started {run['created_at']}.")
     failed = sorted({j["name"] for j in jobs if j.get("conclusion") == "failure"})
@@ -85,12 +104,12 @@ def describe_latest(run: dict | None, jobs: list[dict]) -> str:
     return line
 
 
-def body(when, promoted_run, now, max_age_hours, latest_line) -> str:
+def body(when, promoted_run, since, now, max_age_hours, latest_line) -> str:
     if when:
         moved = (f"`:testing` last moved {when:%Y-%m-%d %H:%M} UTC "
                  f"({(now - when).total_seconds() / 3600:.0f} h ago), in [this run]({promoted_run['html_url']}).")
     else:
-        moved = f"No promotion found in the last {RUNS_SCANNED} post-testing-e2e runs."
+        moved = f"No post-testing-e2e run started since {since:%Y-%m-%d %H:%M} UTC moved the tag."
     return "\n".join([
         MARKER,
         f"`:testing` should advance at least daily. It has not moved for more than {max_age_hours} hours, "
@@ -108,10 +127,29 @@ def body(when, promoted_run, now, max_age_hours, latest_line) -> str:
     ])
 
 
-def open_issue(repo: str) -> dict | None:
-    issues = gh("issue", "list", "-R", repo, "--state", "open", "--limit", "100",
-                "--search", "in:body \"utah:testing-freshness\"", "--json", "number,body")
-    return next((i for i in issues or [] if MARKER in i["body"]), None)
+def marked_issue(issues: list[dict]) -> int | None:
+    """Number of the alarm issue among `issues`: the one whose body carries MARKER."""
+    return next((i["number"] for i in issues if MARKER in (i.get("body") or "")), None)
+
+
+def open_issue(repo: str) -> int | None:
+    # REST listing, not `gh issue list`: with --label/--search that goes through issue search.
+    out = gh_text("api", "--paginate", f"repos/{repo}/issues?state=open&labels=area/ci&per_page=100",
+                  "--jq", ".[] | select(.pull_request == null) | {number, body}")
+    return marked_issue(json_lines(out))
+
+
+def json_lines(out: str) -> list[dict]:
+    return [json.loads(line) for line in out.splitlines() if line.strip()]
+
+
+def runs_since(repo: str, since: dt.datetime) -> list[dict]:
+    """post-testing-e2e runs created at or after `since`, newest first."""
+    out = gh_text("api", "--paginate",
+                  f"repos/{repo}/actions/workflows/{WORKFLOW}/runs?per_page=100"
+                  f"&created=%3E%3D{since:%Y-%m-%dT%H:%M:%SZ}",
+                  "--jq", ".workflow_runs[] | {id, status, conclusion, html_url, created_at}")
+    return json_lines(out)
 
 
 def main(argv=None) -> int:
@@ -121,8 +159,10 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     repo = os.environ.get("GITHUB_REPOSITORY", "projectbluefin/utah")
     now = dt.datetime.now(dt.timezone.utc)
+    max_age = dt.timedelta(hours=args.max_age_hours)
+    since = now - max_age - RUN_SLACK
 
-    runs = gh("api", f"repos/{repo}/actions/workflows/{WORKFLOW}/runs?per_page={RUNS_SCANNED}")["workflow_runs"]
+    runs = runs_since(repo, since)
     cache: dict[int, list[dict]] = {}
 
     def jobs_of(run_id: int) -> list[dict]:
@@ -130,33 +170,32 @@ def main(argv=None) -> int:
             cache[run_id] = gh("api", f"repos/{repo}/actions/runs/{run_id}/jobs?per_page=100")["jobs"]
         return cache[run_id]
 
-    when, promoted_run = last_promotion(repo, runs, jobs_of)
+    when, promoted_run = last_promotion(runs, jobs_of)
     existing = None if args.dry_run else open_issue(repo)
 
-    if not is_stale(when, now, dt.timedelta(hours=args.max_age_hours)):
+    if not is_stale(when, now, max_age):
         print(f":testing last moved {when:%Y-%m-%d %H:%M} UTC; fresh (max age {args.max_age_hours} h)")
         if existing:
-            gh("issue", "close", str(existing["number"]), "-R", repo, "--reason", "completed",
-               "--comment", f"`:testing` moved again at {when:%Y-%m-%d %H:%M} UTC; closing.")
-            print(f"closed #{existing['number']}")
+            gh_text("issue", "close", str(existing), "-R", repo, "--reason", "completed",
+                    "--comment", f"`:testing` moved again at {when:%Y-%m-%d %H:%M} UTC; closing.")
+            print(f"closed #{existing}")
         return 0
 
     latest = runs[0] if runs else None
-    text = body(when, promoted_run, now, args.max_age_hours,
+    text = body(when, promoted_run, since, now, args.max_age_hours,
                 describe_latest(latest, jobs_of(latest["id"]) if latest else []))
     if args.dry_run:
         print(text)
         return 0
     title = TITLE.format(hours=args.max_age_hours)
     if existing:
-        gh("issue", "edit", str(existing["number"]), "-R", repo, "--title", title, "--body", text)
-        print(f"refreshed #{existing['number']}")
+        gh_text("issue", "edit", str(existing), "-R", repo, "--title", title, "--body", text)
+        print(f"refreshed #{existing}")
     else:
         cmd = ["issue", "create", "-R", repo, "--title", title, "--body", text]
         for label in LABELS:
             cmd += ["--label", label]
-        result = subprocess.run(["gh", *cmd], capture_output=True, text=True, check=True)
-        print(result.stdout.strip())
+        print(gh_text(*cmd).strip())
     return 0
 
 
