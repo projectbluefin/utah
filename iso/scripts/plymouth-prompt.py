@@ -25,12 +25,14 @@ input); 3 text fallback; 4 graphical prompt without the expected watermark.
 
 import os
 import re
-import socket
 import struct
 import subprocess
 import sys
 import time
 import zlib
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from qemu_monitor import run_hmp_command
 
 POLL_INTERVAL = 3
 SEARCH_RADIUS = 6         # pixels around the theme's computed watermark origin
@@ -177,27 +179,6 @@ def ocr(frame_path: str) -> str:
     return result.stdout
 
 
-def monitor(sock_path: str, command: str) -> None:
-    """Run one HMP command and return once QEMU has prompted again.
-
-    screendump writes its file synchronously before the next "(qemu)" prompt,
-    so waiting for it means the frame is complete when this returns.
-    """
-    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-        client.settimeout(30)
-        client.connect(sock_path)
-        seen = b""
-        while b"(qemu)" not in seen:
-            seen += client.recv(4096) or b"(qemu)"
-        client.sendall(command.encode() + b"\n")
-        seen = b""
-        while b"(qemu)" not in seen:
-            chunk = client.recv(4096)
-            if not chunk:
-                break
-            seen += chunk
-
-
 def serial_has_text_prompt(serial_log: str) -> bool:
     try:
         with open(serial_log, errors="replace") as handle:
@@ -230,7 +211,9 @@ def wait(sock, serial_log, theme_path, watermark_path, evidence, timeout):
         except FileNotFoundError:
             pass
         try:
-            monitor(sock, f"screendump {frame_path}")
+            run_hmp_command(sock, f"screendump {frame_path}",
+                            prompt=b"(qemu)", drain_before=True,
+                            connect_timeout=30, recv_timeout=30)
             frame = read_image(frame_path)
         except (OSError, ValueError):
             time.sleep(POLL_INTERVAL)

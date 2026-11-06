@@ -259,6 +259,15 @@ source repository `projectbluefin/utah` on `refs/heads/testing`, so an image
 attested by any other workflow or repository never reaches the privileged
 e2e jobs. The `testsuite` job is not gated on it.
 
+A 404 from `gh attestation verify` means the build never attested; it is
+not a lookup problem. The reusable build's `Sign, publish SBOM, and attest`
+step is `continue-on-error`, and inside it the provenance attestation runs
+only if the SBOM steps before it succeeded. A green build can therefore ship
+no attestation, and `:testing` stops advancing (2026-10-31 to 11-06). That
+happened because Utah's `gen-sbom` recipe, run under `sudo`, left a root-owned
+`sbom_out/` that the unprivileged SBOM step could not write. In the build log,
+check `sign.gen-sbom` and `sign.__actions_attest-build-provenance`.
+
 ## Testsuite reporting (exact-digest VM suites)
 
 `post-testing-e2e.yml` runs the `testsuite` job asynchronously against each
