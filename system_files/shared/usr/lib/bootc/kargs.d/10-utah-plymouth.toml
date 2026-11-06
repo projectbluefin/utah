@@ -1,0 +1,9 @@
+# Keep Plymouth's graphical splash and LUKS passphrase prompt on machines with a
+# serial port. Hummingbird's 00-base.toml puts console=ttyS0 on every install,
+# and bootc's kargs.d is additive only, so it cannot be withdrawn here. Plymouth
+# that finds a serial console in /sys/class/tty/console/active "manages them
+# with details forced": the text details plugin on every console, so QEMU and
+# any PC with a 16550 UART booted to a bare "Please enter passphrase for disk"
+# line instead of the Bluefin splash (#461). This tells Plymouth to draw only on
+# the local display; the kernel and systemd still log to ttyS0.
+kargs = ["plymouth.ignore-serial-consoles"]

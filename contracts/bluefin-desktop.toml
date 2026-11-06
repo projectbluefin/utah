@@ -30,6 +30,9 @@ files = [
   "/usr/share/icons/hicolor/icon-theme.cache",
   # The os-release LOGO icon; common ships Bluefin's raptor under this name.
   "/usr/share/pixmaps/fedora-logo-icon.png",
+  # The boot splash watermark the bgrt theme draws (Bluefin's raptor, from
+  # common); fedora-logos owns and erases this path during the logo swap.
+  "/usr/share/plymouth/themes/spinner/watermark.png",
   "/usr/share/ublue-os/bluefin-logos/chicken.png",
   "/usr/share/ublue-os/bluefin-logos/symbols/bluefin",
   "/usr/share/backgrounds/bluefin/01-bluefin.xml",
@@ -139,9 +142,14 @@ files = [
   "/etc/containers/policy.json",
   "/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release",
   "/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2",
+  # Plymouth stays graphical with Hummingbird's console=ttyS0 karg (#461).
+  "/usr/lib/bootc/kargs.d/10-utah-plymouth.toml",
 ]
 
 [configuration.file_contains]
+"/usr/lib/bootc/kargs.d/10-utah-plymouth.toml" = [
+  'kargs = ["plymouth.ignore-serial-consoles"]',
+]
 "/usr/share/applications/io.projectbluefin.chairlift.desktop" = [
   "Name=Control Center",
   "Exec=/home/linuxbrew/.linuxbrew/bin/chairlift-wrapper",

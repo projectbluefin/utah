@@ -473,7 +473,11 @@ def run_qemu(monitor_sock: str, passphrase: str, serial_log: str, ssh_port: int 
         else:
             gnome_stable_count = 0
 
-        if screen_changed and gnome_stable_count >= GNOME_STABLE_POLLS:
+        # With an SSH port the sshd banner above is the verdict. Plymouth's
+        # graphical splash after the unlock is a dark frame whose spinner can
+        # repeat between two polls, which this heuristic would call an
+        # emergency shell; an emergency boot is still caught on serial.
+        if not ssh_port and screen_changed and gnome_stable_count >= GNOME_STABLE_POLLS:
             if brightness > GNOME_THRESHOLD:
                 print(
                     f"[luks-unlock] RESULT: boot succeeded"
