@@ -730,6 +730,14 @@ else
     RECIPE_COMPOSEFS_BACKEND=true
 fi
 echo "  install backend: $([[ "${RECIPE_COMPOSEFS_BACKEND}" == true ]] && echo composefs || echo ostree)"
+# Hand fisherman a crypt(3) hash, not the plaintext. For a plaintext password
+# fisherman runs chpasswd through PAM; on the composefs backend that is
+# `chpasswd --root <deploy dir>`, and the deploy dir holds /etc state with no
+# PAM modules, so every composefs install died at "pam_chauthtok() failed:
+# Module is unknown" (#1129). A "$6$..." value takes chpasswd -e, which writes
+# the hash without PAM on both backends.
+command -v openssl >/dev/null || fail "openssl is required to hash the test account's password"
+TEST_PASSWORD_HASH="$(openssl passwd -6 "${TEST_PASSWORD}")"
 cat > "${WORK}/recipe.json" <<EOF
 {
   "disk": "/dev/vda",
@@ -743,7 +751,7 @@ cat > "${WORK}/recipe.json" <<EOF
   "user": {
     "username": "${TEST_USER}",
     "fullname": "Utah End To End",
-    "password": "${TEST_PASSWORD}",
+    "password": "${TEST_PASSWORD_HASH}",
     "groups": ["wheel"]
   },
   "flatpaks": []

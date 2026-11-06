@@ -49,12 +49,20 @@ DNF="$(command -v dnf5 || command -v dnf)"
 # VIDEO_DEV is the V4L2 core, which v4l2loopback (install-v4l2loopback.sh)
 # is built against: x86_64 defconfig has no media support at all, so without
 # it the gaming flavors could have no virtual camera, nor any camera (#291).
+#
+# CGROUP_BPF is how cgroup v2 enforces device access: crun loads a
+# BPF_PROG_TYPE_CGROUP_DEVICE program for every container it starts, and
+# systemd does the same for DevicePolicy=. defconfig enables BPF_SYSCALL
+# (below) but not CGROUP_BPF, so on the OGC kernel every podman run failed
+# with "crun: bpf create ``: Invalid argument". That broke the composefs
+# installer on the gaming flavors, which runs bootc install in a container
+# (#1129).
 required_config=(SCHED_CLASS_EXT NTSYNC ANDROID_BINDERFS
                  OVERLAY_FS SQUASHFS SQUASHFS_ZSTD EROFS_FS BTRFS_FS
                  BLK_DEV_LOOP ISO9660_FS BLK_DEV_DM DM_SNAPSHOT DM_CRYPT
                  CRYPTO_XTS FUSE_FS FS_VERITY
                  SYSFB_SIMPLEFB DRM_SIMPLEDRM VIDEO_DEV USER_NS TUN
-                 INPUT_UINPUT ZRAM
+                 INPUT_UINPUT ZRAM CGROUP_BPF
                  DRM_AMDGPU DRM_XE)
 verify_config() {
   local config="$1" symbol
@@ -140,7 +148,7 @@ make defconfig
 # binderfs. Enabling DEBUG_INFO makes the build slower and the tree much larger,
 # which is the price of BTF; the kernel that ships is unaffected, since only
 # bzImage is installed and modules go through INSTALL_MOD_STRIP=1.
-scripts/config --enable BPF_SYSCALL --enable BPF_JIT \
+scripts/config --enable BPF_SYSCALL --enable BPF_JIT --enable CGROUP_BPF \
                --disable DEBUG_INFO_NONE \
                --enable DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT \
                --enable DEBUG_INFO_BTF \
