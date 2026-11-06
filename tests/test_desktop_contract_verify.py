@@ -13,10 +13,12 @@ tests redirect the three image prefixes (`/usr`, `/etc`, `/var`) into a
 temporary directory and leave every other path -- notably the contract file
 itself -- alone. `unit_enabled`, `unit_masked` and `unit_disabled` shell out
 to systemctl and are covered by their own tests, so they are replaced here with
-declared sets.
+declared sets. The `[media].decoders` probe shells out to gst-inspect-1.0, so
+its tests patch `subprocess.run` directly.
 """
 
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -186,6 +188,57 @@ class UserServiceTests(VerifyModeTests):
             self.contract_with_user_units("pipewire.socket", "wireplumber.service"),
             naming="required user service is not enabled globally: wireplumber.service",
         )
+
+
+class MediaDecoderTests(VerifyModeTests):
+    """[media].decoders must load via gst-inspect-1.0, not merely be installed
+    (#1116). The probe fails closed when gst-inspect-1.0 itself is missing."""
+
+    def contract_with_decoders(self, *elements):
+        contract = base_contract()
+        contract["media"] = {"decoders": list(elements)}
+        return contract
+
+    def probe(self, *, returncode=0, stderr="", missing=False):
+        calls = []
+
+        def run(argv, **kwargs):
+            calls.append(argv)
+            if missing:
+                raise FileNotFoundError(argv[0])
+            return subprocess.CompletedProcess(argv, returncode, stdout="", stderr=stderr)
+
+        return calls, patch.object(desktop.subprocess, "run", run)
+
+    def test_a_loadable_decoder_passes_and_is_counted(self):
+        calls, patched = self.probe(returncode=0)
+        with patched:
+            code, out, errors = self.verify(self.contract_with_decoders("openh264dec"))
+        self.assertEqual(code, 0, errors)
+        self.assertEqual(calls, [["gst-inspect-1.0", "openh264dec"]])
+        self.assertIn("1 media decoders", out)
+
+    def test_a_decoder_that_fails_to_load_is_rejected_by_name(self):
+        _, patched = self.probe(returncode=1, stderr="No such element or plugin 'openh264dec'")
+        with patched:
+            errors = self.assert_rejected(
+                self.contract_with_decoders("openh264dec"),
+                naming="media decoder 'openh264dec' failed to load",
+            )
+        self.assertIn("No such element or plugin", errors)
+
+    def test_a_missing_gst_inspect_fails_closed(self):
+        _, patched = self.probe(missing=True)
+        with patched:
+            self.assert_rejected(
+                self.contract_with_decoders("openh264dec"),
+                naming="media decoder 'openh264dec' cannot be probed: gst-inspect-1.0 is missing",
+            )
+
+    def test_the_decoder_count_is_omitted_when_none_are_declared(self):
+        code, out, errors = self.verify()
+        self.assertEqual(code, 0, errors)
+        self.assertNotIn("media decoders", out)
 
 
 class CompliantImageTests(VerifyModeTests):
