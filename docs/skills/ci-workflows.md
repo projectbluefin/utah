@@ -128,6 +128,12 @@ post-build verification workflows, not the complete workflow inventory:
   landing; this producer does not arm native auto-merge or relax those gates.
   A successful image build is not proof of a reported rendering/CPU fix:
   retain #992/#997 until actual runtime evidence addresses them.
+- `.github/workflows/image-baselines.yml` -- weekly and manual
+  re-measurement of the Bluefin, Dakota and Utah image baselines. Like the
+  extension updater, trusted `main` alone mints a repository-scoped Mergeraptor
+  App token after `just baselines` has run, and uses it only to create or
+  update the proposal, so the normal contract and image-build checks run on
+  the proposed head. The measurement step keeps the read-only job token.
 - `.github/workflows/post-testing-e2e.yml` -- successful non-PR testing builds
   explicitly dispatch this, or manually supply a successful testing build run ID.
   Its `promote-to-testing` job records per-digest E2E evidence as commit
@@ -174,7 +180,7 @@ queue:
 | --- | --- | --- |
 | `prow.yml` (tide, `cncf/prow-github-actions` v3.4.0; `tide.merge_queue: auto`, `merge_method: squash` in `projectbluefin/.project/prow.yaml`) | On `lgtm` + `approved`, enqueues with `enqueuePullRequest` on the job's `GITHUB_TOKEN` (no `token` secret is passed) | At risk: GitHub starts no workflow for an event `GITHUB_TOKEN` caused, so a group prow enqueues may get no `merge_group` runs and time out (prow's own docs say this is "being verified live"). Pass prow a GitHub App `token` that may enqueue, or have a maintainer click "Merge when ready" |
 | Renovate (`renovate.json`, `local>projectbluefin/renovate-config` = `config:recommended`) | No automerge; the `utah-packages` digest group sets `automerge: false` | A maintainer (or prow) enqueues |
-| `update-bluefin-parity.yml`, `update-gnome-extensions.yml`, `promote-testing-to-main.yml` | Open or maintain pull requests only | A maintainer (or prow) enqueues |
+| `update-bluefin-parity.yml`, `update-gnome-extensions.yml`, `image-baselines.yml`, `promote-testing-to-main.yml` | Open or maintain pull requests only | A maintainer (or prow) enqueues |
 | `sync-main-to-testing.yml` | Pushes `testing`, not `main` | Unaffected |
 
 Queue activation also requires the App's permissions, not just its secrets.
