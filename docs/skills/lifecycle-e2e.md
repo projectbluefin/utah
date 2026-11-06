@@ -33,10 +33,9 @@ baseline digest.
 Phase-keyed diagnostics (`evidence/lifecycle-*.json`, `lifecycle-summary.json`)
 and screendumps identify the active deployment and digest at every phase.
 
-ISO mode installs with `UTAH_E2E_COMPOSEFS_BACKEND=0`, pinning the ostree
-backend because the BLS checks below match only `ostree=` kargs; ISO-mode
-results therefore do not cover the composefs backend the ISO installs by
-default (see `local-testing.md`).
+ISO mode installs through `luks-e2e.sh`, which uses the ostree backend by
+default (#1129). Set `UTAH_E2E_COMPOSEFS_BACKEND=1` to run the lifecycle on a
+composefs-backend install; the BLS checks below handle both shapes.
 
 After each lifecycle phase the harness also captures the BLS Type #1
 entries under the Fedora/bootc layout's BLS root `/boot/loader/entries/`
@@ -76,9 +75,8 @@ For composefs-backed deployments, the match key is `composefs.verity` from
 keys keep OSTree and composefs entries distinct; both require enough entries
 to assign a unique one to every expected deployment.
 
-The ISO installs the composefs backend by default (PR #938), and ISO-mode
-lifecycle runs exercise that default; set `UTAH_E2E_COMPOSEFS_BACKEND=0` to opt
-out to the ostree backend. Synthetic fixtures
+The ISO installs the ostree backend by default (#1129); set
+`UTAH_E2E_COMPOSEFS_BACKEND=1` for composefs. Synthetic fixtures
 prove validator behavior, not emitted bootc formats or successful installation,
 upgrade, and rollback; retain actual status, BLS, and boot evidence for those
 claims.

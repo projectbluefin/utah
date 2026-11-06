@@ -231,22 +231,21 @@ asset digest, see [iso-review](local-testing/references/iso-review.md#bumping-bo
 `install-flatpaks.sh` also shims machine id, session bus, and the `/var/tmp`
 token cache during image build.
 
-### Installer configuration and composefs backend
+### Installer configuration and backend
 
 The live ISO installer configuration (`iso/live/src/etc/bootc-installer/recipe.json`,
-`images.json`, and dynamically generated recipes in `configure-live.sh` and
-`iso/scripts/luks-e2e.sh`) defaults `composefs` and `composeFsBackend` to `true`
-(#882). This configures fisherman to install Utah deployments with the
-composefs backend by default: a read-only composefs root with content-addressed
-file deduplication. This change does not set up sealed images or signed
-fs-verity enforcement, so do not cite it as boot-time integrity verification.
-The installer no longer
-offers xfs (no fs-verity); btrfs and ext4 remain.
+`images.json`, and the recipes generated in `configure-live.sh` and
+`iso/scripts/luks-e2e.sh`) installs with the ostree backend: `composefs` and
+`composeFsBackend` are `false`, and the recipe's empty `image` plus
+`targetImgref` installs offline from containers-storage.
 
-`luks-e2e.sh` installs with the composefs backend unless
-`UTAH_E2E_COMPOSEFS_BACKEND=0`. `lifecycle-e2e.sh` ISO mode sets that to pin the
-ostree backend, because `verify-boot-files.sh` and `scripts/bootc_lifecycle.py`
-gate on `ostree=` BLS entries that composefs-backend installs do not write.
+The composefs default (#882, #938) shipped without the LUKS e2e ever running
+on it, because the provenance gate had blocked post-testing-e2e since 10-31.
+When the e2e came back it failed on every flavor (#1129): fisherman's
+`chpasswd --root` into the composefs deploy directory finds no PAM modules, and
+the gaming flavors' `bootc install to-filesystem` exits 126. Exercise composefs
+with `UTAH_E2E_COMPOSEFS_BACKEND=1`. Flip the default back only after
+`just luks-test` passes that way for every flavor.
 
 ## Tacklebox ISOs (unpublished variants)
 
