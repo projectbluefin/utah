@@ -672,7 +672,17 @@ class DesktopUnitEnablementTests(unittest.TestCase):
     def test_the_reported_desktop_units_are_enabled(self):
         # projectbluefin/utah#99: input-remapper package was installed and its
         # unit never started. Name them so a refactor cannot drop one.
-        for unit in ("input-remapper.service",):
+        # projectbluefin/utah#19: the first-boot Flatpak, setup, statistics,
+        # update and Tailscale units have an explicit enablement policy too.
+        for unit in (
+            "input-remapper.service",
+            "flatpak-preinstall.service",
+            "ublue-system-setup.service",
+            "bluefin-stats-refresh.timer",
+            "projectbluefin-countme.timer",
+            "uupd.timer",
+            "tailscaled.service",
+        ):
             with self.subTest(unit=unit):
                 self.assertIn(unit, self.script_units("enable_unit"))
                 self.assertIn(unit, self.preset_directives("enable"))
