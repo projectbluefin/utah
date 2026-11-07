@@ -93,6 +93,9 @@ STALE_AFTER = dt.timedelta(days=7)
 RELEASE_WORKFLOW = "execute-release.yml"
 # The caller job id ("execute") and the job and step names of
 # projectbluefin/actions reusable-execute-release.yml at the pinned commit.
+# tests/test_release_trigger.py fails when execute-release.yml moves off this
+# pin: re-check both names against the new commit, then update it here.
+RETAG_NAMES_VERIFIED_AT = "6453818f6279a2f2c1282919aad0009a88c01819"
 RETAG_JOB = "execute / Promote release"
 RETAG_STEP = "Promote digests to target tags"
 # Runs are scanned back to (STALE_AFTER + RUN_SLACK): a release created before
