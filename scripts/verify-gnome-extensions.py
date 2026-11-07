@@ -208,6 +208,12 @@ def main() -> int:
     if args.record_provenance:
         record_provenance(args.root)
     if not args.source:
+        # Extension.getSettings() prefers an extension's own schemas/ over the
+        # system directory, where common's overrides are compiled in, and the
+        # image-wide compile cannot see a schema left there. The build installs
+        # every extension schema globally; none may stay behind.
+        for schemas in sorted(base.glob("*/schemas")):
+            failures.append(f"{schemas}: extension-local schemas mask the global ones; install them in /usr/share/glib-2.0/schemas")
         # gnome-shell runs as the user: an unreadable file stops the extension
         # loading ("Permission denied"), and a writable one lets any user
         # change code every session runs. Symlinks carry no meaningful mode.
