@@ -1,7 +1,7 @@
 ---
 name: desktop-contract
 version: "1.0"
-last_updated: "2026-10-25"
+last_updated: "2026-11-07"
 id: desktop-contract
 one_line_purpose: Maintain Bluefin Utah identity, Bluefin desktop defaults, and first-boot Flatpak policy.
 entry_point: docs/skills/desktop-contract.md
@@ -279,8 +279,8 @@ Search Light was dropped: GNOME 51 removed `set_shader_source`, which its shader
   `--record-provenance` (image) writes `/usr/share/utah/provenance.json`.
   See [Image provenance](containerfile.md#image-provenance).
 
-GSConnect's meson install skips `update_desktop_database`: Hummingbird and Utah
-lack `desktop-file-utils`. The system and glib-compile-schemas handle databases.
+GSConnect's meson install skips `update_desktop_database`: Hummingbird and Utah lack `desktop-file-utils`.
+Extension schemas are global and common's overrides must resolve: see [extension schemas](desktop-contract/references/extension-schemas.md).
 
 Declaring GNOME 51 in `metadata.json` is necessary, not sufficient: the
 GSConnect and Dash to Dock failures below passed the metadata check, built

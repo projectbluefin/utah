@@ -82,46 +82,35 @@ class InstallerFlatpakPathTests(unittest.TestCase):
                                  f"{path!r} is the flatpak dir; fisherman appends lib/flatpak itself")
 
 
-class InstallerComposefsBackendTests(unittest.TestCase):
-    """The installer should default to the composefs backend (#882)."""
+class InstallerBackendTests(unittest.TestCase):
+    """The ISO installs with the ostree backend until composefs installs pass
+    the LUKS e2e for every flavor (#1129); composefs stays an e2e opt-in."""
 
-    def test_recipe_enables_composefs_backend(self):
+    def test_recipe_uses_ostree_backend(self):
         data = json.loads(RECIPE.read_text())
-        self.assertIs(data.get("composeFsBackend"), True)
+        self.assertIs(data.get("composeFsBackend"), False)
 
-    def test_images_json_enables_composefs(self):
+    def test_images_json_uses_ostree_backend(self):
         data = json.loads(IMAGES.read_text())
         images = data.get("images", [])
         self.assertTrue(images, "images.json lists no images")
         for image in images:
-            self.assertIs(image.get("composefs"), True)
+            self.assertIs(image.get("composefs"), False)
             self.assertIn("btrfs", image.get("filesystems", []))
-            self.assertIn("ext4", image.get("filesystems", []))
-            # fisherman rejects composefs-backend on XFS: no fs-verity.
-            self.assertNotIn("xfs", image.get("filesystems", []))
 
-    def test_configure_live_configures_composefs_payload(self):
+    def test_configure_live_writes_the_offline_ostree_recipe(self):
         script = CONFIGURE_LIVE.read_text()
-        self.assertIn('data["composeFsBackend"] = True', script)
-        self.assertIn('data["image"] = f"containers-storage:{ref}"', script)
+        self.assertIn('data["composeFsBackend"] = False', script)
+        # An empty image with targetImgref installs from containers-storage
+        # without pulling; a named image would pull from a registry.
+        self.assertIn('data["image"] = ""', script)
 
-    def test_luks_e2e_recipe_configures_composefs_payload(self):
+    def test_luks_e2e_defaults_to_ostree_and_keeps_the_composefs_opt_in(self):
         script = LUKS_E2E.read_text()
-        self.assertIn('RECIPE_COMPOSEFS_BACKEND=true', script)
+        self.assertIn('if [[ "${UTAH_E2E_COMPOSEFS_BACKEND:-0}" == 1 ]]; then', script)
         self.assertIn('RECIPE_IMAGE="containers-storage:${PAYLOAD_IMAGE}"', script)
         self.assertIn('"composeFsBackend": ${RECIPE_COMPOSEFS_BACKEND}', script)
         self.assertIn('"image": "${RECIPE_IMAGE}"', script)
-
-    def test_lifecycle_iso_install_exercises_composefs_default(self):
-        """lifecycle-e2e.sh must not pin the ostree backend: the ISO installs
-        the composefs default and the boot-file/BLS gates handle it. The
-        UTAH_E2E_COMPOSEFS_BACKEND=0 opt-out stays available in luks-e2e.sh."""
-        script = LUKS_E2E.with_name("lifecycle-e2e.sh").read_text()
-        self.assertIn('UTAH_E2E_WORK="${INSTALL_WORK}" bash "${ROOT}/iso/scripts/luks-e2e.sh"', script)
-        self.assertNotIn('UTAH_E2E_COMPOSEFS_BACKEND=0 bash', script)
-        luks = LUKS_E2E.read_text()
-        self.assertIn('if [[ "${UTAH_E2E_COMPOSEFS_BACKEND:-1}" == 0 ]]; then', luks)
-        self.assertIn('RECIPE_COMPOSEFS_BACKEND=false', luks)
 
 
 if __name__ == "__main__":

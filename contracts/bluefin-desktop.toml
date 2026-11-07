@@ -307,6 +307,31 @@ apps = [
 [media]
 decoders = ["openh264dec"]
 
+# Every [section] in schema_dir/*.gschema.override must name a schema some
+# *.gschema.xml there declares. glib-compile-schemas drops a section for a
+# missing schema without a message or a failing exit: common's
+# [org.gnome.shell.extensions.dash-to-dock] (disable-overview-on-startup=true)
+# and two blur-my-shell sections were lost that way while the extensions kept
+# their schemas in their own directories, so GNOME opened the Activities
+# overview at login. A second file declaring a schema id fails here too.
+[gsettings]
+schema_dir = "/usr/share/glib-2.0/schemas"
+
+# Override sections that may stay unresolved, with the reason. A listed schema
+# that becomes installed, or that no override names any more, fails the check.
+[gsettings.unresolved_overrides]
+# common turns off GNOME Software's automatic updates; Bluefin excludes
+# gnome-software too (packages/bluefin.toml [excluded]) and Utah ships Bazaar.
+"org.gnome.software" = "GNOME Software is not shipped; Bazaar is the store"
+# common configures the Files "Open in terminal" extension, but neither
+# Bluefin's package list (packages/bluefin.toml) nor ghcr.io/ublue-os/bluefin
+# ships nautilus-open-any-terminal, so there is no parity gap to track.
+"com.github.stunkymonkey.nautilus-open-any-terminal" = "nautilus-open-any-terminal is not in Bluefin's package set"
+
+# Effective values `gsettings get SCHEMA KEY` must print in the composed image.
+[gsettings.values]
+"org.gnome.shell.extensions.dash-to-dock disable-overview-on-startup" = "true"
+
 [services]
 enabled = [
   "avahi-daemon.service",
