@@ -100,9 +100,16 @@ install-debug-tools:
         exec sudo "$0" "$@"
     fi
     # /usr is read-only on a bootc system; the overlay is discarded on reboot.
-    if ! bootc usr-overlay 2>/dev/null; then
+    # bootc refuses when an overlay already exists, so only that case is
+    # tolerated; any other failure leaves /usr read-only and stops here.
+    if ! overlay_err="$(bootc usr-overlay 2>&1)"; then
+        if [[ ! -w /usr ]]; then
+            printf '%s\n' "$overlay_err" >&2
+            echo 'error: could not unlock /usr with bootc usr-overlay.' >&2
+            exit 1
+        fi
         echo 'Using the existing /usr overlay.' >&2
     fi
     DNF="$(command -v dnf5 || command -v dnf)"
     "$DNF" install -y gdb-headless elfutils sysprof-cli
-    echo 'Installed until the next reboot. Attach with: gdb -p $(pidof gnome-shell)'
+    echo 'Installed until the next reboot. Attach with: sudo gdb -p $(pgrep -u "$USER" -x gnome-shell)'

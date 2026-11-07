@@ -57,4 +57,15 @@ hangs, chosen over shipping `gdb-headless`, `elfutils` and `sysprof-cli` in the
 base image (about 23 MB for every user) or adding a debug flavor. It runs
 `bootc usr-overlay` and installs the three packages from the enabled
 Hummingbird repository; the overlay is transient, so the tools vanish on
-reboot. The recipe re-executes itself under `sudo` when not root.
+reboot. The recipe re-executes itself under `sudo` when not root, and stops
+with bootc's error when `/usr` cannot be unlocked instead of letting `dnf`
+fail later on a read-only filesystem.
+
+To diagnose a hung `gnome-shell` with these tools, first sample the main
+thread with `sudo eu-stack -p <pid>` to see the native frames, then attach
+`gdb` and call `gjs_dumpstack()` (exported by `libgjs`), which prints the live
+JS stack to the journal. Take the PID from `pgrep -u "$USER" -x gnome-shell`,
+since `pidof` also returns GDM's greeter shell. `kernel.yama.ptrace_scope` is
+1, so attaching needs `sudo`. Calling `gjs_dumpstack()` while the main thread
+is inside a GC slice is unsafe: check the backtrace has no `GCRuntime` or
+`js::gc` frames first, and otherwise detach and retry.
