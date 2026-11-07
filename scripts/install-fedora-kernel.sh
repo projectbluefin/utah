@@ -52,7 +52,8 @@ patched_kver="${FEDORA_KERNEL_VERSION}-${patched_release}.${arch}"
 # The packages a bootc base carries. kernel-devel is never installed in an
 # image; it goes into the cache for the module builds that need a tree.
 image_packages=(kernel kernel-core kernel-modules kernel-modules-core kernel-modules-extra)
-DNF="$(command -v dnf5 || command -v dnf)"
+# `check` needs no package manager (it also runs in host-side tests).
+DNF="$(command -v dnf5 || command -v dnf || true)"
 
 usage() {
   echo "usage: $0 build OUTDIR | install DIR [--devel] | check" >&2
