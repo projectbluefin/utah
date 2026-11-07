@@ -225,20 +225,27 @@ calling the verifier there on an installed system fails with exit 127.
 so no target dependencies).
 
 `iso/live/src/install-flatpaks.sh` pins the bootc-installer Flatpak bundle to
-a specific `tuna-os/bootc-installer` release rather than resolving
-`/releases/latest/download/` the way dakota-iso does: the bundle installs
-system-wide with `--no-gpg-verify`, so the version pin is the whole trust
-story, and a fixed tag keeps ISO composition reproducible. Its releases are
-tagged by build date + commit sha (e.g. `v2026.09.19-cee9ba29`), not semver,
-so there is no tag-name continuity to lean on when bumping it.
-`UTAH_INSTALLER_VERSION` and `UTAH_INSTALLER_SHA256` must move together —
-take the digest from that release's `org.bootcinstaller.Installer.flatpak`
-asset (`digest` field of `gh api repos/tuna-os/bootc-installer/releases/tags/<tag>`,
-or download and `sha256sum` it) rather than guessing or reusing an old value.
-`install-flatpaks.sh` also shims the container-build environment: a machine id,
-a session bus (only OCI remotes reach for either), and `/var/tmp` (flatpak's OCI
-token cache, hardcoded, ignoring `$TMPDIR`; tmpfiles creates it on boot, but an
-image build never boots). All three bite only the OCI `tuna-os` remote.
+a specific `tuna-os/bootc-installer` release with `--no-gpg-verify`; a fixed tag
+keeps ISO composition reproducible. For operator guidance on bumping the pin and
+asset digest, see [iso-review](local-testing/references/iso-review.md#bumping-bootc-installer).
+`install-flatpaks.sh` also shims machine id, session bus, and the `/var/tmp`
+token cache during image build.
+
+### Installer configuration and backend
+
+The live ISO installer configuration (`iso/live/src/etc/bootc-installer/recipe.json`,
+`images.json`, and the recipes generated in `configure-live.sh` and
+`iso/scripts/luks-e2e.sh`) installs with the ostree backend: `composefs` and
+`composeFsBackend` are `false`, and the recipe's empty `image` plus
+`targetImgref` installs offline from containers-storage.
+
+The composefs default (#882, #938) shipped without the LUKS e2e ever running
+on it, because the provenance gate had blocked post-testing-e2e since 10-31.
+When the e2e came back it failed on every flavor (#1129): fisherman's
+`chpasswd --root` into the composefs deploy directory finds no PAM modules, and
+the gaming flavors' `bootc install to-filesystem` exits 126. Exercise composefs
+with `UTAH_E2E_COMPOSEFS_BACKEND=1`. Flip the default back only after
+`just luks-test` passes that way for every flavor.
 
 ## Tacklebox ISOs (unpublished variants)
 
@@ -295,6 +302,9 @@ the scope (`/token?scope=repository:projectbluefin/<name>:pull`).
 `just luks-test` runs `iso/scripts/luks-e2e.sh` against a debug live ISO
 (`just iso testing 1`). It checks the live GNOME session, installs to a
 disposable LUKS2 disk from the embedded payload, boots without the ISO,
+requires Plymouth's graphical passphrase prompt with the theme's watermark on
+screen (`iso/scripts/plymouth-prompt.py`; the text fallback fails, see
+[the boot splash](desktop-contract/references/boot-splash.md)),
 unlocks the disk, confirms `bootc status` reports the offline embedded
 payload (not a network pull) on a guest with no route out, and checks
 graphical login and extension states. A trailing check, after login,

@@ -6,7 +6,7 @@
 #   2. prove the live session reached a graphical desktop, not just a shell
 #   3. run the installer with a LUKS passphrase and a user account
 #   4. boot the installed disk with no ISO, so it must come up on its own
-#   5. answer Plymouth's passphrase prompt
+#   5. see Plymouth's graphical, branded passphrase prompt and answer it
 #   6. reach the graphical target and confirm the booted image is the
 #      offline embedded payload, with no network route out
 #   7. log in at the GDM greeter and prove a GNOME session is running
@@ -151,13 +151,9 @@ PY
 # A screenshot nobody can open is not evidence. QEMU writes PPM, so convert to
 # PNG when an encoder is available and keep the PPM otherwise, rather than
 # failing a passing test over a missing tool.
-shot() {
-    local label="$1" sock="$2"
-    local ppm="${SHOTS}/${label}.ppm" png="${SHOTS}/${label}.png"
-    # A failed capture must not reuse evidence from an earlier attempt.
-    rm -f "${ppm}" "${png}"
-    monitor "${sock}" "screendump ${ppm}" || return 0
-    sleep 1
+ppm_to_png() {
+    local ppm="$1" png="${1%.ppm}.png"
+    rm -f "${png}"
     if command -v ffmpeg >/dev/null 2>&1 && [[ -s "${ppm}" ]]; then
         if ffmpeg -y -loglevel error -i "${ppm}" "${png}" 2>/dev/null; then
             rm -f "${ppm}"
@@ -166,6 +162,15 @@ shot() {
         fi
     fi
     echo "  screenshot: ${ppm}"
+}
+shot() {
+    local label="$1" sock="$2"
+    local ppm="${SHOTS}/${label}.ppm" png="${SHOTS}/${label}.png"
+    # A failed capture must not reuse evidence from an earlier attempt.
+    rm -f "${ppm}" "${png}"
+    monitor "${sock}" "screendump ${ppm}" || return 0
+    sleep 1
+    ppm_to_png "${ppm}"
 }
 
 # gnome-shell's process appears before it has drawn anything, so a frame grabbed
@@ -492,6 +497,27 @@ wait_for_repeat_greeter() {
     shot installed-repeat-greeter "${MONITOR_INSTALLED}" || true
 }
 
+# The passphrase prompt as a person at the machine sees it (#461): Plymouth's
+# graphical splash with the payload's watermark, not the text details mode a
+# serial console used to force. luks-unlock.py only needs some prompt to type
+# at; plymouth-prompt.py is the check that it is the branded one. The frame it
+# judged is kept under the label as evidence, pass or fail.
+verify_plymouth_prompt() {
+    local label="$1" serial="$2" status=0
+    python3 "${ROOT}/iso/scripts/plymouth-prompt.py" wait "${MONITOR_INSTALLED}" "${serial}" \
+        "${PLYMOUTH_THEME_FILE}" "${PLYMOUTH_WATERMARK}" "${SHOTS}/${label}.ppm" || status=$?
+    if [[ -s "${SHOTS}/${label}.ppm" ]]; then
+        ppm_to_png "${SHOTS}/${label}.ppm"
+    fi
+    case "${status}" in
+        0) echo "  ${label}: graphical Plymouth prompt with the payload's watermark" ;;
+        3) tail -40 "${serial}" >&2 || true
+           fail "Plymouth fell back to its text details prompt instead of the graphical splash -- is plymouth.ignore-serial-consoles (system_files/shared/usr/lib/bootc/kargs.d) on the installed kernel command line?" ;;
+        4) fail "the passphrase prompt is graphical but lacks the theme's watermark: the boot splash is not Bluefin-branded" ;;
+        *) fail "no graphical Plymouth passphrase prompt appeared (exit ${status})" ;;
+    esac
+}
+
 repeat_installed_boot() {
     local serial_repeat="${WORK}/installed-repeat-boot.log"
     local unlock_output="${WORK}/repeat-boot-unlock.log"
@@ -523,6 +549,7 @@ repeat_installed_boot() {
     done
     (( restart_seen == 1 )) || fail "serial console did not confirm shutdown before repeat-boot unlock"
 
+    verify_plymouth_prompt installed-repeat-luks-prompt "${serial_repeat}"
     python3 "${ROOT}/iso/scripts/luks-unlock.py" qemu \
         "${MONITOR_INSTALLED}" "${PASSPHRASE}" "${serial_repeat}" "${SSH_PORT_INSTALLED}" \
         > "${unlock_output}" 2>&1 || status=$?
@@ -531,14 +558,16 @@ repeat_installed_boot() {
         tail -80 "${serial_repeat}" >&2 || true
         fail "repeat-boot LUKS unlock or post-unlock boot failed (exit ${status})"
     fi
+    # Plymouth holds the console until GDM takes the display, so the
+    # graphical target is read from systemd over SSH, not the serial log.
     for _ in $(seq 1 120); do
         if ssh_target true 2>/dev/null; then
             ssh_ready=1
+            if ssh_target 'systemctl is-active --quiet graphical.target' 2>/dev/null; then
+                graphical_ready=1
+                break
+            fi
         fi
-        if grep -qaE 'Reached target.*Graphical' "${serial_repeat}"; then
-            graphical_ready=1
-        fi
-        (( ssh_ready == 1 && graphical_ready == 1 )) && break
         sleep 5
     done
     kill "${serial_follow_pid}" 2>/dev/null || true
@@ -678,10 +707,14 @@ echo "  live session type: ${live_session_type:-unknown}"
 shot_until_drawn live-desktop "${MONITOR_LIVE}"
 
 echo "=== Phase 3/7: install onto an encrypted disk ==="
-# An empty "image" with a "targetImgref" is the offline shape: fisherman then
-# installs from containers-storage rather than pulling, which is the only way
-# the ISO's embedded payload gets used. Naming the image directly makes it
-# pull, and the image this ISO carries was never published to a registry.
+# The ISO installs with the ostree backend (#1129): an empty "image" with a
+# "targetImgref" is the offline ostree shape, installing from
+# containers-storage without pulling.
+#
+# UTAH_E2E_COMPOSEFS_BACKEND=1 opts in to the composefs backend. Fisherman then
+# needs an explicit source reference (containers-storage:...) to export an OCI
+# layout before running bootc install; targetImgref is kept for day-2 updates.
+# It is not the default until it passes for every flavor (#1129).
 #
 # The user block is what phase 6 logs in as. Without it the installed system
 # has no account at all and the greeter has nobody to offer.
@@ -689,13 +722,21 @@ echo "=== Phase 3/7: install onto an encrypted disk ==="
 # Deliberately no scratch disk mounted at /var/lib/containers: Bluefin's ISO
 # pulls the payload from a registry and needs real space for it; Utah's ISO
 # carries the image in the squashfs, and mounting over that path hides it.
+if [[ "${UTAH_E2E_COMPOSEFS_BACKEND:-0}" == 1 ]]; then
+    RECIPE_IMAGE="containers-storage:${PAYLOAD_IMAGE}"
+    RECIPE_COMPOSEFS_BACKEND=true
+else
+    RECIPE_IMAGE=""
+    RECIPE_COMPOSEFS_BACKEND=false
+fi
+echo "  install backend: $([[ "${RECIPE_COMPOSEFS_BACKEND}" == true ]] && echo composefs || echo ostree)"
 cat > "${WORK}/recipe.json" <<EOF
 {
   "disk": "/dev/vda",
   "filesystem": "btrfs",
-  "image": "",
+  "image": "${RECIPE_IMAGE}",
   "targetImgref": "${PAYLOAD_IMAGE}",
-  "composeFsBackend": false,
+  "composeFsBackend": ${RECIPE_COMPOSEFS_BACKEND},
   "bootloader": "grub2",
   "hostname": "utah-luks-test",
   "encryption": {"type": "luks-passphrase", "passphrase": "${PASSPHRASE}"},
@@ -724,15 +765,36 @@ if ! ssh_live 'sudo modprobe btrfs'; then
 fi
 echo "  btrfs: loadable in the live kernel"
 
+# Phase 5 checks the passphrase prompt on screen against the splash this
+# payload ships: its default Plymouth theme and that theme's watermark. The
+# live system is built FROM the payload image, so these are the payload's own
+# files (and the build asserts the initramfs carries the same bytes). A theme
+# without a watermark is an unbranded splash, so fail here, before the install.
+echo "Reading the payload's Plymouth theme and watermark..."
+PLYMOUTH_THEME_FILE="${WORK}/plymouth-theme.plymouth"
+PLYMOUTH_WATERMARK="${WORK}/plymouth-watermark.png"
+ssh_live 'theme=$(plymouth-set-default-theme) &&
+    file=/usr/share/plymouth/themes/$theme/$theme.plymouth &&
+    dir=$(sed -n "s/^ImageDir=//p" "$file" | head -n 1) &&
+    cp "$file" /tmp/utah-plymouth-theme &&
+    cp "$dir/watermark.png" /tmp/utah-plymouth-watermark.png &&
+    echo "  default theme: $theme; watermark: $dir/watermark.png"' \
+    || fail "the payload's default Plymouth theme has no watermark.png: the boot splash is unbranded"
+scp_live liveuser@127.0.0.1:/tmp/utah-plymouth-theme "${PLYMOUTH_THEME_FILE}"
+scp_live liveuser@127.0.0.1:/tmp/utah-plymouth-watermark.png "${PLYMOUTH_WATERMARK}"
+
 echo "Running the installer from the ISO's embedded store..."
 ssh_live 'sudo /usr/local/bin/fisherman /tmp/luks-recipe.json'
 
 # The installed system already boots with console=ttyS0, but also with
-# "rhgb quiet", which suppresses exactly the systemd messages phase 6 needs to
-# see. Drop those and forward the journal to the console, so "Reached target
-# Graphical Interface" actually reaches the serial log and the test can assert
-# on it rather than on pixel colour. Dakota patches the same entries for the
-# same reason; it only has to add the console because its entries lack one.
+# "quiet", which suppresses the systemd messages phase 6 and the failure
+# diagnostics read. Drop it and forward the journal to the console. Keep
+# "rhgb": without it Plymouth shows its text details mode, and phase 5 is the
+# check that a new install gets the graphical, branded splash (#461). While
+# Plymouth draws, it holds the console and userspace lines do not reach the
+# serial log, so the graphical-target check below also asks systemd over SSH.
+# Dakota patches the same entries; it only has to add the console because its
+# entries lack one.
 echo "Making the installed system boot verbosely on the serial console..."
 ssh_live 'sudo bash -euc "
     tmp=\$(mktemp -d)
@@ -744,7 +806,7 @@ ssh_live 'sudo bash -euc "
             [ -f \"\$entry\" ] || continue
             grep -q \"^options \" \"\$entry\" || continue
             seen=\$((seen+1))
-            sed -i \"s/ rhgb//; s/ quiet//\" \"\$entry\"
+            sed -i \"s/ quiet//\" \"\$entry\"
             grep -q \"console=ttyS0\" \"\$entry\" || \
                 sed -i \"s|^options .*|& console=tty0 console=ttyS0|\" \"\$entry\"
             grep -q \"forward_to_console\" \"\$entry\" || \
@@ -844,10 +906,14 @@ qemu_pids+=("$(cat "${WORK}/installed.pid")")
 echo "  watch the installed VM: vnc://127.0.0.1:$((5900 + VNC_INSTALLED))"
 sleep 5
 
-echo "=== Phase 5/7: answer the passphrase prompt ==="
+echo "=== Phase 5/7: see Plymouth's branded passphrase prompt and answer it ==="
+verify_plymouth_prompt installed-luks-prompt "${SERIAL_INSTALLED}"
 status=0
+# The SSH port gives luks-unlock.py its success signal: the post-unlock
+# systemd lines it also watches for stay off the serial log while Plymouth
+# holds the console.
 python3 "${ROOT}/iso/scripts/luks-unlock.py" qemu \
-    "${MONITOR_INSTALLED}" "${PASSPHRASE}" "${SERIAL_INSTALLED}" || status=$?
+    "${MONITOR_INSTALLED}" "${PASSPHRASE}" "${SERIAL_INSTALLED}" "${SSH_PORT_INSTALLED}" || status=$?
 if [[ ${status} -ne 0 ]]; then
     shot luks-failed "${MONITOR_INSTALLED}" || true
     tail -60 "${SERIAL_INSTALLED}" >&2 || true
@@ -860,6 +926,11 @@ emergency_seen=""
 for i in $(seq 1 90); do
     if grep -qa "Reached target.*Graphical" "${SERIAL_INSTALLED}" 2>/dev/null; then
         echo "  serial: reached the graphical target"; break
+    fi
+    # Plymouth holds the console until GDM takes the display, so the target
+    # is usually reached with nothing on serial; ask systemd itself.
+    if ssh_target 'systemctl is-active --quiet graphical.target' 2>/dev/null; then
+        echo "  ssh: graphical.target is active"; break
     fi
 
     if grep -qa "Kernel panic" "${SERIAL_INSTALLED}" 2>/dev/null; then
@@ -1194,7 +1265,7 @@ else
     fi
 fi
 if [[ "${UTAH_E2E_REQUIRE_SCREENSHOTS:-0}" == 1 ]]; then
-    for label in live-desktop installed-greeter installed-desktop installed-fastfetch; do
+    for label in live-desktop installed-luks-prompt installed-greeter installed-desktop installed-fastfetch; do
         [[ -s "${SHOTS}/${label}.png" ]] || fail "missing required screenshot: ${label}"
         # live-desktop is retaken until content shows below the top bar, so
         # the gate must hold it to the same standard or a top-bar-only frame
@@ -1292,7 +1363,7 @@ if [[ -n "${DOCS}" && "${DOCS}" != "none" ]]; then
     # earlier attempts, and a glob swept those into the verification record --
     # which is meant to be the evidence a run passed, not a pile of the ways
     # previous ones did not.
-    for _s in live-desktop installed-greeter installed-desktop installed-fastfetch; do
+    for _s in live-desktop installed-luks-prompt installed-greeter installed-desktop installed-fastfetch; do
         cp -f "${SHOTS}/${_s}.png" "${DOCS}/screenshots/" 2>/dev/null || true
     done
     captured="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -1323,7 +1394,9 @@ the check beside it passed.
 2. The installer creates a LUKS2 volume and installs from the ISO's embedded
    container store, with no network.
 3. The installed disk boots on its own, with no ISO attached.
-4. Plymouth's passphrase prompt is answered and the root volume opens.
+4. Plymouth draws its graphical passphrase prompt with the theme's watermark
+   in place (not the text fallback), and the passphrase typed there opens the
+   root volume.
 5. The system reaches the graphical target rather than an emergency shell.
 6. \`bootc status\` on the installed system reports the booted image as the
    offline embedded payload, not a substitute reached over a network this
@@ -1344,6 +1417,13 @@ desktop from inside it. Everything below is how it got there.
 ![Live session](screenshots/live-desktop.png)
 
 The desktop the ISO boots into, with the installer available.
+
+### Encrypted disk passphrase prompt
+![Passphrase prompt](screenshots/installed-luks-prompt.png)
+
+The installed disk's first boot, before anything on the encrypted root can
+run: Plymouth's own prompt, with the Bluefin watermark the test matched at the
+position the theme places it.
 
 ### GDM greeter on the installed system
 ![Greeter](screenshots/installed-greeter.png)

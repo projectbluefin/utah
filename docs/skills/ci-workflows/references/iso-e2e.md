@@ -20,6 +20,16 @@ oneshot that runs after `display-manager.service`, so it catches a boot that
 stopped just short of a usable display. Test credentials are confined to the
 disposable ISO/disk; neither is uploaded or released.
 
+The installed disk's first boot must show Plymouth's graphical passphrase
+prompt with the payload's watermark (`iso/scripts/plymouth-prompt.py`:
+tesseract finds the prompt text, and the default theme's `watermark.png`,
+read from the live guest, matches at the theme's alignment). A prompt on the
+serial console fails at once as the text fallback (#461); the judged frame is
+kept as `installed-luks-prompt.png` and published with the other evidence.
+The harness therefore keeps `rhgb` on the installed entry and drops only
+`quiet`; Plymouth then holds the console until GDM starts, so the graphical
+target is read over SSH as well as from serial.
+
 Only after the entire LUKS matrix succeeds, `production-iso` composes a fresh
 `DEBUG=0` x86_64 UEFI ISO from each same digest, writes its SHA-256 checksum,
 and retains both as a 30-day Actions artifact. It is deliberately an artifact,
@@ -248,6 +258,15 @@ reusable build workflow (`projectbluefin/actions` `reusable-build.yml`) for
 source repository `projectbluefin/utah` on `refs/heads/testing`, so an image
 attested by any other workflow or repository never reaches the privileged
 e2e jobs. The `testsuite` job is not gated on it.
+
+A 404 from `gh attestation verify` means the build never attested; it is
+not a lookup problem. The reusable build's `Sign, publish SBOM, and attest`
+step is `continue-on-error`, and inside it the provenance attestation runs
+only if the SBOM steps before it succeeded. A green build can therefore ship
+no attestation, and `:testing` stops advancing (2026-10-31 to 11-06). That
+happened because Utah's `gen-sbom` recipe, run under `sudo`, left a root-owned
+`sbom_out/` that the unprivileged SBOM step could not write. In the build log,
+check `sign.gen-sbom` and `sign.__actions_attest-build-provenance`.
 
 ## Testsuite reporting (exact-digest VM suites)
 

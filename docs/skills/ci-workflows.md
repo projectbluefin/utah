@@ -27,17 +27,20 @@ post-build verification workflows, not the complete workflow inventory:
 - `.github/workflows/build.yml` -- pull requests, merge queue groups
   (`merge_group`), pushes to `testing`, a manual dispatch. Top-level
   `permissions: {}`; each job grants its own. Cancels in-progress runs per
-  workflow and ref for pull requests only. A merge group runs `contract` and
-  nothing else: `kernel_cache`, `build_main` and `build_kernel` carry
-  `github.event_name != 'merge_group'`, because they push and sign (see
-  `merge-queue.yml` below). A dispatch
+  workflow and ref for pull requests only. The independent `pinned_fetches`
+  job runs the shared download-pinning gate in fail mode, including on merge
+  groups and dispatches. Its documented substring exceptions live in
+  `.github/pinned-fetches-allowlist.txt`; review them when their fetches change.
+  A merge group also runs `contract`, but `kernel_cache`, `build_main` and
+  `build_kernel` skip it because they push and sign (see `merge-queue.yml`
+  below). A dispatch
   with `contract_only=true` skips the publication jobs and `dispatch-iso`.
   Publishing dispatches (`contract_only=false`) must target `testing`; a
   dispatch from any other ref, including the Actions UI default `main`,
   fails unless `contract_only=true`. An optional `sha` input must equal the
   dispatched ref's `github.sha`, so a sync race fails closed and `testing`
   waits for the next sync or nightly run.
-  With the default `review_vm=false`, only the contract checks run. Set
+  With the default `review_vm=false`, only the source checks run. Set
   `review_vm=true` as well to build a disposable image on the runner, compose
   and boot an offline ISO, and retain test evidence; `review_iso_all_flavors`
   expands that job from main flavors to every flavor in `config/flavors.json`.
@@ -113,9 +116,24 @@ post-build verification workflows, not the complete workflow inventory:
   metadata paths in `scripts/verify-gnome-extensions.py`
   (`SOURCE_EXTENSIONS`); update that map when adding an extension. Paths are
   passed as argv and `shell-version` values are allow-listed in the report.
-  The dispatch uses `contract_only=true`: source contract checks only, not an
-  image build or the image-side extension verifier. A trusted full image build
-  remains necessary before merge. No automated merge is enabled.
+  Trusted `main` alone may mint a repository-scoped Mergeraptor App token,
+  with contents and pull-request write permissions, after metadata
+  preparation. The token creates or updates the proposal and is revoked
+  afterward; it is never passed to extension code. App-authenticated PR
+  events start the normal contract and image-build workflows on the exact
+  proposed head, unlike the old `GITHUB_TOKEN` proposal followed by a
+  contract-only dispatch (#1073). Do not dispatch a publishing build on the
+  candidate branch or fabricate required-check statuses.
+  Hive's authenticated review, required checks, holds and soak still govern
+  landing; this producer does not arm native auto-merge or relax those gates.
+  A successful image build is not proof of a reported rendering/CPU fix:
+  retain #992/#997 until actual runtime evidence addresses them.
+- `.github/workflows/image-baselines.yml` -- weekly and manual
+  re-measurement of the Bluefin, Dakota and Utah image baselines. Like the
+  extension updater, trusted `main` alone mints a repository-scoped Mergeraptor
+  App token after `just baselines` has run, and uses it only to create or
+  update the proposal, so the normal contract and image-build checks run on
+  the proposed head. The measurement step keeps the read-only job token.
 - `.github/workflows/post-testing-e2e.yml` -- successful non-PR testing builds
   explicitly dispatch this, or manually supply a successful testing build run ID.
   Its `promote-to-testing` job records per-digest E2E evidence as commit
@@ -162,7 +180,7 @@ queue:
 | --- | --- | --- |
 | `prow.yml` (tide, `cncf/prow-github-actions` v3.4.0; `tide.merge_queue: auto`, `merge_method: squash` in `projectbluefin/.project/prow.yaml`) | On `lgtm` + `approved`, enqueues with `enqueuePullRequest` on the job's `GITHUB_TOKEN` (no `token` secret is passed) | At risk: GitHub starts no workflow for an event `GITHUB_TOKEN` caused, so a group prow enqueues may get no `merge_group` runs and time out (prow's own docs say this is "being verified live"). Pass prow a GitHub App `token` that may enqueue, or have a maintainer click "Merge when ready" |
 | Renovate (`renovate.json`, `local>projectbluefin/renovate-config` = `config:recommended`) | No automerge; the `utah-packages` digest group sets `automerge: false` | A maintainer (or prow) enqueues |
-| `update-bluefin-parity.yml`, `update-gnome-extensions.yml`, `promote-testing-to-main.yml` | Open or maintain pull requests only | A maintainer (or prow) enqueues |
+| `update-bluefin-parity.yml`, `update-gnome-extensions.yml`, `image-baselines.yml`, `promote-testing-to-main.yml` | Open or maintain pull requests only | A maintainer (or prow) enqueues |
 | `sync-main-to-testing.yml` | Pushes `testing`, not `main` | Unaffected |
 
 Queue activation also requires the App's permissions, not just its secrets.

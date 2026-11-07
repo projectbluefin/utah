@@ -22,8 +22,8 @@ for root in "$@"; do
                 options)
                     # bootc writes an ostree= karg (ostree backend) or a
                     # composefs= karg (composefs backend) into every Type #1 entry.
-                    # PR #938 proposes composefs as the install default;
-                    # validate either backend regardless of that choice.
+                    # composefs is the install default; the check accepts
+                    # either backend.
                     if [[ " $value " == *" ostree="* \
                        || " $value " == *" composefs="* \
                        || " $value " == *" composefs.digest="* ]]; then

@@ -1,7 +1,7 @@
 ---
 name: desktop-contract
 version: "1.0"
-last_updated: "2026-10-25"
+last_updated: "2026-11-07"
 id: desktop-contract
 one_line_purpose: Maintain Bluefin Utah identity, Bluefin desktop defaults, and first-boot Flatpak policy.
 entry_point: docs/skills/desktop-contract.md
@@ -65,14 +65,14 @@ The TOML's sections are the contract's table of contents:
   references Bazaar and the Bluefin background path, the custom command menu
   points at `docs.projectbluefin.io`, the keybindings set `xdg-terminal-exec`,
   the GDM keyfile declares the login-screen schema and the Bluefin asset path.
-  Common's container signature policy names
-  `/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release`; the pinned Hummingbird base
-  supplies that key (fingerprint `567E…1D51`) alongside Utah's
+  Common's container signature policy names `/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release`;
+  the pinned Hummingbird base supplies that key (fingerprint `567E…1D51`) alongside Utah's
   `RPM-GPG-KEY-redhat-release-2`, so no policy weakening or alias is needed.
-- **`[flatpak]`** — first-boot policy: the Flathub and TunaOS remotes,
-  the Bazaar, NautilusPreviewer (spacebar previews in Files) and Ghostty
-  preinstalls, the `99-flatpaks.sh` hook, and the system-flatpaks Brewfile
-  whose app list the contract enumerates.
+- **`[flatpak]`** — first-boot policy: the Flathub and TunaOS remotes, the Bazaar,
+  NautilusPreviewer (spacebar previews in Files) and Ghostty preinstalls, the `99-flatpaks.sh`
+  hook, and the system-flatpaks Brewfile whose app list the contract enumerates.
+- **`[media]`** — GStreamer decoders that must load, not merely be installed: `openh264dec`.
+  The factory libav is built on `ffmpeg-free` (no H.264), so `avdec_h264` is not asserted (#1116).
 - **`[services]`** — systemd units the preset must enable: `gdm.service`, `avahi-daemon.service`,
   `avahi-daemon.socket`, `switcheroo-control.service`, `bluetooth.service`,
   `ublue-system-setup.service`, `flatpak-preinstall.service`, `flatpak-nuke-fedora.service`,
@@ -255,10 +255,13 @@ has 16 trees under `system_files/shared/usr/share/gnome-shell/extensions/`;
 gitlinks pin exact commits. Weekly automation proposes valid tracked-branch
 heads; missing or invalid metadata keeps that source pinned and does not block
 other candidates. Only matching Utah submodules represent extensions; do not
-add RPM recipes for an extension already covered here. Contract-only CI checks
-source metadata, not the image-side verifier; full image build and runtime
-review remain required. No automated merge is enabled. Edit `.gitmodules` for
-source URL or branch changes; automation advances existing pins.
+add RPM recipes for an extension already covered here. A repository-scoped
+App token is minted on trusted `main` only, after the preparer validates each
+pin; that App opens or updates the proposal, so the normal `pull_request`
+contract and image-build CI run on its exact head instead of a contract-only
+dispatch. Hive review, required checks and the normal merge policy still
+govern landing, and no automated merge is enabled. Source metadata alone does
+not prove GNOME 51 runtime compatibility. Edit `.gitmodules` for source URL or branch changes; automation advances existing pins.
 Search Light was dropped: GNOME 51 removed `set_shader_source`, which its shader code calls, so it failed ISO tests.
 
 `scripts/verify-gnome-extensions.py` checks GNOME 51 support and provenance:
@@ -276,8 +279,8 @@ Search Light was dropped: GNOME 51 removed `set_shader_source`, which its shader
   `--record-provenance` (image) writes `/usr/share/utah/provenance.json`.
   See [Image provenance](containerfile.md#image-provenance).
 
-GSConnect's meson install skips `update_desktop_database`: Hummingbird and Utah
-lack `desktop-file-utils`. The system and glib-compile-schemas handle databases.
+GSConnect's meson install skips `update_desktop_database`: Hummingbird and Utah lack `desktop-file-utils`.
+Extension schemas are global and common's overrides must resolve: see [extension schemas](desktop-contract/references/extension-schemas.md).
 
 Declaring GNOME 51 in `metadata.json` is necessary, not sufficient: the
 GSConnect and Dash to Dock failures below passed the metadata check, built
@@ -377,10 +380,10 @@ entry for `/usr/share/pixmaps/bluefin-gdm-logo.png` in
 asset path so a stray edit that points `logo` somewhere else fails the
 build.
 
-## About artwork and the panel icon (#318)
+## About artwork, the panel icon (#318), and the boot splash (#461)
 
-See [the About artwork reference](desktop-contract/references/about-artwork.md)
-for compiled PNG paths, restoration after RPMs, and the symbolic panel icon.
+[About artwork](desktop-contract/references/about-artwork.md): PNG paths, restoration after RPMs, panel icon.
+[Boot splash](desktop-contract/references/boot-splash.md): graphical, branded Plymouth prompt and its gates.
 
 ## Services and login defaults
 

@@ -1,14 +1,14 @@
-ARG BASE_IMAGE=quay.io/hummingbird-community/os-minimal:latest@sha256:0d0d6f18cc43289fefc94831e75dcc0012b9c6ab6bd160673d9e587be9cfdbe0
+ARG BASE_IMAGE=quay.io/hummingbird-community/os-minimal:latest@sha256:466a0963bdb347debf3784ed6e5d37dcb09e184214c532882e2fa88af8a88fbf
 # The package factory publishes a complete, digest-addressable RPM repository.
 # Keep this pin in Utah so an image build is reproducible and can be reviewed
 # against the exact package set it consumes.
 ARG PACKAGE_IMAGE=ghcr.io/projectbluefin/utah-packages
-ARG PACKAGE_IMAGE_SHA=sha256:500aa6d113d577785702d523b157756a4c50759baf4e1e5d97568e0807516bda
+ARG PACKAGE_IMAGE_SHA=sha256:6a502f8153c83fe67f1b3dc49920d4510f0d652fa6d03dc9265acaf42bc453a9
 # CI keeps PACKAGE_IMAGE_SHA pinned. PACKAGE_IMAGE_REF supports a local image
 # in containers-storage, where no registry digest is available.
 ARG PACKAGE_IMAGE_REF=${PACKAGE_IMAGE}@${PACKAGE_IMAGE_SHA}
 ARG COMMON_IMAGE=ghcr.io/projectbluefin/common
-ARG COMMON_IMAGE_SHA=sha256:9ddf063bc86394ce391bc837f7b7d15517b3fe9e1f154113ca7e1fae96039547
+ARG COMMON_IMAGE_SHA=sha256:a2e4b8f76b3ffe23f452c1da54ee9f3887860c3ee114bb528f9d717a35aa20f9
 ARG BREW_IMAGE=ghcr.io/ublue-os/brew
 ARG BREW_IMAGE_SHA=sha256:974ce5e4d6d5fceb6151910957515a42c0eefced4ea386fdfadb0fbad84499a5
 # Bluefin wallpapers, taken straight from the artwork repository's own image
@@ -16,7 +16,7 @@ ARG BREW_IMAGE_SHA=sha256:974ce5e4d6d5fceb6151910957515a42c0eefced4ea386fdfadb0f
 # wait on a Common release. It is the multi-arch index digest: the contents are
 # architecture-independent. Renovate keeps it current like the pins above.
 ARG WALLPAPERS_IMAGE=ghcr.io/projectbluefin/bluefin-wallpapers-gnome
-ARG WALLPAPERS_IMAGE_SHA=sha256:94084099dbd9a6c3a8c6254410e3e12179c053fca535d23c46adb1e27372d425
+ARG WALLPAPERS_IMAGE_SHA=sha256:acaf565d5de01c8caea2bca7aa96bb71e75c94de02c6bd614f8d771a4a620969
 
 FROM ${COMMON_IMAGE}@${COMMON_IMAGE_SHA} AS common
 FROM ${BREW_IMAGE}@${BREW_IMAGE_SHA} AS brew
@@ -346,6 +346,7 @@ ARG UUPD_TIMER_SHA256=bbb5f098ec33d047bdef571e0bc112364df157e0f92d73e0febab703c4
 # scripts/mirror-shim.sh rather than inline, because as a bare && chain a
 # failure printed nothing at all -- see the comment at the top of that script.
 RUN --mount=type=bind,from=artwork,source=/out/branding,target=/tmp/utah-artwork-branding,ro \
+    --mount=type=bind,from=common,source=/system_files/bluefin/usr/share/plymouth,target=/tmp/utah-common-plymouth,ro \
     mkdir -p /tmp/uupd && \
     curl -fsSL "https://github.com/ublue-os/uupd/releases/download/${UUPD_VERSION}/uupd_Linux_x86_64.tar.gz" \
       -o /tmp/uupd/uupd_Linux_x86_64.tar.gz && \

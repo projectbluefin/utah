@@ -30,6 +30,9 @@ files = [
   "/usr/share/icons/hicolor/icon-theme.cache",
   # The os-release LOGO icon; common ships Bluefin's raptor under this name.
   "/usr/share/pixmaps/fedora-logo-icon.png",
+  # The boot splash watermark the bgrt theme draws (Bluefin's raptor, from
+  # common); fedora-logos owns and erases this path during the logo swap.
+  "/usr/share/plymouth/themes/spinner/watermark.png",
   "/usr/share/ublue-os/bluefin-logos/chicken.png",
   "/usr/share/ublue-os/bluefin-logos/symbols/bluefin",
   "/usr/share/backgrounds/bluefin/01-bluefin.xml",
@@ -139,9 +142,14 @@ files = [
   "/etc/containers/policy.json",
   "/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release",
   "/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2",
+  # Plymouth stays graphical with Hummingbird's console=ttyS0 karg (#461).
+  "/usr/lib/bootc/kargs.d/10-utah-plymouth.toml",
 ]
 
 [configuration.file_contains]
+"/usr/lib/bootc/kargs.d/10-utah-plymouth.toml" = [
+  'kargs = ["plymouth.ignore-serial-consoles"]',
+]
 "/usr/share/applications/io.projectbluefin.chairlift.desktop" = [
   "Name=Control Center",
   "Exec=/home/linuxbrew/.linuxbrew/bin/chairlift-wrapper",
@@ -291,6 +299,38 @@ apps = [
   "org.mozilla.firefox",
   "page.tesk.Refine",
 ]
+
+# Software decoders that must load, not merely be installed (#1116). Utah's
+# supported H.264 path is openh264dec; the factory's libav plugin is built
+# against ffmpeg-free, which registers no H.264 decoder, so avdec_h264 is not
+# part of the contract.
+[media]
+decoders = ["openh264dec"]
+
+# Every [section] in schema_dir/*.gschema.override must name a schema some
+# *.gschema.xml there declares. glib-compile-schemas drops a section for a
+# missing schema without a message or a failing exit: common's
+# [org.gnome.shell.extensions.dash-to-dock] (disable-overview-on-startup=true)
+# and two blur-my-shell sections were lost that way while the extensions kept
+# their schemas in their own directories, so GNOME opened the Activities
+# overview at login. A second file declaring a schema id fails here too.
+[gsettings]
+schema_dir = "/usr/share/glib-2.0/schemas"
+
+# Override sections that may stay unresolved, with the reason. A listed schema
+# that becomes installed, or that no override names any more, fails the check.
+[gsettings.unresolved_overrides]
+# common turns off GNOME Software's automatic updates; Bluefin excludes
+# gnome-software too (packages/bluefin.toml [excluded]) and Utah ships Bazaar.
+"org.gnome.software" = "GNOME Software is not shipped; Bazaar is the store"
+# common configures the Files "Open in terminal" extension, but neither
+# Bluefin's package list (packages/bluefin.toml) nor ghcr.io/ublue-os/bluefin
+# ships nautilus-open-any-terminal, so there is no parity gap to track.
+"com.github.stunkymonkey.nautilus-open-any-terminal" = "nautilus-open-any-terminal is not in Bluefin's package set"
+
+# Effective values `gsettings get SCHEMA KEY` must print in the composed image.
+[gsettings.values]
+"org.gnome.shell.extensions.dash-to-dock disable-overview-on-startup" = "true"
 
 [services]
 enabled = [

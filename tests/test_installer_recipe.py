@@ -14,6 +14,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 RECIPE = ROOT / "iso/live/src/etc/bootc-installer/recipe.json"
 IMAGES = ROOT / "iso/live/src/etc/bootc-installer/images.json"
+CONFIGURE_LIVE = ROOT / "iso/live/src/configure-live.sh"
+LUKS_E2E = ROOT / "iso/scripts/luks-e2e.sh"
 CONTRACT = ROOT / "contracts/bluefin-desktop.toml"
 
 
@@ -68,7 +70,8 @@ class InstallerFlatpakPathTests(unittest.TestCase):
     copied every Flatpak to /sysroot/var/lib/flatpak/lib/flatpak: the
     installed system had none, and the dock (Firefox, Bazaar, Files) was
     empty. The e2e sends no such key and so never saw it. Without the key,
-    fisherman finds ostree/deploy/default/var itself.
+    fisherman finds the deployment's var itself (state/os/default/var under
+    the composefs backend).
     """
 
     def test_flatpak_var_path_is_a_var_root_if_set(self):
@@ -77,6 +80,37 @@ class InstallerFlatpakPathTests(unittest.TestCase):
             if path:
                 self.assertFalse(path.rstrip("/").endswith("lib/flatpak"),
                                  f"{path!r} is the flatpak dir; fisherman appends lib/flatpak itself")
+
+
+class InstallerBackendTests(unittest.TestCase):
+    """The ISO installs with the ostree backend until composefs installs pass
+    the LUKS e2e for every flavor (#1129); composefs stays an e2e opt-in."""
+
+    def test_recipe_uses_ostree_backend(self):
+        data = json.loads(RECIPE.read_text())
+        self.assertIs(data.get("composeFsBackend"), False)
+
+    def test_images_json_uses_ostree_backend(self):
+        data = json.loads(IMAGES.read_text())
+        images = data.get("images", [])
+        self.assertTrue(images, "images.json lists no images")
+        for image in images:
+            self.assertIs(image.get("composefs"), False)
+            self.assertIn("btrfs", image.get("filesystems", []))
+
+    def test_configure_live_writes_the_offline_ostree_recipe(self):
+        script = CONFIGURE_LIVE.read_text()
+        self.assertIn('data["composeFsBackend"] = False', script)
+        # An empty image with targetImgref installs from containers-storage
+        # without pulling; a named image would pull from a registry.
+        self.assertIn('data["image"] = ""', script)
+
+    def test_luks_e2e_defaults_to_ostree_and_keeps_the_composefs_opt_in(self):
+        script = LUKS_E2E.read_text()
+        self.assertIn('if [[ "${UTAH_E2E_COMPOSEFS_BACKEND:-0}" == 1 ]]; then', script)
+        self.assertIn('RECIPE_IMAGE="containers-storage:${PAYLOAD_IMAGE}"', script)
+        self.assertIn('"composeFsBackend": ${RECIPE_COMPOSEFS_BACKEND}', script)
+        self.assertIn('"image": "${RECIPE_IMAGE}"', script)
 
 
 if __name__ == "__main__":
