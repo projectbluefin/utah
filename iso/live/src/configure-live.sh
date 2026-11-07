@@ -79,7 +79,12 @@ WantedBy=local-fs.target
 EOF
 systemctl enable var-tmp.mount || true
 
-# Utah installs with composefs by default (#882).
+# Utah installs with the ostree backend. The composefs default (#882, #938)
+# was never exercised by the LUKS e2e before it shipped and fails every flavor
+# (#1129): fisherman's user creation runs chpasswd --root in the composefs
+# deploy directory (no PAM modules there), and the gaming flavors' bootc
+# install to-filesystem exits 126. An empty "image" with a "targetImgref" is
+# the offline ostree shape: fisherman installs from containers-storage.
 # The ISO builder embeds its OCI payload into /usr/lib/containers/storage, the
 # image store this platform already resolves to.
 #
@@ -121,10 +126,10 @@ for path in (Path("/etc/bootc-installer/images.json"), Path("${SCRIPT_DIR}/etc/b
     else:
         data["imgref"] = ref
         data["targetImgref"] = ref
-        data["image"] = f"containers-storage:{ref}"
+        data["image"] = ""
         data["local_imgref"] = f"containers-storage:{ref}"
         data["bootloader"] = "grub2"
-        data["composeFsBackend"] = True
+        data["composeFsBackend"] = False
     Path("/etc/bootc-installer" , path.name).write_text(json.dumps(data, indent=2) + "\n")
 PY
 touch /etc/bootc-installer/live-iso-mode
