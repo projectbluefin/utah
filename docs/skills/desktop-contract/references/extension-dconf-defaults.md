@@ -1,9 +1,9 @@
 # Extension dconf defaults must match shipped schema paths
 
 `system_files/shared/etc/dconf/db/distro.d/08-dakota-extension-defaults`
-sets defaults for shell extensions that compile their own GSettings schemas.
-GNOME's `Extension.getSettings()` builds the schema source from the
-extension's own `schemas/` directory, and GSettings resolves a key by the
+sets defaults for shell extensions. The build installs their GSettings
+schemas in `/usr/share/glib-2.0/schemas` ([extension schemas](extension-schemas.md)),
+and GSettings resolves a key by the
 schema's declared `path`, not by the extension's UUID folder name. A dconf
 section header therefore only takes effect when it equals the `path=` of a
 schema the extension actually ships.

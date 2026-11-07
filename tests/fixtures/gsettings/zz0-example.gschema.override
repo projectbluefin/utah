@@ -1,0 +1,11 @@
+# Shaped like common's zz0-bluefin-modifications.gschema.override.
+[org.example.dock]
+disable-overview-on-startup=true
+
+# A desktop-qualified section names the same schema.
+[org.example.dock.blur:GNOME]
+blur=true
+
+# No schema declares this one; the contract must allow it explicitly.
+[org.example.store]
+allow-updates=false

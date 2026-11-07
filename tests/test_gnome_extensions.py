@@ -10,11 +10,20 @@ Two vendored extensions failed to load on GNOME 51 in a booted image:
 
 These tests read the pinned submodule sources, so a pin moved back to an
 affected revision fails here instead of in a booted VM.
+
+Extension schemas must also be global: left in an extension's schemas/, the
+image-wide glib-compile-schemas dropped common's dash-to-dock override and
+GNOME opened the Activities overview at login.
 """
 
+import importlib.util
+import json
+import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
+import tempfile
 import unittest
 ROOT = Path(__file__).resolve().parents[1]
 EXTENSIONS = ROOT / "system_files/shared/usr/share/gnome-shell/extensions"
@@ -75,6 +84,97 @@ class GnomeExtensionPatchTests(unittest.TestCase):
         for path in sources:
             with self.subTest(path=path.name):
                 self.assertIsNone(removed.search(path.read_text(encoding="utf-8")))
+
+
+class ExtensionSchemaTests(unittest.TestCase):
+    """The build installs every extension schema globally and the installed
+    verifier rejects any extension-local schemas/ left behind."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name)
+        self.extensions = self.tmp / "extensions"
+        self.system = self.tmp / "schemas"
+        self.system.mkdir()
+        self.log = self.tmp / "compile.log"
+
+    def extension(self, uuid, *files):
+        folder = self.extensions / uuid
+        folder.mkdir(parents=True)
+        (folder / "metadata.json").write_text("{}")
+        for name in files:
+            path = folder / "schemas" / name
+            path.parent.mkdir(exist_ok=True)
+            path.write_text(name)
+        return folder
+
+    def install_schemas(self, compile_status=0):
+        script = (ROOT / "scripts/build-gnome-extensions.sh").read_text()
+        start = script.index("system_schemas=")
+        block = script[start:script.index("\ndone\n", start) + len("\ndone\n")]
+        block = block.replace("/usr/share/gnome-shell/extensions", str(self.extensions))
+        block = block.replace("/usr/share/glib-2.0/schemas", str(self.system))
+        stub = f'glib-compile-schemas() {{ printf "%s\\n" "$*" >> "{self.log}"; return {compile_status}; }}\n'
+        return subprocess.run(["bash", "-euo", "pipefail", "-c", stub + block], capture_output=True, text=True)
+
+    def test_schemas_are_validated_installed_globally_and_removed_locally(self):
+        dock = self.extension("dock@example.org", "org.example.dock.gschema.xml", "gschemas.compiled", "meson.build")
+        plain = self.extension("plain@example.org")
+        result = self.install_schemas()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.log.read_text(), f"--strict --dry-run {dock}/schemas/\n")
+        installed = self.system / "org.example.dock.gschema.xml"
+        self.assertEqual(installed.read_text(), "org.example.dock.gschema.xml")
+        self.assertEqual(installed.stat().st_mode & 0o777, 0o644)
+        self.assertEqual(sorted(path.name for path in self.system.iterdir()), ["org.example.dock.gschema.xml"])
+        self.assertFalse((dock / "schemas").exists())
+        self.assertTrue((plain / "metadata.json").is_file())
+
+    def test_an_existing_global_schema_is_never_overwritten(self):
+        self.extension("dock@example.org", "org.example.dock.gschema.xml")
+        (self.system / "org.example.dock.gschema.xml").write_text("system")
+        result = self.install_schemas()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("org.example.dock.gschema.xml is already installed", result.stderr)
+        self.assertEqual((self.system / "org.example.dock.gschema.xml").read_text(), "system")
+
+    def test_a_compiled_only_schema_directory_fails(self):
+        self.extension("dock@example.org", "gschemas.compiled")
+        result = self.install_schemas()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("has no .gschema.xml to install globally", result.stderr)
+
+    def test_an_invalid_schema_fails_before_anything_is_installed(self):
+        dock = self.extension("dock@example.org", "org.example.dock.gschema.xml")
+        result = self.install_schemas(compile_status=1)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(list(self.system.iterdir()), [])
+        self.assertTrue((dock / "schemas").is_dir())
+
+    def test_installed_verifier_rejects_extension_local_schemas(self):
+        root = self.tmp / "image"
+        script = root / "libexec/verify.py"
+        script.parent.mkdir(parents=True)
+        shutil.copyfile(ROOT / "scripts/verify-gnome-extensions.py", script)
+        spec = importlib.util.spec_from_file_location("installed_verifier", script)
+        verifier = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(verifier)
+        extensions = root / "usr/share/gnome-shell/extensions"
+        for uuid in verifier.SOURCE_EXTENSIONS:
+            (extensions / uuid).mkdir(parents=True)
+            (extensions / uuid / "metadata.json").write_text('{"shell-version": ["51"]}')
+        records = [{"uuid": uuid} for uuid in verifier.SOURCE_EXTENSIONS]
+        env = dict(os.environ, GNOME_EXTENSION_PROVENANCE=json.dumps(records))
+        command = ["python3", str(script), "--root", str(root)]
+        result = subprocess.run(command, env=env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        schemas = extensions / "dash-to-dock@micxgx.gmail.com/schemas"
+        schemas.mkdir()
+        (schemas / "gschemas.compiled").write_text("")
+        result = subprocess.run(command, env=env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(f"{schemas}: extension-local schemas mask the global ones", result.stderr)
 
 
 if __name__ == "__main__":
