@@ -50,3 +50,12 @@ Installed is not working. Package presence says nothing about whether a daemon
 starts or does its job: thermald and intel_lpmd stand down on unsupported CPUs,
 and tuned-ppd's power-profiles API is only observable from GNOME Settings on
 hardware.
+
+## Closing baseline gaps
+
+After refreshing image snapshots, run `python3 scripts/image-baseline.py check`
+and remove each complete package table it reports as "no longer gaps"
+from `baselines/triage.toml`. Those notices are advisory, so a passing
+check does not mean the triage cleanup is complete. If the refresh is
+still in an open PR, validate the cleanup with its snapshots and land
+the refresh first; the old snapshots still require those triage entries.
