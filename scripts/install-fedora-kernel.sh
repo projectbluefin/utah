@@ -144,8 +144,22 @@ install_kernel() {
     rpm -q "$name" >/dev/null 2>&1 || continue
     rpms+=("${dir}/${name}-${FEDORA_KERNEL_VERSION}-${patched_release}.${arch}.rpm")
   done
-  [ "$devel" = --devel ] && rpms+=("${dir}/kernel-devel-${FEDORA_KERNEL_VERSION}-${patched_release}.${arch}.rpm")
-  rpm -Uvh "${rpms[@]}"
+  # rpm 6 refuses unsigned packages by default (%_pkgverify_level all), and
+  # this build is unsigned. Its provenance is the builder that made it, or the
+  # cosign-verified cache image that carries it; rpm still checks the digests.
+  rpm -Uvh --define "_pkgverify_level digest" "${rpms[@]}"
+  # kernel-devel pulls in a toolchain, so dnf resolves it; dnf installs a
+  # command-line package without the OpenPGP check.
+  if [ "$devel" = --devel ]; then
+    "$DNF" -y install "${dir}/kernel-devel-${FEDORA_KERNEL_VERSION}-${patched_release}.${arch}.rpm"
+  fi
+  # The base image ships an initramfs beside its kernel; the scriptlets do not
+  # produce one in a container build, so build it the way
+  # regenerate-initramfs.sh does for the final image.
+  if [ ! -s "/usr/lib/modules/${patched_kver}/initramfs.img" ]; then
+    dracut --no-hostonly --reproducible --zstd --kver "$patched_kver" --force \
+      "/usr/lib/modules/${patched_kver}/initramfs.img"
+  fi
   # What the old kernel's scriptlets generated (its initramfs) is not owned by
   # any package, so the tree outlives the erase. bootc wants one kernel.
   for name in $old; do
