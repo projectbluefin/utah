@@ -71,24 +71,24 @@ if ! IMAGE_NAME="$(python3 "${FLAVORS_PY}" image "${FLAVOR}")"; then
     exit 2
 fi
 
-# Match build-ghcr's cache route, resolving it once for both builds. Otherwise
-# kernel flavors compile from the pristine base rather than test the image CI
-# ships. Only explicit local BASE_IMAGE overrides are unsigned development input.
-if [ "${FLAVOR}" != main ]; then
-    BASE_IMAGE="${BASE_IMAGE:-ghcr.io/${REPO_ORGANIZATION,,}/utah-kernel-cache:$(./scripts/kernel-cache-tag.sh)}"
-    if [[ "${BASE_IMAGE}" == ghcr.io/* ]]; then
-        COSIGN="${COSIGN:-cosign}"
-        command -v "${COSIGN}" >/dev/null 2>&1 || {
-            echo "cosign is required to verify the kernel cache" >&2
-            exit 1
-        }
-        digest="$("${SKOPEO:-skopeo}" inspect "docker://${BASE_IMAGE}" | python3 -c 'import json, sys; print(json.load(sys.stdin)["Digest"])')"
-        cache_repository="${BASE_IMAGE%%@*}"
-        BASE_IMAGE="${cache_repository%:*}@${digest}"
-        "${COSIGN}" verify "${BASE_IMAGE}" \
-            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-            --certificate-identity-regexp '^https://github\.com/projectbluefin/utah/\.github/workflows/build\.yml@refs/(heads/testing|pull/[0-9]+/merge)$'
-    fi
+# Match build-ghcr's cache route, resolving it once for both builds. Every
+# flavor builds on the kernel cache image (its patched Fedora kernel; the
+# OGC/NVIDIA archives for the rest), so a build on the pristine base would test
+# an image CI never ships -- and fail the Containerfile's kernel check. Only
+# explicit local BASE_IMAGE overrides are unsigned development input.
+BASE_IMAGE="${BASE_IMAGE:-ghcr.io/${REPO_ORGANIZATION,,}/utah-kernel-cache:$(./scripts/kernel-cache-tag.sh)}"
+if [[ "${BASE_IMAGE}" == ghcr.io/* ]]; then
+    COSIGN="${COSIGN:-cosign}"
+    command -v "${COSIGN}" >/dev/null 2>&1 || {
+        echo "cosign is required to verify the kernel cache" >&2
+        exit 1
+    }
+    digest="$("${SKOPEO:-skopeo}" inspect "docker://${BASE_IMAGE}" | python3 -c 'import json, sys; print(json.load(sys.stdin)["Digest"])')"
+    cache_repository="${BASE_IMAGE%%@*}"
+    BASE_IMAGE="${cache_repository%:*}@${digest}"
+    "${COSIGN}" verify "${BASE_IMAGE}" \
+        --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+        --certificate-identity-regexp '^https://github\.com/projectbluefin/utah/\.github/workflows/build\.yml@refs/(heads/testing|pull/[0-9]+/merge)$'
 fi
 
 # Same Podman >= 5.5 guard as the build recipes: older engines warn and

@@ -58,32 +58,31 @@ build, promote, and release always agree on published image names. `just
 image_name` is the same query wrapped for callers outside the Justfile; no
 recipe goes through it.
 
-## The matrix is split in two, by what each flavor builds on
+## The matrix is split in two
 
 The build workflow resolves the set in its "Resolve the image flavors" step
 and submits it as two matrices, `build_main` and `build_kernel` (comment,
-`.github/workflows/build.yml`). `main` uses the pristine Hummingbird base;
-the other flavors use the kernel cache image. The split exists so that a
-kernel cache miss -- twenty minutes of compiling -- holds up only the flavors
-that consume it, instead of every image in the run, and `main` starts the
-moment the contract check passes. The two calls carry different `brand_name`
-values because the reusable workflow keys its cancel-in-progress concurrency
-group on that name; Utah's Justfile ignores it when naming images.
+`.github/workflows/build.yml`). Every flavor builds on the kernel cache image:
+`main` and `nvidia` for its patched Fedora kernel, the rest for the OGC kernel
+too ([kernel-cache.md](kernel-cache.md#the-patched-fedora-kernel)). So both
+matrices wait for the cache job. They stay separate because the reusable
+workflow keys its cancel-in-progress concurrency group on `brand_name`, so the
+two calls carry different names, and the required check is named after
+`build_main`. Utah's Justfile ignores `brand_name` when naming images.
 
 ## flavors.py renders the set in the shape each consumer needs
 
 `scripts/flavors.py` is the only reader of `config/flavors.json`:
 
 - `list` -- every active flavor, for the build matrix.
-- `list-main` -- flavors that build on the pristine base (never wait for the
-  kernel cache).
-- `list-kernel` -- flavors that build on the kernel cache image.
+- `list-main` -- `main`, submitted as its own matrix (`build_main`).
+- `list-kernel` -- the OGC and NVIDIA flavors (`build_kernel`).
 - `suites` -- each flavor's image with its configured testsuite suites,
   read from the `suites` map in `config/flavors.json` (the `testsuite` matrix
   in `post-testing-e2e.yml`). A flavor with no `suites` entry is a hard error,
   so a new flavor needs its suites declared alongside it.
-- `needs-kernel` -- `true`/`false`; with no OGC or NVIDIA flavor in the set,
-  building the cache is 45 minutes spent on nothing.
+- `needs-kernel` -- `true` whenever any flavor is active, since every flavor
+  builds on the kernel cache.
 - `images` / `releases` -- the same set shaped for the promote and release
   matrices (docstring, `scripts/flavors.py`).
 - `image FLAVOR` -- the published image name for a flavor (e.g. `utah` or

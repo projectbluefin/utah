@@ -1,18 +1,26 @@
 # The kernel cache image.
 #
-# Compiling the OGC kernel takes roughly half an hour and building NVIDIA's open
-# module takes several minutes more, and neither depends on anything Utah's own
-# Containerfile does -- only on the base image and on the pins inside
-# scripts/install-ogc-kernel.sh and scripts/install-nvidia.sh.  Doing that work
-# inside every image build meant paying it again on every push, for three of the
-# four flavors, for inputs that had not moved.
+# Three things are compiled here, once, instead of in every image build: the
+# base image's Fedora kernel rebuilt with Utah's patches (an hour), the OGC
+# kernel (roughly half an hour), and NVIDIA's open module (several minutes
+# more). None of them depends on anything Utah's own Containerfile does -- only
+# on the base image, the patches and the pins inside
+# scripts/install-fedora-kernel.sh, scripts/install-ogc-kernel.sh and
+# scripts/install-nvidia.sh.  Doing that work inside every image build meant
+# paying it again on every push, for inputs that had not moved.
 #
-# So it is paid once here.  The result is the same base image plus a /utah-cache
-# directory of archives, published as ghcr.io/<owner>/utah-kernel-cache:<key>
-# where <key> is a hash of exactly those inputs (`just kernel-cache-tag`).  The
-# gaming, nvidia and nvidia-gaming builds then use this as their BASE_IMAGE and
-# the install scripts unpack instead of compiling.  `main` needs neither, so it
-# keeps using the pristine base and pays nothing for this.
+# So it is paid once here.  The result is the base image with its kernel
+# swapped for the patched build, plus a /utah-cache directory of archives,
+# published as ghcr.io/<owner>/utah-kernel-cache:<key> where <key> is a hash of
+# exactly those inputs (`just kernel-cache-tag`).  Every flavor uses this as
+# its BASE_IMAGE: main and nvidia for the patched kernel (and nvidia for its
+# prebuilt module), the gaming flavors for the OGC kernel as well.  The install
+# scripts unpack instead of compiling.
+#
+# The patched kernel is installed in the final stage, not only archived, so
+# everything built FROM this image -- Utah's v4l2loopback stage included --
+# sees it as the base kernel with no extra step.  Its kernel-devel stays in
+# /utah-cache/fedora-kernel for the module builds that need a tree.
 #
 # The cache image's own build has no /utah-cache, so the same scripts take their
 # source-build path here.  There is no second implementation to drift.
@@ -26,23 +34,36 @@ FROM ${BASE_IMAGE} AS builder
 COPY packages/hummingbird.repo /etc/yum.repos.d/hummingbird.repo
 # hummingbird.repo runs with gpgcheck=1; the key it names has to exist here too.
 COPY packages/RPM-GPG-KEY-redhat-release-2 /etc/pki/rpm-gpg/
+# The Fedora kernel source RPM is checked against Fedora 44's release key.
+COPY packages/RPM-GPG-KEY-fedora-44-primary /etc/pki/rpm-gpg/
 COPY packages/fedora-44.repo /etc/yum.repos.d/fedora-44.repo
 RUN mkdir -p /usr/local/libexec
+COPY scripts/install-fedora-kernel.sh /usr/local/libexec/utah-install-fedora-kernel
+COPY packages/kernel-patches/0001-btrfs-fix-the-fsverity-callback-where-unexpected-range-is-verified.patch /usr/share/utah/kernel-patches/
 COPY scripts/install-ogc-kernel.sh /usr/local/libexec/utah-install-ogc-kernel
 COPY scripts/install-nvidia.sh /usr/local/libexec/utah-install-nvidia
 
+# The patched kernel goes in first, with its kernel-devel, so the NVIDIA module
+# below is built for the kernel the images will boot.
 # nvidia-gaming is the superset: it produces a module for the base kernel and
 # one for the OGC kernel, so a single cache image serves all three flavors.
-RUN chmod 0755 /usr/local/libexec/utah-install-ogc-kernel /usr/local/libexec/utah-install-nvidia && \
+RUN chmod 0755 /usr/local/libexec/utah-install-fedora-kernel \
+      /usr/local/libexec/utah-install-ogc-kernel /usr/local/libexec/utah-install-nvidia && \
     mkdir -p /cache-out && \
+    /usr/local/libexec/utah-install-fedora-kernel build /cache-out/fedora-kernel && \
+    /usr/local/libexec/utah-install-fedora-kernel install /cache-out/fedora-kernel --devel && \
     UTAH_KERNEL_CACHE_OUT=/cache-out/ogc.tar \
       /usr/local/libexec/utah-install-ogc-kernel && \
     UTAH_NVIDIA_MODULES_ONLY=1 UTAH_KERNEL_CACHE_OUT_DIR=/cache-out \
       /usr/local/libexec/utah-install-nvidia nvidia-gaming && \
-    ls -l /cache-out
+    ls -lR /cache-out
 
 # The builder's toolchain, kernel tree and object files stay behind in the
-# builder.  What ships is the untouched base image plus the archives, so this
-# remains a legitimate base for a bootc build.
+# builder.  What ships is the base image with the patched kernel in place of
+# Fedora's, plus the archives, so this remains a legitimate base for a bootc
+# build.  The install script is used once here and not left behind.
 FROM ${BASE_IMAGE}
 COPY --from=builder /cache-out /utah-cache
+COPY scripts/install-fedora-kernel.sh /tmp/utah-install-fedora-kernel
+RUN bash /tmp/utah-install-fedora-kernel install /utah-cache/fedora-kernel && \
+    rm -f /tmp/utah-install-fedora-kernel

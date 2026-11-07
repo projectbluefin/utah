@@ -14,7 +14,7 @@ JUST = shutil.which("just")
 
 @unittest.skipUnless(JUST, "just is required to execute the build recipe")
 class KernelCacheSigningTests(unittest.TestCase):
-    def run_recipe(self, *, verifier: bool = True, valid: bool = True):
+    def run_recipe(self, *, verifier: bool = True, valid: bool = True, flavor: str = "gaming"):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
             tools = base / "bin"
@@ -41,7 +41,7 @@ class KernelCacheSigningTests(unittest.TestCase):
                 cosign.chmod(0o755)
             rendered = subprocess.run(
                 [JUST, "--justfile", str(ROOT / "Justfile"), "--working-directory",
-                 str(ROOT), "--dry-run", "build-ghcr", "utah", "testing", "gaming"],
+                 str(ROOT), "--dry-run", "build-ghcr", "utah", "testing", flavor],
                 check=True, capture_output=True, text=True)
             env = {
                 "PATH": str(tools), "HOME": str(base), "GITHUB_ACTIONS": "false",
@@ -72,6 +72,15 @@ class KernelCacheSigningTests(unittest.TestCase):
         self.assertIn(f"verify {accepted}", verification)
         self.assertIn(f"--build-arg BASE_IMAGE={accepted}", builds)
         self.assertNotIn("BASE_IMAGE=ghcr.io/projectbluefin/utah-kernel-cache:", builds)
+
+    def test_main_also_builds_on_the_verified_cache(self):
+        # main's distribution kernel is the cache image's patched Fedora build;
+        # the pristine Hummingbird base would ship the btrfs fs-verity bug.
+        result, builds, verification = self.run_recipe(flavor="main")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        accepted = "ghcr.io/projectbluefin/utah-kernel-cache@sha256:accepted"
+        self.assertIn(f"verify {accepted}", verification)
+        self.assertIn(f"--build-arg BASE_IMAGE={accepted}", builds)
 
 
 if __name__ == "__main__":

@@ -83,6 +83,7 @@ COPY scripts/install-packages.py \
      scripts/verify-rpm-contract.py \
      scripts/build-gnome-extensions.sh \
      scripts/install-ogc-kernel.sh \
+     scripts/install-fedora-kernel.sh \
      scripts/install-nvidia.sh \
      scripts/clean-stage.sh \
      scripts/pin-build-mtimes.py \
@@ -191,6 +192,11 @@ ARG GENERIC_LOGOS_SHA256=2f9247f480788ef5cea4bc9f872bc5653ae0578fb7bec045f8b807c
 # Common's recipes silently shadowed ours, so every override reverted
 # (issue #449). The `just` >= 1.56 floor is enforced by
 # tests/test_ujust_overrides.py.
+# The kernel check, first thing once the scripts are in place: every flavor
+# builds FROM the kernel cache image, whose distribution kernel is Fedora's
+# rebuilt with the btrfs fs-verity fix (scripts/install-fedora-kernel.sh). A
+# build on the pristine Hummingbird base would ship a kernel that reports
+# intact composefs objects on btrfs as corrupt, so it fails here instead.
 RUN --mount=type=bind,from=v4l2loopback,source=/out,target=/tmp/utah-v4l2loopback,ro \
     --mount=type=bind,from=inputs,source=/,target=/tmp/utah-inputs,ro \
     cp -a /tmp/utah-inputs/usr/. /usr/ && \
@@ -199,6 +205,7 @@ RUN --mount=type=bind,from=v4l2loopback,source=/out,target=/tmp/utah-v4l2loopbac
                 verify-rpm-contract.py:utah-verify-rpm-contract \
                 build-gnome-extensions.sh:utah-build-gnome-extensions \
                 install-ogc-kernel.sh:utah-install-ogc-kernel \
+                install-fedora-kernel.sh:utah-install-fedora-kernel \
                 install-nvidia.sh:utah-install-nvidia \
                 clean-stage.sh:utah-clean-stage \
                 pin-build-mtimes.py:utah-pin-build-mtimes \
@@ -215,6 +222,7 @@ RUN --mount=type=bind,from=v4l2loopback,source=/out,target=/tmp/utah-v4l2loopbac
                 image-repo.sh:utah-image-repo; do \
       install -Dm 0755 "/tmp/utah-inputs/tmp/utah-scripts/${pair%%:*}" "/usr/local/libexec/${pair##*:}" || exit 1; \
     done && \
+    /usr/local/libexec/utah-install-fedora-kernel check && \
     cp -a /tmp/utah-inputs/tmp/utah-common/. / && \
     cp -a /tmp/utah-inputs/tmp/utah-bluefin/. / && \
     cp -a /tmp/utah-inputs/tmp/utah-brew/. / && \

@@ -156,7 +156,12 @@ ensure_toolchain() {
   toolchain_ready=1
   if [ ! -d "$build_tree" ]; then
     echo "No build tree at $build_tree; supplying kernel-devel-${kernel}"
-    if "$DNF" -y install "kernel-devel-${kernel}"; then
+    # Utah's patched Fedora kernel (install-fedora-kernel.sh) is in no
+    # repository and not on Koji; the kernel cache carries its kernel-devel.
+    if [ -f "${CACHE_DIR}/fedora-kernel/kernel-devel-${kernel}.rpm" ]; then
+      "$DNF" -y install "${CACHE_DIR}/fedora-kernel/kernel-devel-${kernel}.rpm"
+      installed_kernel_devel="kernel-devel"
+    elif "$DNF" -y install "kernel-devel-${kernel}"; then
       installed_kernel_devel="kernel-devel-${kernel}"
     else
       local arch nv ver rel koji rpmfile actual
