@@ -8,8 +8,10 @@ lacks, and structural differences are tracked under #1236. Experimental
 pre-alpha: it has a build, not users, and nothing is ready for real machines.
 It publishes `:testing` container images, a live ISO built monthly from
 `:stable` by `projectbluefin/dakota-iso`, and a rolling `:stable` tag that
-`execute-release.yml` releases weekly (Mondays 06:00 UTC) once the release
-gate passes (#336; see `docs/skills/ci-workflows/references/release-cadence.md`).
+`execute-release.yml` releases once the release gate passes: on a promotion
+merge, a manual run, or the daily 06:00 UTC check when `:stable` is over a
+week old and `:testing` has moved on (#336; see
+`docs/skills/ci-workflows/references/release-cadence.md`).
 
 ## Read order
 

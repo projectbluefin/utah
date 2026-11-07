@@ -163,17 +163,17 @@ class EnvironmentContractTests(unittest.TestCase):
         self.assertEqual(self.run_step(step, world, matrix), 0)
 
 
-class WeeklyReleaseScheduleTests(unittest.TestCase):
-    """:stable releases weekly, through the same gate as any other release."""
+class ScheduledReleaseTests(unittest.TestCase):
+    """The daily stable check releases through the same gate as any other release."""
 
-    def test_a_weekly_schedule_triggers_the_release_workflow(self):
+    def test_a_daily_schedule_triggers_the_release_workflow(self):
         triggers = RELEASE.get("on", RELEASE.get(True))
         crons = [entry["cron"] for entry in triggers["schedule"]]
         self.assertEqual(len(crons), 1)
         minute, hour, dom, month, dow = crons[0].split()
-        # Exactly once a week: a fixed weekday, every day-of-month and month.
-        self.assertRegex(dow, r"^[0-6]$")
-        self.assertEqual((dom, month), ("*", "*"))
+        # Once a day: scripts/release-trigger.py decides whether :stable is
+        # over a week old, so the cron itself is no longer the cadence.
+        self.assertEqual((dom, month, dow), ("*", "*", "*"))
         self.assertRegex(minute + hour, r"^\d+$")
 
     def test_the_scheduled_run_still_passes_through_the_evidence_gate(self):
