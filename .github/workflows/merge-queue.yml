@@ -34,8 +34,9 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
-      # Same source and split as build.yml's contract job: build_main builds
-      # the flavors on the pristine Hummingbird base.
+      # Same source and split as build.yml's contract job: build_main's
+      # flavors. build-ghcr builds them on the kernel cache image that the
+      # pull request's run published and signed under the same content tag.
       - name: Resolve the base-image flavors
         id: flavors
         run: |

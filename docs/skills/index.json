@@ -112,7 +112,7 @@
     {
       "id": "kernel-cache",
       "name": "kernel-cache",
-      "one_line_purpose": "Understand and rebuild the OGC kernel and NVIDIA module cache image.",
+      "one_line_purpose": "Understand and rebuild the kernel cache image (patched Fedora kernel, OGC kernel, NVIDIA module).",
       "entry_point": "docs/skills/kernel-cache.md",
       "category": "image-build",
       "status": "active",
@@ -120,11 +120,13 @@
         "kernel",
         "nvidia",
         "ogc",
-        "cache"
+        "cache",
+        "btrfs",
+        "fsverity"
       ],
-      "description": "The kernel cache image, its content-hash tag, and unpack-or-compile behavior. Use when touching install-ogc-kernel.sh, install-nvidia.sh, Containerfile.kernel, or debugging flavored builds.",
+      "description": "The kernel cache image, its content-hash tag, and unpack-or-compile behavior. Use when touching install-fedora-kernel.sh, kernel-patches, install-ogc-kernel.sh, install-nvidia.sh, Containerfile.kernel, or debugging flavored builds.",
       "version": "1.0",
-      "last_updated": "2026-10-14",
+      "last_updated": "2026-11-07",
       "doc_type": "reference"
     },
     {

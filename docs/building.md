@@ -15,6 +15,17 @@ just boot-vm
 ENABLE_SSHD=1 just build-ghcr utah testing main
 ```
 
+Every flavor, `main` included, builds on the kernel cache image, for its
+patched Fedora kernel ([kernel-cache.md](skills/kernel-cache.md#the-patched-fedora-kernel)).
+`build-ghcr` pulls the published cache for the current inputs and verifies it
+with `cosign`, which must be on `PATH`. If your change touches the cache's own
+inputs, build it locally and point the build at it:
+
+```bash
+just build-kernel-cache                       # a couple of hours
+BASE_IMAGE="$(just kernel-cache-ref)" just build-ghcr utah testing main
+```
+
 `just check` ends in `just test`, the host-side suite under `tests/`. It needs
 two third-party Python modules — `pyyaml` and `jsonschema` — which a clean
 checkout does not have. They are declared in

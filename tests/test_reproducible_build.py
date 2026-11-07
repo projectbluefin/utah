@@ -175,11 +175,15 @@ class ReproducibilityCheckTests(unittest.TestCase):
                 for invocation in builds:
                     self.assertIn(f"--build-arg IMAGE_NAME={expected} ", invocation)
 
-    def test_kernel_flavors_build_only_the_verified_immutable_cache(self):
-        result = self.run_check(IDENTICAL, IDENTICAL, flavor="nvidia")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        for invocation in self.builds():
-            self.assertIn("BASE_IMAGE=ghcr.io/projectbluefin/utah-kernel-cache@sha256:verified-cache", invocation)
+    def test_every_flavor_builds_only_the_verified_immutable_cache(self):
+        # main too: its distribution kernel is the cache image's patched build.
+        for flavor in ("main", "nvidia"):
+            with self.subTest(flavor=flavor):
+                self.build_log.write_text("")
+                result = self.run_check(IDENTICAL, IDENTICAL, flavor=flavor)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                for invocation in self.builds():
+                    self.assertIn("BASE_IMAGE=ghcr.io/projectbluefin/utah-kernel-cache@sha256:verified-cache", invocation)
 
     def test_invalid_cache_signature_prevents_both_builds(self):
         result = self.run_check(IDENTICAL, IDENTICAL, flavor="gaming", verify_status=1)

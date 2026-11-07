@@ -26,11 +26,14 @@ SCRIPT = ROOT / "scripts" / "kernel-cache-tag.sh"
 # Every file the tag is required to cover, relative to the repository root.
 HASHED_INPUTS = (
     "Containerfile.kernel",
+    "scripts/install-fedora-kernel.sh",
     "scripts/install-ogc-kernel.sh",
     "scripts/install-nvidia.sh",
+    "packages/kernel-patches/0001-btrfs-fix-the-fsverity-callback-where-unexpected-range-is-verified.patch",
     "packages/hummingbird.repo",
     "packages/fedora-44.repo",
     "packages/RPM-GPG-KEY-redhat-release-2",
+    "packages/RPM-GPG-KEY-fedora-44-primary",
 )
 
 
@@ -52,7 +55,7 @@ class KernelCacheTagTests(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.root = Path(tmp.name) / "utah"
         (self.root / "scripts").mkdir(parents=True)
-        (self.root / "packages").mkdir(parents=True)
+        (self.root / "packages" / "kernel-patches").mkdir(parents=True)
         shutil.copy2(SCRIPT, self.root / "scripts" / "kernel-cache-tag.sh")
         for rel in HASHED_INPUTS:
             shutil.copy2(ROOT / rel, self.root / rel)

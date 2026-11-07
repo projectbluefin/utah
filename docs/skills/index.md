@@ -13,7 +13,7 @@ schema 1.0 · 12 skills
 | [diagnosis](diagnosis.md) | contracts | active | Route running-machine diagnosis to the shipped Utah guidance. |
 | [docs-parity](docs-parity.md) | meta | active | Reconcile Utah's README with the docs.projectbluefin.io/utah page before deleting duplicate prose. |
 | [flavors](flavors.md) | image-build | active | Add, remove, or retire an image flavor safely. |
-| [kernel-cache](kernel-cache.md) | image-build | active | Understand and rebuild the OGC kernel and NVIDIA module cache image. |
+| [kernel-cache](kernel-cache.md) | image-build | active | Understand and rebuild the kernel cache image (patched Fedora kernel, OGC kernel, NVIDIA module). |
 | [lifecycle-e2e](lifecycle-e2e.md) | testing | active | Run the QEMU lifecycle harness and validate bootc upgrade, rollback, and BLS boot files. |
 | [local-testing](local-testing.md) | testing | active | Build, install, and boot Utah locally in a VM or live ISO. |
 | [package-contract](package-contract.md) | contracts | active | Maintain Bluefin package parity and Utah's overlay manifest. |
