@@ -90,3 +90,19 @@ report *args:
     UBLUE_IMAGE_REPO_BIN="/usr/local/libexec/utah-image-repo" \
     BONEDIGGER_BRAND="🐦 Utah Bug Report" \
     /usr/libexec/bonedigger-report {{ args }}
+
+# Install gdb, elfutils and sysprof-cli until reboot to diagnose shell hangs
+[group('System')]
+install-debug-tools:
+    #!/usr/bin/bash
+    set -euo pipefail
+    if [[ "$(id -u)" -ne 0 ]]; then
+        exec sudo "$0" "$@"
+    fi
+    # /usr is read-only on a bootc system; the overlay is discarded on reboot.
+    if ! bootc usr-overlay 2>/dev/null; then
+        echo 'Using the existing /usr overlay.' >&2
+    fi
+    DNF="$(command -v dnf5 || command -v dnf)"
+    "$DNF" install -y gdb-headless elfutils sysprof-cli
+    echo 'Installed until the next reboot. Attach with: gdb -p $(pidof gnome-shell)'
