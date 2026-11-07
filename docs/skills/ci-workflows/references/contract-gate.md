@@ -88,10 +88,10 @@ the build before expensive compilation or container builds run:
   references across all workflow files are reported.
   Exercised by black-box tests in `tests/test_check_workflow_outputs.py`.
 
-The same job resolves the flavor set and splits it in two by what each
-flavor builds on -- `main` on the pristine Hummingbird base, the rest on the
-kernel cache image -- emitting `main_flavors`, `kernel_flavors`, and
-`needs_kernel` (step "Resolve the image flavors",
+The same job resolves the flavor set and splits it in two -- `main`, and the
+OGC/NVIDIA flavors; all of them build on the kernel cache image -- emitting
+`main_flavors`, `kernel_flavors`, and `needs_kernel` (step "Resolve the image
+flavors",
 `.github/workflows/build.yml`). The split rationale and the flavors.py
 commands live in [flavors.md](../../flavors.md). An empty resolved set fails
 loudly there, because an invalid matrix creates no image job at all and the

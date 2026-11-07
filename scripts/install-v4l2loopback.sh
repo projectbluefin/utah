@@ -94,9 +94,18 @@ module="usr/lib/modules/${release}/extra/v4l2loopback/v4l2loopback.ko"
 tree="${root}/usr/lib/modules/${release}/build"
 
 provide_kernel_devel() {
-  local arch nv ver rel rpmfile url sig
+  local arch nv ver rel rpmfile url sig cached
   arch="${release##*.}"; nv="${release%.*}"; ver="${nv%%-*}"; rel="${nv#*-}"
   rpmfile="kernel-devel-${ver}-${rel}.${arch}.rpm"
+  # The base kernel is Utah's patched rebuild of Fedora's (install-fedora-kernel.sh),
+  # which Koji has never seen. Its kernel-devel ships in the kernel cache image
+  # this stage is built FROM, whose digest the build verified with cosign.
+  cached="${root}/utah-cache/fedora-kernel/${rpmfile}"
+  if [ -f "$cached" ]; then
+    echo "Taking kernel-devel for ${release} from the kernel cache"
+    "$DNF" -y install "$cached"
+    return
+  fi
   url="https://kojipkgs.fedoraproject.org/packages/kernel/${ver}/${rel}/data/signed/${FEDORA_KEY_ID}/${arch}/${rpmfile}"
   echo "Taking kernel-devel for ${release} from ${url}"
   curl --retry 3 --retry-all-errors -fsSLo "/tmp/${rpmfile}" "$url"

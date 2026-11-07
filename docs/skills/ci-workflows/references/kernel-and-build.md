@@ -1,8 +1,8 @@
 # Kernel cache and build matrix
 
-The kernel cache job runs only when `needs_kernel` is `true` -- while the
-matrix is main-only, building it is 45 minutes spent on an image nothing
-consumes (comment, `.github/workflows/build.yml`). When it does run, it
+The kernel cache job runs whenever `needs_kernel` is `true`, which is whenever
+any flavor is active: every flavor builds on the cache image (comment,
+`.github/workflows/build.yml`). When it does run, it
 frees runner disk, logs in to GHCR with `GITHUB_TOKEN`, and probes the
 content-hash tag with `podman pull`. A published tag is a cache hit only if
 its digest verifies; unsigned or wrongly signed hits are rebuilt from the
@@ -46,9 +46,9 @@ Docker keychain outside the checkout and are removed at recipe exit.
 
 ## The build matrix calls reusable-build.yml twice
 
-`build_main` needs only `contract`, so `main` starts the moment the gate
-passes; `build_kernel` needs `contract` and `kernel_cache`, so a cache miss
-holds up only the flavors that consume it. Both call
+`build_main` and `build_kernel` both need `contract` and `kernel_cache`: every
+flavor builds FROM the cache image, `main` for its patched Fedora kernel
+([kernel-cache.md](../../kernel-cache.md#the-patched-fedora-kernel)). Both call
 `reusable-build.yml@ae7d740d261d56354aeaf0a72af6f87e442e0472 # v1`, and
 `just check` asserts that pin with
 `grep -qE 'reusable-build\.yml@(v1|[0-9a-f]{40} # v1)$' .github/workflows/build.yml`

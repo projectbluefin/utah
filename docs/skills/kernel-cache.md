@@ -1,31 +1,42 @@
 ---
 name: kernel-cache
 version: "1.0"
-last_updated: "2026-10-14"
+last_updated: "2026-11-07"
 id: kernel-cache
-one_line_purpose: Understand and rebuild the OGC kernel and NVIDIA module cache image.
+one_line_purpose: Understand and rebuild the kernel cache image (patched Fedora kernel, OGC kernel, NVIDIA module).
 entry_point: docs/skills/kernel-cache.md
 category: image-build
 mcp_compliance_level: partial
 optimization_status: draft
 status: active
 dependencies: []
-tags: [kernel, nvidia, ogc, cache]
+tags: [kernel, nvidia, ogc, cache, btrfs, fsverity]
 description: >-
   The kernel cache image, its content-hash tag, and unpack-or-compile
-  behavior. Use when touching install-ogc-kernel.sh, install-nvidia.sh,
-  Containerfile.kernel, or debugging flavored builds.
+  behavior. Use when touching install-fedora-kernel.sh, kernel-patches,
+  install-ogc-kernel.sh, install-nvidia.sh, Containerfile.kernel, or
+  debugging flavored builds.
 metadata:
   type: reference
 ---
 
 # Kernel Cache
 
-`gaming`, `nvidia` and `nvidia-gaming` need an OGC kernel and an NVIDIA
-kernel module that no repository ships for this base, so Utah compiles them.
-That is about half an hour for the kernel and several minutes for the module,
-and it depends on nothing the image build does -- only on the pinned base
-image and on `scripts/install-ogc-kernel.sh` and `scripts/install-nvidia.sh`.
+Every flavor builds on the kernel cache image. It carries three things no
+repository ships for this base:
+
+- **The distribution kernel, patched.** Hummingbird takes its kernel from
+  Fedora 44 (`fedora-44-updates`), and every kernel from 7.2 on -- 7.3.x and
+  7.4-rc1 included -- reports intact btrfs fs-verity data as corrupt. See
+  [The patched Fedora kernel](#the-patched-fedora-kernel). `main` needs this as
+  much as the rest.
+- **The OGC kernel** for `gaming` and `nvidia-gaming`.
+- **NVIDIA's open module** for `nvidia` and `nvidia-gaming`.
+
+That is about an hour for the Fedora kernel rebuild, half an hour for the OGC
+kernel and several minutes for the module, and none of it depends on what the
+image build does -- only on the pinned base image, the patches in
+`packages/kernel-patches/` and the three install scripts.
 
 So it is paid once, in a separate image built from `Containerfile.kernel` and
 tagged with a hash of exactly those inputs:
@@ -43,7 +54,52 @@ Misses and unsigned or wrongly signed hits are built, pushed, signed and
 verified. The consumer resolves the content tag once, requires cosign, verifies
 that immutable digest with the same identity regexp, and passes only those
 verified bytes as `BASE_IMAGE`. A missing verifier is an error, not a skip.
-`main` keeps the pristine Hummingbird base and pulls none of the cache.
+A fork pull request cannot publish the cache, so no flavor is built for it.
+
+## The patched Fedora kernel
+
+`btrfs_verify_folio()` asks fs-verity to verify the whole folio when a read
+completes only part of it. Since 7.2 btrfs uses large data folios by default,
+so the partial read is common: verification hashes blocks that have not
+arrived, the kernel logs `fs-verity (dm-0, inode N): FILE CORRUPTED!` with
+`real_hash` equal to the hash of a zero block, and the read is retried --
+usually successfully, sometimes as `EIO` in userspace. A composefs root is
+nothing but fs-verity objects, so a composefs install on btrfs (`bootc install
+--composefs-backend`, or bootc-migrate's OSTree to composefs conversion) reads
+its own system files through the bug. The upstream fix is linux-next
+`dcf8811f63af` ("btrfs: fix the fsverity callback where unexpected range is
+verified"); no released kernel carries it yet (bootc-dev/bootc#2471).
+
+`scripts/install-fedora-kernel.sh build` rebuilds Fedora's own source RPM for
+the base image's kernel (Koji's copy signed with the Fedora 44 key, also
+checked against a recorded SHA-256) with `packages/kernel-patches/*.patch`
+concatenated into the spec's `linux-kernel-test.patch` hook. Base variant only:
+no debug kernels, debuginfo, UKI, tools or headers. The release gains
+`.1.utah1` (`7.2.15-200.1.utah1.fc44`), which sorts above Fedora's build and
+below any later one.
+
+The builder installs the result, with its `kernel-devel`, before the NVIDIA
+step, so the module is built for the kernel the images boot. The final stage
+installs it into the base image itself (`install`, which also removes Fedora's
+tree), so everything built `FROM` the cache -- the Containerfile's
+v4l2loopback stage included -- sees it as the base kernel. `kernel-devel`
+stays in `/utah-cache/fedora-kernel/`, where `install-v4l2loopback.sh` and
+`install-nvidia.sh` take it before trying Koji. The Containerfile runs
+`utah-install-fedora-kernel check` first, so a build on the pristine
+Hummingbird base fails instead of shipping the bug.
+
+A/B evidence for the patch (2026-11-07, VM, 6700 fs-verity files on btrfs, 10
+cold-read passes each): Fedora `7.2.15-200.fc44` logged 18 `FILE CORRUPTED`
+reports, at least one on every pass; the rebuild logged none.
+
+Remove it when the fix is in the base image's kernel: delete the patch (and the
+script, its `COPY`s, the `check` in the Containerfile and the
+`/utah-cache/fedora-kernel` lookups), and `main` can return to the pristine
+base. Moving `BASE_IMAGE` to a new kernel before then means moving
+`FEDORA_KERNEL_VERSION`, `FEDORA_KERNEL_RELEASE` and
+`FEDORA_KERNEL_SRPM_SHA256` with it; the `check` fails the build until they
+agree. Secure Boot: the rebuild is not signed by Fedora's key, so with Secure
+Boot enforcing, shim refuses it just as it refuses the OGC kernel.
 
 ## What the tag hashes
 
@@ -57,13 +113,19 @@ and not otherwise, so it is a hash of exactly those inputs (header comment,
   and the single `RUN` that fills `/cache-out`, and the final stage's
   `COPY --from=builder`. Hashing only the `ARG` line would leave an edit to
   any of that invisible to the key, and since CI builds the cache image only
-  when its tag is not already published, the three cached flavors would
-  silently take an image built from the previous recipe.
-- `scripts/install-ogc-kernel.sh` and `scripts/install-nvidia.sh`, whole
-  files, comments included -- the two scripts that do the building.
+  when its tag is not already published, every flavor would silently take an
+  image built from the previous recipe.
+- `scripts/install-fedora-kernel.sh`, `scripts/install-ogc-kernel.sh` and
+  `scripts/install-nvidia.sh`, whole files, comments included -- the scripts
+  that do the building. The Fedora kernel's version, release and source RPM
+  digest are pinned in the first.
+- `packages/kernel-patches/*.patch` -- what the Fedora kernel is rebuilt with.
 - `packages/hummingbird.repo` and `packages/fedora-44.repo` -- the repositories
   the toolchain comes from (Fedora 44 is builder-only); a different compiler
   produces a different kernel.
+- `packages/RPM-GPG-KEY-redhat-release-2` and
+  `packages/RPM-GPG-KEY-fedora-44-primary` -- the keys the builder verifies
+  Hummingbird's RPMs and the Fedora kernel source RPM with.
 
 Editing any of them changes the hash and forces a rebuild, comment-only
 edits included. That is deliberate: the key can only ever rebuild something

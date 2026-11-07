@@ -371,12 +371,17 @@ build-ghcr base_name stream flavor kernel_pin="":
       export DOCKER_CONFIG="$auth_dir" REGISTRY_AUTH_FILE="$auth_dir/config.json"
       echo "${GITHUB_TOKEN}" | podman login ghcr.io -u "${GITHUB_ACTOR:-x}" --password-stdin
     fi
-    # main builds neither the OGC kernel nor an NVIDIA module, so it keeps the
-    # pristine Hummingbird base and does not pull the cache image at all.  The
-    # other three take the cache image as their base; the install scripts find
-    # /utah-cache there and unpack rather than compile.
-    base_args=()
-    if [ "{{ flavor }}" != main ]; then
+    # Every flavor takes the kernel cache image as its base: its distribution
+    # kernel is Fedora's rebuilt with the btrfs fs-verity fix, which main needs
+    # as much as the rest (scripts/install-fedora-kernel.sh).  The OGC and
+    # NVIDIA flavors also find /utah-cache there and unpack rather than compile.
+    # BASE_IMAGE overrides it with a local `just build-kernel-cache` result, as
+    # unsigned development input -- for a change to the cache's own inputs,
+    # whose tag is not published yet. CI never takes the override.
+    if [ -n "${BASE_IMAGE:-}" ] && [ "${GITHUB_ACTIONS:-false}" != true ]; then
+      echo "Building on the local kernel cache ${BASE_IMAGE} (unverified)"
+      base_args=(--build-arg BASE_IMAGE="${BASE_IMAGE}")
+    else
       cache_ref="$(./scripts/kernel-cache-tag.sh)"
       cache_ref="ghcr.io/{{ repo_organization }}/{{ kernel_cache_image }}:${cache_ref}"
       # Verify immutable bytes, never a mutable tag that FROM can re-resolve.
@@ -504,6 +509,19 @@ build-local stream="testing" package_image="localhost/utah-packages:local-merged
       echo "Local package image not found: $package_image" >&2
       exit 1
     }
+    # The kernel cache image is the base here too (see build-ghcr). BASE_IMAGE
+    # overrides it with a local build of Containerfile.kernel, which is trusted
+    # as development input; the published cache is verified like build-ghcr's.
+    base_image="${BASE_IMAGE:-}"
+    if [ -z "$base_image" ]; then
+      command -v cosign >/dev/null 2>&1 || { echo "cosign is required to verify the kernel cache before building (or set BASE_IMAGE)" >&2; exit 1; }
+      base_image="ghcr.io/{{ repo_organization }}/{{ kernel_cache_image }}:$(./scripts/kernel-cache-tag.sh)"
+      digest="$(skopeo inspect "docker://${base_image}" | python3 -c 'import json, sys; print(json.load(sys.stdin)["Digest"])')"
+      base_image="${base_image%:*}@${digest}"
+      cosign verify "$base_image" \
+        --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+        --certificate-identity-regexp '^https://github\.com/projectbluefin/utah/\.github/workflows/build\.yml@refs/(heads/testing|pull/[0-9]+/merge)$'
+    fi
     version="local-{{ stream }}-$(git rev-parse --short HEAD)"
     # Same build-input epoch and guarded export policy as build-ghcr.
     source_date_epoch="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct -- Containerfile packages system_files scripts config .gitmodules docs/agent)}"
@@ -513,6 +531,7 @@ build-local stream="testing" package_image="localhost/utah-packages:local-merged
       "${epoch_args[@]}" \
       --build-arg SOURCE_DATE_EPOCH="${source_date_epoch}" \
       --build-arg UTAH_REWRITE_TIMESTAMPS=1 \
+      --build-arg BASE_IMAGE="$base_image" \
       --build-arg PACKAGE_IMAGE_REF="$package_image" \
       --build-arg IMAGE_NAME="{{ image }}" \
       --build-arg IMAGE_ID="{{ image }}" \
