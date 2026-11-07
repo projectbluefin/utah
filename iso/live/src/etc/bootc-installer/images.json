@@ -9,9 +9,9 @@
       "icon": "resource:///org/bootcinstaller/Installer/images/bluefin.png",
       "bootloader": "grub2",
       "filesystem": "btrfs",
-      "composefs": true,
+      "composefs": false,
       "needs_user_creation": false,
-      "filesystems": ["btrfs", "ext4"]
+      "filesystems": ["btrfs", "xfs"]
     }
   ]
 }
