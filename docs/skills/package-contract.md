@@ -401,10 +401,10 @@ pattern would let a non-`.js` file ship unseen. Adding a path means
 adding a glob AND a `KINDS` entry so `write_report()` can classify the
 new rows. `GapTests` in `tests/test_image_baseline.py` exercises missing
 Firefox defaults in the report and recognizes an unowned overlay as shipped.
-For extraction proof, run `extract IMAGE /tmp/surface-check` against a real
-image and inspect the Firefox rows and asset contents; source-string checks
-cannot establish shipping. Never append rows measured from a newer image to
-an older snapshot: `image.txt` must describe the same image as both TSVs.
+For extraction proof, run `extract IMAGE /tmp/surface-check` on a real image
+and inspect its Firefox rows and asset contents; source-string checks cannot
+establish shipping. Never append rows from a newer image to an older snapshot:
+`image.txt` must describe the same image as both TSVs; after a refresh, [remove resolved triage entries](package-contract/references/factory-consumption.md#closing-baseline-gaps).
 
 `scripts/audit-bluefin-parity.py` is the re-runnable version of that
 pipeline. Every name Bluefin ships that Utah does not install (and does
