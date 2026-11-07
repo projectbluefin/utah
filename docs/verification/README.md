@@ -8,9 +8,9 @@ the check beside it passed.
 
 | | |
 | --- | --- |
-| Captured | 2026-10-30T13:50:09Z |
+| Captured | 2026-11-07T11:09:02Z |
 | Live ISO | `utah-live.iso`, 5.2G |
-| Installed image | `ghcr.io/projectbluefin/utah@sha256:3133b60624739dff4249f356e42fd926b05db117d0cbc7a90d923676f50ade2b` |
+| Installed image | `ghcr.io/projectbluefin/utah@sha256:e4318805e8b32ba2f1e252ef9932eb02ef9a591901b403d415dea82c0700192d` |
 | Root filesystem | btrfs on LUKS2, passphrase unlock |
 | Live session | GNOME, wayland |
 | Installed session | GNOME, wayland, user `utahtest` |
@@ -23,7 +23,9 @@ the check beside it passed.
 2. The installer creates a LUKS2 volume and installs from the ISO's embedded
    container store, with no network.
 3. The installed disk boots on its own, with no ISO attached.
-4. Plymouth's passphrase prompt is answered and the root volume opens.
+4. Plymouth draws its graphical passphrase prompt with the theme's watermark
+   in place (not the text fallback), and the passphrase typed there opens the
+   root volume.
 5. The system reaches the graphical target rather than an emergency shell.
 6. `bootc status` on the installed system reports the booted image as the
    offline embedded payload, not a substitute reached over a network this
@@ -44,6 +46,13 @@ desktop from inside it. Everything below is how it got there.
 ![Live session](screenshots/live-desktop.png)
 
 The desktop the ISO boots into, with the installer available.
+
+### Encrypted disk passphrase prompt
+![Passphrase prompt](screenshots/installed-luks-prompt.png)
+
+The installed disk's first boot, before anything on the encrypted root can
+run: Plymouth's own prompt, with the Bluefin watermark the test matched at the
+position the theme places it.
 
 ### GDM greeter on the installed system
 ![Greeter](screenshots/installed-greeter.png)
