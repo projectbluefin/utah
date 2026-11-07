@@ -519,6 +519,12 @@ class WorkflowWiringTests(unittest.TestCase):
         triggers = self.doc.get("on", self.doc.get(True))
         self.assertEqual([e["cron"] for e in triggers["schedule"]], ["0 6 * * *"])
 
+    def test_the_retag_names_were_verified_against_the_pinned_reusable_release(self):
+        # A rename in projectbluefin/actions would make every run read as
+        # "no retag", which releases daily instead of weekly.
+        uses = self.doc["jobs"]["execute"]["uses"]
+        self.assertEqual(uses.rsplit("@", 1)[1], release_trigger.RETAG_NAMES_VERIFIED_AT)
+
 
 if __name__ == "__main__":
     unittest.main()
