@@ -12,8 +12,10 @@ build script. The bundled source snapshots describe both mechanisms.
 For a reversible per-user override, copy the installed UUID directory from
 `/usr/share/gnome-shell/extensions/` into
 `~/.local/share/gnome-shell/extensions/` (create the parent first). Modify
-that copy, preserving the UUID and `metadata.json`. If it has schemas, run
-`glib-compile-schemas ~/.local/share/gnome-shell/extensions/UUID/schemas`.
+that copy, preserving the UUID and `metadata.json`. Image extensions keep
+their schemas in `/usr/share/glib-2.0/schemas`, where Bluefin's overrides
+apply, so the copy has no `schemas/`. Adding one masks those defaults; if you
+do, run `glib-compile-schemas ~/.local/share/gnome-shell/extensions/UUID/schemas`.
 The user copy takes precedence at the next Shell start. On Wayland, log out
 and back in after saving work; restarting GDM terminates sessions.
 Check `gnome-extensions info UUID`, then the journal; if the state is ERROR

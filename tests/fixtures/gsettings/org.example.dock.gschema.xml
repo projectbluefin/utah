@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist gettext-domain="example">
+  <schema id="org.example.dock" path="/org/example/dock/">
+    <key name="disable-overview-on-startup" type="b">
+      <default>false</default>
+    </key>
+    <child name="blur" schema="org.example.dock.blur"/>
+  </schema>
+  <schema id="org.example.dock.blur" path="/org/example/dock/blur/">
+    <key name="blur" type="b">
+      <default>false</default>
+    </key>
+  </schema>
+</schemalist>
