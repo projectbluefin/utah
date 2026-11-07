@@ -405,6 +405,7 @@ For extraction proof, run `extract IMAGE /tmp/surface-check` against a real
 image and inspect the Firefox rows and asset contents; source-string checks
 cannot establish shipping. Never append rows measured from a newer image to
 an older snapshot: `image.txt` must describe the same image as both TSVs.
+Refresh cleanup: [remove resolved triage entries](package-contract/references/factory-consumption.md#closing-baseline-gaps).
 
 `scripts/audit-bluefin-parity.py` is the re-runnable version of that
 pipeline. Every name Bluefin ships that Utah does not install (and does
