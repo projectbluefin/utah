@@ -268,6 +268,27 @@ happened because Utah's `gen-sbom` recipe, run under `sudo`, left a root-owned
 `sbom_out/` that the unprivileged SBOM step could not write. In the build log,
 check `sign.gen-sbom` and `sign.__actions_attest-build-provenance`.
 
+### Testing freshness alarm
+
+A broken promotion gate never fails a build: `:testing` simply stops moving.
+`testing-freshness.yml` runs every six hours. `scripts/testing-freshness.py`
+takes the completion time of the "Move :testing to the tested digests" step
+in the newest post-testing-e2e run whose `promote-to-testing` job ran it. That
+job is the only writer of `:testing`, so the step's end is the promotion time.
+It scans runs started up to 36 hours plus a day of slack ago; when the move
+is older than 36 hours, or no scanned run moved the tag, the script opens one issue labelled `kind/bug`, `area/ci` and
+`priority/critical-urgent` for the hive to pick up. Every run refreshes the
+issue with the newest e2e run's failed jobs, and the issue closes itself once
+the tag moves. Nothing on the image can say when it was promoted: the move is
+`skopeo copy --preserve-digests`, and the config's `created` is
+SOURCE_DATE_EPOCH (the last build-input commit). A run's overall conclusion is
+not used either, because a run can promote and fail a later job, or pass while
+the ratchet holds the tag. If the job or step is renamed, update
+`scripts/testing-freshness.py`; `tests/test_testing_freshness.py` fails until
+you do. The script finds its issue through the REST issues listing (label
+`area/ci` plus a body marker), not issue search. Dispatch the workflow with
+another `max_age_hours` to try a different threshold.
+
 ## Testsuite reporting (exact-digest VM suites)
 
 `post-testing-e2e.yml` runs the `testsuite` job asynchronously against each
