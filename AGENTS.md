@@ -77,10 +77,15 @@ checks (`scripts/check-skill-frontmatter.sh`, `scripts/check-skill-index.sh`,
   RUN steps fold into neighbours, and per-image ARGs are declared late because
   an ARG is part of the cache key of every layer below it.
 - **The kernel cache tag** is a hash of `Containerfile.kernel` (whole file),
-  `scripts/install-ogc-kernel.sh`, `scripts/install-nvidia.sh`, and
-  `packages/hummingbird.repo` (`scripts/kernel-cache-tag.sh`). Any edit to
-  those files — comments included — forces a ~45-minute cache rebuild. That is
-  deliberate; just know it before you touch them.
+  `scripts/install-fedora-kernel.sh`, `scripts/install-ogc-kernel.sh`,
+  `scripts/install-nvidia.sh`, `packages/kernel-patches/*.patch`, the two repo
+  files and the two RPM keys (`scripts/kernel-cache-tag.sh`). Any edit to
+  those files — comments included — forces a cache rebuild of a couple of
+  hours. That is deliberate; just know it before you touch them.
+- **Every flavor builds on the kernel cache image**, `main` included: its
+  distribution kernel is Fedora's rebuilt with the btrfs fs-verity fix, a
+  temporary measure (`docs/skills/kernel-cache.md`). The Containerfile fails a
+  build on the pristine Hummingbird base.
 - **Utah scripts install as `/usr/local/libexec/utah-*`** via one staged COPY
   and a rename loop in the Containerfile. A new script means updating the COPY
   list, the rename loop, and `just check`.

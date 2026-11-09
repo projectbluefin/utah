@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Configure the Utah live ISO after Flatpaks are baked in. This is the
-# non-composefs/bootcDirect branch of Dakota's installer integration.
+# Configure the Utah live ISO after Flatpaks are baked in. Mirrors Dakota's
+# composefs-backend installer integration (#882).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -79,7 +79,12 @@ WantedBy=local-fs.target
 EOF
 systemctl enable var-tmp.mount || true
 
-# Utah is a conventional bootc image rather than Dakota's composefs runtime.
+# Utah installs with the ostree backend. The composefs default (#882, #938)
+# was never exercised by the LUKS e2e before it shipped and fails every flavor
+# (#1129): fisherman's user creation runs chpasswd --root in the composefs
+# deploy directory (no PAM modules there), and the gaming flavors' bootc
+# install to-filesystem exits 126. An empty "image" with a "targetImgref" is
+# the offline ostree shape: fisherman installs from containers-storage.
 # The ISO builder embeds its OCI payload into /usr/lib/containers/storage, the
 # image store this platform already resolves to.
 #

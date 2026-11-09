@@ -1,22 +1,22 @@
-ARG BASE_IMAGE=quay.io/hummingbird-community/os-minimal:latest@sha256:834747d185bee2b04c8fcb6212e37da885594542128de4728041ca2f87557eb8
+ARG BASE_IMAGE=quay.io/hummingbird-community/os-minimal:latest@sha256:466a0963bdb347debf3784ed6e5d37dcb09e184214c532882e2fa88af8a88fbf
 # The package factory publishes a complete, digest-addressable RPM repository.
 # Keep this pin in Utah so an image build is reproducible and can be reviewed
 # against the exact package set it consumes.
 ARG PACKAGE_IMAGE=ghcr.io/projectbluefin/utah-packages
-ARG PACKAGE_IMAGE_SHA=sha256:688e21379c0d5fe58ade6715bba0c264716c7e5e6d4dd7dbeae14f1c87dfe827
+ARG PACKAGE_IMAGE_SHA=sha256:9ae5f277c776f4b9dce2a6b19a684fe7e8825855569c528f3686c7f4edc7e077
 # CI keeps PACKAGE_IMAGE_SHA pinned. PACKAGE_IMAGE_REF supports a local image
 # in containers-storage, where no registry digest is available.
 ARG PACKAGE_IMAGE_REF=${PACKAGE_IMAGE}@${PACKAGE_IMAGE_SHA}
 ARG COMMON_IMAGE=ghcr.io/projectbluefin/common
-ARG COMMON_IMAGE_SHA=sha256:bac49b023752b9cd73f339d687ad7bb4946a2f54ad3153c85945f576adab0269
+ARG COMMON_IMAGE_SHA=sha256:a2e4b8f76b3ffe23f452c1da54ee9f3887860c3ee114bb528f9d717a35aa20f9
 ARG BREW_IMAGE=ghcr.io/ublue-os/brew
-ARG BREW_IMAGE_SHA=sha256:b3425199be750618562faad58b9944629805e0e1cac8bf60b18d6bc132a56909
+ARG BREW_IMAGE_SHA=sha256:2993b28cf9a54efebdc418ef42228618f5c68e8b931430f2d60eddc190e30016
 # Bluefin wallpapers, taken straight from the artwork repository's own image
 # rather than only through Common's pin of it, so wallpaper freshness does not
 # wait on a Common release. It is the multi-arch index digest: the contents are
 # architecture-independent. Renovate keeps it current like the pins above.
 ARG WALLPAPERS_IMAGE=ghcr.io/projectbluefin/bluefin-wallpapers-gnome
-ARG WALLPAPERS_IMAGE_SHA=sha256:820ec33dc2354e521bc915670625f8177a123d961121809b868e420f63c73ab8
+ARG WALLPAPERS_IMAGE_SHA=sha256:acaf565d5de01c8caea2bca7aa96bb71e75c94de02c6bd614f8d771a4a620969
 
 FROM ${COMMON_IMAGE}@${COMMON_IMAGE_SHA} AS common
 FROM ${BREW_IMAGE}@${BREW_IMAGE_SHA} AS brew
@@ -83,6 +83,7 @@ COPY scripts/install-packages.py \
      scripts/verify-rpm-contract.py \
      scripts/build-gnome-extensions.sh \
      scripts/install-ogc-kernel.sh \
+     scripts/install-fedora-kernel.sh \
      scripts/install-nvidia.sh \
      scripts/clean-stage.sh \
      scripts/pin-build-mtimes.py \
@@ -192,6 +193,11 @@ ARG GENERIC_LOGOS_SHA256=2f9247f480788ef5cea4bc9f872bc5653ae0578fb7bec045f8b807c
 # Common's recipes silently shadowed ours, so every override reverted
 # (issue #449). The `just` >= 1.56 floor is enforced by
 # tests/test_ujust_overrides.py.
+# The kernel check, first thing once the scripts are in place: every flavor
+# builds FROM the kernel cache image, whose distribution kernel is Fedora's
+# rebuilt with the btrfs fs-verity fix (scripts/install-fedora-kernel.sh). A
+# build on the pristine Hummingbird base would ship a kernel that reports
+# intact composefs objects on btrfs as corrupt, so it fails here instead.
 RUN --mount=type=bind,from=v4l2loopback,source=/out,target=/tmp/utah-v4l2loopback,ro \
     --mount=type=bind,from=inputs,source=/,target=/tmp/utah-inputs,ro \
     cp -a /tmp/utah-inputs/usr/. /usr/ && \
@@ -200,6 +206,7 @@ RUN --mount=type=bind,from=v4l2loopback,source=/out,target=/tmp/utah-v4l2loopbac
                 verify-rpm-contract.py:utah-verify-rpm-contract \
                 build-gnome-extensions.sh:utah-build-gnome-extensions \
                 install-ogc-kernel.sh:utah-install-ogc-kernel \
+                install-fedora-kernel.sh:utah-install-fedora-kernel \
                 install-nvidia.sh:utah-install-nvidia \
                 clean-stage.sh:utah-clean-stage \
                 pin-build-mtimes.py:utah-pin-build-mtimes \
@@ -217,6 +224,7 @@ RUN --mount=type=bind,from=v4l2loopback,source=/out,target=/tmp/utah-v4l2loopbac
                 image-repo.sh:utah-image-repo; do \
       install -Dm 0755 "/tmp/utah-inputs/tmp/utah-scripts/${pair%%:*}" "/usr/local/libexec/${pair##*:}" || exit 1; \
     done && \
+    /usr/local/libexec/utah-install-fedora-kernel check && \
     cp -a /tmp/utah-inputs/tmp/utah-common/. / && \
     cp -a /tmp/utah-inputs/tmp/utah-bluefin/. / && \
     cp -a /tmp/utah-inputs/tmp/utah-brew/. / && \
@@ -352,8 +360,8 @@ ARG UUPD_TIMER_SHA256=bbb5f098ec33d047bdef571e0bc112364df157e0f92d73e0febab703c4
 # own and cost forty seconds to commit a few megabytes. It lives in
 # scripts/mirror-shim.sh rather than inline, because as a bare && chain a
 # failure printed nothing at all -- see the comment at the top of that script.
-RUN --mount=type=bind,from=common,source=/system_files/bluefin/usr/share/pixmaps,target=/tmp/utah-bluefin-pixmaps,ro \
-    --mount=type=bind,from=artwork,source=/out/branding,target=/tmp/utah-artwork-branding,ro \
+RUN --mount=type=bind,from=artwork,source=/out/branding,target=/tmp/utah-artwork-branding,ro \
+    --mount=type=bind,from=common,source=/system_files/bluefin/usr/share/plymouth,target=/tmp/utah-common-plymouth,ro \
     mkdir -p /tmp/uupd && \
     curl -fsSL "https://github.com/ublue-os/uupd/releases/download/${UUPD_VERSION}/uupd_Linux_x86_64.tar.gz" \
       -o /tmp/uupd/uupd_Linux_x86_64.tar.gz && \

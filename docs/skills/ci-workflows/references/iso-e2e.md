@@ -20,6 +20,16 @@ oneshot that runs after `display-manager.service`, so it catches a boot that
 stopped just short of a usable display. Test credentials are confined to the
 disposable ISO/disk; neither is uploaded or released.
 
+The installed disk's first boot must show Plymouth's graphical passphrase
+prompt with the payload's watermark (`iso/scripts/plymouth-prompt.py`:
+tesseract finds the prompt text, and the default theme's `watermark.png`,
+read from the live guest, matches at the theme's alignment). A prompt on the
+serial console fails at once as the text fallback (#461); the judged frame is
+kept as `installed-luks-prompt.png` and published with the other evidence.
+The harness therefore keeps `rhgb` on the installed entry and drops only
+`quiet`; Plymouth then holds the console until GDM starts, so the graphical
+target is read over SSH as well as from serial.
+
 Only after the entire LUKS matrix succeeds, `production-iso` composes a fresh
 `DEBUG=0` x86_64 UEFI ISO from each same digest, writes its SHA-256 checksum,
 and retains both as a 30-day Actions artifact. It is deliberately an artifact,
@@ -85,10 +95,18 @@ tip. `promote-to-testing` runs `scripts/promotion-ratchet.py`, in order:
    release gate; tested digests already `:testing` -> `noop`; tested commit
    older, or a same-commit rebuild already superseded under its dated tag by a
    newer rebuild -> `refuse` with a `::warning` (out-of-order completion is
-   expected, the run stays green and the evidence is kept); diverged from the
-   promoted commit (force-push), an image not built from the tested commit, or
-   any registry/API error or unreadable label -> `::error`, job fails, nothing
-   moves. Any one refusing flavor refuses the whole promotion.
+   expected, the run stays green and the evidence is kept); a commit that is
+   neither an ancestor nor a descendant of the one `:testing` points at is a
+   divergence -- under testing -> squash -> main -> force-reset the commit
+   behind :testing is routinely squashed out of history (a squashed fix-up, a
+   rebase that dropped the commit the image was built from, projectbluefin/utah#1033),
+   so it can no longer be verified against. Only the newer side may win: if
+   the tested commit is strictly newer than the ghost, `:testing` is
+   re-baselined forward to it with a `::warning`; if the tested commit is
+   off-line and no newer, it refuses as an out-of-order completion; an image
+   not built from the tested commit, any registry/API error or unreadable
+   label -> `::error`, job fails, nothing moves. Any one refusing flavor
+   refuses the whole promotion.
 3. **Move** the tags (`skopeo copy --all --preserve-digests`) only on
    `promote`.
 
@@ -120,6 +138,22 @@ only the dated tag (`publish_stream_tag: "false"`). The recording and tag steps
 run only from `main`: the release gate trusts these statuses, and a dispatch
 from another ref would run that branch's copy of this file. It still tests; it
 cannot publish evidence or move a tag.
+
+**Ghost baseline.** Under `testing` -> squash -> `main` -> force-reset, the
+commit behind a published `:testing` image is routinely squashed out of
+`main`'s history (a squashed fix-up, a rebase that dropped the commit the image
+was built from, projectbluefin/utah#1033). A `:testing` commit that is neither
+an ancestor nor a descendant of the tested commit -- GitHub `compare` reports
+`diverged` -- is exactly that squashed-away line, and the old logic refused such
+a promotion forever, freezing `:testing` on a commit the graph can no longer
+name. The ratchet now orders the two commits by committer date and lets only the
+newer side win: if the tested commit is strictly newer than the ghost, it is
+re-baselined forward to it (the latest E2E-green commit) with a `::warning`, so
+nothing moves off the verified line; if the tested commit is off-line and no
+newer -- a late out-of-order completion or an old build replayed by hand -- it
+refuses with a `::warning` and leaves the tags as they are. The `behind` case
+(the tested commit is a strict ancestor of what `:testing` points at) is refused
+first, so a re-baseline never moves a flavor backwards.
 
 **Recovery.** If `:testing` ever points at an image whose label cannot be
 read, every promotion fails closed until a maintainer retags `:testing` to a
@@ -215,6 +249,46 @@ Fulcio identity pinned to the tacklebox `release-image.yml` workflow on
 an unsigned image or one attested by any other workflow or repository is
 rejected before each Renovate-driven digest bump can run privileged.
 
+### Utah image provenance
+
+Before `luks` and `tacklebox-iso` pull the new image, `verify-provenance`
+runs `iso/scripts/verify-image-provenance.sh` on every digest in the matrix
+(utah#1018). It verifies the SLSA provenance attestation published by the
+reusable build workflow (`projectbluefin/actions` `reusable-build.yml`) for
+source repository `projectbluefin/utah` on `refs/heads/testing`, so an image
+attested by any other workflow or repository never reaches the privileged
+e2e jobs. The `testsuite` job is not gated on it.
+
+A 404 from `gh attestation verify` means the build never attested; it is
+not a lookup problem. The reusable build's `Sign, publish SBOM, and attest`
+step is `continue-on-error`, and inside it the provenance attestation runs
+only if the SBOM steps before it succeeded. A green build can therefore ship
+no attestation, and `:testing` stops advancing (2026-10-31 to 11-06). That
+happened because Utah's `gen-sbom` recipe, run under `sudo`, left a root-owned
+`sbom_out/` that the unprivileged SBOM step could not write. In the build log,
+check `sign.gen-sbom` and `sign.__actions_attest-build-provenance`.
+
+### Testing freshness alarm
+
+A broken promotion gate never fails a build: `:testing` simply stops moving.
+`testing-freshness.yml` runs every six hours. `scripts/testing-freshness.py`
+takes the completion time of the "Move :testing to the tested digests" step
+in the newest post-testing-e2e run whose `promote-to-testing` job ran it. That
+job is the only writer of `:testing`, so the step's end is the promotion time.
+It scans runs started up to 36 hours plus a day of slack ago; when the move
+is older than 36 hours, or no scanned run moved the tag, the script opens one issue labelled `kind/bug`, `area/ci` and
+`priority/critical-urgent` for the hive to pick up. Every run refreshes the
+issue with the newest e2e run's failed jobs, and the issue closes itself once
+the tag moves. Nothing on the image can say when it was promoted: the move is
+`skopeo copy --preserve-digests`, and the config's `created` is
+SOURCE_DATE_EPOCH (the last build-input commit). A run's overall conclusion is
+not used either, because a run can promote and fail a later job, or pass while
+the ratchet holds the tag. If the job or step is renamed, update
+`scripts/testing-freshness.py`; `tests/test_testing_freshness.py` fails until
+you do. The script finds its issue through the REST issues listing (label
+`area/ci` plus a body marker), not issue search. Dispatch the workflow with
+another `max_age_hours` to try a different threshold.
+
 ## Testsuite reporting (exact-digest VM suites)
 
 `post-testing-e2e.yml` runs the `testsuite` job asynchronously against each
@@ -225,3 +299,13 @@ come from `needs.resolve.outputs.digests` and the suite mappings from
 This job surfaces scenario results, fastfetch OCR logs, and screenshots directly
 in GitHub Actions without gating `:testing` tag promotion, keeping deployments
 unblocked while maintaining visible QA signal across flavors.
+
+## Extension startup states
+
+At first login, poll for `ACTIVE` (or the older `ENABLED` spelling) within
+the test's retry budget, rather than accepting the first non-empty state.
+GNOME Shell's `loadExtension()` initially sets `ERROR` before awaiting
+initialization; an activation state may also print as `UNKNOWN`. In #969,
+E2E runs 40635543943 and 40700004838 saw these states with an empty
+`GetExtensionErrors` result. A persistent non-active state must still fail,
+with diagnostics preserved; do not toggle the extension to make it pass.

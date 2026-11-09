@@ -66,7 +66,9 @@ class BlingTests(unittest.TestCase):
         return loop[loop.index("for extension"):].replace("/usr/share/gnome-shell/extensions", str(base))
 
     @unittest.skipUnless(shutil.which("jq"), "jq required for build loop")
-    def test_build_loop_moves_all_members_and_compiles_only_present_schemas(self):
+    def test_build_loop_moves_all_members_with_their_schemas(self):
+        # Schemas are installed globally after every extension is in place,
+        # so the bling loop only moves folders, schemas/ included.
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
             folder = self.member(base, "future", "future@example.org")
@@ -78,9 +80,10 @@ class BlingTests(unittest.TestCase):
                 'glib-compile-schemas() { printf "compiled:%s\\n" "$*"; };\n' + loop,
             ], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(result.stdout, f"compiled:--strict {base}/future@example.org/schemas\n")
+            self.assertEqual(result.stdout, "")
             for uuid in ("future@example.org", "other@example.org"):
                 self.assertTrue((base / uuid / "metadata.json").is_file())
+            self.assertTrue((base / "future@example.org/schemas").is_dir())
             self.assertFalse(folder.exists())
             self.assertNotIn("enabled-extensions", loop)
 

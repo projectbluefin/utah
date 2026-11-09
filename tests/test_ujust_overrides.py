@@ -234,6 +234,46 @@ class UjustOverridesTests(unittest.TestCase):
         self.assertIn("https://github.com/projectbluefin/utah/issues/395", result.stderr)
         self.assertEqual(self.calls(), "")
 
+    def setup_debug_tools(self, uid=0, bootc_exit=0):
+        self.mock("id", f'echo {uid}')
+        self.mock("sudo", 'echo "sudo" >> "$CALLS"')
+        self.mock("bootc", f'echo "bootc $*" >> "$CALLS"; echo overlay-error >&2; '
+                  f'exit {bootc_exit}')
+        self.mock("dnf5", 'echo "dnf5 $*" >> "$CALLS"')
+
+    def test_install_debug_tools_unlocks_usr_then_installs(self):
+        self.setup_debug_tools()
+        result = self.run_recipe("install-debug-tools")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.calls(), "bootc usr-overlay\n"
+                         "dnf5 install -y gdb-headless elfutils sysprof-cli\n")
+        self.assertIn('pgrep -u "$USER" -x gnome-shell', result.stdout)
+        self.assertNotIn("pidof", result.stdout)
+
+    def test_install_debug_tools_reexecs_under_sudo_when_not_root(self):
+        self.setup_debug_tools(uid=1000)
+        result = self.run_recipe("install-debug-tools")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.calls(), "sudo\n")
+
+    @unittest.skipIf(os.access("/usr", os.W_OK), "/usr is writable on this host")
+    def test_install_debug_tools_stops_when_usr_stays_read_only(self):
+        self.setup_debug_tools(bootc_exit=1)
+        result = self.run_recipe("install-debug-tools")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.calls(), "bootc usr-overlay\n")
+        self.assertIn("overlay-error", result.stderr)
+        self.assertIn("could not unlock /usr", result.stderr)
+
+    def test_install_debug_tools_has_a_user_facing_list_description(self):
+        result = subprocess.run([self.just, "--justfile", str(self.entry), "--list"],
+                                env=self.env, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        line = next((l for l in result.stdout.splitlines()
+                     if l.strip().startswith("install-debug-tools ")), None)
+        self.assertIsNotNone(line, f"install-debug-tools missing from --list; got {result.stdout!r}")
+        self.assertIn("# Install gdb, elfutils and sysprof-cli until reboot", line)
+
     def test_report_override_keeps_a_user_facing_list_description(self):
         # just uses only the comment line immediately preceding a recipe as
         # its description, so an implementation comment block ending right

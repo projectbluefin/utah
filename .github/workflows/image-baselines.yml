@@ -19,11 +19,13 @@ concurrency:
 
 jobs:
   refresh:
+    # Only trusted main may mint the App token and open a proposal. A schedule
+    # or manual dispatch on any other ref must never create a proposal.
+    if: github.repository_owner == 'projectbluefin' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-26.04
     timeout-minutes: 60
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -35,9 +37,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: just baselines
-      - name: Propose refreshed baselines
-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+      # Mint only after the measurement has run. Unlike GITHUB_TOKEN, an
+      # App-authenticated proposal triggers the normal pull_request CI, so the
+      # required contract and image-build checks report on the proposed head
+      # and the PR's author is the trusted mergeraptor bot.
+      - name: Get repository-scoped mergeraptor token
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
         with:
+          client-id: ${{ secrets.MERGERAPTOR_APP_ID }}
+          private-key: ${{ secrets.MERGERAPTOR_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
+      - name: Propose refreshed baselines
+        uses: peter-evans/create-pull-request@15733dbdfeedb4f7fdb73d13c6f5ac83b710fab8 # v8
+        with:
+          token: ${{ steps.app-token.outputs.token }}
           branch: automation/image-baselines
           title: 'chore(baselines): refresh Bluefin, Dakota and Utah image baselines'
           commit-message: 'chore(baselines): refresh Bluefin, Dakota and Utah image baselines'

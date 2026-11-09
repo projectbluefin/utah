@@ -314,6 +314,13 @@ wait_for_boot() {
             echo "  serial: reached graphical target"
             break
         fi
+        # Plymouth's graphical splash holds the console until GDM takes the
+        # display, so the target is usually reached with nothing on serial.
+        if ssh_target 'systemctl is-active --quiet graphical.target' 2>/dev/null; then
+            seen_target=1
+            echo "  ssh: graphical.target is active"
+            break
+        fi
         if grep -qa "Kernel panic" "${SERIAL_LOG}" 2>/dev/null; then
             diagnose_failure "Kernel panic observed on serial console during ${phase_label}"
         fi
@@ -523,6 +530,11 @@ if [[ "${DISK_OR_ISO}" == *.iso ]]; then
     # luks-e2e.sh writes its installed disk under its own work directory, which
     # defaults somewhere else entirely. Pin it to a directory this script owns so
     # the disk is where the next phase looks for it.
+    #
+    # The backend is not pinned here: it follows luks-e2e.sh, which installs
+    # with ostree (#1129). Callers may export UTAH_E2E_COMPOSEFS_BACKEND=1 to
+    # exercise composefs; bootc_lifecycle.py and verify-boot-files.sh handle
+    # both BLS shapes.
     INSTALL_WORK="${UTAH_E2E_WORK:-${WORK}/install}"
     mkdir -p "${INSTALL_WORK}"
     UTAH_E2E_WORK="${INSTALL_WORK}" bash "${ROOT}/iso/scripts/luks-e2e.sh" \

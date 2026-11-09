@@ -14,8 +14,8 @@ next to the list rather than in a commit message.
     flavors.py images     [{"image": "utah"}, ...]         promote
     flavors.py releases   [{"image": "utah", "source_tag": ...}, ...]  release
     flavors.py needs-kernel   true / false
-    flavors.py list-main      ["main"]            flavors that build on the pristine base
-    flavors.py list-kernel    ["nvidia", ...]     flavors that build on the kernel cache
+    flavors.py list-main      ["main"]            main, submitted as its own build matrix
+    flavors.py list-kernel    ["nvidia", ...]     the OGC/NVIDIA flavors, the other matrix
     flavors.py image FLAVOR   utah / utah-nvidia  published image name for flavor
     flavors.py suites     [{"image": "utah", "suites": "smoke,common"}, ...]  matrix
 """
@@ -46,14 +46,14 @@ elif what == "releases":
     print(json.dumps([{"image": IMAGE[f], "source_tag": "testing", "target_tag": "stable"}
                       for f in flavors]))
 elif what == "needs-kernel":
-    # Only the OGC and NVIDIA flavors consume the kernel cache image. With
-    # neither in the set, building it is 45 minutes spent on nothing.
-    print("true" if any(f != "main" for f in flavors) else "false")
+    # Every flavor builds on the kernel cache image: its distribution kernel is
+    # Fedora's rebuilt with the btrfs fs-verity fix (install-fedora-kernel.sh),
+    # and the OGC and NVIDIA flavors unpack their kernel and module from it too.
+    print("true" if flavors else "false")
 elif what == "list-main":
-    # main is built on the pristine Hummingbird base and never waits for the
-    # kernel cache. The build workflow submits it separately so a cache miss
-    # (about twenty minutes of kernel compile) delays only the flavors that
-    # actually consume the result.
+    # main waits for the kernel cache like the rest. The build workflow still
+    # submits it as its own matrix: the reusable build keys cancel-in-progress
+    # on brand_name, and main's required check names its own call.
     print(json.dumps([f for f in flavors if f == "main"]))
 elif what == "list-kernel":
     print(json.dumps([f for f in flavors if f != "main"]))

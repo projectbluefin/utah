@@ -4,7 +4,7 @@
 The checker runs inside a composed image for runtime verification, while
 ``--check`` validates the contract itself in source-only CI. RPM parity remains
 in verify-rpm-contract.py; this covers Utah identity, Bluefin desktop defaults,
-Flatpak policy, and required service enablement.
+GSettings overrides, Flatpak policy, and required service enablement.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ import re
 import subprocess
 import sys
 import tomllib
+import xml.etree.ElementTree as ElementTree
 from pathlib import Path
 from typing import Any
 
@@ -116,6 +117,97 @@ def unit_disabled(unit: str, root: Path = Path("/")) -> bool:
         return False
 
 
+def decoder_load_error(element: str) -> str | None:
+    """Return why a GStreamer element does not load, or None when it does.
+
+    Fails closed: a missing gst-inspect-1.0 is an error, not a pass.
+    """
+    try:
+        probe = subprocess.run(
+            ["gst-inspect-1.0", element], capture_output=True, text=True, check=False
+        )
+    except FileNotFoundError:
+        return f"media decoder {element!r} cannot be probed: gst-inspect-1.0 is missing"
+    if probe.returncode != 0:
+        return f"media decoder {element!r} failed to load: {probe.stderr.strip()}"
+    return None
+
+
+OVERRIDE_SECTION = re.compile(r"^\s*\[([^\]]+)\]\s*$")
+GSETTINGS_VALUE_KEY = re.compile(r"^[A-Za-z0-9_.-]+ [A-Za-z0-9-]+$")
+
+
+def override_section_errors(schema_dir: Path, allowed: dict[str, str]) -> tuple[list[str], int]:
+    """Check that every override section in schema_dir names an installed schema.
+
+    glib-compile-schemas drops an override section whose schema no
+    *.gschema.xml in the directory declares, and ignores a second file that
+    declares an existing schema id, both without a message or a non-zero exit.
+    `allowed` maps schema ids that may stay unresolved to the reason; an entry
+    that resolves, or that no override names, is stale and also an error.
+    Returns the errors and the number of override sections that resolved.
+    """
+    errors: list[str] = []
+    declared: dict[str, list[str]] = {}
+    for schema_file in sorted(schema_dir.glob("*.gschema.xml")):
+        try:
+            schemalist = ElementTree.parse(schema_file).getroot()
+        except (OSError, ElementTree.ParseError) as exc:
+            errors.append(f"unreadable GSettings schema {schema_file}: {exc}")
+            continue
+        for schema in schemalist.iter("schema"):
+            if schema.get("id"):
+                declared.setdefault(schema.get("id"), []).append(schema_file.name)
+    for schema_id, files in sorted(declared.items()):
+        if len(files) > 1:
+            errors.append(
+                f"GSettings schema {schema_id} is declared by {', '.join(files)};"
+                " glib-compile-schemas keeps one and silently ignores the rest"
+            )
+
+    overridden: dict[str, list[str]] = {}
+    for override in sorted(schema_dir.glob("*.gschema.override")):
+        for line in override.read_text().splitlines():
+            match = OVERRIDE_SECTION.match(line)
+            if match:
+                # [schema:DESKTOP] limits a section to one desktop.
+                schema_id = match.group(1).split(":", 1)[0].strip()
+                overridden.setdefault(schema_id, []).append(override.name)
+
+    resolved = 0
+    for schema_id, files in sorted(overridden.items()):
+        if schema_id in declared:
+            resolved += len(files)
+        elif schema_id not in allowed:
+            errors.append(
+                f"{', '.join(files)} overrides {schema_id}, but no installed schema declares it;"
+                " glib-compile-schemas silently drops the section"
+            )
+    for schema_id in sorted(allowed):
+        if schema_id in declared:
+            errors.append(f"allowed unresolved override {schema_id} is installed now; remove it from the allowlist")
+        elif schema_id not in overridden:
+            errors.append(f"allowed unresolved override {schema_id} is not overridden any more; remove it from the allowlist")
+    return errors, resolved
+
+
+def gsettings_value_error(schema: str, key: str, expected: str) -> str | None:
+    """Return why `gsettings get schema key` does not print expected, or None.
+
+    Fails closed: a missing gsettings is an error, not a pass.
+    """
+    try:
+        probe = subprocess.run(["gsettings", "get", schema, key], capture_output=True, text=True, check=False)
+    except FileNotFoundError:
+        return f"GSettings {schema} {key} cannot be read: gsettings is missing"
+    if probe.returncode != 0:
+        return f"GSettings {schema} {key} cannot be read: {probe.stderr.strip()}"
+    actual = probe.stdout.strip()
+    if actual != expected:
+        return f"GSettings {schema} {key} is {actual}, expected {expected}"
+    return None
+
+
 def validate_contract(contract: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     for section in ("branding", "configuration", "flatpak", "services"):
@@ -133,6 +225,16 @@ def validate_contract(contract: dict[str, Any]) -> list[str]:
         errors.append("Flatpak app contract contains duplicate IDs")
     if not str(flatpak.get("brewfile", "")).startswith("/"):
         errors.append("Flatpak Brewfile path must be absolute")
+    gsettings = contract.get("gsettings")
+    if gsettings is not None:
+        if not str(gsettings.get("schema_dir", "")).startswith("/"):
+            errors.append("GSettings schema_dir must be absolute")
+        for schema_id, reason in gsettings.get("unresolved_overrides", {}).items():
+            if not isinstance(reason, str) or not reason.strip():
+                errors.append(f"allowed unresolved override {schema_id} needs a reason")
+        for name, value in gsettings.get("values", {}).items():
+            if not GSETTINGS_VALUE_KEY.match(name) or not isinstance(value, str):
+                errors.append(f"GSettings value must be 'schema key' = \"value\": {name!r}")
     return errors
 
 
@@ -249,6 +351,34 @@ def main() -> int:
         if not unit_disabled(unit):
             errors.append(f"service must be disabled: {unit}")
 
+    decoders = contract.get("media", {}).get("decoders", [])
+    for element in decoders:
+        error = decoder_load_error(element)
+        if error:
+            errors.append(error)
+
+    # Malformed [gsettings] entries are already in errors from validate_contract.
+    gsettings = contract.get("gsettings")
+    resolved_overrides = 0
+    gsettings_values = {}
+    if gsettings is not None:
+        schema_dir = Path(str(gsettings.get("schema_dir", "")))
+        if schema_dir.is_absolute() and schema_dir.is_dir():
+            override_errors, resolved_overrides = override_section_errors(
+                schema_dir, gsettings.get("unresolved_overrides", {})
+            )
+            errors.extend(override_errors)
+        elif schema_dir.is_absolute():
+            errors.append(f"GSettings schema directory is missing: {schema_dir}")
+        gsettings_values = gsettings.get("values", {})
+        for name, expected in gsettings_values.items():
+            if not GSETTINGS_VALUE_KEY.match(name) or not isinstance(expected, str):
+                continue
+            schema, key = name.split(" ", 1)
+            error = gsettings_value_error(schema, key, expected)
+            if error:
+                errors.append(error)
+
     for error in errors:
         fail(error)
     if errors:
@@ -257,10 +387,17 @@ def main() -> int:
     masked_msg = f", {masked_count} masked services" if masked_count else ""
     disabled_count = len(services.get("disabled", []))
     disabled_msg = f", {disabled_count} disabled services" if disabled_count else ""
+    decoder_msg = f", {len(decoders)} media decoders" if decoders else ""
+    gsettings_msg = (
+        f", {resolved_overrides} GSettings override sections, {len(gsettings_values)} GSettings values"
+        if gsettings is not None
+        else ""
+    )
     print(
         f"Utah desktop contract passed: {len(flatpak['apps'])} Flatpaks, "
         f"{len(services.get('enabled', []))} enabled services, "
-        f"{len(services.get('user_enabled', []))} user services{masked_msg}{disabled_msg}"
+        f"{len(services.get('user_enabled', []))} user services{masked_msg}{disabled_msg}{decoder_msg}"
+        f"{gsettings_msg}"
     )
     return 0
 

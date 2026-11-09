@@ -83,15 +83,11 @@ if [ -f /usr/sbin/grub2-switch-to-blscfg ]; then
     sed -i 's|^EFIDIR=.*|EFIDIR="fedora"|' /usr/sbin/grub2-switch-to-blscfg
 fi
 
-# GNOME Control Center's distro builds use these compile-time PNG paths, not
-# os-release NAME/LOGO. The RPM transaction erased Common's earlier overlay
-# while swapping distro logos. Restore Bluefin's matching light/dark artwork
-# only after the transaction, from the digest-pinned Common stage bind mount.
-# install-packages.py checks FEDORA_LOGO_FILES before this restore; identical
-# paths here contain Bluefin artwork and are checked by the desktop contract.
-for logo in fedora_logo_med.png fedora_whitelogo_med.png fedora-logo.png system-logo-white.png; do
-    install -Dm0644 "/tmp/utah-bluefin-pixmaps/${logo}" "/usr/share/pixmaps/${logo}"
-done
+# GNOME Control Center's About logo comes from the compile-time
+# distributor_logo paths in the packaged build, which point at
+# /usr/share/bluefin-artwork-logos/bluefin-logo-{light,dark}.png (shipped by
+# bluefin-artwork-logos, a gnome-control-center dependency). No restore of
+# Fedora-named pixmaps is needed; the desktop contract checks the new paths.
 
 # The greeter logo is artwork's Bluefin wordmark (dark variant: white lettering
 # for the dark login screen), rasterized here because gnome-shell draws the file
@@ -133,6 +129,22 @@ chmod 0644 /usr/share/pixmaps/bluefin-gdm-logo.png
 # Keep Bluefin's icon name and menu behavior; rebuild the index after every
 # overlay and logos-RPM operation so it includes our shipped symbolic SVG.
 gtk-update-icon-cache --force /usr/share/icons/hicolor
+
+# Boot splash watermark. common ships Bluefin's raptor as the spinner theme's
+# watermark.png, which the bgrt default theme draws from the same ImageDir at
+# the bottom of the splash and the LUKS passphrase prompt. Utah copies common's
+# tree before the package transaction, and the fedora-logos -> generic-logos
+# swap in utah-install-packages then erases the file the logos package owns at
+# that path: the image shipped no watermark.png at all and the splash was
+# unbranded. Re-apply common's plymouth tree after every package operation, as
+# Bluefin does by layering common last; the contract and the initramfs check
+# (regenerate-initramfs.sh) assert the result. Mounted from the pinned common
+# image by the Containerfile.
+cp -a /tmp/utah-common-plymouth/. /usr/share/plymouth/
+plymouth_theme="$(plymouth-set-default-theme)"
+plymouth_image_dir="$(sed -n 's|^ImageDir=||p' \
+    "/usr/share/plymouth/themes/${plymouth_theme}/${plymouth_theme}.plymouth" | head -n 1)"
+cmp "${plymouth_image_dir}/watermark.png" /tmp/utah-common-plymouth/themes/spinner/watermark.png
 
 # Compile the system dconf databases now so the GDM greeter picks up the
 # org.gnome.login-screen logo override (etc/dconf/db/gdm.d/01-bluefin-gdm-logo)

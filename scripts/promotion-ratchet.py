@@ -128,6 +128,13 @@ class GitHub:
             raise PromotionError(f"compare {base[:7]}...{head[:7]} returned {status!r}")
         return status
 
+    def committed_at(self, sha: str) -> str:
+        """ISO-8601 committer date; orders two commits that share no ancestry."""
+        when = self._api(f"repos/{self.repository}/commits/{sha}", "--jq", ".commit.committer.date")
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", when):
+            raise PromotionError(f"commit {sha[:7]} has no usable committer date ({when!r})")
+        return when
+
     def statuses(self, sha: str) -> list[dict]:
         out = self._api(
             f"repos/{self.repository}/commits/{sha}/statuses",
@@ -187,7 +194,7 @@ def _bind_tested(entry: dict, tested_sha: str, registry: Registry, github: GitHu
 
 class Outcome(NamedTuple):
     image: str
-    verdict: str  # new | same-digest | ahead | rebuild | behind | superseded-rebuild | diverged
+    verdict: str  # new | same-digest | ahead | rebuild | behind | superseded-rebuild | based
     detail: str
 
 
@@ -239,7 +246,18 @@ def assess(
         )
     if relation == "behind":
         return Outcome(image, "behind", f"tested commit is older than {where}")
-    return Outcome(image, "diverged", f"tested commit diverged from {where}")
+    # Neither commit descends from the other. Under testing -> squash -> main
+    # -> force-reset this is routine: the commit behind :testing was squashed
+    # away. Only the newer side may win, so a pre-squash commit tested late
+    # (or an old build replayed by hand) cannot drag :testing behind its squash.
+    if github.committed_at(tested_sha) <= github.committed_at(promoted.sha):
+        return Outcome(image, "diverged", f"tested commit is off-line and no newer than {where}")
+    return Outcome(
+        image,
+        "based",
+        f"baseline {promoted.sha[:7]} ({promoted.version}) was rewritten out of "
+        f"history; tested commit {tested_sha[:7]} supersedes it",
+    )
 
 
 def decide(
@@ -264,11 +282,11 @@ def decide(
 
     if "diverged" in verdicts:
         lines.append(
-            f"::error title=:{moving_tag} not moved::diverged. "
-            "Refusing to move tags for a commit that is not a descendant of the promoted one. "
-            "Evidence is retained; a maintainer must reconcile."
+            f"::warning title=:{moving_tag} not moved::Out-of-order completion: the tested commit "
+            f"{tested_sha[:7]} is off-line and no newer than what :{moving_tag} points at. "
+            "Tags left as they are; evidence retained."
         )
-        return "refuse", 1, lines
+        return "refuse", 0, lines
     if "behind" in verdicts:
         lines.append(
             f"::warning title=:{moving_tag} not moved::Out-of-order completion: the tested commit "
@@ -283,6 +301,22 @@ def decide(
             "Tags left as they are; evidence retained."
         )
         return "refuse", 0, lines
+    if "based" in verdicts:
+        # The commit behind :testing's current image was rewritten out of
+        # history, so the old baseline is a ghost it can no longer verify
+        # against. It is already unrecoverable under the old logic; move
+        # :testing to the latest E2E-green commit rather than freezing it
+        # forever. This branch is only reached when the tested commit is
+        # strictly newer than the ghost: the 'diverged' and 'behind' cases
+        # above refuse any off-line commit no newer than the promoted one, so
+        # this re-baseline never moves a flavor backward.
+        lines.append(
+            f"::warning title=:{moving_tag} re-baselined::The commit :testing "
+            "pointed at was rewritten out of history. Moving :testing to the "
+            f"latest E2E-green commit {tested_sha[:7]} instead of freezing. "
+            "Evidence is retained."
+        )
+        return "promote", 0, lines
     if verdicts == {"same-digest"}:
         lines.append(f"::notice title=:{moving_tag} already current::Nothing to promote; the tested digests are already :{moving_tag}.")
         return "noop", 0, lines

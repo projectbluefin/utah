@@ -22,6 +22,22 @@ renders relative times freezes the clock in the harness (the `ago()` site
 test pins `Date.now`) rather than trusting setup-to-assert to stay within
 one unit.
 
+### Python install pins
+
+`tests/test_python_install_pins.py` runs explicitly in `just check` and also
+through `just test`. It inspects workflow `run` steps (`.yml` and `.yaml`) and
+Justfile recipes for `pip`, `pip3`, and `python -m pip` installs, including
+backslash continuations and shell command chains. Every direct package must
+have an exact `==` version; wildcard pins and version ranges fail. Requirements
+files passed with `-r` or `--requirement` are checked recursively, and missing
+or cyclic files fail. Keep paths relative to the repository root.
+
+Declare host test dependencies in `tests/requirements.txt`, where Renovate
+can update the pins. Do not silently install missing modules in `just check`;
+`just test` reports how to install the declared dependencies. This gate covers
+the pip command forms above, not arbitrary shell wrappers or other Python
+installers; extend its fixtures when introducing a new install form.
+
 ### CI guard scripts and test coverage
 
 The front-matter description budget measures the content after stripping the
@@ -72,10 +88,10 @@ the build before expensive compilation or container builds run:
   references across all workflow files are reported.
   Exercised by black-box tests in `tests/test_check_workflow_outputs.py`.
 
-The same job resolves the flavor set and splits it in two by what each
-flavor builds on -- `main` on the pristine Hummingbird base, the rest on the
-kernel cache image -- emitting `main_flavors`, `kernel_flavors`, and
-`needs_kernel` (step "Resolve the image flavors",
+The same job resolves the flavor set and splits it in two -- `main`, and the
+OGC/NVIDIA flavors; all of them build on the kernel cache image -- emitting
+`main_flavors`, `kernel_flavors`, and `needs_kernel` (step "Resolve the image
+flavors",
 `.github/workflows/build.yml`). The split rationale and the flavors.py
 commands live in [flavors.md](../../flavors.md). An empty resolved set fails
 loudly there, because an invalid matrix creates no image job at all and the

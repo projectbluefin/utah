@@ -130,16 +130,21 @@ class QueryTests(unittest.TestCase):
                 self.assertIn("nvidia", result.stderr)
                 self.assertEqual(result.stdout, "")
 
-    def test_needs_kernel_is_false_for_main_only(self):
+    def test_needs_kernel_is_true_for_main_only(self):
+        # main's distribution kernel is the cache image's patched Fedora build.
         cli = build_tree({"flavors": ["main"], "retired": {}})
-        self.assertEqual(run(cli, "needs-kernel").stdout.strip(), "false")
+        self.assertEqual(run(cli, "needs-kernel").stdout.strip(), "true")
 
-    def test_needs_kernel_is_true_for_any_non_main_flavor(self):
+    def test_needs_kernel_is_true_for_any_flavor_set(self):
         for flavors in (["main", "nvidia"], ["gaming"], ["nvidia-gaming"]):
             cli = build_tree({"flavors": flavors, "retired": {}})
             self.assertEqual(
                 run(cli, "needs-kernel").stdout.strip(), "true", flavors
             )
+
+    def test_needs_kernel_is_false_with_no_flavors(self):
+        cli = build_tree({"flavors": [], "retired": {"main": "off"}})
+        self.assertEqual(run(cli, "needs-kernel").stdout.strip(), "false")
 
     def test_list_main_and_list_kernel_partition_the_flavor_set(self):
         cli = build_tree({"flavors": ALL_FLAVORS, "retired": {}})
@@ -197,7 +202,7 @@ class ShippedConfigTests(unittest.TestCase):
         self.assertEqual(main + kernel, flavors)
         self.assertEqual(
             run(SCRIPT, "needs-kernel").stdout.strip(),
-            "true" if kernel else "false",
+            "true" if flavors else "false",
         )
         self.assertEqual(
             [run(SCRIPT, "image", f).stdout.strip() for f in flavors],

@@ -174,10 +174,10 @@ packages = [
     # Bluetooth printer backend, published by the pinned factory (#390).
     "bluez-cups",
     # Boot splash (#461): factory-built, matching Bluefin's set (the metapackage
-    # and theme pull the libs and label/two-step plugins as dependencies).
-    # Theme selection and initramfs wiring (spinner default, dracut plymouth
-    # module) follow with the initramfs regeneration work; without them the
-    # BLS rhgb quiet entry still renders nothing.
+    # and theme pull the libs and label/two-step plugins as dependencies). The
+    # splash itself is wired elsewhere: the watermark and serial-console karg
+    # in configure-branding.sh and kargs.d, the initramfs copy checked by
+    # regenerate-initramfs.sh (docs/skills/desktop-contract.md).
     "plymouth",
     "plymouth-system-theme",
     "plymouth-theme-spinner",
@@ -187,7 +187,12 @@ packages = [
     "intel-mediasdk",
     "intel-vpl-gpu-rt",
     "libvpl",
-    # Totem stays omitted: uchardet is unpublished (#383).
+    # Playlist parsing and software H.264 decoding now have their dependency
+    # closures in the pinned factory (#383). Request the real codec explicitly
+    # so a noopenh264 compatibility library cannot satisfy the plugin alone.
+    "totem-pl-parser",
+    "gstreamer1-plugin-openh264",
+    "openh264",
     # Locale and fonts
     "langpacks-en",
     "langpacks-fonts-en",
@@ -877,6 +882,9 @@ parity = [
     "intel-mediasdk",
     "intel-vpl-gpu-rt",
     "ffmpegthumbnailer",
+    "totem-pl-parser",
+    "gstreamer1-plugin-openh264",
+    "openh264",
     # Bluefin tools consumed from the pinned factory (#263, #388, #392).
     "thermald",
     "intel-lpmd",

@@ -8,6 +8,10 @@ or a CI artifact can be checked after the fact (recipe comment, `Justfile`,
   `utah-verify-desktop-contract /usr/share/utah/bluefin-desktop.toml`, after
   branding and services are configured; a contract failure fails the build.
   The extension verifier runs earlier in the same step.
+  It also loads each `[media].decoders` element with `gst-inspect-1.0`; a
+  missing element or a missing `gst-inspect-1.0` fails the build. `[gsettings]`
+  checks that every schema override section resolves and reads the
+  `[gsettings.values]` with `gsettings get` ([extension schemas](extension-schemas.md)).
 - **On demand** — `just check-desktop-contract <ref>` (default
   `localhost/utah:testing`) podman-runs both verifiers inside an
   already-composed image: both verifiers and the desktop contract are

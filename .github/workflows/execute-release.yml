@@ -99,7 +99,7 @@ jobs:
   execute:
     needs: [check-trigger, e2e-evidence]
     if: needs.check-trigger.outputs.is-promotion == 'true'
-    uses: projectbluefin/actions/.github/workflows/reusable-execute-release.yml@209517dda44829f126e25da28f11245c34458ac3 # v1
+    uses: projectbluefin/actions/.github/workflows/reusable-execute-release.yml@6453818f6279a2f2c1282919aad0009a88c01819 # v1
     permissions:
       actions: read
       contents: write
@@ -119,5 +119,5 @@ jobs:
       # The same testsuite commit post-testing-e2e.yml validated, not the
       # floating v1 tag, so the gate cannot drift from that evidence (#773).
       # tests/test_iso_ci.py keeps the two refs equal.
-      gate_test_ref: f077951d8315871542264e385305880ed05c3460 # v1
+      gate_test_ref: 641c09d7f531566a2848ddbf00e8288d081952f0 # v1
     secrets: inherit

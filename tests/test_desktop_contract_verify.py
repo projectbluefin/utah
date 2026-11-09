@@ -13,11 +13,17 @@ tests redirect the three image prefixes (`/usr`, `/etc`, `/var`) into a
 temporary directory and leave every other path -- notably the contract file
 itself -- alone. `unit_enabled`, `unit_masked` and `unit_disabled` shell out
 to systemctl and are covered by their own tests, so they are replaced here with
-declared sets.
+declared sets. The `[media].decoders` probe shells out to gst-inspect-1.0, and
+the `[gsettings].values` probe to gsettings, so their tests patch
+`subprocess.run` directly. The `[gsettings]` override guard reads the schema
+fixtures in `tests/fixtures/gsettings/`.
 """
 
 import json
+import shutil
+import subprocess
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -27,6 +33,8 @@ from test_desktop_contract import ROOT, load
 desktop = load("verify-desktop-contract")
 
 REDIRECTED_PREFIXES = ("/usr", "/etc", "/var")
+GSETTINGS_FIXTURES = ROOT / "tests/fixtures/gsettings"
+SCHEMA_DIR = "/usr/share/glib-2.0/schemas"
 
 OS_RELEASE = {
     "NAME": "Utah",
@@ -186,6 +194,57 @@ class UserServiceTests(VerifyModeTests):
             self.contract_with_user_units("pipewire.socket", "wireplumber.service"),
             naming="required user service is not enabled globally: wireplumber.service",
         )
+
+
+class MediaDecoderTests(VerifyModeTests):
+    """[media].decoders must load via gst-inspect-1.0, not merely be installed
+    (#1116). The probe fails closed when gst-inspect-1.0 itself is missing."""
+
+    def contract_with_decoders(self, *elements):
+        contract = base_contract()
+        contract["media"] = {"decoders": list(elements)}
+        return contract
+
+    def probe(self, *, returncode=0, stderr="", missing=False):
+        calls = []
+
+        def run(argv, **kwargs):
+            calls.append(argv)
+            if missing:
+                raise FileNotFoundError(argv[0])
+            return subprocess.CompletedProcess(argv, returncode, stdout="", stderr=stderr)
+
+        return calls, patch.object(desktop.subprocess, "run", run)
+
+    def test_a_loadable_decoder_passes_and_is_counted(self):
+        calls, patched = self.probe(returncode=0)
+        with patched:
+            code, out, errors = self.verify(self.contract_with_decoders("openh264dec"))
+        self.assertEqual(code, 0, errors)
+        self.assertEqual(calls, [["gst-inspect-1.0", "openh264dec"]])
+        self.assertIn("1 media decoders", out)
+
+    def test_a_decoder_that_fails_to_load_is_rejected_by_name(self):
+        _, patched = self.probe(returncode=1, stderr="No such element or plugin 'openh264dec'")
+        with patched:
+            errors = self.assert_rejected(
+                self.contract_with_decoders("openh264dec"),
+                naming="media decoder 'openh264dec' failed to load",
+            )
+        self.assertIn("No such element or plugin", errors)
+
+    def test_a_missing_gst_inspect_fails_closed(self):
+        _, patched = self.probe(missing=True)
+        with patched:
+            self.assert_rejected(
+                self.contract_with_decoders("openh264dec"),
+                naming="media decoder 'openh264dec' cannot be probed: gst-inspect-1.0 is missing",
+            )
+
+    def test_the_decoder_count_is_omitted_when_none_are_declared(self):
+        code, out, errors = self.verify()
+        self.assertEqual(code, 0, errors)
+        self.assertNotIn("media decoders", out)
 
 
 class CompliantImageTests(VerifyModeTests):
@@ -394,6 +453,138 @@ class ServiceTests(VerifyModeTests):
         self.assert_rejected(
             self.disabled_contract("dnsmasq.service"),
             naming="service must be disabled: dnsmasq.service",
+        )
+
+
+class GSettingsTests(VerifyModeTests):
+    """[gsettings] guards common's schema overrides (dash-to-dock's
+    disable-overview-on-startup was silently dropped) and the values they set.
+
+    The fixture override names org.example.dock, a desktop-qualified
+    org.example.dock.blur:GNOME, and org.example.store, which no schema
+    declares."""
+
+    ALLOWED = {"org.example.store": "not shipped"}
+    VALUE = "org.example.dock disable-overview-on-startup"
+
+    def setUp(self):
+        super().setUp()
+        self.schemas = self.root / SCHEMA_DIR.lstrip("/")
+        shutil.copytree(GSETTINGS_FIXTURES, self.schemas)
+
+    def contract(self, allowed=None, values=None):
+        contract = base_contract()
+        contract["gsettings"] = {
+            "schema_dir": SCHEMA_DIR,
+            "unresolved_overrides": dict(self.ALLOWED if allowed is None else allowed),
+            "values": dict(values or {}),
+        }
+        return contract
+
+    def gsettings(self, *, stdout="true\n", returncode=0, stderr="", missing=False):
+        calls = []
+
+        def run(argv, **kwargs):
+            calls.append(argv)
+            if missing:
+                raise FileNotFoundError(argv[0])
+            return subprocess.CompletedProcess(argv, returncode, stdout=stdout, stderr=stderr)
+
+        return calls, patch.object(desktop.subprocess, "run", run)
+
+    def test_resolved_and_allowed_overrides_pass_and_are_counted(self):
+        code, out, errors = self.verify(self.contract())
+        self.assertEqual(code, 0, errors)
+        self.assertIn("2 GSettings override sections, 0 GSettings values", out)
+
+    def test_a_section_for_a_missing_schema_is_rejected_by_name(self):
+        (self.schemas / "org.example.dock.gschema.xml").unlink()
+        errors = self.assert_rejected(
+            self.contract(),
+            naming="zz0-example.gschema.override overrides org.example.dock, but no installed schema declares it",
+        )
+        self.assertIn("overrides org.example.dock.blur,", errors)
+
+    def test_an_unlisted_unresolved_section_is_rejected(self):
+        self.assert_rejected(self.contract(allowed={}), naming="overrides org.example.store")
+
+    def test_an_allowed_schema_that_is_installed_is_stale(self):
+        self.assert_rejected(
+            self.contract(allowed=dict(self.ALLOWED, **{"org.example.dock": "stale"})),
+            naming="allowed unresolved override org.example.dock is installed now",
+        )
+
+    def test_an_allowed_schema_no_override_names_is_stale(self):
+        self.assert_rejected(
+            self.contract(allowed=dict(self.ALLOWED, **{"org.example.gone": "stale"})),
+            naming="allowed unresolved override org.example.gone is not overridden any more",
+        )
+
+    def test_a_schema_id_declared_twice_is_rejected(self):
+        # glib-compile-schemas ignores the second file and still exits 0.
+        shutil.copyfile(self.schemas / "org.example.dock.gschema.xml", self.schemas / "org.example.copy.gschema.xml")
+        self.assert_rejected(
+            self.contract(),
+            naming="GSettings schema org.example.dock is declared by org.example.copy.gschema.xml, org.example.dock.gschema.xml",
+        )
+
+    def test_an_unparseable_schema_is_rejected(self):
+        self.write(f"{SCHEMA_DIR}/org.example.broken.gschema.xml", "<schemalist>")
+        self.assert_rejected(self.contract(), naming="unreadable GSettings schema")
+
+    def test_a_missing_schema_directory_is_rejected(self):
+        shutil.rmtree(self.schemas)
+        self.assert_rejected(self.contract(), naming=f"GSettings schema directory is missing: {self.schemas}")
+
+    def test_a_matching_value_passes(self):
+        calls, patched = self.gsettings(stdout="true\n")
+        with patched:
+            code, out, errors = self.verify(self.contract(values={self.VALUE: "true"}))
+        self.assertEqual(code, 0, errors)
+        self.assertEqual(calls, [["gsettings", "get", "org.example.dock", "disable-overview-on-startup"]])
+        self.assertIn("1 GSettings values", out)
+
+    def test_a_different_value_is_rejected(self):
+        _, patched = self.gsettings(stdout="false\n")
+        with patched:
+            self.assert_rejected(
+                self.contract(values={self.VALUE: "true"}),
+                naming="GSettings org.example.dock disable-overview-on-startup is false, expected true",
+            )
+
+    def test_an_unknown_schema_is_rejected_with_gsettings_error(self):
+        _, patched = self.gsettings(stdout="", returncode=1, stderr="No such schema “org.example.dock”\n")
+        with patched:
+            self.assert_rejected(
+                self.contract(values={self.VALUE: "true"}),
+                naming="GSettings org.example.dock disable-overview-on-startup cannot be read: No such schema",
+            )
+
+    def test_a_missing_gsettings_fails_closed(self):
+        _, patched = self.gsettings(missing=True)
+        with patched:
+            self.assert_rejected(
+                self.contract(values={self.VALUE: "true"}),
+                naming="cannot be read: gsettings is missing",
+            )
+
+    def test_check_mode_rejects_malformed_gsettings_entries(self):
+        contract = self.contract(allowed={"org.example.store": " "}, values={"no-key": "true"})
+        contract["gsettings"]["schema_dir"] = "usr/share/glib-2.0/schemas"
+        errors = desktop.validate_contract(contract)
+        self.assertIn("GSettings schema_dir must be absolute", errors)
+        self.assertIn("allowed unresolved override org.example.store needs a reason", errors)
+        self.assertIn("GSettings value must be 'schema key' = \"value\": 'no-key'", errors)
+
+    def test_shipped_contract_allowlist_and_values(self):
+        gsettings = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())["gsettings"]
+        self.assertEqual(gsettings["schema_dir"], SCHEMA_DIR)
+        self.assertEqual(
+            set(gsettings["unresolved_overrides"]),
+            {"org.gnome.software", "com.github.stunkymonkey.nautilus-open-any-terminal"},
+        )
+        self.assertEqual(
+            gsettings["values"], {"org.gnome.shell.extensions.dash-to-dock disable-overview-on-startup": "true"}
         )
 
 

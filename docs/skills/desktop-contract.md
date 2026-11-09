@@ -1,7 +1,7 @@
 ---
 name: desktop-contract
 version: "1.0"
-last_updated: "2026-10-25"
+last_updated: "2026-11-07"
 id: desktop-contract
 one_line_purpose: Maintain Bluefin Utah identity, Bluefin desktop defaults, and first-boot Flatpak policy.
 entry_point: docs/skills/desktop-contract.md
@@ -65,13 +65,14 @@ The TOML's sections are the contract's table of contents:
   references Bazaar and the Bluefin background path, the custom command menu
   points at `docs.projectbluefin.io`, the keybindings set `xdg-terminal-exec`,
   the GDM keyfile declares the login-screen schema and the Bluefin asset path.
-  Common's container signature policy names
-  `/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release`; the pinned Hummingbird base
-  supplies that key (fingerprint `567E…1D51`) alongside Utah's
+  Common's container signature policy names `/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release`;
+  the pinned Hummingbird base supplies that key (fingerprint `567E…1D51`) alongside Utah's
   `RPM-GPG-KEY-redhat-release-2`, so no policy weakening or alias is needed.
-- **`[flatpak]`** — first-boot policy: the Flathub and TunaOS remotes,
-  the Bazaar and Ghostty preinstalls, the `99-flatpaks.sh` hook, and the
-  system-flatpaks Brewfile whose app list the contract enumerates.
+- **`[flatpak]`** — first-boot policy: the Flathub and TunaOS remotes, the Bazaar,
+  NautilusPreviewer (spacebar previews in Files) and Ghostty preinstalls, the `99-flatpaks.sh`
+  hook, and the system-flatpaks Brewfile whose app list the contract enumerates.
+- **`[media]`** — GStreamer decoders that must load, not merely be installed: `openh264dec`.
+  The factory libav is built on `ffmpeg-free` (no H.264), so `avdec_h264` is not asserted (#1116).
 - **`[services]`** — systemd units the preset must enable: `gdm.service`, `avahi-daemon.service`,
   `avahi-daemon.socket`, `switcheroo-control.service`, `bluetooth.service`,
   `ublue-system-setup.service`, `flatpak-preinstall.service`, `flatpak-nuke-fedora.service`,
@@ -249,16 +250,18 @@ for the live image's own `installer-local` remote.
 ## GNOME extensions are pinned submodules
 
 Utah deliberately differs from Bluefin Classic's RPM path: selected GNOME Shell
-extensions are pinned as Git submodules and built into the image. `.gitmodules`
+extensions are pinned Git submodules and built into the image. `.gitmodules`
 has 16 trees under `system_files/shared/usr/share/gnome-shell/extensions/`;
-gitlinks pin exact commits. Submodule URLs and branches feed the weekly update
-workflow; only matching Utah submodules represent an extension, not full
-package-backlog parity. Do not add RPM recipes for an extension already covered
-by a Utah submodule. `.github/workflows/update-gnome-extensions.yml` opens or
-updates review PRs with old/new commits and declared Shell versions. Its
-contract-only check validates source metadata, not the installed verifier; a
-full image build must verify pins before merge. Edit `.gitmodules` directly
-for source URL or tracked-branch changes; automation advances existing pins.
+gitlinks pin exact commits. Weekly automation proposes valid tracked-branch
+heads; missing or invalid metadata keeps that source pinned and does not block
+other candidates. Only matching Utah submodules represent extensions; do not
+add RPM recipes for an extension already covered here. A repository-scoped
+App token is minted on trusted `main` only, after the preparer validates each
+pin; that App opens or updates the proposal, so the normal `pull_request`
+contract and image-build CI run on its exact head instead of a contract-only
+dispatch. Hive review, required checks and the normal merge policy still
+govern landing, and no automated merge is enabled. Source metadata alone does
+not prove GNOME 51 runtime compatibility. Edit `.gitmodules` for source URL or branch changes; automation advances existing pins.
 Search Light was dropped: GNOME 51 removed `set_shader_source`, which its shader code calls, so it failed ISO tests.
 
 `scripts/verify-gnome-extensions.py` checks GNOME 51 support and provenance:
@@ -276,37 +279,34 @@ Search Light was dropped: GNOME 51 removed `set_shader_source`, which its shader
   `--record-provenance` (image) writes `/usr/share/utah/provenance.json`.
   See [Image provenance](containerfile.md#image-provenance).
 
-GSConnect's meson install skips `update_desktop_database`: Hummingbird and Utah
-lack `desktop-file-utils`. The system and glib-compile-schemas handle databases.
+GSConnect's meson install skips `update_desktop_database`: Hummingbird and Utah lack `desktop-file-utils`.
+Extension schemas are global and common's overrides must resolve: see [extension schemas](desktop-contract/references/extension-schemas.md).
 
-Declaring GNOME 51 in `metadata.json` is necessary, not sufficient: both
-failures below passed the metadata check, built cleanly, and only showed up
-in a booted session's journal (`journalctl _UID=1000 | grep -i extension`).
+Declaring GNOME 51 in `metadata.json` is necessary, not sufficient: the
+GSConnect and Dash to Dock failures below passed the metadata check, built
+cleanly, and only showed up in a booted session's journal
+(`journalctl _UID=1000 | grep -i extension`). Blur my Shell's pin update is
+separate and still needs boot testing.
 
-- **GSConnect** tracks upstream `GSConnect/gnome-shell-extension-gsconnect`
-  at `v73`. Earlier GSConnect subclassed `GjsPrivate.DBusImplementation`, a
-  final GType since GNOME 48, in `shell/clipboard.js`, `wl_clipboard.js` and
-  `service/utils/dbus.js`. Utah once text-patched only the first, so the
-  daemon still threw "Cannot inherit from a final type" on every login and
-  GSConnect never started. v73 stopped subclassing it (upstream 11be9b7f); the
-  build now greps the whole `src/` tree and fails if a subclass returns. The
-  `projectbluefin` fork it used to track only added the GNOME 51 declaration,
-  which upstream carries itself.
-- **Dash to Dock** is pinned to the v109 release commit on `master` (upstream
-  publishes no `extensions.gnome.org-v1xx` branch past v106). v106 imports
-  `resource:///org/gnome/shell/ui/pointerWatcher.js`, which GNOME 51 removed,
-  so the dock silently never loaded; upstream 38545156 moved it to
-  `Meta.CursorTracker`.
+- **Blur my Shell** is pinned to upstream `master` v77 (`b973ec8f`), beyond v76;
+  it fixes popup first-open handling, modal blur, and excess allocation while
+  painting. Metadata declares GNOME 51, but boot testing is still required.
+- **GSConnect** tracks v74. v73 removed final
+  `GjsPrivate.DBusImplementation` subclassing that had stopped its daemon at
+  login; the build scans all sources for regressions. Upstream declares GNOME 51.
+- **Dash to Dock** tracks v110 on `master` (no EGO branch past v106); v106's
+  removed `pointerWatcher.js` import was replaced by `Meta.CursorTracker`.
 
-`tests/test_gnome_extensions.py` covers both pinned sources. On a booted VM,
-copy the changed tree under `bootc usr-overlay`, restart `gdm`, then verify
+`tests/test_gnome_extensions.py` checks the GSConnect and Dash to Dock pinned
+sources. On a booted VM, copy the changed tree under `bootc usr-overlay`,
+restart `gdm`, then verify
 `gnome-extensions info <uuid>` reports `State: ACTIVE`; inspect the session
-journal for load errors. The journal does not always carry them (#969): for
-an extension in `ERROR`, ask the shell for the text it recorded with
-`gdbus call --session --dest org.gnome.Shell.Extensions --object-path
-/org/gnome/Shell/Extensions --method
-org.gnome.Shell.Extensions.GetExtensionErrors <uuid>`, which
-`iso/scripts/luks-e2e.sh` prints on every extension failure. SSH probes must
+journal for load errors. At first login, poll for `ACTIVE` within the retry
+budget; see [extension startup states](ci-workflows/references/iso-e2e.md#extension-startup-states).
+For a persistent failure, query `org.gnome.Shell.Extensions.GetExtensionErrors`
+with `gdbus call --session --dest org.gnome.Shell.Extensions --object-path
+/org/gnome/Shell/Extensions --method` and the UUID (#969); the LUKS test
+prints this diagnostic because the journal can miss it. SSH probes must
 set `XDG_RUNTIME_DIR=/run/user/<uid>`
 and `DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/<uid>/bus`, because SSH does
 not inherit the graphical session's D-Bus environment. Extension dconf
@@ -380,10 +380,10 @@ entry for `/usr/share/pixmaps/bluefin-gdm-logo.png` in
 asset path so a stray edit that points `logo` somewhere else fails the
 build.
 
-## About artwork and the panel icon (#318)
+## About artwork, the panel icon (#318), and the boot splash (#461)
 
-See [the About artwork reference](desktop-contract/references/about-artwork.md)
-for compiled PNG paths, restoration after RPMs, and the symbolic panel icon.
+[About artwork](desktop-contract/references/about-artwork.md): PNG paths, restoration after RPMs, panel icon.
+[Boot splash](desktop-contract/references/boot-splash.md): graphical, branded Plymouth prompt and its gates.
 
 ## Services and login defaults
 

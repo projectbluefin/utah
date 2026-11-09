@@ -137,6 +137,8 @@ check:
     # Every executable release asset fetched during composition must be pinned
     # and verified; no build may resolve a mutable latest release.
     python3 scripts/check-download-integrity.py
+    # Reject unpinned Python installs before running the rest of the suite.
+    python3 tests/test_python_install_pins.py
     # The status page's package grid is generated from the manifests; a stale
     # committed copy would publish a list the image no longer installs.
     python3 scripts/generate-site-data.py --check
@@ -156,7 +158,6 @@ check:
          <(grep -m1 '^ARG BASE_IMAGE=' Containerfile.kernel)
     python3 scripts/flavors.py list >/dev/null
     python3 scripts/check_workflow_outputs.py
-    pip install --quiet jsonschema 2>/dev/null || true
     bash scripts/check-skill-frontmatter.sh
     bash scripts/check-skill-index.sh
     python3 scripts/generate_skill_index.py --check
@@ -375,12 +376,17 @@ build-ghcr base_name stream flavor kernel_pin="":
       export DOCKER_CONFIG="$auth_dir" REGISTRY_AUTH_FILE="$auth_dir/config.json"
       echo "${GITHUB_TOKEN}" | podman login ghcr.io -u "${GITHUB_ACTOR:-x}" --password-stdin
     fi
-    # main builds neither the OGC kernel nor an NVIDIA module, so it keeps the
-    # pristine Hummingbird base and does not pull the cache image at all.  The
-    # other three take the cache image as their base; the install scripts find
-    # /utah-cache there and unpack rather than compile.
-    base_args=()
-    if [ "{{ flavor }}" != main ]; then
+    # Every flavor takes the kernel cache image as its base: its distribution
+    # kernel is Fedora's rebuilt with the btrfs fs-verity fix, which main needs
+    # as much as the rest (scripts/install-fedora-kernel.sh).  The OGC and
+    # NVIDIA flavors also find /utah-cache there and unpack rather than compile.
+    # BASE_IMAGE overrides it with a local `just build-kernel-cache` result, as
+    # unsigned development input -- for a change to the cache's own inputs,
+    # whose tag is not published yet. CI never takes the override.
+    if [ -n "${BASE_IMAGE:-}" ] && [ "${GITHUB_ACTIONS:-false}" != true ]; then
+      echo "Building on the local kernel cache ${BASE_IMAGE} (unverified)"
+      base_args=(--build-arg BASE_IMAGE="${BASE_IMAGE}")
+    else
       cache_ref="$(./scripts/kernel-cache-tag.sh)"
       cache_ref="ghcr.io/{{ repo_organization }}/{{ kernel_cache_image }}:${cache_ref}"
       # Verify immutable bytes, never a mutable tag that FROM can re-resolve.
@@ -508,6 +514,19 @@ build-local stream="testing" package_image="localhost/utah-packages:local-merged
       echo "Local package image not found: $package_image" >&2
       exit 1
     }
+    # The kernel cache image is the base here too (see build-ghcr). BASE_IMAGE
+    # overrides it with a local build of Containerfile.kernel, which is trusted
+    # as development input; the published cache is verified like build-ghcr's.
+    base_image="${BASE_IMAGE:-}"
+    if [ -z "$base_image" ]; then
+      command -v cosign >/dev/null 2>&1 || { echo "cosign is required to verify the kernel cache before building (or set BASE_IMAGE)" >&2; exit 1; }
+      base_image="ghcr.io/{{ repo_organization }}/{{ kernel_cache_image }}:$(./scripts/kernel-cache-tag.sh)"
+      digest="$(skopeo inspect "docker://${base_image}" | python3 -c 'import json, sys; print(json.load(sys.stdin)["Digest"])')"
+      base_image="${base_image%:*}@${digest}"
+      cosign verify "$base_image" \
+        --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+        --certificate-identity-regexp '^https://github\.com/projectbluefin/utah/\.github/workflows/build\.yml@refs/(heads/testing|pull/[0-9]+/merge)$'
+    fi
     version="local-{{ stream }}-$(git rev-parse --short HEAD)"
     # Same build-input epoch and guarded export policy as build-ghcr.
     source_date_epoch="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct -- Containerfile packages system_files scripts config .gitmodules docs/agent)}"
@@ -517,6 +536,7 @@ build-local stream="testing" package_image="localhost/utah-packages:local-merged
       "${epoch_args[@]}" \
       --build-arg SOURCE_DATE_EPOCH="${source_date_epoch}" \
       --build-arg UTAH_REWRITE_TIMESTAMPS=1 \
+      --build-arg BASE_IMAGE="$base_image" \
       --build-arg PACKAGE_IMAGE_REF="$package_image" \
       --build-arg IMAGE_NAME="{{ image }}" \
       --build-arg IMAGE_ID="{{ image }}" \
@@ -562,12 +582,29 @@ tag-images image_name default_tag alias_tags:
     set -euo pipefail
     for tag in {{ alias_tags }}; do podman tag "localhost/{{ image_name }}:{{ default_tag }}" "localhost/{{ image_name }}:$tag"; done
 
+# The reusable build runs this under sudo, before the push. The image is in
+# rootful containers-storage, where syft's podman provider cannot reach it (no
+# podman socket on the runner), so scan the mounted image root instead. Hand
+# sbom_out back to the invoking user whatever happens: sign-and-publish later
+# writes its own SBOM there unprivileged, and a root-owned sbom_out made that
+# step fail, which skipped the build-provenance attestation. With no
+# attestation, post-testing-e2e's verify-provenance got a 404 for every flavor
+# and :testing stopped advancing.
 gen-sbom base_name stream flavor syft_cmd:
     #!/usr/bin/env bash
     set -euo pipefail
     image_name="$(python3 scripts/flavors.py image '{{ flavor }}')"
+    ref="localhost/$image_name:{{ stream }}"
+    mounted=""
+    finish() {
+        if [[ -n "$mounted" ]]; then podman image unmount "$ref" >/dev/null || true; fi
+        if [[ -n "${SUDO_UID:-}" && -d sbom_out ]]; then chown -R "$SUDO_UID:${SUDO_GID:-$SUDO_UID}" sbom_out; fi
+    }
+    trap finish EXIT
     mkdir -p "sbom_out/$image_name"
-    "{{ syft_cmd }}" "localhost/$image_name:{{ stream }}" -o json >"sbom_out/$image_name/sbom.json"
+    root="$(podman image mount "$ref")"
+    mounted=1
+    "{{ syft_cmd }}" "dir:$root" --source-name "$ref" -o json >"sbom_out/$image_name/sbom.json"
 
 # Install the locally built bootc image to a sparse disk for QEMU. This follows
 # Bluefin's bootc-to-disk path rather than trying to boot an OCI layer directly.
