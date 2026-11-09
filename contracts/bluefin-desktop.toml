@@ -214,6 +214,10 @@ files = [
 "/usr/share/glib-2.0/schemas/zz3-bluefin-unsupported-stuff.gschema.override" = [
   "disable-extension-version-validation=true",
   "tilingshell@ferrarodomenico.com",
+  # Bluefin smoke checks these Quick Settings extensions are enabled.
+  "quicksettings-audio-devices-hider@marcinjahn.com",
+  "quicksettings-audio-devices-renamer@marcinjahn.com",
+  "tailscale-gnome-qs@tailscale-qs.github.io",
 ]
 "/etc/dconf/db/distro.d/02-bluefin-keybindings" = [
   "xdg-terminal-exec",
