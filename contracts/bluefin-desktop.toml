@@ -218,6 +218,9 @@ files = [
   "quicksettings-audio-devices-hider@marcinjahn.com",
   "quicksettings-audio-devices-renamer@marcinjahn.com",
   "tailscale-gnome-qs@tailscale-qs.github.io",
+  # Bluefin smoke checks Copyous and the upstream Syncthing toggle are enabled.
+  "copyous@boerdereinar.dev",
+  "syncthing-toggle@rehhouari.github.com",
 ]
 "/etc/dconf/db/distro.d/02-bluefin-keybindings" = [
   "xdg-terminal-exec",
