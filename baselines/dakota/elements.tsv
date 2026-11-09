@@ -33,6 +33,7 @@ bluefin-ibus-rime.bst	ibus-rime
 bluefin-ifuse.bst	ifuse
 bluefin-intel-media-driver.bst	intel-media-driver
 bluefin-just-overrides.bst	just-overrides
+bluefin-kanata.bst	kanata
 bluefin-kexec-disable.bst	kexec-disable
 bluefin-leveldb.bst	leveldb
 bluefin-librime.bst	librime
