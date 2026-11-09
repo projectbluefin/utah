@@ -1453,13 +1453,13 @@ readme, shot, captured = sys.argv[1], sys.argv[2], sys.argv[3]
 begin, end = "<!-- BEGIN E2E VERIFICATION -->", "<!-- END E2E VERIFICATION -->"
 block = (
     f"{begin}\n"
-    f"[![Verified end to end]({shot})](https://github.com/projectbluefin/utah/blob/verification/README.md)\n\n"
-    f"*Verified end to end on {captured}: installed to a LUKS2-encrypted disk, "
+    f"[![Latest published CI desktop]({shot})](https://github.com/projectbluefin/utah/blob/verification/README.md)\n\n"
+    f"*Verified locally on {captured}: installed to a LUKS2-encrypted disk, "
     f"unlocked at the Plymouth prompt, and logged in to a GNOME session — "
-    f"the shot above is fastfetch inside that booted install. "
-    f"Full record and more screenshots in "
-    f"[docs/verification](https://github.com/projectbluefin/utah/tree/verification), refreshed by "
-    f"`just luks-test`.*\n"
+    f"this local run's record is in `docs/verification/README.md`. "
+    f"The image above and "
+    f"[published CI record](https://github.com/projectbluefin/utah/tree/verification) "
+    f"come from CI and may describe a different run.*\n"
     f"{end}"
 )
 text = open(readme, encoding="utf-8").read()
