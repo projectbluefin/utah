@@ -26,7 +26,10 @@
 #            changes exactly as they were, so the machine stays bootable.
 #   remove   undo the four changes and confirm none is left in effect.
 #
-# The three paths can be overridden for host-side fixture tests; nothing on
+# This verifier relies on OSTree's /etc merge, finalization refresh and
+# /usr/etc pristine policy. Refuse other backends before touching policy;
+# composefs acceptance requires its own verification and booted evidence.
+# The paths can be overridden for host-side fixture tests; nothing on
 # the host is touched when they point into a scratch tree.
 set -euo pipefail
 
@@ -34,6 +37,7 @@ mode="${1:-}"
 SEMANAGE_CONF="${UTAH_SEMANAGE_CONF:-/etc/selinux/semanage.conf}"
 PRISTINE_STORE="${UTAH_PRISTINE_STORE:-/usr/etc/selinux/targeted}"
 HOME_ROOT="${UTAH_HOME_ROOT:-/var/home}"
+OSTREE_BOOTED="${UTAH_OSTREE_BOOTED:-/run/ostree-booted}"
 
 BOOLEAN=virt_use_samba
 FCONTEXT_DIR=/srv/utah-e2e
@@ -53,6 +57,11 @@ fail() {
 run() {
     echo "+ $*"
     "$@" || fail "'$*' exited $?"
+}
+
+require_ostree_backend() {
+    [[ -e "$OSTREE_BOOTED" ]] \
+        || fail "OSTree backend required (${OSTREE_BOOTED} missing); composefs SELinux update verification is not implemented (#551, #1129)"
 }
 
 store_is_persistent() {
@@ -174,6 +183,10 @@ report_finalize_log() {
 }
 
 case "$mode" in
+    probe|apply|image-policy|verify|reject|remove) require_ostree_backend ;;
+esac
+
+case "$mode" in
     probe)
         if store_is_persistent; then
             echo persistent
@@ -207,14 +220,15 @@ case "$mode" in
         ;;
     image-policy)
         require_enforcing
+        report_finalize_log
         require_image_policy
         echo "PASS: the running SELinux policy is the image's own, plus local changes"
         ;;
     verify)
         store_is_persistent || fail "store-root in ${SEMANAGE_CONF} is not /etc/selinux"
         require_enforcing
-        require_image_policy
         report_finalize_log
+        require_image_policy
         run semodule -l >/dev/null
         run semanage boolean -l >/dev/null
         boolean_is on || fail "${BOOLEAN} is not on"
@@ -255,7 +269,7 @@ case "$mode" in
         rm -rf "$module_dir"
         run semodule -l >/dev/null
         ! grep -qx "$BAD_MODULE" <<<"$(semodule -l)" || fail "rejected module ${BAD_MODULE} is listed"
-        if [[ -n "$(find /etc/selinux/targeted/active -name "${BAD_MODULE}*" 2>/dev/null)" ]]; then
+        if [[ -n "$(find "$(dirname "$SEMANAGE_CONF")/targeted/active" -name "${BAD_MODULE}*" 2>/dev/null)" ]]; then
             fail "rejected module ${BAD_MODULE} left files in the store"
         fi
         boolean_is on || fail "${BOOLEAN} changed after the rejected module"

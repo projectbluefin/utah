@@ -83,6 +83,10 @@ See the [open issues](https://github.com/projectbluefin/utah/issues) to track pr
 
 ## Persistent SELinux changes
 
+The update and recovery procedure below applies to OSTree installs.
+Composefs installs remain experimental (#1129); SELinux policy persistence
+and update verification on that backend are not established by this change.
+
 SELinux stays enforcing on Utah, and lasting policy changes are made with the
 same commands as on Bluefin: `sudo setsebool -P` for a boolean,
 `sudo semanage fcontext` for a file-labelling rule, `sudo semanage port` for a

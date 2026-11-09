@@ -267,8 +267,15 @@ ostree-finalize-staged.service` names the failure. Recovery is
 `semodule -r <module>` or restoring the pristine store from
 `/usr/etc/selinux`; both are documented for users in `README.md`.
 
-The lifecycle harness proves this on a booted guest
-(`iso/scripts/verify-selinux-store.sh`, see `local-testing.md`). A
+These update and recovery semantics apply to the OSTree backend. Composefs
+remains opt-in (#1129); neither its policy refresh nor a pristine-store path
+is established here. The lifecycle verifier refuses a guest without
+`/run/ostree-booted` before performing its OSTree-specific checks. Keep the
+hold until booted update/rollback evidence on the new head establishes the
+supported backend; a passing image build or host fixture is insufficient.
+
+The lifecycle harness checks this on a booted OSTree guest
+(`iso/scripts/verify-selinux-store.sh`, see `lifecycle-e2e.md`). A
 `switch` from a pre-#551 image, whose `/etc/selinux` has no `active/`,
 takes the new image's store whole; a machine switched in from Bluefin
 carries whatever store files it changed there, which become live again at

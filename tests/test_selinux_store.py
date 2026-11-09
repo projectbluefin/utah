@@ -175,9 +175,12 @@ class GuestCheckerTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.conf = Path(self.temp.name) / "semanage.conf"
+        self.ostree_booted = Path(self.temp.name) / "ostree-booted"
+        self.ostree_booted.touch()
 
     def run_checker(self, *args):
-        env = dict(os.environ, UTAH_SEMANAGE_CONF=str(self.conf))
+        env = dict(os.environ, UTAH_SEMANAGE_CONF=str(self.conf),
+                   UTAH_OSTREE_BOOTED=str(self.ostree_booted))
         return subprocess.run(
             ["bash", str(CHECKER), *args],
             capture_output=True, text=True, check=False, env=env,
@@ -201,6 +204,15 @@ class GuestCheckerTests(unittest.TestCase):
     def test_unknown_mode_is_a_usage_error(self):
         result = self.run_checker("bogus")
         self.assertEqual(result.returncode, 2)
+
+    def test_non_ostree_backend_is_rejected_before_policy_operations(self):
+        self.ostree_booted.unlink()
+        for mode in ("probe", "apply", "image-policy", "verify", "reject", "remove"):
+            with self.subTest(mode=mode):
+                result = self.run_checker(mode)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("OSTree backend required", result.stderr)
+                self.assertNotIn("PASS", result.stdout)
 
     def test_checker_covers_the_four_kinds_of_change(self):
         text = CHECKER.read_text()
@@ -256,6 +268,8 @@ class ImagePolicyCheckTests(unittest.TestCase):
         self.dir = Path(self.temp.name)
         self.conf = self.dir / "semanage.conf"
         self.conf.write_text(CONF_HEAD + NEW_LINE + "\n")
+        self.ostree_booted = self.dir / "ostree-booted"
+        self.ostree_booted.touch()
         self.store = self.dir / "pristine"
         (self.store / "policy").mkdir(parents=True)
         (self.store / "policy/policy.35").write_bytes(b"compiled")
@@ -271,6 +285,7 @@ done
 exec cat "{self.dir}/{tool}-running"
 """)
         self.fake("getenforce", "echo Enforcing\n")
+        self.fake("journalctl", "echo 'finalize: SELinux policy refresh diagnostic'\n")
         self.fake("semodule", "printf 'apache\\nutah_e2e\\n'\n")
         self.write("seinfo-image", self.TYPES)
         self.write("sesearch-image", self.RULES)
@@ -283,15 +298,16 @@ exec cat "{self.dir}/{tool}-running"
     def write(self, name, text):
         (self.dir / name).write_text(text)
 
-    def run_check(self):
+    def run_check(self, mode="image-policy"):
         env = dict(
             os.environ,
             PATH=f"{self.bin}:{os.environ['PATH']}",
             UTAH_SEMANAGE_CONF=str(self.conf),
             UTAH_PRISTINE_STORE=str(self.store),
+            UTAH_OSTREE_BOOTED=str(self.ostree_booted),
         )
         return subprocess.run(
-            ["bash", str(CHECKER), "image-policy"],
+            ["bash", str(CHECKER), mode],
             capture_output=True, text=True, check=False, env=env,
         )
 
@@ -311,6 +327,25 @@ exec cat "{self.dir}/{tool}-running"
         self.assertIn("TE rules differ", result.stderr)
         self.assertIn("image only: allow httpd_t", result.stderr)
         self.assertIn("running only: allow httpd_t", result.stderr)
+
+    def test_finalize_log_survives_policy_mismatch_in_both_modes(self):
+        self.write("seinfo-running", self.TYPES)
+        self.write("sesearch-running", self.RULES.replace(" open read", " read"))
+        for mode in ("image-policy", "verify"):
+            with self.subTest(mode=mode):
+                result = self.run_check(mode)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("TE rules differ", result.stderr)
+                self.assertIn("finalize: SELinux policy refresh diagnostic", result.stdout)
+
+    def test_rejected_module_residue_is_checked_in_the_fixture_store(self):
+        active = self.dir / "targeted/active"
+        active.mkdir(parents=True)
+        (active / "utah_e2e_bad-residue").touch()
+        self.fake("semodule", 'if [[ "$1" == -i ]]; then exit 1; fi\nprintf "apache\\nutah_e2e\\n"\n')
+        result = self.run_check("reject")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("left files in the store", result.stderr)
 
     def test_type_the_image_dropped_but_still_running_fails(self):
         self.write("seinfo-running", self.TYPES + "   old_t\n")
