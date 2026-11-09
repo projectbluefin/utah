@@ -11,13 +11,13 @@ def update(text, provenance):
         raise ValueError("invalid provenance")
     begin, end = "<!-- BEGIN E2E VERIFICATION -->", "<!-- END E2E VERIFICATION -->"
     block = (f"{begin}\n"
-             "[![Verified ISO desktop](docs/verification/screenshots/installed-fastfetch.png)]"
-             "(docs/verification/README.md)\n\n"
+             "[![Verified ISO desktop](https://github.com/projectbluefin/utah/raw/verification/screenshots/installed-fastfetch.png)]"
+             "(https://github.com/projectbluefin/utah/blob/verification/README.md)\n\n"
              f"*LUKS ISO test passed for commit `{sha[:12]}`. "
              f"[CI run](https://github.com/projectbluefin/utah/actions/runs/{run}) "
              "also runs independent desktop tests that do not gate this record; "
              "the LUKS and production ISO jobs passed; "
-             "[screenshots and provenance](docs/verification/README.md).*\n"
+             "[screenshots and provenance](https://github.com/projectbluefin/utah/tree/verification).*\n"
              f"{end}")
     pattern = re.compile(re.escape(begin) + r".*?" + re.escape(end), re.S)
     if pattern.search(text):
@@ -27,8 +27,10 @@ def update(text, provenance):
 
 
 if __name__ == "__main__":
-    provenance = json.loads(Path("docs/verification/provenance.json").read_text())
-    if not Path("docs/verification/screenshots/installed-fastfetch.png").is_file():
+    import sys
+    record = Path(sys.argv[1] if len(sys.argv) > 1 else "docs/verification")
+    provenance = json.loads((record / "provenance.json").read_text())
+    if not (record / "screenshots/installed-fastfetch.png").is_file():
         raise SystemExit("missing verified screenshot")
     path = Path("README.md")
     path.write_text(update(path.read_text(), provenance))

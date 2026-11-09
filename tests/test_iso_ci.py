@@ -258,6 +258,9 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(update(result, proof), result)
         self.assertIn("Keep this paragraph.", result)
         self.assertIn("actions/runs/123", result)
+        # The record now lives on the `verification` branch, so the block must
+        # not embed any local docs/verification/ path.
+        self.assertNotIn("docs/verification/", result)
         self.assertIn("independent desktop tests that do not gate this record", result)
         self.assertNotIn("failure", result)
         self.assertIn("the LUKS and production ISO jobs passed", result)

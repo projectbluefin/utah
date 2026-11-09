@@ -444,21 +444,38 @@ jobs:
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: iso-verified-utah
-          path: docs/verification
+          path: ${{ runner.temp }}/verification
+      # The record lives on a single-commit orphan branch, force-pushed each
+      # time, so screenshots never accumulate in main's history.
+      - name: Publish the verification record branch
+        env:
+          RECORD: ${{ runner.temp }}/verification
+          SOURCE_SHA: ${{ needs.resolve.outputs.sha }}
+        run: |
+          set -euo pipefail
+          test -f "$RECORD/screenshots/installed-fastfetch.png"
+          git worktree add --orphan -b verification "$RUNNER_TEMP/record"
+          cp -a "$RECORD/." "$RUNNER_TEMP/record/"
+          git -C "$RUNNER_TEMP/record" add -A
+          git -C "$RUNNER_TEMP/record" \
+            -c user.name='github-actions[bot]' \
+            -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -q -m "verification record for ${SOURCE_SHA}"
+          git -C "$RUNNER_TEMP/record" push --force origin HEAD:refs/heads/verification
       - name: Refresh README evidence link
-        run: python3 scripts/update-e2e-readme.py
-      - name: Propose updated verification record
-        uses: peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1 # v8
+        env:
+          RECORD: ${{ runner.temp }}/verification
+        run: python3 scripts/update-e2e-readme.py "$RECORD"
+      - name: Propose updated verification link
+        uses: peter-evans/create-pullrequest@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
         with:
           branch: automation/iso-verification
-          title: 'docs: refresh verified ISO screenshots'
-          commit-message: 'docs: refresh verified ISO screenshots'
+          title: 'docs: refresh verified ISO record link'
+          commit-message: 'docs: refresh verified ISO record link'
           body: |
-            Screenshots from the existing LUKS ISO test, after every configured flavor passed.
+            The LUKS ISO test passed for every configured flavor. Screenshots and provenance were published to the `verification` branch.
             Source commit: ${{ needs.resolve.outputs.sha }}
             Build: https://github.com/${{ github.repository }}/actions/runs/${{ needs.resolve.outputs.run }}
             ISO E2E: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-            Exact image reference and ISO checksum are in docs/verification/.
           add-paths: |
             README.md
-            docs/verification/

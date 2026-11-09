@@ -65,7 +65,7 @@ just check-repos                # every contract package resolves in the enabled
 `just luks-test` drives `iso/scripts/luks-e2e.sh`: it installs from the ISO's
 embedded container store with no network, unlocks the LUKS2 volume at the
 Plymouth prompt, confirms the disk boots on its own, and overwrites
-[`docs/verification/README.md`](verification/README.md) and its screenshots
+[`docs/verification/README.md`](https://github.com/projectbluefin/utah/tree/verification) and its screenshots
 with the fresh passing record — that file documents exactly what a run
 proved and when. See
 [`skills/local-testing.md`](skills/local-testing.md) for the encrypted and
