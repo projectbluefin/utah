@@ -76,7 +76,7 @@ The TOML's sections are the contract's table of contents:
 - **`[services]`** — systemd units the preset must enable: `gdm.service`, `avahi-daemon.service`,
   `avahi-daemon.socket`, `switcheroo-control.service`, `bluetooth.service`,
   `ublue-system-setup.service`, `flatpak-preinstall.service`, `flatpak-nuke-fedora.service`,
-  `brew-setup.service`, `dconf-update.service`, `bootc-unified-storage.service`,
+  `brew-setup.service`, `dconf-update.service`, `bootc-unified-storage.timer`,
   `input-remapper.service`, `ModemManager.service`, `thermald.service`, `intel_lpmd.service`,
   `sysstat.service`, `sysstat-collect.timer`, `sysstat-summary.timer`,
   `projectbluefin-countme.timer`, `cups.socket`, `systemd-boot-update.service`, `uupd.timer`,
@@ -173,6 +173,11 @@ the full registry pull of the booted image (82 s of a 1 min 32 s boot on a
 datacenter link), despite a comment claiming it needed no network. It now sets
 `DefaultDependencies=no` with the equivalent explicit ordering plus
 `network-online.target`, runs at idle priority and retries every 15 minutes.
+Not gating the targets was not enough: the pull still ran from 11 s to 77 s of
+first boot and starved the session coming up (geoclue hit its start timeout,
+gnome-shell's PowerProfiles call timed out, TuneD waited on the sysroot lock).
+So it has no `[Install]` section; `bootc-unified-storage.timer` starts it 15
+minutes after boot, and the contract and preset enable the timer.
 Do not wrap `bootc` in `sh -c` to sequence it: the bare binary's
 `install_exec_t` label is its SELinux entrypoint, and wrapped it ran as
 `initrc_t` with its `chcon` calls denied `mac_admin`. Pinned by

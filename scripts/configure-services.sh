@@ -81,7 +81,7 @@ enable_unit ublue-system-setup.service
 enable_unit systemd-resolved.service
 # See the preset: gated on systemd-boot by drop-in, skipped elsewhere (#363).
 enable_unit systemd-boot-update.service
-enable_unit bootc-unified-storage.service
+enable_unit bootc-unified-storage.timer
 # Dakota desktop parity (#675). The units ship in
 # system_files/shared/usr/lib/systemd/system/; the preset agrees so bootc's
 # first-boot preset application keeps them enabled (see #98).

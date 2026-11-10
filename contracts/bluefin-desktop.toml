@@ -347,7 +347,7 @@ enabled = [
   # Dakota desktop parity (#675).
   "ublue-firstboot-date.service",
   "ublue-booted-image.service",
-  "bootc-unified-storage.service",
+  "bootc-unified-storage.timer",
   "brew-setup.service",
   "cups.socket",
   "bluefin-stats-refresh.timer",

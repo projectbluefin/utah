@@ -9,7 +9,7 @@ TARGET_IMAGE="${TARGET_IMAGE:-ghcr.io/projectbluefin/utah:testing}"
 
 # Live media must not apply update or unified-storage policy intended for an
 # installed image. The payload embedded in the squashfs is the install source.
-systemctl mask bootc-unified-storage.service || true
+systemctl mask bootc-unified-storage.service bootc-unified-storage.timer || true
 
 # The image's useradd default is HOME=/home (scripts/fix-home-labels.sh), and
 # /home is a symlink to var/home, which does not exist yet at build time, so
