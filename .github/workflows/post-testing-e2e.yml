@@ -448,6 +448,7 @@ jobs:
       # The record lives on a single-commit orphan branch, force-pushed each
       # time, so screenshots never accumulate in main's history.
       - name: Publish the verification record branch
+        id: publish
         env:
           RECORD: ${{ runner.temp }}/verification
           SOURCE_SHA: ${{ needs.resolve.outputs.sha }}
@@ -462,9 +463,14 @@ jobs:
             -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
             commit -q -m "verification record for ${SOURCE_SHA}"
           git -C "$RUNNER_TEMP/record" push --force origin HEAD:refs/heads/verification
+          # The record is a single-commit orphan; capture its exact commit so the
+          # README evidence links pin to it instead of the mutable `verification`
+          # branch, which always resolves to the latest force-push.
+          echo "record_commit=$(git -C "$RUNNER_TEMP/record" rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Refresh README evidence link
         env:
           RECORD: ${{ runner.temp }}/verification
+          RECORD_COMMIT: ${{ steps.publish.outputs.record_commit }}
         run: python3 scripts/update-e2e-readme.py "$RECORD"
       - name: Propose updated verification link
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
