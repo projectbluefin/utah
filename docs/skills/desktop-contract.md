@@ -171,17 +171,11 @@ A target orders itself `After=` every unit it `Wants` unless that unit sets
 holds both targets until it exits. `bootc-unified-storage.service` did that for
 the full registry pull of the booted image (82 s of a 1 min 32 s boot on a
 datacenter link), despite a comment claiming it needed no network. It now sets
-`DefaultDependencies=no` with the equivalent explicit ordering plus
-`network-online.target`, runs at idle priority and retries every 15 minutes.
-Not gating the targets was not enough: the pull still ran from 11 s to 77 s of
-first boot and starved the session coming up (geoclue hit its start timeout,
-gnome-shell's PowerProfiles call timed out, TuneD waited on the sysroot lock).
-So it has no `[Install]` section; `bootc-unified-storage.timer` starts it 15
-minutes after boot, and the contract and preset enable the timer.
-Do not wrap `bootc` in `sh -c` to sequence it: the bare binary's
-`install_exec_t` label is its SELinux entrypoint, and wrapped it ran as
-`initrc_t` with its `chcon` calls denied `mac_admin`. Pinned by
-`tests/test_unified_storage_unit.py`.
+`DefaultDependencies=no`, idle priority and 15 minute retries, but the pull
+still starved first boot (geoclue start timeout, TuneD on the sysroot lock), so
+it has no `[Install]`: `bootc-unified-storage.timer` starts it 15 minutes after
+boot. Never wrap `bootc` in `sh -c`: its `install_exec_t` label is its SELinux
+entrypoint (wrapped, `chcon` was denied). Pinned by `tests/test_unified_storage_unit.py`.
 
 ## Boot-error noise is a bug (#444)
 
