@@ -1,0 +1,17 @@
+# Starts bootc-unified-storage.service well after boot. The service pulls the
+# whole booted image (several GB) and holds the ostree sysroot lock while it
+# does; run during first boot it starved the desktop session coming up. See
+# the service for the details.
+[Unit]
+Description=Enable bootc unified storage after boot (experimental)
+Documentation=https://containers.github.io/bootc/experimental-unified-storage.html
+ConditionPathExists=/run/ostree-booted
+ConditionPathExists=!/var/lib/.bootc-unified-storage
+
+[Timer]
+OnBootSec=15min
+AccuracySec=1min
+Unit=bootc-unified-storage.service
+
+[Install]
+WantedBy=timers.target
