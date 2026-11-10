@@ -30,6 +30,8 @@ SOURCE_EXTENSIONS = {
     "quicksettings-audio-devices-hider@marcinjahn.com": "tmp/quicksettings-audio-devices-hider/resources/metadata.json",
     "quicksettings-audio-devices-renamer@marcinjahn.com": "tmp/quicksettings-audio-devices-renamer/resources/metadata.json",
     "tailscale-gnome-qs@tailscale-qs.github.io": "tmp/tailscale-gnome-qs/tailscale-gnome-qs@tailscale-qs.github.io/metadata.json",
+    "copyous@boerdereinar.dev": "tmp/copyous/resources/metadata.json",
+    "syncthing-toggle@rehhouari.github.com": "tmp/syncthing-toggle-rehhouari/metadata.json",
 }
 
 
@@ -70,6 +72,7 @@ ARCHIVES = {
     "quick-settings-audio-panel@rayzeq.github.io": "qsap",
     "quicksettings-audio-devices-hider@marcinjahn.com": "hider",
     "quicksettings-audio-devices-renamer@marcinjahn.com": "renamer",
+    "copyous@boerdereinar.dev": "copyous",
 }
 
 

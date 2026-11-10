@@ -76,7 +76,7 @@ The TOML's sections are the contract's table of contents:
 - **`[services]`** — systemd units the preset must enable: `gdm.service`, `avahi-daemon.service`,
   `avahi-daemon.socket`, `switcheroo-control.service`, `bluetooth.service`,
   `ublue-system-setup.service`, `flatpak-preinstall.service`, `flatpak-nuke-fedora.service`,
-  `brew-setup.service`, `dconf-update.service`, `bootc-unified-storage.service`,
+  `brew-setup.service`, `dconf-update.service`, `bootc-unified-storage.timer`,
   `input-remapper.service`, `ModemManager.service`, `thermald.service`, `intel_lpmd.service`,
   `sysstat.service`, `sysstat-collect.timer`, `sysstat-summary.timer`,
   `projectbluefin-countme.timer`, `cups.socket`, `systemd-boot-update.service`, `uupd.timer`,
@@ -171,12 +171,11 @@ A target orders itself `After=` every unit it `Wants` unless that unit sets
 holds both targets until it exits. `bootc-unified-storage.service` did that for
 the full registry pull of the booted image (82 s of a 1 min 32 s boot on a
 datacenter link), despite a comment claiming it needed no network. It now sets
-`DefaultDependencies=no` with the equivalent explicit ordering plus
-`network-online.target`, runs at idle priority and retries every 15 minutes.
-Do not wrap `bootc` in `sh -c` to sequence it: the bare binary's
-`install_exec_t` label is its SELinux entrypoint, and wrapped it ran as
-`initrc_t` with its `chcon` calls denied `mac_admin`. Pinned by
-`tests/test_unified_storage_unit.py`.
+`DefaultDependencies=no`, idle priority and 15 minute retries, but the pull
+still starved first boot (geoclue start timeout, TuneD on the sysroot lock), so
+it has no `[Install]`: `bootc-unified-storage.timer` starts it 15 minutes after
+boot. Never wrap `bootc` in `sh -c`: its `install_exec_t` label is its SELinux
+entrypoint (wrapped, `chcon` was denied). Pinned by `tests/test_unified_storage_unit.py`.
 
 ## Boot-error noise is a bug (#444)
 

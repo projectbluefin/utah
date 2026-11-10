@@ -81,7 +81,7 @@ enable_unit ublue-system-setup.service
 enable_unit systemd-resolved.service
 # See the preset: gated on systemd-boot by drop-in, skipped elsewhere (#363).
 enable_unit systemd-boot-update.service
-enable_unit bootc-unified-storage.service
+enable_unit bootc-unified-storage.timer
 # Dakota desktop parity (#675). The units ship in
 # system_files/shared/usr/lib/systemd/system/; the preset agrees so bootc's
 # first-boot preset application keeps them enabled (see #98).
@@ -221,6 +221,17 @@ grep -q '^DeployCollectionID=' /etc/flatpak/remotes.d/flathub.flatpakrepo ||
 grep -qx 'DeployCollectionID=org.flathub.Stable' /etc/flatpak/remotes.d/flathub.flatpakrepo
 
 disable_unit flatpak-add-fedora-repos.service
+
+# Keep TuneD off the ostree sysroot lock: its bootloader plugin would run
+# `bootc loader-entries set-options-for-source` on every power-profile switch
+# and hang behind bootc-unified-storage or an upgrade. The profile explains;
+# TuneD merges a post-loaded profile into every profile it applies, including
+# the ones tuned-ppd switches to. Written here, after the package transaction,
+# because the tuned RPM owns this %config(noreplace) file.
+if rpm -q --quiet tuned; then
+    test -f /usr/lib/tuned/profiles/utah-bootc-kargs-off/tuned.conf
+    printf '%s\n' utah-bootc-kargs-off > /etc/tuned/post_loaded_profile
+fi
 
 # Keep image updates under uupd/bootc rather than the legacy rpm-ostree path.
 # Mask in /usr/lib as well as /etc so the mask survives cross-vendor /etc 3-way merges

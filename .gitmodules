@@ -61,3 +61,11 @@
 	path = system_files/shared/usr/share/gnome-shell/extensions/tmp/bluefin-bling
 	url = https://github.com/projectbluefin/bluefin-bling.git
 	branch = main
+[submodule "system_files/shared/usr/share/gnome-shell/extensions/tmp/copyous"]
+	path = system_files/shared/usr/share/gnome-shell/extensions/tmp/copyous
+	url = https://github.com/boerdereinar/copyous.git
+	branch = main
+[submodule "system_files/shared/usr/share/gnome-shell/extensions/tmp/syncthing-toggle-rehhouari"]
+	path = system_files/shared/usr/share/gnome-shell/extensions/tmp/syncthing-toggle-rehhouari
+	url = https://github.com/rehhouari/gnome-shell-extension-syncthing-toggle.git
+	branch = main
