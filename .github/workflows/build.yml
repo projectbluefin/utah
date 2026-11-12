@@ -281,7 +281,7 @@ jobs:
   build_main:
     needs: [contract, kernel_cache]
     if: ${{ github.event_name != 'merge_group' && !cancelled() && !inputs.contract_only && needs.contract.result == 'success' && needs.kernel_cache.result == 'success' && needs.kernel_cache.outputs.available == 'true' && needs.contract.outputs.main_flavors != '[]' }}
-    uses: projectbluefin/actions/.github/workflows/reusable-build.yml@6453818f6279a2f2c1282919aad0009a88c01819 # v1
+    uses: projectbluefin/actions/.github/workflows/reusable-build.yml@a40b05d204fd8ee053a2e008053aa7b14ccbfc4b # v1
     permissions:
       contents: read
       packages: write
@@ -331,7 +331,7 @@ jobs:
   build_kernel:
     needs: [contract, kernel_cache]
     if: ${{ github.event_name != 'merge_group' && !cancelled() && !inputs.contract_only && needs.contract.result == 'success' && needs.kernel_cache.result == 'success' && needs.kernel_cache.outputs.available == 'true' && needs.contract.outputs.kernel_flavors != '[]' }}
-    uses: projectbluefin/actions/.github/workflows/reusable-build.yml@6453818f6279a2f2c1282919aad0009a88c01819 # v1
+    uses: projectbluefin/actions/.github/workflows/reusable-build.yml@a40b05d204fd8ee053a2e008053aa7b14ccbfc4b # v1
     permissions:
       contents: read
       packages: write
