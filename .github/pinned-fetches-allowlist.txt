@@ -19,7 +19,3 @@ iso/scripts/lifecycle-e2e.sh
 
 # rev-parse HEAD is compared to the pinned OGC_COMMIT right after the clone.
 --branch "$OGC_TAG" https://github.com/OpenGamingCollective/linux.git
-
-# The reusable workflow checks out its own scanner here; these are upstream
-# actions repository files, not Utah's build inputs.
-pinned-fetches-gate/
