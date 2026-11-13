@@ -10,8 +10,13 @@ upstream script requires review.
 
 Common's script asks `/usr/libexec/ublue-booted-image` for the tag, and that
 reader falls back to the boot-time snapshot (`/run/ublue-os/booted-image`) when
-unprivileged `bootc status` fails. The build patches nothing there; it fails if
-image-info stops calling the reader or the reader loses the snapshot fallback.
+unprivileged `bootc status` fails. The snapshot is written by
+`ublue-booted-image.service`, which runs `bootc status` as its own bare
+`ExecStart`, not from the `ublue-booted-image-sync` script: inside the script
+the call ran in the unconfined service domain and bootc's relabelling `chcon`
+probe was denied `mac_admin`, logging two AVC denials per boot (#1198). The
+build patches nothing there; it fails if image-info stops calling the reader
+or the reader loses the snapshot fallback.
 `tests/test_image_info_patch.py` exercises these paths without a composed image.
 Never suppress fastfetch stderr to clean up a
 screenshot. Historical verification screenshots remain evidence of their
