@@ -34,9 +34,11 @@ or cyclic files fail. Keep paths relative to the repository root.
 
 Declare host test dependencies in `tests/requirements.txt`, where Renovate
 can update the pins. Do not silently install missing modules in `just check`;
-`just test` reports how to install the declared dependencies. This gate covers
-the pip command forms above, not arbitrary shell wrappers or other Python
-installers; extend its fixtures when introducing a new install form.
+`just test` reports how to install the declared dependencies. The build contract
+job installs them before `just check`, which already runs the host suite; keep
+that order when rearranging its steps. This gate covers the pip command forms
+above, not arbitrary shell wrappers or other Python installers; extend its
+fixtures when introducing a new install form.
 
 ### CI guard scripts and test coverage
 
