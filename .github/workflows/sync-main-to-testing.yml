@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   sync:
-    uses: projectbluefin/actions/.github/workflows/reusable-sync-branches.yml@46001bf923f11eab3a88fe1cf4540debb050516c # v1
+    uses: projectbluefin/actions/.github/workflows/reusable-sync-branches.yml@3adf1194c894fe7b1ae54e583c56306c6a2382ee # v1
     permissions:
       contents: write
 
