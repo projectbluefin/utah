@@ -8,7 +8,15 @@ Before=systemd-user-sessions.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/bin/ublue-booted-image-sync
+# Create the state dir before bootc's StandardOutput truncates its JSON there.
+ExecStartPre=/usr/bin/install -d -m 0755 /run/ublue-os
+# ExecStart must stay the bare bootc binary: its install_exec_t label is the
+# entrypoint into bootc's SELinux domain. Run from the sync script in the
+# unconfined service domain, bootc's relabelling chcon probe was denied
+# mac_admin, logging two AVC denials every boot (projectbluefin/utah#1198).
+ExecStart=/usr/bin/bootc status --json
+StandardOutput=truncate:/run/ublue-os/booted-image.json
+ExecStartPost=/usr/bin/ublue-booted-image-sync /run/ublue-os/booted-image.json
 
 [Install]
 WantedBy=multi-user.target

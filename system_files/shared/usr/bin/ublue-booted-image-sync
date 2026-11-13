@@ -1,14 +1,14 @@
 #!/usr/bin/bash
 # Record the booted bootc image ref where unprivileged consumers (Common's
 # /usr/libexec/ublue-booted-image, used by fastfetch's ublue-image-info.sh)
-# can read it. `bootc status` requires root on bootc >= 1.14, so the live
-# query is dead in user sessions, and the baked image tag is the compose-time
-# tag. The booted ref cannot change within a boot, so one write per boot is
-# always accurate. Parity with Dakota (projectbluefin/utah#675).
+# can read it. The booted ref cannot change within a boot, so one write per
+# boot is always accurate. bootc status runs as the unit's ExecStart, not here,
+# so it enters bootc's SELinux domain instead of being denied mac_admin by its
+# relabelling chcon probe (projectbluefin/utah#1198). Parity with Dakota (#675).
 set -euo pipefail
 
-bootc_json="$(bootc status --json 2>/dev/null || true)"
-ref="$(jq -r '.status.booted.image.image.image // empty' <<<"${bootc_json}" 2>/dev/null || true)"
+json="${1:-/run/ublue-os/booted-image.json}"
+ref="$(jq -r '.status.booted.image.image.image // empty' "${json}" 2>/dev/null || true)"
 if [ -z "${ref}" ]; then
     echo "no booted bootc image found; leaving no state file" >&2
     exit 0
