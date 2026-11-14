@@ -87,8 +87,8 @@ The TOML's sections are the contract's table of contents:
   carry active `timers.target.wants` symlinks that bypass uupd staging or undo manual rollbacks.
   Switchers can also manually verify or mask them if a local `/etc` symlink was preserved.
 
-  The last two units are Dakota parity (#675): install-date stamping and the
-  booted-image snapshot Common's `/usr/libexec/ublue-booted-image` falls back to.
+  The last two units are Dakota parity (#675): install-date stamping and the booted-image
+  snapshot Common's `/usr/libexec/ublue-booted-image` falls back to ([image-info](desktop-contract/references/image-info.md)).
   `configure-services.sh` enables them, patches Common's fastfetch ([stats](desktop-contract/references/stats-refresh.md))
   and `uwelcome.sh` (non-interactive shells skip the greeting), and checks image-info ([bootc compatibility](desktop-contract/references/image-info.md)).
   Wallpaper rotation is deliberately NOT Dakota parity: Common's per-user `bluefin-dynamic-wallpaper`

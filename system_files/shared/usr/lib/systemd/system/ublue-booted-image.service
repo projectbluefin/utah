@@ -1,13 +1,17 @@
 [Unit]
 Description=Record booted bootc image ref for unprivileged consumers
 Documentation=https://github.com/projectbluefin/utah/issues/675
-ConditionPathExists=/usr/bin/bootc
+Documentation=https://github.com/projectbluefin/utah/issues/1198
 After=local-fs.target
 Before=systemd-user-sessions.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+# Reads the booted deployment's origin file; never runs bootc. A service
+# runs as unconfined_service_t, where bootc's relabelling chcon probe is
+# denied mac_admin: two AVC denials every boot, whether bootc ran from a
+# script or as this unit's ExecStart (#1198).
 ExecStart=/usr/bin/ublue-booted-image-sync
 
 [Install]

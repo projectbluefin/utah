@@ -5,17 +5,48 @@
 # query is dead in user sessions, and the baked image tag is the compose-time
 # tag. The booted ref cannot change within a boot, so one write per boot is
 # always accurate. Parity with Dakota (projectbluefin/utah#675).
+#
+# The ref comes from the booted deployment's origin file, not from bootc: run
+# from a boot service, bootc's relabelling chcon probe is denied mac_admin
+# (#1198). The origin's container-image-reference is what bootc reports as
+# .status.booted.image.image.image, after its transport prefix.
 set -euo pipefail
 
-bootc_json="$(bootc status --json 2>/dev/null || true)"
-ref="$(jq -r '.status.booted.image.image.image // empty' <<<"${bootc_json}" 2>/dev/null || true)"
+root="${UBLUE_BOOTED_IMAGE_ROOT:-}"
+state_dir="${root}/run/ublue-os"
+cmdline="$(cat "${root}/proc/cmdline" 2>/dev/null || true)"
+
+origin=""
+# ostree deployments: ostree=/ostree/boot.N/<os>/<bootcsum>/<serial> resolves
+# to the deployment directory; its origin file sits beside it.
+if [[ "${cmdline}" =~ (^|[[:space:]])ostree=([^[:space:]]+) ]]; then
+    deploy="$(readlink -f "${root}/sysroot${BASH_REMATCH[2]}" 2>/dev/null || true)"
+    [ -n "${deploy}" ] && origin="${deploy}.origin"
+# composefs deployments: composefs=<id> or composefs.digest=<algo>:<id>.
+elif [[ "${cmdline}" =~ (^|[[:space:]])composefs(\.digest)?=([^:[:space:]]*:)?([0-9a-f]+) ]]; then
+    id="${BASH_REMATCH[4]}"
+    origin="${root}/sysroot/state/deploy/${id}/${id}.origin"
+fi
+
+ref=""
+if [ -n "${origin}" ] && [ -r "${origin}" ]; then
+    ref="$(sed -n 's/^[[:space:]]*container-image-reference[[:space:]]*=[[:space:]]*//p' "${origin}" | head -n1)"
+    # Drop the transport: ostree-image-signed:docker://, ostree-unverified-
+    # registry:, ostree-remote-image:<remote>:docker://, plain docker://.
+    case "${ref}" in
+        *docker://*) ref="${ref##*docker://}" ;;
+        ostree-remote-registry:*) ref="${ref#ostree-remote-registry:}"; ref="${ref#*:}" ;;
+        ostree-*registry:*) ref="${ref#*registry:}" ;;
+    esac
+fi
+
 if [ -z "${ref}" ]; then
-    echo "no booted bootc image found; leaving no state file" >&2
+    echo "no booted image ref found (origin: ${origin:-none}); leaving no state file" >&2
     exit 0
 fi
 
-install -d -m 0755 /run/ublue-os
-tmp="$(mktemp /run/ublue-os/booted-image.XXXXXX)"
+install -d -m 0755 "${state_dir}"
+tmp="$(mktemp "${state_dir}/booted-image.XXXXXX")"
 printf '%s\n' "${ref}" > "${tmp}"
 chmod 0644 "${tmp}"
-mv -f "${tmp}" /run/ublue-os/booted-image
+mv -f "${tmp}" "${state_dir}/booted-image"

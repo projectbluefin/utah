@@ -10,7 +10,11 @@ upstream script requires review.
 
 Common's script asks `/usr/libexec/ublue-booted-image` for the tag, and that
 reader falls back to the boot-time snapshot (`/run/ublue-os/booted-image`) when
-unprivileged `bootc status` fails. The build patches nothing there; it fails if
+unprivileged `bootc status` fails. `ublue-booted-image.service` writes it from
+the booted deployment's origin file (`container-image-reference`), never from
+bootc: a boot service runs bootc as `unconfined_service_t`, where its chcon
+probe is denied `mac_admin` (#1198). `tests/test_booted_image_unit.py` covers
+the ostree and composefs origin layouts. The build patches nothing there; it fails if
 image-info stops calling the reader or the reader loses the snapshot fallback.
 `tests/test_image_info_patch.py` exercises these paths without a composed image.
 Never suppress fastfetch stderr to clean up a
