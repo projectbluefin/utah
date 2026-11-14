@@ -559,7 +559,7 @@ issue = "#263"
 
 [package.uupd]
 status = "waived"
-reason = "Utah installs uupd from the pinned upstream release (Containerfile); only Bluefin's uupd-manual.service differs"
+reason = "Utah installs uupd from the pinned upstream release (Containerfile), not an RPM; uupd-manual.service now ships from system_files as in Dakota's uupd.bst, so this gap closes on the next Utah baseline refresh"
 
 [package.virt-what]
 status = "planned"

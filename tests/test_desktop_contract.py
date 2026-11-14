@@ -506,6 +506,27 @@ class ServiceMaskParityTests(unittest.TestCase):
                 self.assertIn(path, files)
                 self.assertIn(path, file_contains)
 
+    def test_dakota_uupd_files_shipped_and_required(self):
+        # Dakota's elements/bluefin/uupd.bst ships these beside the binary.
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        files = contract["configuration"]["files"]
+        file_contains = contract["configuration"]["file_contains"]
+        for path in (
+            "/usr/lib/systemd/system/uupd-manual.service",
+            "/etc/polkit-1/rules.d/uupd.rules",
+            "/etc/uupd/config.json",
+        ):
+            with self.subTest(path=path):
+                self.assertIn(path, files)
+                self.assertTrue((ROOT / "system_files/shared" / path.lstrip("/")).is_file())
+        # The downloaded units land after Common's copy; pin which one ships.
+        for path in ("/usr/lib/systemd/system/uupd.timer", "/usr/lib/systemd/system/uupd.service"):
+            with self.subTest(path=path):
+                self.assertIn(path, files)
+                self.assertIn(path, file_contains)
+        config = json.loads((ROOT / "system_files/shared/etc/uupd/config.json").read_text())
+        self.assertTrue(config["checks"]["hardware"]["enable"])
+
     def test_bootc_fetch_apply_updates_masked_and_disabled(self):
         preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset").read_text()
         self.assertIn("disable bootc-fetch-apply-updates.timer", preset)

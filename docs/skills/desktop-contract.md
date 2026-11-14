@@ -85,7 +85,7 @@ The TOML's sections are the contract's table of contents:
   `bootc-fetch-apply-updates.service` are masked in `/etc` and `/usr/lib` (and disabled in
   `85-utah-desktop.preset`) so cross-vendor `/etc` 3-way merges (e.g. switching from Bluefin) do not
   carry active `timers.target.wants` symlinks that bypass uupd staging or undo manual rollbacks.
-  Switchers can also manually verify or mask them if a local `/etc` symlink was preserved.
+  Switchers can mask them by hand if a local `/etc` symlink survived. uupd matches Dakota ([uupd](desktop-contract/references/uupd.md)).
 
   The last two units are Dakota parity (#675): install-date stamping and the
   booted-image snapshot Common's `/usr/libexec/ublue-booted-image` falls back to.

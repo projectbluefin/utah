@@ -327,11 +327,12 @@ ARG GNOME_EXTENSION_PROVENANCE
 # ENABLE_SSHD=1, following tunaOS's debug-image convention.
 ARG ENABLE_SSHD=0
 # Renovate can update this pinned release independently of the base image.
+# The version follows Dakota's elements/bluefin/uupd.bst (its x86_64 source).
 # UUPD_SHA256 is the x86_64 tarball digest from the release's published
 # uupd_<version>_checksums.txt; a mutable download that executed in the image
 # is otherwise unverified. Both move together, so Renovate updates both.
-ARG UUPD_VERSION=v1.4.0
-ARG UUPD_SHA256=c7463f193cd35b92cde2ee05496501d6ac13808899bd26e17e027b7ee9ee1acc
+ARG UUPD_VERSION=v1.5.5
+ARG UUPD_SHA256=d8d420a153de11589abad3292eef2131a75ac3487414065a2661a558ef0d027c
 # The two systemd units come from raw.githubusercontent at the same tag, and a
 # git tag move changes what raw.* serves for them without touching the release
 # asset the checksum above covers. uupd.service runs as root on a timer, so
