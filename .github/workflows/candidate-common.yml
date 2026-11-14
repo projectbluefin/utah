@@ -67,8 +67,10 @@ jobs:
           work="$RUNNER_TEMP/common-source"
           mkdir -p "$work/home" "$work/auth" "$work/runtime"
           chmod 0700 "$work/runtime"
-          env -i PATH="$PATH" HOME="$work/home" git clone --no-checkout https://github.com/projectbluefin/common.git "$work/repo"
-          env -i PATH="$PATH" HOME="$work/home" git -C "$work/repo" checkout --detach "$COMMON_SHA"
+          env -i PATH="$PATH" HOME="$work/home" git init "$work/repo"
+          env -i PATH="$PATH" HOME="$work/home" git -C "$work/repo" remote add origin https://github.com/projectbluefin/common.git
+          env -i PATH="$PATH" HOME="$work/home" git -C "$work/repo" fetch --depth=1 origin "$COMMON_SHA"
+          env -i PATH="$PATH" HOME="$work/home" git -C "$work/repo" checkout --detach FETCH_HEAD
           test "$(git -C "$work/repo" rev-parse 'HEAD^{commit}')" = "$COMMON_SHA"
           env -i PATH="$PATH" HOME="$work/home" git -C "$work/repo" submodule update --init --recursive
           env -i PATH="$PATH" HOME="$work/home" XDG_RUNTIME_DIR="$work/runtime" REGISTRY_AUTH_FILE="$work/auth/config.json" DOCKER_CONFIG="$work/auth" \
@@ -202,9 +204,11 @@ jobs:
           sudo bash iso/scripts/build-iso-tacklebox.sh main testing local "" 1 2>&1 | tee evidence/tbx-build.log
           tacklebox_image=$(cat config/tacklebox-image)
           [[ "$tacklebox_image" =~ ^[^[:space:]@]+@sha256:[a-f0-9]{64}$ ]]
+          tacklebox_repository=${tacklebox_image%@sha256:*}
+          tacklebox_digest=${tacklebox_image##*@sha256:}
           sudo TACKLEBOX_IMAGE="$tacklebox_image" bash iso/scripts/verify-tacklebox-attestation.sh
           sudo podman pull "$tacklebox_image"
-          sudo podman run --rm --privileged --security-opt label=disable -v /dev:/dev -v "$PWD/output:/out:ro" "$tacklebox_image" verify /out/utah-main-tacklebox.iso 2>&1 | tee evidence/tbx-verify.log
+          sudo podman run --rm --privileged --security-opt label=disable -v /dev:/dev -v "$PWD/output:/out:ro" "${tacklebox_repository}@sha256:${tacklebox_digest}" verify /out/utah-main-tacklebox.iso 2>&1 | tee evidence/tbx-verify.log
           test "$(stat -c %s output/utah-main-tacklebox.iso)" -le "$((8 * 1024 * 1024 * 1024))"
           bash iso/scripts/tacklebox-boot-gate.sh "$PWD/output/utah-main-tacklebox.iso" UTAH_LIVE_READY 2>&1 | tee evidence/tbx-boot.log
           sudo rm output/utah-main-tacklebox.iso
