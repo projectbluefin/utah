@@ -391,8 +391,8 @@ the desktop policy is applied explicitly. `scripts/configure-services.sh`
 mirrors bluefin-lts's `40-services.sh`: it applies the desktop presets,
 enables GDM, input-remapper, firmware updates, Tailscale, uupd, user setup and resolved,
 configures authselect, and removes the extension build toolchain before
-cleanup (Containerfile RUN comment; originated in `docs/building.md`'s former
-design section and now lives in this skill).
+cleanup. Lid/sleep stay at logind defaults; Dakota-copied sysctl, WirePlumber
+and polkit defaults: [Dakota system defaults](desktop-contract/references/dakota-system-defaults.md).
 
 Hummingbird's base does not include `systemd-resolved` by default; it is listed
 under `[services]` in `packages/utah.toml` and configured in
