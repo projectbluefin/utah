@@ -306,6 +306,7 @@
         "tree",
         "unbound-anchor",
         "unzip",
+        "uresourced",
         "uriparser",
         "usermode",
         "vim-enhanced",
@@ -373,7 +374,7 @@
     }
   ],
   "totals": {
-    "installed": 316,
+    "installed": 317,
     "unavailable": 6
   },
   "unavailable": [

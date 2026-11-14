@@ -52,6 +52,8 @@ HOME_URL = "https://projectbluefin.io"
 DOCUMENTATION_URL = "https://docs.projectbluefin.io"
 SUPPORT_URL = "https://github.com/projectbluefin/utah/issues/"
 BUG_REPORT_URL = "https://github.com/projectbluefin/utah/issues/"
+VENDOR_NAME = "Project Bluefin"
+VENDOR_URL = "https://projectbluefin.io"
 DEFAULT_HOSTNAME = "bluefin"
 VERSION_CODENAME = "Utahraptor"
 IMAGE_ID = "utah"
@@ -422,6 +424,34 @@ enabled = [
   "input-remapper.service",
   "ModemManager.service",
   "power-profiles-daemon.service",
+  # Dakota's effective service state (#1233); see 85-utah-desktop.preset.
+  "rtkit-daemon.service",
+  "uresourced.service",
+  "upower.service",
+  "udisks2.service",
+  "polkit-agent-helper.socket",
+  "cups.service",
+  "pcscd.socket",
+  "gnome-remote-desktop.service",
+  "gnome-remote-desktop-configuration.service",
+  "malcontent-timerd.service",
+  "malcontent-timer-extension-agent.service",
+  "malcontent-webd.service",
+  "malcontent-webd-update.timer",
+  "systemd-oomd.service",
+  "systemd-oomd.socket",
+  "wpa_supplicant.service",
+  "podman.socket",
+  "podman-auto-update.timer",
+  "podman-restart.service",
+  "podman-clean-transient.service",
+  "systemd-sysext.socket",
+  "systemd-factory-reset.socket",
+  "systemd-pcrextend.socket",
+  "systemd-storage-block.socket",
+  "systemd-storage-fs.socket",
+  "systemd-udev-load-credentials.service",
+  "systemd-userdb-load-credentials.service",
   "thermald.service",
   "projectbluefin-countme.timer",
   "switcheroo-control.service",
@@ -483,4 +513,7 @@ disabled = [
   "sysstat-collect.timer",
   "sysstat-summary.timer",
   "sysstat-rotate.timer",
+  # Utah-only units Dakota does not run (#1233).
+  "multipathd.service",
+  "lm_sensors.service",
 ]
