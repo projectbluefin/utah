@@ -156,6 +156,11 @@ post-build verification workflows, not the complete workflow inventory:
   file, kept in sync with `maintainers.yaml`. Run `label-sync` via manual
   `workflow_dispatch` on Actions → Prow after merge and after every change to
   `projectbluefin/.project/prow.yaml` to initialize or update repository labels.
+  A separate Sunday 03:37 UTC cron also syncs labels. Merge reconciliation runs
+  `sweep lgtm` every four hours at minute 37; other supported events run `lgtm`.
+  The four-hour backstop trades scheduled runner use for up to four hours of
+  reconciliation delay plus GitHub scheduling delays, not immediate CI-green
+  handling. Existing review, check, and queue protections are unchanged.
 
 CI delegates builds, vulnerability reporting, keyless signatures, provenance,
 and caching to `projectbluefin/actions@v1` (originated as a `docs/building.md`
@@ -178,7 +183,7 @@ queue:
 
 | Automation | How it merges | Under a required merge queue |
 | --- | --- | --- |
-| `prow.yml` (tide, `cncf/prow-github-actions` v3.4.0; `tide.merge_queue: auto`, `merge_method: squash` in `projectbluefin/.project/prow.yaml`) | On `lgtm` + `approved`, enqueues with `enqueuePullRequest` on the job's `GITHUB_TOKEN` (no `token` secret is passed) | At risk: GitHub starts no workflow for an event `GITHUB_TOKEN` caused, so a group prow enqueues may get no `merge_group` runs and time out (prow's own docs say this is "being verified live"). Pass prow a GitHub App `token` that may enqueue, or have a maintainer click "Merge when ready" |
+| `prow.yml` (tide, `cncf/prow-github-actions` v3.5.0; `tide.merge_queue: auto`, `merge_method: squash` in `projectbluefin/.project/prow.yaml`) | On `lgtm` + `approved`, enqueues with `enqueuePullRequest` on the job's `GITHUB_TOKEN` (no `token` secret is passed) | At risk: GitHub starts no workflow for an event `GITHUB_TOKEN` caused, so a group prow enqueues may get no `merge_group` runs and time out (prow's own docs say this is "being verified live"). Pass prow a GitHub App `token` that may enqueue, or have a maintainer click "Merge when ready" |
 | Renovate (`renovate.json`, `local>projectbluefin/renovate-config` = `config:recommended`) | No automerge; the `utah-packages` digest group sets `automerge: false` | A maintainer (or prow) enqueues |
 | `update-bluefin-parity.yml`, `update-gnome-extensions.yml`, `image-baselines.yml`, `promote-testing-to-main.yml` | Open or maintain pull requests only | A maintainer (or prow) enqueues |
 | `sync-main-to-testing.yml` | Pushes `testing`, not `main` | Unaffected |
