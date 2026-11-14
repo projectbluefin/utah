@@ -37,7 +37,9 @@ def load(path: Path) -> configparser.ConfigParser:
 class SnapshotUnitTests(unittest.TestCase):
     def test_runs_bootc_as_execstart(self):
         service = load(SNAPSHOT)["Service"]
-        self.assertEqual(service["ExecStart"], "/usr/bin/bootc status --json")
+        # "-" ignores a bootc failure, as the old script did; systemd strips
+        # it, so bootc is still the executable.
+        self.assertEqual(service["ExecStart"], "-/usr/bin/bootc status --json")
         self.assertEqual(service["Type"], "oneshot")
 
     def test_writes_json_through_standard_output(self):

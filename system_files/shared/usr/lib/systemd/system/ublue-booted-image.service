@@ -13,7 +13,11 @@ RemainAfterExit=yes
 # entrypoint into bootc's SELinux domain. Run from a script in the unconfined
 # service domain, bootc's relabelling chcon probe was denied mac_admin,
 # logging two AVC denials every boot (#1198).
-ExecStart=/usr/bin/bootc status --json
+# The leading "-" keeps the old script's tolerance: a bootc failure (a
+# non-bootc boot, a transient error) counts as success instead of failing this
+# unit and, through Requires=, skipping ublue-booted-image-sync.service.
+# systemd strips the prefix itself, so bootc is still the executable.
+ExecStart=-/usr/bin/bootc status --json
 # No ExecStartPre= or ExecStartPost= here: systemd opens this output for every
 # command the unit runs, so a second command would truncate the JSON, or fail
 # before creating a directory it needs. tmpfiles.d creates /run/ublue-os, and
