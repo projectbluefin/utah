@@ -46,7 +46,8 @@ name a schema installed there.
     `packages/bluefin.toml` nor Bluefin's image ships the package, so there is
     no parity gap and no `[unavailable]` entry to track.
 - `[gsettings.values]` asserts what `gsettings get SCHEMA KEY` prints in the
-  composed image: dash-to-dock's `disable-overview-on-startup` is `true`.
+  composed image: dash-to-dock's `disable-overview-on-startup` is `true`, and
+  `org.gnome.shell enabled-extensions` is exactly Dakota's default set.
 
 Tests: `GSettingsTests` in `tests/test_desktop_contract_verify.py` (fixtures in
 `tests/fixtures/gsettings/`) and `ExtensionSchemaTests` in

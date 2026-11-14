@@ -584,7 +584,19 @@ class GSettingsTests(VerifyModeTests):
             {"org.gnome.software", "com.github.stunkymonkey.nautilus-open-any-terminal"},
         )
         self.assertEqual(
-            gsettings["values"], {"org.gnome.shell.extensions.dash-to-dock disable-overview-on-startup": "true"}
+            gsettings["values"],
+            {
+                "org.gnome.shell.extensions.dash-to-dock disable-overview-on-startup": "true",
+                # Dakota's default-enabled set, in Dakota's order
+                # (projectbluefin/dakota elements/bluefin/shell-extensions/disable-ext-validator.bst).
+                "org.gnome.shell enabled-extensions": "['caffeine@patapon.info', "
+                "'appindicatorsupport@rgcjonas.gmail.com', 'bazaar-integration@kolunmi.github.io', "
+                "'blur-my-shell@aunetx', 'dash-to-dock@micxgx.gmail.com', "
+                "'fuzzy-application-search@mkhl.codeberg.page', "
+                "'gradia-integration@alexandervanhee.github.io', 'gsconnect@andyholmes.github.io', "
+                "'custom-command-list@storageb.github.com', 'BudsLink-Companion@maniacx.github.com', "
+                "'tilingshell@ferrarodomenico.com']",
+            },
         )
 
 

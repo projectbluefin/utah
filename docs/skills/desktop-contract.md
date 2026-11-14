@@ -69,7 +69,7 @@ The TOML's sections are the contract's table of contents:
   the pinned Hummingbird base supplies that key (fingerprint `567E…1D51`) alongside Utah's
   `RPM-GPG-KEY-redhat-release-2`, so no policy weakening or alias is needed.
 - **`[flatpak]`** — first-boot policy: the Flathub and TunaOS remotes, the Bazaar,
-  NautilusPreviewer (spacebar previews in Files) and Ghostty preinstalls, the `99-flatpaks.sh`
+  NautilusPreviewer (spacebar previews in Files), Ghostty and BudsLink preinstalls, the `99-flatpaks.sh`
   hook, and the system-flatpaks Brewfile whose app list the contract enumerates.
 - **`[media]`** — GStreamer decoders that must load, not merely be installed: `openh264dec`.
   The factory libav is built on `ffmpeg-free` (no H.264), so `avdec_h264` is not asserted (#1116).
@@ -90,7 +90,7 @@ The TOML's sections are the contract's table of contents:
   The last two units are Dakota parity (#675): install-date stamping and the
   booted-image snapshot Common's `/usr/libexec/ublue-booted-image` falls back to.
   `configure-services.sh` enables them, patches Common's fastfetch ([stats](desktop-contract/references/stats-refresh.md))
-  and `uwelcome.sh` (non-interactive shells skip the greeting), and checks image-info ([bootc compatibility](desktop-contract/references/image-info.md)).
+  and `uwelcome.sh` (non-interactive shells skip the greeting), checks image-info ([bootc compatibility](desktop-contract/references/image-info.md)), and applies [Dakota's desktop defaults](desktop-contract/references/dakota-desktop-defaults.md).
   Wallpaper rotation is deliberately NOT Dakota parity: Common's per-user `bluefin-dynamic-wallpaper`
   timer is hemisphere-aware and rotates live at month boundaries, while
   Dakota's boot-time month symlink is northern-only and stale until reboot, so
@@ -123,8 +123,8 @@ The TOML's sections are the contract's table of contents:
 
 The common image pinned in `Containerfile` (`COMMON_IMAGE_SHA`) includes
 `projectbluefin/common#1284`, which removed Warehouse and smile from Bluefin's
-default Brewfile. Utah follows that upstream default set; the ordered app
-contract changes with the pinned artifact rather than overriding its Brewfile.
+default Brewfile. Utah follows that set plus Dakota's BudsLink append ([Dakota desktop defaults](desktop-contract/references/dakota-desktop-defaults.md));
+the ordered app contract otherwise changes with the pinned artifact.
 Read the live pin from `Containerfile` — Renovate rewrites it there, so no
 digest is repeated in this document. The verifier still compares the actual
 inherited Brewfile.
@@ -261,7 +261,7 @@ contract and image-build CI run on its exact head instead of a contract-only
 dispatch. Hive review, required checks and the normal merge policy still
 govern landing, and no automated merge is enabled. Source metadata alone does
 not prove GNOME 51 runtime compatibility. Edit `.gitmodules` for source URL or branch changes; automation advances existing pins.
-Search Light was dropped: GNOME 51 removed `set_shader_source`, which its shader code calls, so it failed ISO tests.
+Search Light was dropped: GNOME 51 removed `set_shader_source`, which its shader code calls, so it failed ISO tests. Only Dakota's extension set is enabled by default ([Dakota desktop defaults](desktop-contract/references/dakota-desktop-defaults.md)).
 
 `scripts/verify-gnome-extensions.py` checks GNOME 51 support and provenance:
 

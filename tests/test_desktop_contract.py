@@ -426,6 +426,20 @@ class GnomeExtensionTests(unittest.TestCase):
                 f"{uuid} source path does not point at extension metadata: {relative}",
             )
 
+    def test_enabled_extensions_override_matches_contract_and_ships(self):
+        # The in-image gsettings check pins the effective value; this keeps
+        # the source override in step with it and every enabled UUID shipped.
+        override = (
+            ROOT / "system_files/shared/usr/share/glib-2.0/schemas/zz3-bluefin-unsupported-stuff.gschema.override"
+        ).read_text()
+        line = next(line for line in override.splitlines() if line.startswith("enabled-extensions="))
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        expected = contract["gsettings"]["values"]["org.gnome.shell enabled-extensions"]
+        self.assertEqual(line.removeprefix("enabled-extensions="), expected)
+        for uuid in json.loads(expected.replace("'", '"')):
+            with self.subTest(uuid=uuid):
+                self.assertIn(uuid, extensions.SOURCE_EXTENSIONS)
+
 
 class ServiceMaskParityTests(unittest.TestCase):
     def test_stats_refresh_timer_enabled_in_contract_preset_and_script(self):
