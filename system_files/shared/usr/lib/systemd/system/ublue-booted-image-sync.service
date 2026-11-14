@@ -1,0 +1,20 @@
+[Unit]
+Description=Parse bootc status JSON into the booted-image state file
+Documentation=https://github.com/projectbluefin/utah/issues/675
+Requires=ublue-booted-image.service
+After=ublue-booted-image.service
+Before=systemd-user-sessions.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Runs in the unconfined service domain, so calling `bootc status` here would
+# be denied mac_admin by bootc's relabelling probe (see ublue-booted-image.service).
+# This unit only runs the sync script, which parses JSON already written; it
+# never calls bootc. It must NOT set StandardOutput=file:/truncate: -- that
+# applies to its own ExecStart too, truncating the file before the script read
+# it (projectbluefin/utah#1203).
+ExecStart=/usr/bin/ublue-booted-image-sync /run/ublue-os/booted-image.json
+
+[Install]
+WantedBy=multi-user.target
