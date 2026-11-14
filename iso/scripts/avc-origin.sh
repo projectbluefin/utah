@@ -19,7 +19,19 @@ grep -hE 'avc: +denied .*comm="(chcon|bootc)"' "$log" 2>/dev/null \
         journalctl -b "_PID=${ppid}" -o verbose --no-pager 2>/dev/null \
             | grep -E '^\s*(_SYSTEMD_UNIT|_COMM|_CMDLINE|_EXE)=' | sort -u | head -n 8
     fi
+    # This image loads no audit rules, so there is no SYSCALL record and no
+    # ppid. A parent's PID is almost always just below its child's: list the
+    # services whose main process started in the 300 PIDs before the denial.
+    pid="$(grep -oE ' pid=[0-9]+' <<<"$records" | head -n1 | cut -d= -f2)"
+    if [ -n "$pid" ]; then
+        echo "-- services with ExecMainPID in $((pid - 300))..${pid}:"
+        systemctl list-units --all --type=service --plain --no-legend 2>/dev/null | awk '{print $1}' \
+            | xargs -r systemctl show -p Id -p ExecMainPID -p ExecMainStartTimestamp 2>/dev/null \
+            | awk -v lo="$((pid - 300))" -v hi="$pid" -F= '
+                $1=="Id"{id=$2} $1=="ExecMainPID"{p=$2}
+                $1=="ExecMainStartTimestamp"{ if (p+0>=lo && p+0<=hi) print p, id, $2 }' | sort -n
+    fi
     ts="${id#audit(}"; ts="${ts%%.*}"
-    echo "-- journal $((ts - 2))..$((ts + 2)):"
-    journalctl -b --no-pager -o short-precise --since="@$((ts - 2))" --until="@$((ts + 2))" 2>/dev/null | head -n 60
+    echo "-- journal $((ts - 1))..$((ts + 1)):"
+    journalctl -b --no-pager -o short-precise --since="@$((ts - 1))" --until="@$((ts + 1))" 2>/dev/null | head -n 400
 done
