@@ -77,7 +77,7 @@ The TOML's sections are the contract's table of contents:
   `avahi-daemon.socket`, `switcheroo-control.service`, `bluetooth.service`,
   `ublue-system-setup.service`, `flatpak-preinstall.service`, `flatpak-nuke-fedora.service`,
   `brew-setup.service`, `dconf-update.service`, `bootc-unified-storage.timer`,
-  `input-remapper.service`, `ModemManager.service`, `thermald.service`, `intel_lpmd.service`,
+  `input-remapper.service`, `ModemManager.service`, `power-profiles-daemon.service`, `thermald.service`,
   `sysstat.service`, `sysstat-collect.timer`, `sysstat-summary.timer`,
   `projectbluefin-countme.timer`, `cups.socket`, `systemd-boot-update.service`, `uupd.timer`,
   `bluefin-stats-refresh.timer`, `ublue-firstboot-date.service`, `ublue-booted-image.service`.
