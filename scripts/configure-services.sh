@@ -171,6 +171,12 @@ esac' "${UWELCOME_SH}"
         exit 1
     fi
 fi
+# Common's System Update, Community and Documentation launchers duplicate
+# Control Center (updates, the Community link, docs); Dakota drops all three
+# (projectbluefin/dakota elements/bluefin/common.bst). `ujust update` stays.
+rm -f /usr/share/applications/system-update.desktop \
+    /usr/share/applications/discourse.desktop \
+    /usr/share/applications/documentation.desktop
 # input-remapper is installed by Bluefin's package set, but without its root
 # daemon running, udev autoload fails on input devices and the GUI prompts for
 # root credentials on launch. Enable it next to the desktop units; see #99.
@@ -222,6 +228,15 @@ grep -q '^DeployCollectionID=' /etc/flatpak/remotes.d/flathub.flatpakrepo ||
     sed -i '/^\[Flatpak Repo\]$/a DeployCollectionID=org.flathub.Stable' \
         /etc/flatpak/remotes.d/flathub.flatpakrepo
 grep -qx 'DeployCollectionID=org.flathub.Stable' /etc/flatpak/remotes.d/flathub.flatpakrepo
+# BudsLink backs the BudsLink-Companion extension enabled by default; Dakota
+# appends it to common's system Flatpaks and preinstalls it
+# (projectbluefin/dakota elements/bluefin/common.bst,
+# files/oci/bluefin-flatpak/preinstall.d/io.github.maniacx.BudsLink.preinstall).
+# The desktop contract's [flatpak] apps list fails the build if it is missing.
+SYSTEM_FLATPAKS=/usr/share/ublue-os/homebrew/system-flatpaks.Brewfile
+if [ -f "${SYSTEM_FLATPAKS}" ] && ! grep -qxF 'flatpak "io.github.maniacx.BudsLink"' "${SYSTEM_FLATPAKS}"; then
+    echo 'flatpak "io.github.maniacx.BudsLink"' >>"${SYSTEM_FLATPAKS}"
+fi
 
 disable_unit flatpak-add-fedora-repos.service
 

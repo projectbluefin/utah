@@ -137,6 +137,8 @@ files = [
   "/usr/bin/ublue-image-info.sh",
   "/usr/libexec/ublue-booted-image",
   "/etc/profile.d/uwelcome.sh",
+  # Dakota's shell defaults (projectbluefin/dakota elements/bluefin/common.bst).
+  "/etc/profile.d/bluefin-shell-defaults.sh",
   # Common's Red Hat signature policy uses the unsuffixed key path. The pinned
   # Hummingbird base carries that key; Utah also stages its repository copy.
   "/etc/containers/policy.json",
@@ -209,6 +211,10 @@ files = [
 "/etc/profile.d/uwelcome.sh" = [
   "case $- in",
 ]
+"/etc/profile.d/bluefin-shell-defaults.sh" = [
+  ": \"${BLUEFIN_SHELL_ENABLE_MOTD:=0}\"",
+  "export BLUEFIN_SHELL_ENABLE_MOTD",
+]
 "/etc/dconf/profile/user" = [
   "user-db:user",
   "system-db:distro",
@@ -227,20 +233,16 @@ files = [
   "docs.projectbluefin.io",
   "menuicon-setting='ublue-logo-symbolic'",
 ]
+# Tiling Shell's Quarters layout is Dakota's four distinct quadrants
+# (projectbluefin/dakota files/dconf/08-dakota-extension-defaults); the
+# second and third tiles were once copies of the fourth.
 "/etc/dconf/db/distro.d/08-dakota-extension-defaults" = [
   "show-indicator=false",
-  "layouts-json=",
+  "{\"id\": \"Quarters\",\"tiles\": [{\"x\": 0,\"y\": 0,\"width\": 0.5,\"height\": 0.5,\"groups\": [1]},{\"x\": 0,\"y\": 0.5,\"width\": 0.5,\"height\": 0.5,\"groups\": [1]},{\"x\": 0.5,\"y\": 0,\"width\": 0.5,\"height\": 0.5,\"groups\": [1]},{\"x\": 0.5,\"y\": 0.5,\"width\": 0.5,\"height\": 0.5,\"groups\": [1]}]}",
 ]
+# The exact enabled set is pinned in [gsettings.values].
 "/usr/share/glib-2.0/schemas/zz3-bluefin-unsupported-stuff.gschema.override" = [
   "disable-extension-version-validation=true",
-  "tilingshell@ferrarodomenico.com",
-  # Bluefin smoke checks these Quick Settings extensions are enabled.
-  "quicksettings-audio-devices-hider@marcinjahn.com",
-  "quicksettings-audio-devices-renamer@marcinjahn.com",
-  "tailscale-gnome-qs@tailscale-qs.github.io",
-  # Bluefin smoke checks Copyous and the upstream Syncthing toggle are enabled.
-  "copyous@boerdereinar.dev",
-  "syncthing-toggle@rehhouari.github.com",
 ]
 "/etc/dconf/db/distro.d/02-bluefin-keybindings" = [
   "xdg-terminal-exec",
@@ -295,6 +297,9 @@ files = [
   "/usr/share/flatpak/preinstall.d/ghostty.preinstall",
   # Spacebar file previews in Files (Sushi), from Flathub (#1015).
   "/usr/share/flatpak/preinstall.d/nautilus-previewer.preinstall",
+  # BudsLink backs the default-enabled BudsLink-Companion extension
+  # (projectbluefin/dakota files/oci/bluefin-flatpak/preinstall.d/).
+  "/usr/share/flatpak/preinstall.d/io.github.maniacx.BudsLink.preinstall",
   "/etc/flatpak/remotes.d/tuna-os.flatpakrepo",
   "/usr/share/ublue-os/privileged-setup.hooks.d/99-flatpaks.sh",
   "/usr/share/ublue-os/homebrew/system-flatpaks.Brewfile",
@@ -352,6 +357,9 @@ apps = [
   "org.mozilla.thunderbird",
   "org.mozilla.firefox",
   "page.tesk.Refine",
+  # Not in common's Brewfile: configure-services.sh appends it, as Dakota does
+  # (projectbluefin/dakota elements/bluefin/common.bst).
+  "io.github.maniacx.BudsLink",
 ]
 
 # Software decoders that must load, not merely be installed (#1116). Utah's
@@ -385,6 +393,10 @@ schema_dir = "/usr/share/glib-2.0/schemas"
 # Effective values `gsettings get SCHEMA KEY` must print in the composed image.
 [gsettings.values]
 "org.gnome.shell.extensions.dash-to-dock disable-overview-on-startup" = "true"
+# Default-enabled extensions are exactly Dakota's set, in Dakota's order
+# (projectbluefin/dakota elements/bluefin/shell-extensions/disable-ext-validator.bst).
+# Utah's other bundled extensions stay installed but opt-in.
+"org.gnome.shell enabled-extensions" = "['caffeine@patapon.info', 'appindicatorsupport@rgcjonas.gmail.com', 'bazaar-integration@kolunmi.github.io', 'blur-my-shell@aunetx', 'dash-to-dock@micxgx.gmail.com', 'fuzzy-application-search@mkhl.codeberg.page', 'gradia-integration@alexandervanhee.github.io', 'gsconnect@andyholmes.github.io', 'custom-command-list@storageb.github.com', 'BudsLink-Companion@maniacx.github.com', 'tilingshell@ferrarodomenico.com']"
 
 [services]
 enabled = [
