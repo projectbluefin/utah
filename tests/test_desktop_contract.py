@@ -637,6 +637,11 @@ class ServiceMaskParityTests(unittest.TestCase):
 
         skill_doc = (ROOT / "docs/skills/desktop-contract.md").read_text()
         services_heading = skill_doc.split("`[services]`", 1)[1].split("\n\n", 1)[0]
+        # The bullet links the Dakota service-state reference, which carries
+        # the long list of units Dakota's enable-by-default policy turns on.
+        services_heading += (
+            ROOT / "docs/skills/desktop-contract/references/dakota-services.md"
+        ).read_text()
         missing = [unit for unit in enabled if unit not in services_heading]
         self.assertEqual(
             missing, [],

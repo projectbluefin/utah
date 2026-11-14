@@ -21,5 +21,43 @@ user), `scripts/configure-services.sh`, and `contracts/bluefin-desktop.toml`
   `iostat` work on demand; enable collection with
   `systemctl enable --now sysstat.service`.
 
+- Dakota's effective service state (#1233). Dakota has no system `disable *`
+  preset, so a booted Dakota runs every installed unit with `[Install]` that
+  no preset turns off. These units ship in Utah and are enabled on Dakota after
+  `preset-all` (measured from `ghcr.io/projectbluefin/dakota:testing`). They
+  are enabled in one block of the preset, in `configure-services.sh` and in
+  `[services].enabled`:
+  `rtkit-daemon.service`,
+  `uresourced.service`,
+  `upower.service`,
+  `udisks2.service`,
+  `polkit-agent-helper.socket`,
+  `cups.service`,
+  `pcscd.socket`,
+  `gnome-remote-desktop.service`,
+  `gnome-remote-desktop-configuration.service`,
+  `malcontent-timerd.service`,
+  `malcontent-timer-extension-agent.service`,
+  `malcontent-webd.service`,
+  `malcontent-webd-update.timer`,
+  `systemd-oomd.service`,
+  `systemd-oomd.socket`,
+  `wpa_supplicant.service`,
+  `podman.socket`,
+  `podman-auto-update.timer`,
+  `podman-restart.service`,
+  `podman-clean-transient.service`,
+  `systemd-sysext.socket`,
+  `systemd-factory-reset.socket`,
+  `systemd-pcrextend.socket`,
+  `systemd-storage-block.socket`,
+  `systemd-storage-fs.socket`,
+  `systemd-udev-load-credentials.service`,
+  `systemd-userdb-load-credentials.service`.
+  `multipathd.service` and `lm_sensors.service`, which Dakota doesn't run,
+  are in `[services].disabled`. To re-measure, run `systemctl --root=/
+  preset-all` inside both images and diff `systemctl --root=/
+  list-unit-files`.
+
 `ServiceMaskParityTests` in `tests/test_desktop_contract.py` pins the
 three-way agreement for each group.

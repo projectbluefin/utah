@@ -186,6 +186,36 @@ enable_unit ModemManager.service
 # power-profiles-daemon, not TuneD, and no intel_lpmd.
 enable_unit power-profiles-daemon.service
 enable_unit thermald.service
+# Dakota's effective service state (#1233); see 85-utah-desktop.preset.
+enable_unit rtkit-daemon.service
+enable_unit uresourced.service
+enable_unit upower.service
+enable_unit udisks2.service
+enable_unit polkit-agent-helper.socket
+enable_unit cups.service
+enable_unit pcscd.socket
+enable_unit gnome-remote-desktop.service
+enable_unit gnome-remote-desktop-configuration.service
+enable_unit malcontent-timerd.service
+enable_unit malcontent-timer-extension-agent.service
+enable_unit malcontent-webd.service
+enable_unit malcontent-webd-update.timer
+enable_unit systemd-oomd.service
+enable_unit systemd-oomd.socket
+enable_unit wpa_supplicant.service
+enable_unit podman.socket
+enable_unit podman-auto-update.timer
+enable_unit podman-restart.service
+enable_unit podman-clean-transient.service
+enable_unit systemd-sysext.socket
+enable_unit systemd-factory-reset.socket
+enable_unit systemd-pcrextend.socket
+enable_unit systemd-storage-block.socket
+enable_unit systemd-storage-fs.socket
+enable_unit systemd-udev-load-credentials.service
+enable_unit systemd-userdb-load-credentials.service
+disable_unit multipathd.service
+disable_unit lm_sensors.service
 # nfs-client.target is turned off: see 85-utah-desktop.preset.
 disable_unit nfs-client.target
 # sysstat collection is opt-in, as in Dakota (elements/bluefin/sysstat.bst);
