@@ -73,14 +73,14 @@ The TOML's sections are the contract's table of contents:
   hook, and the system-flatpaks Brewfile whose app list the contract enumerates.
 - **`[media]`** — GStreamer decoders that must load, not merely be installed: `openh264dec`.
   The factory libav is built on `ffmpeg-free` (no H.264), so `avdec_h264` is not asserted (#1116).
-- **`[services]`** — systemd units the preset must enable: `gdm.service`, `avahi-daemon.service`,
-  `avahi-daemon.socket`, `switcheroo-control.service`, `bluetooth.service`,
-  `ublue-system-setup.service`, `flatpak-preinstall.service`, `flatpak-nuke-fedora.service`,
-  `brew-setup.service`, `dconf-update.service`, `bootc-unified-storage.timer`,
+- **`[services]`** — systemd units the preset must enable: `gdm.service`, `colord.service`,
+  `accounts-daemon.service`, `avahi-daemon.service`, `avahi-daemon.socket`, `bluetooth.service`,
+  `switcheroo-control.service`, `ublue-system-setup.service`, `flatpak-preinstall.service`,
+  `flatpak-nuke-fedora.service`, `brew-setup.service`, `dconf-update.service`, `bootc-unified-storage.timer`,
   `input-remapper.service`, `ModemManager.service`, `power-profiles-daemon.service`, `thermald.service`,
-  `sysstat.service`, `sysstat-collect.timer`, `sysstat-summary.timer`,
   `projectbluefin-countme.timer`, `cups.socket`, `systemd-boot-update.service`, `uupd.timer`,
   `bluefin-stats-refresh.timer`, `ublue-firstboot-date.service`, `ublue-booted-image.service`.
+  [Dakota service presets](desktop-contract/references/dakota-services.md): GNOME units, user units, opt-in sysstat.
   Update policy delegates background updates to `uupd.timer`; `bootc-fetch-apply-updates.timer` and
   `bootc-fetch-apply-updates.service` are masked in `/etc` and `/usr/lib` (and disabled in
   `85-utah-desktop.preset`) so cross-vendor `/etc` 3-way merges (e.g. switching from Bluefin) do not

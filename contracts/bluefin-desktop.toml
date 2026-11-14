@@ -355,13 +355,14 @@ enabled = [
   "flatpak-nuke-fedora.service",
   "flatpak-preinstall.service",
   "gdm.service",
+  # GNOME's system services: gnome-build-meta's 80-gnome.preset, as Dakota
+  # ships it.
+  "colord.service",
+  "accounts-daemon.service",
   "input-remapper.service",
   "ModemManager.service",
   "power-profiles-daemon.service",
   "thermald.service",
-  "sysstat.service",
-  "sysstat-collect.timer",
-  "sysstat-summary.timer",
   "projectbluefin-countme.timer",
   "switcheroo-control.service",
   "ublue-system-setup.service",
@@ -378,6 +379,9 @@ user_enabled = [
   "pipewire-pulse.socket",
   "wireplumber.service",
   "xdg-user-dirs.service",
+  # Dakota parity: gnome-build-meta's user presets (80-speechd, 80-xdg).
+  "speech-dispatcher.socket",
+  "xdg-desktop-portal-rewrite-launchers.service",
 ]
 masked = [
   "bootc-fetch-apply-updates.service",
@@ -413,4 +417,10 @@ disabled = [
   "httpd.socket",
   "httpd@.service",
   "htcacheclean.service",
+  # sysstat collection is opt-in, as in Dakota (elements/bluefin/sysstat.bst
+  # writes 80-sysstat.preset disabling all four); sar/iostat work on demand.
+  "sysstat.service",
+  "sysstat-collect.timer",
+  "sysstat-summary.timer",
+  "sysstat-rotate.timer",
 ]

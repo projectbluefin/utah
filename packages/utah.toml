@@ -466,9 +466,9 @@ packages = [
     # (libutempter, libhandy, gssproxy, quota, python3-pillow, python3-cups,
     # usbutils, net-snmp, libtraceevent/libtracefs, libsrtp, gtksourceview5,
     # djvulibre, liba52, libmpeg2) are published, so the names they gated resolve.
-    # sysstat's units are the ones Fedora's preset enables and Utah wires
-    # (85-utah-desktop.preset, configure-services.sh, desktop contract);
-    # nfs-client.target is disabled, see 85-utah-desktop.preset.
+    # sysstat ships for on-demand sar/iostat; its collection units are opt-in
+    # and preset-disabled, as in Dakota (elements/bluefin/sysstat.bst; see
+    # 85-utah-desktop.preset). nfs-client.target is disabled there too.
     "tmux",
     "powertop",
     "sysstat",
