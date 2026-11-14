@@ -32,12 +32,12 @@
 set -euo pipefail
 shopt -s nullglob
 
-FEDORA_KERNEL_VERSION="${UTAH_FEDORA_KERNEL_VERSION:-7.2.15}"
+FEDORA_KERNEL_VERSION="${UTAH_FEDORA_KERNEL_VERSION:-7.3.3}"
 FEDORA_KERNEL_RELEASE="${UTAH_FEDORA_KERNEL_RELEASE:-200.fc44}"
 # The Koji copy signed with the Fedora 44 release key, checked against the key
 # committed in packages/ and against this digest. Version, release and digest
 # move together, with BASE_IMAGE.
-FEDORA_KERNEL_SRPM_SHA256="${UTAH_FEDORA_KERNEL_SRPM_SHA256:-579a2ad0a24950e30b79d6a6b8e80a1fe2fc5fbf1b4424ab120f3e371e4590d0}"
+FEDORA_KERNEL_SRPM_SHA256="${UTAH_FEDORA_KERNEL_SRPM_SHA256:-602e8a3b636a17438bd92001fb542844820f2a86c53b793c76e5d9dbfbbf1e29}"
 UTAH_BUILDID=".1.utah1"
 FEDORA_KEY="/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-44-primary"
 FEDORA_KEY_ID="6d9f90a6"

@@ -75,7 +75,7 @@ the base image's kernel (Koji's copy signed with the Fedora 44 key, also
 checked against a recorded SHA-256) with `packages/kernel-patches/*.patch`
 concatenated into the spec's `linux-kernel-test.patch` hook. Base variant only:
 no debug kernels, debuginfo, UKI, tools or headers. The release gains
-`.1.utah1` (`7.2.15-200.1.utah1.fc44`), which sorts above Fedora's build and
+`.1.utah1` (`7.3.3-200.1.utah1.fc44`), which sorts above Fedora's build and
 below any later one.
 
 The builder installs the result, with its `kernel-devel`, before the NVIDIA
@@ -97,9 +97,13 @@ script, its `COPY`s, the `check` in the Containerfile and the
 `/utah-cache/fedora-kernel` lookups), and `main` can return to the pristine
 base. Moving `BASE_IMAGE` to a new kernel before then means moving
 `FEDORA_KERNEL_VERSION`, `FEDORA_KERNEL_RELEASE` and
-`FEDORA_KERNEL_SRPM_SHA256` with it; the `check` fails the build until they
-agree. Secure Boot: the rebuild is not signed by Fedora's key, so with Secure
-Boot enforcing, shim refuses it just as it refuses the OGC kernel.
+`FEDORA_KERNEL_SRPM_SHA256` in the same transaction. Otherwise the builder
+compiles the old kernel successfully, then `rpm -U` rejects replacing the
+newer base kernel. Never use `--oldpackage` to hide a stale source pin; rebuild
+the base's exact Fedora version and retain source signature and digest checks.
+The `check` also rejects a cache with the wrong module tree. Secure Boot: the
+rebuild is not signed by Fedora's key, so with Secure Boot enforcing, shim
+refuses it just as it refuses the OGC kernel.
 
 ## What the tag hashes
 
