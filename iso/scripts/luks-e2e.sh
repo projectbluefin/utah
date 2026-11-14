@@ -1028,12 +1028,12 @@ ssh_target "
 " || fail "logrotate state directory or service failed on the installed system"
 echo "  logrotate.service: succeeded with a nonempty state file"
 
-# ublue-booted-image.service runs bootc as its own ExecStart so bootc's chcon
-# probe is not denied mac_admin (#1198), and ublue-booted-image-sync.service
-# turns its JSON into the ref unprivileged fastfetch reads.
+# ublue-booted-image.service records the booted ref from the deployment's
+# origin file for unprivileged fastfetch. It must not run bootc: from a boot
+# service, bootc's chcon probe is denied mac_admin (#1198).
 echo "Verifying the booted-image record on the installed system..."
-ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' sh -eu -c 'systemctl is-active --quiet ublue-booted-image.service; systemctl is-active --quiet ublue-booted-image-sync.service; test -s /run/ublue-os/booted-image; cat /run/ublue-os/booted-image'" \
-    > "${WORK}/booted-image.txt" || fail "booted-image units did not leave /run/ublue-os/booted-image"
+ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' sh -eu -c 'systemctl is-active --quiet ublue-booted-image.service; test -s /run/ublue-os/booted-image; cat /run/ublue-os/booted-image'" \
+    > "${WORK}/booted-image.txt" || fail "ublue-booted-image.service did not leave /run/ublue-os/booted-image"
 echo "  /run/ublue-os/booted-image: $(cat "${WORK}/booted-image.txt")"
 ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' sh -c 'grep -hF avc: /var/log/audit/audit.log 2>/dev/null; journalctl -b --no-pager -o cat 2>/dev/null | grep -F avc:; true'" \
     > "${WORK}/avc.log" || fail "could not read the installed system's AVC records"

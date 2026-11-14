@@ -443,7 +443,6 @@ class ServiceMaskParityTests(unittest.TestCase):
         for unit in (
             "ublue-firstboot-date.service",
             "ublue-booted-image.service",
-            "ublue-booted-image-sync.service",
         ):
             with self.subTest(unit=unit):
                 self.assertIn(f'"{unit}"', contract)

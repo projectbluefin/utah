@@ -1,28 +1,18 @@
 [Unit]
-Description=Snapshot bootc status for the booted-image record
+Description=Record booted bootc image ref for unprivileged consumers
 Documentation=https://github.com/projectbluefin/utah/issues/675
 Documentation=https://github.com/projectbluefin/utah/issues/1198
-ConditionPathExists=/usr/bin/bootc
-After=local-fs.target systemd-tmpfiles-setup.service
+After=local-fs.target
 Before=systemd-user-sessions.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-# ExecStart must stay the bare bootc binary: its install_exec_t label is the
-# entrypoint into bootc's SELinux domain. Run from a script in the unconfined
-# service domain, bootc's relabelling chcon probe was denied mac_admin,
-# logging two AVC denials every boot (#1198).
-# The leading "-" keeps the old script's tolerance: a bootc failure (a
-# non-bootc boot, a transient error) counts as success instead of failing this
-# unit and, through Requires=, skipping ublue-booted-image-sync.service.
-# systemd strips the prefix itself, so bootc is still the executable.
-ExecStart=-/usr/bin/bootc status --json
-# No ExecStartPre= or ExecStartPost= here: systemd opens this output for every
-# command the unit runs, so a second command would truncate the JSON, or fail
-# before creating a directory it needs. tmpfiles.d creates /run/ublue-os, and
-# ublue-booted-image-sync.service parses the JSON afterwards.
-StandardOutput=truncate:/run/ublue-os/booted-image.json
+# Reads the booted deployment's origin file; never runs bootc. A service
+# runs as unconfined_service_t, where bootc's relabelling chcon probe is
+# denied mac_admin: two AVC denials every boot, whether bootc ran from a
+# script or as this unit's ExecStart (#1198).
+ExecStart=/usr/bin/ublue-booted-image-sync
 
 [Install]
 WantedBy=multi-user.target

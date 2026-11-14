@@ -87,7 +87,6 @@ enable_unit bootc-unified-storage.timer
 # first-boot preset application keeps them enabled (see #98).
 enable_unit ublue-firstboot-date.service
 enable_unit ublue-booted-image.service
-enable_unit ublue-booted-image-sync.service
 # Apply Dakota's runtime desktop integrations onto common's files. Each patch
 # is guarded: already-patched is a no-op, an unrecognized upstream file fails
 # the build loudly instead of silently shipping unpatched behavior.
