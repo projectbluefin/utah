@@ -1038,7 +1038,11 @@ echo "  /run/ublue-os/booted-image: $(cat "${WORK}/booted-image.txt")"
 ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' sh -c 'grep -hF avc: /var/log/audit/audit.log 2>/dev/null; journalctl -b --no-pager -o cat 2>/dev/null | grep -F avc:; true'" \
     > "${WORK}/avc.log" || fail "could not read the installed system's AVC records"
 if grep -E 'denied .*comm="(chcon|bootc)"' "${WORK}/avc.log" >&2; then
-    fail "bootc's chcon probe was denied again (#1198)"
+    scp_target "${ROOT}/iso/scripts/avc-origin.sh" "${TEST_USER}@127.0.0.1:/tmp/utah-avc-origin.sh" >/dev/null || true
+    ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' bash /tmp/utah-avc-origin.sh" \
+        > "${WORK}/avc-origin.txt" 2>&1 || true
+    sed 's/^/  /' "${WORK}/avc-origin.txt" >&2
+    fail "chcon was denied mac_admin during boot (#1198); see avc-origin.txt for its source"
 fi
 echo "  bootc chcon AVC denials: none"
 
