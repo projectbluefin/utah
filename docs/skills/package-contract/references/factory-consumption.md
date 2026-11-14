@@ -38,18 +38,22 @@ Rules applied while choosing names:
   `rpcbind`, `autofs`, `brltty`, `dnsmasq`, `saned` or `ipp-usb`. Utah wires
   `sysstat*` and disables `nfs-client.target` (Hummingbird's own preset enables
   it): it pulls in `gssproxy.service`, which failed to start in the review VM
-  (`STATE_DIRECTORY`, Permission denied; cause not diagnosed). `tuned` (Requires `rpm-ostree if bootc`,
-  and rpm-ostree is waived and unpublished) and `smartmontools` are not
-  installable, so their units stay unwired. Bluefin ships `tuned-ppd` rather
-  than `power-profiles-daemon`; never install both.
+  (`STATE_DIRECTORY`, Permission denied; cause not diagnosed).
+  `smartmontools` is not installable, so its unit stays unwired.
+- Power profiles follow Dakota, not Bluefin: Utah installs and enables
+  `power-profiles-daemon` and ships no TuneD. Never install `tuned-ppd`
+  beside it: both claim `org.freedesktop.UPower.PowerProfiles`. TuneD also
+  called `bootc loader-entries` on every profile switch and hung on the
+  ostree sysroot lock, which needed a post-loaded profile workaround; PPD has
+  no bootloader plugin, so that workaround is gone.
 - A `planned` triage entry for a name Utah now installs closes when
   `just baselines` refreshes the Utah snapshot; do not hand-edit the generated
   snapshot.
 
 Installed is not working. Package presence says nothing about whether a daemon
-starts or does its job: thermald and intel_lpmd stand down on unsupported CPUs,
-and tuned-ppd's power-profiles API is only observable from GNOME Settings on
-hardware.
+starts or does its job: thermald stands down on unsupported CPUs, and
+power-profiles-daemon's API is only observable from GNOME Settings (or
+`powerprofilesctl`) on hardware.
 
 ## Closing baseline gaps
 

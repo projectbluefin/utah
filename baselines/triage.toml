@@ -40,16 +40,12 @@ area = "printing"
 issue = "#263"
 
 [package.tuned]
-status = "planned"
-area = "hardware-power"
-issue = "#263"
-reason = "Published by the factory (#388) but uninstallable: Requires (rpm-ostree if bootc); bootc is in the image and rpm-ostree is waived and published nowhere (sha256:d3b5bac2)"
+status = "waived"
+reason = "Dakota, the parity target, ships power-profiles-daemon for power profiles; Utah installs it instead of TuneD"
 
 [package.tuned-ppd]
-status = "planned"
-area = "hardware-power"
-issue = "#263"
-reason = "Published by the factory (#388) but uninstallable: Requires tuned (see tuned). Bluefin runs tuned-ppd instead of power-profiles-daemon, so the latter is not installed as a stand-in"
+status = "waived"
+reason = "Dakota, the parity target, ships power-profiles-daemon; tuned-ppd claims the same D-Bus name, so the two never ship together"
 
 [package.smartmontools]
 status = "planned"

@@ -36,10 +36,12 @@ enable flatpak-preinstall.service
 enable flatpak-nuke-fedora.service
 enable input-remapper.service
 enable ModemManager.service
-# Laptop thermal management (#388). Fedora's 90-default.preset enables both for
-# desktops; Hummingbird's 99-default-disable would leave them off.
+# Power profiles and thermal management as Dakota ships them (#388):
+# power-profiles-daemon backs GNOME's power-mode switch and thermald handles
+# thermal limits. Utah ships neither TuneD/tuned-ppd nor intel_lpmd.
+# Hummingbird's 99-default-disable would leave both off.
+enable power-profiles-daemon.service
 enable thermald.service
-enable intel_lpmd.service
 # System activity accounting, enabled by Fedora's 90-default.preset for Bluefin
 # (#263).
 enable sysstat.service

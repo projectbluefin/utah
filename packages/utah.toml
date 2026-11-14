@@ -356,12 +356,13 @@ packages = [
     # in Bluefin's [excluded] list. Each name was resolved against the pinned
     # image by CI's package availability step.
     #
-    # Power and thermal policy (#388). Fedora's preset (redhat-systemd-presets
-    # 90-default.preset, which Bluefin inherits) enables thermald and
-    # intel_lpmd; the matching enablements are in 85-utah-desktop.preset and
+    # Power and thermal policy (#388), as Dakota ships it: power-profiles-daemon
+    # (gnome-build-meta core-deps) backs GNOME's power-profile switch, and
+    # thermald handles thermal limits. Dakota ships neither TuneD/tuned-ppd nor
+    # intel-lpmd. The matching enablements are in 85-utah-desktop.preset and
     # configure-services.sh.
+    "power-profiles-daemon",
     "thermald",
-    "intel-lpmd",
     "powerstat",
     # Everyday command-line tools (#392). xdg-utils supplies xdg-open, which
     # nothing else in the image provides. nano-default-editor sets EDITOR.
@@ -502,12 +503,9 @@ packages = [
     "papers-nautilus",
     #
     # Left out (resolved against sha256:d3b5bac2):
-    #   tuned, tuned-ppd (#388)     Requires (rpm-ostree if bootc). bootc is in
-    #                               the image, rpm-ostree is waived (Utah updates
-    #                               with bootc) and published nowhere. Bluefin
-    #                               runs tuned-ppd instead of
-    #                               power-profiles-daemon, so the latter is not
-    #                               installed as a stand-in.
+    #   tuned, tuned-ppd            Dakota runs power-profiles-daemon, which is
+    #                               installed above; the two claim the same
+    #                               D-Bus name, so never install both.
     #   gstreamer1-plugins-good-qt  Qt5 (libQt5Qml, libQt5Quick,
     #                               libQt5WaylandClient, libQt5X11Extras);
     #                               Bluefin also ships the -qt6 split, which is
@@ -886,8 +884,8 @@ parity = [
     "gstreamer1-plugin-openh264",
     "openh264",
     # Bluefin tools consumed from the pinned factory (#263, #388, #392).
+    "power-profiles-daemon",
     "thermald",
-    "intel-lpmd",
     "powerstat",
     "xdg-utils",
     "rsync",

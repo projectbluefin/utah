@@ -176,9 +176,10 @@ fi
 # root credentials on launch. Enable it next to the desktop units; see #99.
 enable_unit input-remapper.service
 enable_unit ModemManager.service
-# Thermal management, as Fedora's preset enables it for Bluefin (#388).
+# Power profiles and thermal management as Dakota ships them (#388):
+# power-profiles-daemon, not TuneD, and no intel_lpmd.
+enable_unit power-profiles-daemon.service
 enable_unit thermald.service
-enable_unit intel_lpmd.service
 # sysstat accounting, as Fedora's preset enables it for Bluefin (#263).
 # nfs-client.target is turned off: see 85-utah-desktop.preset.
 disable_unit nfs-client.target
@@ -221,17 +222,6 @@ grep -q '^DeployCollectionID=' /etc/flatpak/remotes.d/flathub.flatpakrepo ||
 grep -qx 'DeployCollectionID=org.flathub.Stable' /etc/flatpak/remotes.d/flathub.flatpakrepo
 
 disable_unit flatpak-add-fedora-repos.service
-
-# Keep TuneD off the ostree sysroot lock: its bootloader plugin would run
-# `bootc loader-entries set-options-for-source` on every power-profile switch
-# and hang behind bootc-unified-storage or an upgrade. The profile explains;
-# TuneD merges a post-loaded profile into every profile it applies, including
-# the ones tuned-ppd switches to. Written here, after the package transaction,
-# because the tuned RPM owns this %config(noreplace) file.
-if rpm -q --quiet tuned; then
-    test -f /usr/lib/tuned/profiles/utah-bootc-kargs-off/tuned.conf
-    printf '%s\n' utah-bootc-kargs-off > /etc/tuned/post_loaded_profile
-fi
 
 # Keep image updates under uupd/bootc rather than the legacy rpm-ostree path.
 # Mask in /usr/lib as well as /etc so the mask survives cross-vendor /etc 3-way merges
