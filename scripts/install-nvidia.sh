@@ -62,11 +62,10 @@ driver_version="${UTAH_NVIDIA_DRIVER_VERSION:-595.99.02}"
 run="NVIDIA-Linux-x86_64-${driver_version}.run"
 url="https://download.nvidia.com/XFree86/Linux-x86_64/${driver_version}/${run}"
 # The vendor `.run` is executed as root during composition, so it is verified
-# against a digest committed here, the same arrangement as KERNEL_DEVEL_SHA256
-# below. This used to fetch `${url}.sha256sum` at build time instead, but that
-# file lives in the same directory on the same server as the installer:
-# whoever can substitute one can substitute both, so the fetch added no trust
-# beyond the TLS channel it was meant to backstop. The constant is NVIDIA's
+# against a digest committed here. This used to fetch `${url}.sha256sum` at
+# build time instead, but that file lives in the same directory on the same
+# server as the installer: whoever can substitute one can substitute both, so
+# the fetch added no trust beyond the TLS channel it was meant to backstop. The constant is NVIDIA's
 # published SHA-256 for the pinned driver version; the two move together, as
 # does UTAH_NVIDIA_RUN_SHA256 when UTAH_NVIDIA_DRIVER_VERSION is overridden.
 NVIDIA_RUN_SHA256="${UTAH_NVIDIA_RUN_SHA256:-e87477958bf763070549324bd5ad6c948eba6ed210e44005b3eff84940f6e1ec}"
@@ -101,37 +100,15 @@ fi
 # attempt at a source build. It is needed only to compile against, so it goes in
 # here and comes out again below.
 #
-# It may not be in the repositories this image enables either. Utah enables only
-# Hummingbird plus its own package factory, and when the base kernel is not in
-# those:
-#
-#   No match for argument: kernel-devel-<nevr>
-#
-# Adding the matching Fedora repository would not fix it for long, because a
-# repository only carries the current kernel and this image is pinned to a base
-# whose kernel will not move. Fedora own build system keeps every build
-# indefinitely, so that is where this comes from, addressed by exact NEVR.
-#
-# Those RPMs are unsigned at that path, so the download is checked against a
-# hash recorded here instead. It is a constant because the base image is pinned
-# by digest: the kernel cannot change without BASE_IMAGE changing.
-#
-# Which is exactly why the hash has to move with BASE_IMAGE, and why it is
-# recorded here beside the kernel it was taken from rather than on its own. The
-# 7.2 base bump left this pinned to 7.1.8-100.fc43 for one revision: the dnf
-# path above satisfied 7.2 and the fallback never ran, so nothing failed and
-# nothing said the constant had gone stale. It would have failed the first time
-# the enabled repositories dropped the kernel -- the precise situation this
-# fallback exists for. Pairing the two makes that mismatch loud and immediate
-# instead of latent, and costs nothing when they agree.
-#
-# Both are overridable together, and that pairing is the point. The override on
-# the hash exists for exactly one situation -- validating a kernel this file has
-# not been re-recorded for -- so a guard that refused to proceed whenever the
-# kernel differed from the recorded NEVR would make the override unreachable in
-# the only case it is for. Override both, or neither.
-KERNEL_DEVEL_NEVR="${UTAH_KERNEL_DEVEL_NEVR:-7.2.14-200.fc44.x86_64}"
-KERNEL_DEVEL_SHA256="${UTAH_KERNEL_DEVEL_SHA256:-9dcd7676b88d3fcc640597296e8738d940ad4405915e2c9659e6097a7c804775}"
+# Every build starts FROM the kernel cache image (Containerfile.kernel), and
+# the Containerfile's `utah-install-fedora-kernel check` fails any build whose
+# base kernel is not Utah's patched rebuild of Fedora's. That kernel is in no
+# repository and not on Koji, so its kernel-devel comes from the cache, which
+# carries it in /utah-cache/fedora-kernel/. The enabled repositories are tried
+# next. There used to be a third source, a Koji download checked against a
+# hash recorded here for one stock Fedora kernel; it could not match the
+# patched kernel and had gone stale, so it is gone. If neither source has it,
+# the cache image is broken and the right fix is rebuilding it.
 
 build_tree="/usr/lib/modules/${kernel}/build"
 installed_kernel_devel=""
@@ -147,7 +124,7 @@ toolchain_ready=""
 # Everything a compile needs and an unpack does not: kernel-devel for the base
 # kernel and the toolchain. This used to run unconditionally, before the cache
 # was consulted, so an image whose modules arrived prebuilt still spent a
-# minute and a half fetching a 60 MB kernel-devel from koji and installing gcc,
+# minute and a half fetching a 60 MB kernel-devel and installing gcc,
 # only to remove both again at the end. It is called from the compile path of
 # build_module and nowhere else, so an image served entirely from the cache
 # never pays for it. The cache builder, which has no cache, still does.
@@ -164,30 +141,11 @@ ensure_toolchain() {
     elif "$DNF" -y install "kernel-devel-${kernel}"; then
       installed_kernel_devel="kernel-devel-${kernel}"
     else
-      local arch nv ver rel koji rpmfile actual
-      if [ "${kernel}" != "${KERNEL_DEVEL_NEVR}" ]; then
-        echo "KERNEL_DEVEL_SHA256 was recorded for kernel ${KERNEL_DEVEL_NEVR}," >&2
-        echo "but this image boots ${kernel}. The hash cannot match, so the" >&2
-        echo "download below would fail after fetching 60 MB. Re-record both" >&2
-        echo "constants for ${kernel} when bumping BASE_IMAGE, or set both" >&2
-        echo "UTAH_KERNEL_DEVEL_NEVR and UTAH_KERNEL_DEVEL_SHA256 to validate" >&2
-        echo "a kernel this file has not been re-recorded for." >&2
-        exit 1
-      fi
-      arch="${kernel##*.}"; nv="${kernel%.*}"; ver="${nv%%-*}"; rel="${nv#*-}"
-      koji="https://kojipkgs.fedoraproject.org/packages/kernel/${ver}/${rel}/${arch}"
-      rpmfile="kernel-devel-${ver}-${rel}.${arch}.rpm"
-      echo "Not in the enabled repositories; taking it from ${koji}/${rpmfile}"
-      curl --retry 3 --retry-all-errors -fsSLo "/tmp/${rpmfile}" "${koji}/${rpmfile}"
-      actual="$(sha256sum "/tmp/${rpmfile}" | cut -d" " -f1)"
-      if [ "$actual" != "$KERNEL_DEVEL_SHA256" ]; then
-        echo "kernel-devel SHA-256 is $actual, expected $KERNEL_DEVEL_SHA256" >&2
-        echo "The base image kernel has moved; update KERNEL_DEVEL_SHA256." >&2
-        exit 1
-      fi
-      "$DNF" -y install "/tmp/${rpmfile}"
-      installed_kernel_devel="kernel-devel"
-      rm -f "/tmp/${rpmfile}"
+      echo "kernel-devel-${kernel} is neither in ${CACHE_DIR}/fedora-kernel/ nor in" >&2
+      echo "the enabled repositories. Every build is FROM the kernel cache image," >&2
+      echo "which carries it; rebuild that image (just build-kernel-cache)." >&2
+      diagnose
+      exit 1
     fi
   fi
   if [ ! -d "$build_tree" ]; then
