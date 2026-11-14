@@ -1,5 +1,5 @@
 # Runtime contract for Utah's Bluefin-derived desktop experience on top of
-# Hummingbird. This is intentionally separate from packages/bluefin.toml:
+# Hummingbird. This is intentionally separate from packages/base.toml:
 # package parity proves RPMs; this file proves Utah identity, Bluefin desktop
 # defaults, and first-boot Flatpak policy.
 
@@ -378,13 +378,14 @@ schema_dir = "/usr/share/glib-2.0/schemas"
 # Override sections that may stay unresolved, with the reason. A listed schema
 # that becomes installed, or that no override names any more, fails the check.
 [gsettings.unresolved_overrides]
-# common turns off GNOME Software's automatic updates; Bluefin excludes
-# gnome-software too (packages/bluefin.toml [excluded]) and Utah ships Bazaar.
+# common turns off GNOME Software's automatic updates; the base manifest
+# excludes gnome-software (packages/base.toml [excluded]), Dakota does not ship
+# it either, and Utah ships Bazaar.
 "org.gnome.software" = "GNOME Software is not shipped; Bazaar is the store"
 # common configures the Files "Open in terminal" extension, but neither
-# Bluefin's package list (packages/bluefin.toml) nor ghcr.io/ublue-os/bluefin
-# ships nautilus-open-any-terminal, so there is no parity gap to track.
-"com.github.stunkymonkey.nautilus-open-any-terminal" = "nautilus-open-any-terminal is not in Bluefin's package set"
+# packages/base.toml nor Dakota (baselines/dakota/elements.tsv) ships
+# nautilus-open-any-terminal, so there is no parity gap to track.
+"com.github.stunkymonkey.nautilus-open-any-terminal" = "nautilus-open-any-terminal is not in Utah's or Dakota's package set"
 
 # Effective values `gsettings get SCHEMA KEY` must print in the composed image.
 [gsettings.values]

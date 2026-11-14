@@ -47,8 +47,7 @@ check:
     # -- so a parse error in them surfaced minutes into a build instead of here.
     python3 scripts/check-script-syntax.py
     test -f Containerfile
-    test -f packages/bluefin.toml
-    test -f packages/.bluefin-parity-ref
+    test -f packages/base.toml
     test -f packages/utah.toml
     test -f packages/utah-packages.repo
     test -f system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
@@ -85,7 +84,7 @@ check:
     git submodule update --init --recursive
     python3 scripts/verify-desktop-contract.py --check contracts/bluefin-desktop.toml
     python3 scripts/verify-gnome-extensions.py --source
-    # Every Bluefin package Utah lacks must be triaged (baselines/triage.toml).
+    # Every Dakota item Utah lacks must be triaged (baselines/triage.toml).
     python3 scripts/image-baseline.py check
     grep -q '/system_files/bluefin' Containerfile
     grep -q 'flatpak-preinstall.service' scripts/configure-services.sh
@@ -140,8 +139,8 @@ check:
     # README.md and docs/skills/package-contract.md quote the same package
     # counts by hand; catch it before the manifests move and the prose does not.
     python3 scripts/check-doc-counts.py
-    python3 scripts/install-packages.py --check --repos-dir packages packages/bluefin.toml
-    python3 scripts/verify-rpm-contract.py --check packages/bluefin.toml
+    python3 scripts/install-packages.py --check --repos-dir packages packages/base.toml
+    python3 scripts/verify-rpm-contract.py --check packages/base.toml
     # run the host-side unit suite (tests/test_*.py) via its dedicated recipe
     just test
     grep -qE 'reusable-build\.yml@(v1|[0-9a-f]{40} # v1)$' .github/workflows/build.yml
@@ -221,44 +220,18 @@ check-repos:
       echo "check-repos: giving up after 3 engine failures; the registry is not serving the pinned image" >&2
       return 125
     }
-    gate packages/bluefin.toml packages/utah.toml || exit "$?"
-    gate --check-unavailable packages/bluefin.toml packages/utah.toml
+    gate packages/base.toml packages/utah.toml || exit "$?"
+    gate --check-unavailable packages/base.toml packages/utah.toml
 
-# packages/bluefin.toml is a verbatim copy of Bluefin's base.toml pinned to
-# the revision in packages/.bluefin-parity-ref.  Drift here is a parity bug,
-# so make it loud rather than letting it accumulate quietly.
-check-parity:
+# Re-measure Utah against Dakota, its parity target: Dakota's element list from
+# its SBOM, then the user-visible files inside both images. Needs podman and
+# gh. Then review baselines/GAP.md and triage new gaps.
+baselines dakota="ghcr.io/projectbluefin/dakota:testing" utah="ghcr.io/projectbluefin/utah:testing":
     #!/usr/bin/env bash
     set -euo pipefail
-    ref=$(tr -d '[:space:]' < packages/.bluefin-parity-ref)
-    if [[ ! "$ref" =~ ^[0-9a-f]{40}$ ]]; then
-      echo "packages/.bluefin-parity-ref must contain a full 40-character commit SHA" >&2
-      exit 1
-    fi
-    upstream=$(mktemp)
-    trap 'rm -f "$upstream"' EXIT
-    curl -fsSL -o "$upstream" \
-      "https://raw.githubusercontent.com/projectbluefin/bluefin/${ref}/build_files/packages/base.toml"
-    if diff -u "$upstream" packages/bluefin.toml; then
-      echo "packages/bluefin.toml matches projectbluefin/bluefin@${ref}"
-    else
-      echo "packages/bluefin.toml has drifted from projectbluefin/bluefin@${ref}" >&2
-      exit 1
-    fi
-
-# Re-measure Utah against the published Bluefin and Dakota images: package
-# lists and user-visible files from inside each image, and Dakota's SBOM.
-# Needs podman and gh. Then review baselines/GAP.md and triage new gaps.
-baselines bluefin="ghcr.io/ublue-os/bluefin:stable" utah="ghcr.io/projectbluefin/utah:testing":
-    #!/usr/bin/env bash
-    set -euo pipefail
-    for pair in "{{ bluefin }} bluefin" "{{ utah }} utah"; do
-      read -r image dir <<<"$pair"
-      podman pull -q "$image" >/dev/null
-      python3 scripts/image-baseline.py extract "$image" "baselines/$dir"
-    done
     # Dakota's publish.yml runs only for its `testing` and `next` branches;
-    # `testing` is the one that publishes the image Bluefin users get.
+    # `testing` publishes the image measured here. The SBOM comes first:
+    # extract names each Dakota file's owner from elements.tsv.
     dakota_branch=testing
     run=$(gh run list -R projectbluefin/dakota -w publish.yml -b "$dakota_branch" -s success -L 20 \
       --json databaseId --jq '.[].databaseId' | while read -r id; do
@@ -273,63 +246,12 @@ baselines bluefin="ghcr.io/ublue-os/bluefin:stable" utah="ghcr.io/projectbluefin
       exit 1
     fi
     python3 scripts/image-baseline.py dakota "$run" baselines/dakota
+    for pair in "{{ dakota }} dakota" "{{ utah }} utah"; do
+      read -r image dir <<<"$pair"
+      podman pull -q "$image" >/dev/null
+      python3 scripts/image-baseline.py extract "$image" "baselines/$dir"
+    done
     python3 scripts/image-baseline.py gap
-
-# Partition every Bluefin package Utah lacks by where it could come from:
-# hummingbird-available / factory-built / nowhere. The 2026-09-30 bare-metal
-# audit (#382) ran this pipeline by hand against the OCI image feeds. This
-# is the same pipeline as a single recipe so a future audit -- or a
-# scheduled drift report -- does not reinvent the manual sequence.
-#
-# Pulls the pinned factory OCI repodata (Containerfile PACKAGE_IMAGE_SHA)
-# and Hummingbird's primary.xml directly. No podman run is started; the
-# audit is a static-repodata read against the same pinned inputs
-# scripts/check-repo-availability.py mounts for `just check-repos`, so
-# the verdict and the install transaction cannot disagree on what the
-# repositories offer.
-#
-#   just audit-bluefin-parity                # partition + print, do not write
-#   just audit-bluefin-parity --write        # record the new baseline after printing
-#   just audit-bluefin-parity --check        # compare against the recorded baseline
-#
-# Pass `--ref=<sha|tag|branch>` to audit against a Bluefin revision that
-# is not yet committed to packages/.bluefin-parity-ref. The default is the
-# pinned SHA in that file.
-#
-# Args are interpolated into the body with `{{args}}`, not read from `$@`: a
-# `just` shebang recipe receives no positional parameters (`$# = 0`), so a
-# `"$@"` loop never sees the flags. Value flags use the `--key=value` form
-# because that is all the forwarding script's `case` matches; the flags are
-# re-parsed there.
-audit-bluefin-parity *args:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    subcommand="run"
-    forward=()
-    for arg in {{args}}; do
-      case "$arg" in
-        --check) subcommand="check" ;;
-        --write) forward+=(--write) ;;
-        --ref=*) forward+=("$arg") ;;
-        *) echo "audit-bluefin-parity: unknown argument: $arg" >&2; exit 64 ;;
-      esac
-    done
-    python3 scripts/audit-bluefin-parity.py "$subcommand" "${forward[@]+"${forward[@]}"}"
-
-# Gate: fail when an audit partition grew past baselines/audit-baseline.json.
-# The script also fails on a missing baseline; first run is `just
-# audit-bluefin-parity --write` to record the starting state of the debt.
-check-audit-parity *args:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    forward=()
-    for arg in {{args}}; do
-      case "$arg" in
-        --ref=*) forward+=("$arg") ;;
-        *) echo "check-audit-parity: unknown argument: $arg" >&2; exit 64 ;;
-      esac
-    done
-    python3 scripts/audit-bluefin-parity.py check "${forward[@]+"${forward[@]}"}"
 
 image_name base_name stream flavor:
     @python3 scripts/flavors.py image "{{ flavor }}"
@@ -773,7 +695,7 @@ secureboot base_name default_tag flavor:
     podman run --rm --entrypoint /bin/sh "localhost/$image_name:{{ default_tag }}" -c 'test -e /usr/lib/modules || test -e /boot'
 
 # Regenerate the status page's package data from the manifests. Run this after
-# changing packages/bluefin.toml or packages/utah.toml; `just check` fails if
+# changing packages/base.toml or packages/utah.toml; `just check` fails if
 # the committed copy is stale.
 site-data:
     python3 scripts/generate-site-data.py

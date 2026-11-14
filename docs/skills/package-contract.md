@@ -1,21 +1,21 @@
 ---
 name: package-contract
-version: "1.1"
-last_updated: "2026-10-03"
+version: "2.0"
+last_updated: "2026-11-14"
 id: package-contract
-one_line_purpose: Maintain Bluefin package parity and Utah's overlay manifest.
+one_line_purpose: Maintain Utah's base manifest, overlay and Dakota parity triage.
 entry_point: docs/skills/package-contract.md
 category: contracts
 mcp_compliance_level: partial
 optimization_status: draft
 status: active
 dependencies: []
-tags: [packages, parity, bluefin, contracts]
+tags: [packages, parity, dakota, contracts]
 description: >-
-  Bluefin parity contract: verbatim bluefin.toml, utah.toml overlay, device
-  firmware, [unavailable] rules, repository policy (on-image reposdir
-  scan). Use when adding, removing,
-  or debugging packages or parity/check-repos failures.
+  Package contract: Utah-owned base.toml, utah.toml overlay, device
+  firmware, [unavailable] rules, repository policy, Dakota gap triage
+  (baselines/GAP.md). Use when adding, removing, or debugging packages or
+  parity/check-repos failures.
 on_device: docs/agent/skills/package-contract.md
 metadata:
   type: policy
@@ -23,19 +23,20 @@ metadata:
 
 # Package Contract
 
-Utah keeps Bluefin's user-facing package contract on a Hummingbird base. Two
+Utah ships the Bluefin experience on a Hummingbird base. Its parity target is
+Dakota (`ghcr.io/projectbluefin/dakota:testing`, Bluefin on GNOME OS). Two
 manifests under `packages/` define what the image installs; this skill is the
 policy for changing them.
 
 ## The two manifests
 
-- **`packages/bluefin.toml`** — the parity contract. It is a byte-for-byte
-  copy of projectbluefin/bluefin's `build_files/packages/base.toml` pinned to
-  the revision in `packages/.bluefin-parity-ref` and must stay that way.
-  **Never hand-edit it.** Sync it verbatim from upstream; any drift is a parity
-  bug. `just check-parity` diffs it against upstream on every CI run so drift
-  fails the build rather than accumulating quietly (recipe comment: `Justfile`,
-  `check-parity`).
+- **`packages/base.toml`** — Utah's base manifest. It was frozen from
+  projectbluefin/bluefin's `build_files/packages/base.toml` at
+  `bb63fd1667eb84209e0af2cc3772ca96e8f6bda9` (2026-09-17) and is edited by
+  hand; nothing syncs it from Bluefin classic. Keep its section layout
+  (`[multimedia_overrides]`, `[fedora]`, `[fedora_vNN]`, `[excluded]`):
+  `scripts/install-packages.py` reads exactly those. Adds and removes follow
+  from the Dakota gap report (see "Dakota parity" below).
 - **`packages/utah.toml`** — Utah's overlay. Everything Utah needs *in
   addition to* or *instead of* the contract lives here. The full rules are in
   the header comment of that file (cite it; do not move or copy it):
@@ -55,10 +56,9 @@ policy for changing them.
     and iwlegacy packages are named explicitly — the X230's
     `iwlwifi-6000g2a-6.ucode` ships in `iwlwifi-dvm-firmware` (#97).
   - `[services]` — desktop services Bluefin adds on top of the server base.
-  - `[unavailable]` — Bluefin parity gaps none of Utah's enabled repositories
-    provide, whether the name comes from the copied `base.toml` contract or
-    from the published Bluefin image snapshot
-    (`baselines/bluefin/rpms.tsv`).
+  - `[unavailable]` — parity gaps none of Utah's enabled repositories
+    provide, whether the name comes from `base.toml` or from a measured image
+    baseline.
 
 Flatpak-first (standing policy): no RPM for an end-user app Utah ships as a
 Flatpak (`contracts/bluefin-desktop.toml` `[flatpak]`). Transitional native
@@ -78,17 +78,17 @@ hardware establishes that its radio works.
 ## [unavailable] rules
 
 `[unavailable]` means "no repository Utah enables provides this name at all".
-It covers both kinds of parity gap: names in the copied `base.toml` contract,
-and names Bluefin's published image ships from a build file outside that
-contract (recorded in `baselines/bluefin/rpms.tsv` and triaged in
-`baselines/triage.toml` — `nss-mdns` is the current example). Each entry
+It covers both kinds of parity gap: names in `base.toml`, and names a measured
+image ships outside that manifest (Dakota's gaps are triaged in
+`baselines/triage.toml`; `nss-mdns` came from the retired Bluefin image
+baseline). Each entry
 **MUST carry a tracking issue**: the list is the documented parity debt, not
 a dumping ground for packages that are merely inconvenient (header comment,
 `packages/utah.toml`).
 
 ## Media packages and codec parity
 
-Bluefin's `[multimedia_overrides]` selects replacement builds from negativo17;
+The base manifest's `[multimedia_overrides]` (from Bluefin) selects replacement builds from negativo17;
 Utah does not enable that repository or consume that section wholesale.
 Do not infer that Hummingbird installs a name just because it appears there.
 The Intel VA-API driver (`libva-intel-media-driver`, providing
@@ -319,7 +319,7 @@ releases or emit missing-module errors with empty kernel names.
   is a **build failure**. `just check-repos` reads the base and package-image
   digests from `Containerfile`, copies the same repository configuration, and
   runs `install-packages.py --resolve` inside that base. This includes the
-  release-specific Bluefin section, GNOME, services, and extension build tools.
+  release-specific base-manifest section, GNOME, services, and extension build tools.
   It needs Podman and network access. A name lookup on GitHub Pages is not
   evidence that the pinned OCI repository is complete or ABI-compatible.
   The factory's leading metadata layer is checked against the pinned manifest
@@ -329,40 +329,33 @@ releases or emit missing-module errors with empty kernel names.
   requires a transaction summary and rejects dependency and repository errors.
 - `[unavailable]` entries still present in the install set are a validation
   error (`install-packages.py --check`).
-- Drift in `packages/bluefin.toml` from upstream at `packages/.bluefin-parity-ref`
-  is a CI failure (`just check-parity`).
 
-## Pinned upstream parity reference
+## Dakota parity
 
-`packages/.bluefin-parity-ref` holds the 40-character commit SHA that
-`packages/bluefin.toml` is synchronized with. The reference exists so Utah's
-parity gate tests against a known revision rather than moving with Bluefin's
-default branch, preventing unrelated upstream changes from breaking Utah's CI.
+`scripts/image-baseline.py` measures what Dakota ships that Utah does not:
+`extract` lists the user-visible files (applications, autostarts, sessions,
+systemd units, `/usr/bin`, `/usr/sbin`) inside each image, and `gap` writes
+`baselines/GAP.md` with every Dakota path Utah lacks. Dakota has no RPM
+database, so each path is attributed to the Dakota element most likely to
+install it, guessed from `baselines/dakota/elements.tsv` (the SBOM of the
+latest `testing` publish run) plus a short `ALIASES` table; an unmatched path
+is its own item. Details and the refresh flow: `baselines/README.md`.
 
-`.github/workflows/update-bluefin-parity.yml` moves it: nightly it resolves
-Bluefin `main`, and when the upstream contract differs it opens or refreshes a
-single review PR on `automation/bluefin-parity` carrying the new
-`packages/bluefin.toml`, the new SHA here, and the regenerated counts. It never
-auto-merges. Editing the reference by hand is only needed when synchronizing
-`packages/bluefin.toml` outside that workflow.
+Every item needs an entry in `baselines/triage.toml` (`just check` runs
+`image-baseline.py check`): `planned` with an issue (#1236 is the epic; its
+children #1222-#1235 track the structural moves such as kanata, native
+Ghostty, systemd-boot, AppArmor, oo7, sudo-rs, virtualization and service
+policy), `waived` with a reason (GNOME OS or BuildStream internals,
+Flatpak-first apps), `unavailable` for names in `[unavailable]`, or
+`untriaged` with an `area`. Closing a gap means shipping the files Utah lacks,
+usually by adding the Fedora package to `base.toml` or `utah.toml`, then
+re-measuring and dropping the entry `check` reports as no longer a gap.
 
-The bump PR does not refresh `baselines/audit-baseline.json`: the audit is
-local-only (it resolves names against the pinned factory repository), so the
-workflow cannot run it. After merging a bump, run
-`just audit-bluefin-parity --write` locally and commit the refreshed baseline;
-until then `just check-audit-parity` reports a stale baseline because the
-recorded `ref` no longer matches `packages/.bluefin-parity-ref`. The bump PR
-body repeats this reminder.
+Never append rows from a newer image to an older snapshot: `image.txt` must
+describe the same image as its `surface.tsv`; after a refresh,
+[remove resolved triage entries](package-contract/references/factory-consumption.md#closing-baseline-gaps).
 
-**Do not commit overlay fixes to `automation/bluefin-parity`.** That branch is
-disposable: `create-pull-request` rebuilds it from `main` plus the generated
-working-tree changes on every run and force-resets it whenever the result
-differs, so a `packages/utah.toml` fix pushed onto the open bump PR is
-discarded at the next nightly run while upstream still differs from `main`.
-Raise the overlay change as its own pull request against `main`; the bump PR
-then picks the fix up on its next rebuild.
-
-Current counts, per the README "Package parity" section: 61 Bluefin contract
+Current counts, per the README "Parity with Dakota" section: 61 base manifest
 packages installed, 254 Utah additions (GNOME 51, base-image parity, device
 firmware, desktop services), 7 genuinely unavailable. `scripts/check-doc-counts.py` (part of
 `just check`) recomputes these from the manifests and fails if either
@@ -384,117 +377,18 @@ assert a package in every section reaches the install set and is counted under
 its own heading, so a section wired into one place and not another fails the
 suite rather than shipping quietly.
 
-## Re-runnable parity audit (issue #402)
-
-`scripts/image-baseline.py` measures what files Bluefin ships that Utah
-does not (`baselines/GAP.md`). It does not say *where* the missing name
-could come from, only that it is missing. That gap was the 2026-09-30
-bare-metal audit (#382): `rpm -qa` both images, `comm` the difference,
-then partition each gap name by which repository could supply it.
-
-The `EXTRACT` script inside that tool globs a closed list of user-visible
-paths (applications, autostarts, sessions, systemd units, `/usr/bin`,
-`/usr/sbin`) and the Bluefin firefox-config defaults
-(`/usr/share/ublue-os/firefox-config/*`, #502). The glob is `*`, not
-`*.js`, because `99-flatpaks.sh` copies the whole directory: a narrower
-pattern would let a non-`.js` file ship unseen. Adding a path means
-adding a glob AND a `KINDS` entry so `write_report()` can classify the
-new rows. `GapTests` in `tests/test_image_baseline.py` exercises missing
-Firefox defaults in the report and recognizes an unowned overlay as shipped.
-For extraction proof, run `extract IMAGE /tmp/surface-check` on a real image
-and inspect its Firefox rows and asset contents; source-string checks cannot
-establish shipping. Never append rows from a newer image to an older snapshot:
-`image.txt` must describe the same image as both TSVs; after a refresh, [remove resolved triage entries](package-contract/references/factory-consumption.md#closing-baseline-gaps).
-
-`scripts/audit-bluefin-parity.py` is the re-runnable version of that
-pipeline. Every name Bluefin ships that Utah does not install (and does
-not list in `[unavailable]`) lands in one of three partitions:
-
-- **hummingbird-available** — resolves against Hummingbird today. The
-  smallest move to close the gap is to add the name to `[parity]`
-  (or `[hardware]`, etc.); the manifest is the only thing in the way.
-- **factory-built** — absent from Hummingbird, present in the pinned
-  factory repository. The factory already builds what we need; this is a
-  manifest gap, not a factory gap.
-- **nowhere** — neither repository provides it. A factory recipe must
-  land first; until then, the name belongs in `[unavailable]` with a
-  tracking issue.
-
-The script reads the same pinned inputs as `just check-repos` (the
-Containerfile `PACKAGE_IMAGE_SHA` for the factory OCI; the baseurl in
-`packages/hummingbird.repo` for Hummingbird) and parses the
-`primary.xml` from each, so the verdict and the install transaction
-cannot disagree on what the repositories offer. No podman run is
-involved — the audit is a static repodata read.
-
-The audit writes `baselines/audit-baseline.json` (only when the
-`--write` flag is passed; the default is report-only, matching the
-2026-09-30 audit's "look before you leap" posture). The check
-subcommand compares the current run to the baseline and exits nonzero when
-a partition grows past the recorded state; a name moving from
-`factory-built` to `hummingbird-available` is a Hummingbird rebuild
-landing and is silent. A name disappearing from the baseline (an operator
-moved it into `[parity]` and closed the gap) is silent too — only new
-names that did not exist anywhere in the baseline trigger the gate.
-
-The baseline records the Bluefin ref and factory pin it was captured
-against (`ref` / `factory_ref` in the JSON). `check` compares those back
-against the current audit before it diffs the partitions: a Bluefin-ref or
-factory-pin bump that leaves the package set unchanged would otherwise read
-as "no growth" and pass silently, so it is reported as a stale baseline
-instead. Rewrite the baseline against the new ref with `--write` before the
-gate can meaningfully run. A stale-baseline verdict is reported before any
-partition-growth message, so it is never masked by a growth report, and the
-failing summary line names the stale baseline rather than claiming the
-partitions grew.
-The baseline also records the Hummingbird repo `baseurl` it was captured
-against. A Hummingbird repo URL change moves packages between the
-Hummingbird and factory repodata the audit reads, shifting
-`hummingbird-available` without any name actually being added or
-removed, so the partition diff alone would read "no growth". The check
-compares the current `baseurl` to the recorded one first and reports a
-mismatch as a stale baseline before the partition diff, so the verdict
-is never masked by a growth report; a baseline written before the key
-existed is not invented into a mismatch. Rewrite the baseline against
-the new repo with `just audit-bluefin-parity --write`.
-
-Bootstrap is a one-time manual command: on a fresh checkout where
-`baselines/audit-baseline.json` is missing, `just check-audit-parity`
-exits 2 with a clear message; running `just audit-bluefin-parity --write`
-once commits the starting state of the debt and turns the gate on.
-Subsequent runs gate against that baseline.
-
-```bash
-just audit-bluefin-parity              # partition + print, do not write
-just audit-bluefin-parity --write      # record the new baseline
-just check-audit-parity                # fail on partition growth
-just check-audit-parity --ref=HEAD     # audit against an unpinned Bluefin ref
-```
-
-The recipes read their flags from a `*args` parameter that is interpolated
-into the shebang body with `{{args}}`. A `just` shebang recipe receives no
-positional parameters (`$# = 0`), so a `"$@"` loop there is a silent no-op:
-the flags never reach the script and the recipe falls back to report-only
-`run`. Value flags use the `--key=value` form, which is what the recipe's
-`case` re-parses.
-
-The audit needs network (the factory OCI metadata layer and Hummingbird's
-`repodata/`); it is a sibling of `just check-repos`, not part of `just
-check`, which stays offline.
-
 ## Verification
 
 ```bash
-just check-parity
 just check-repos
-just check-audit-parity
-python3 scripts/install-packages.py --check packages/bluefin.toml
-python3 scripts/verify-rpm-contract.py --check packages/bluefin.toml
+python3 scripts/install-packages.py --check packages/base.toml
+python3 scripts/verify-rpm-contract.py --check packages/base.toml
+python3 scripts/image-baseline.py check
 python3 scripts/check-doc-counts.py
 ```
 
 ## Runtime ujust dependencies
 
 See [the runtime ujust dependency reference](package-contract/references/ujust.md)
-for provider checks and the retained audit baseline. Keep detailed inventories
+for provider checks. Keep detailed inventories
 in references so policy additions stay within the skill size budget.

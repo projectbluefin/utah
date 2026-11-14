@@ -1,10 +1,11 @@
-# Utah's package overlay on top of the Bluefin package contract.
+# Utah's package overlay on top of its base manifest.
 #
-# packages/bluefin.toml is a byte-for-byte copy of projectbluefin/bluefin's
-# build_files/packages/base.toml and must stay that way -- it is the parity
-# contract, and any drift there is a parity bug.  Everything Utah needs *in
-# addition to* (or *instead of*) that contract lives here.  Flatpak-first:
-# never add an RPM for an end-user app Utah ships as a Flatpak (see
+# packages/base.toml is Utah's frozen base manifest (copied from
+# projectbluefin/bluefin's base.toml once, edited by hand since). Dakota
+# (projectbluefin/dakota) is the parity target: baselines/GAP.md lists what
+# Dakota ships that Utah lacks. Everything Utah needs *in addition to* (or
+# *instead of*) the base manifest lives here.  Flatpak-first: never add an RPM
+# for an end-user app Utah ships as a Flatpak (see
 # contracts/bluefin-desktop.toml [flatpak]); drop conditions ride inline.
 #
 # Sections:
@@ -13,9 +14,8 @@
 #   [hardware]     device firmware the bootable base leaves out entirely
 #   [build]        toolchain needed to build the pinned GNOME extensions
 #   [services]     desktop daemons enabled after the server base (cryptsetup, flatpak, fwupd, ...)
-#   [unavailable]  Bluefin parity gaps none of Utah's enabled repositories
-#                  provide -- from the copied base.toml contract or from the
-#                  published Bluefin image snapshot (baselines/bluefin/rpms.tsv)
+#   [unavailable]  parity gaps none of Utah's enabled repositories provide --
+#                  from the base manifest or from a measured image baseline
 #
 # Bluefin's [multimedia_overrides] selects replacement builds from negativo17.
 # Utah does not enable that repository or install that section wholesale.
@@ -114,7 +114,7 @@ gtk4 = "4"
 libadwaita = "1"
 
 [parity]
-# Packages Bluefin's image carries without naming them in bluefin.toml, because
+# Packages Bluefin's image carries without naming them in its base.toml, because
 # Fedora's Silverblue base supplies them, and which Hummingbird's repository
 # has but its server-shaped bootable base leaves out. Measured, not guessed:
 # the image-level parity report (#117, scripts/check-image-parity.py) listed
@@ -251,8 +251,8 @@ packages = [
     "lm_sensors",
     "libimobiledevice-utils",
     "vim-enhanced",
-    # GPU process monitor. Bluefin's published image ships it from a build
-    # file outside the copied base.toml (baselines/bluefin/rpms.tsv); the
+    # GPU process monitor. Bluefin's published image shipped it from a build
+    # file outside its base.toml (measured in the retired Bluefin baseline); the
     # Homebrew formula is deprecated, so the factory build published by
     # utah-packages#311 is the source. Tracked by #451.
     "nvtop",
@@ -317,7 +317,7 @@ packages = [
     # repository. All of these stay out until utah-packages builds their
     # missing dependencies (#263).
     "samba",
-    # Screen reader stack Bluefin ships (baselines/bluefin/rpms.tsv: orca 50.2,
+    # Screen reader stack Bluefin shipped (retired Bluefin baseline: orca 50.2,
     # speech-dispatcher 0.12.1) and the upstream testsuite asserts. Published
     # by the pinned factory image (#741, utah-packages#447).
     "orca",
@@ -653,15 +653,15 @@ packages = [
 ]
 
 [unavailable]
-# Bluefin parity gaps none of Utah's enabled repositories provide.  Two kinds
-# of gap land here and both count as parity debt:
+# Parity gaps none of Utah's enabled repositories provide.  Two kinds of gap
+# land here and both count as parity debt:
 #
-#   contract gaps  names in packages/bluefin.toml (the copied base.toml) that
-#                  neither utah-packages nor Hummingbird's repository carries
-#   image gaps     names Bluefin's published image ships from a build file
-#                  outside the copied contract, recorded in the snapshot at
-#                  baselines/bluefin/rpms.tsv and triaged in
-#                  baselines/triage.toml
+#   contract gaps  names in packages/base.toml that neither utah-packages nor
+#                  Hummingbird's repository carries
+#   image gaps     names a measured image ships outside the base manifest.
+#                  Dakota is the parity target: its gaps are recorded in
+#                  baselines/GAP.md and triaged in baselines/triage.toml;
+#                  older entries came from the retired Bluefin image baseline
 #
 # Each entry MUST carry a tracking issue: this list is the documented parity
 # debt, not a dumping ground for packages that are merely inconvenient.
@@ -669,7 +669,7 @@ packages = [
 # evolution-ews-core
 #
 #   The Exchange Web Services plugin for Evolution (fedora_v43 section of
-#   the Bluefin manifest). Building it requires both the evolution-data-server
+#   the base manifest). Building it requires both the evolution-data-server
 #   stack -- camel, libebook, libecal, libedata-book -- and Evolution itself,
 #   which is where evolution-mail and evolution-shell come from.
 #   utah-packages now builds evolution-data-server (3.61.3), so the EDS half of
@@ -681,7 +681,8 @@ packages = [
 # fish
 #   Deliberately excluded, not blocked: the factory builds it and it resolves,
 #   but Bluefin classic shipping every shell was a mistake Utah does not repeat.
-#   Users who want fish get it from Homebrew. Tracked by #419.
+#   Users who want fish get it from Homebrew. Tracked by #419. Dakota ships
+#   fish from GNOME OS; whether Utah follows is #1230.
 #
 # firefox
 #   Neither enabled repository provides the firefox RPM: the factory does
@@ -713,13 +714,12 @@ packages = [
 #
 # nss-mdns
 #   nss-mdns is the Name Service Switch module that resolves .local hostnames
-#   over mDNS, so `ping foo.local` resolves. Bluefin ships it
-#   (baselines/bluefin/rpms.tsv, nss-mdns 0.15.1-28.fc44); Utah does not, and
-#   Hummingbird's repository does not carry it either -- verified in
+#   over mDNS, so `ping foo.local` resolves. Bluefin shipped it
+#   (nss-mdns 0.15.1-28.fc44 in the retired Bluefin baseline); Utah does not,
+#   and Hummingbird's repository does not carry it either -- verified in
 #   repodata/primary.xml, where nss-mdns appears only as a Recommends of cups
 #   (a virtual provide) and never as an installable <name>. It is an
-#   image-level parity gap, not inherited from the copied base.toml contract
-#   (nss-mdns is not in packages/bluefin.toml) and not built by the
+#   image-level parity gap, not in packages/base.toml, and not built by the
 #   utah-packages factory, so no repository Utah enables at runtime supplies it.
 #   Enabling avahi-daemon restores mDNS service browsing but not .local name
 #   resolution, which is what this module provides; the two are separate

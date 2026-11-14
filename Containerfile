@@ -76,7 +76,7 @@ COPY Containerfile /usr/share/utah/agent/build-source.Containerfile
 COPY .gitmodules /usr/share/utah/agent/gitmodules
 COPY config/flavors.json /usr/share/utah/agent/flavors.json
 COPY scripts/build-gnome-extensions.sh /usr/share/utah/agent/build-gnome-extensions.sh.txt
-COPY packages/bluefin.toml packages/utah.toml contracts/bluefin-desktop.toml /usr/share/utah/
+COPY packages/base.toml packages/utah.toml contracts/bluefin-desktop.toml /usr/share/utah/
 COPY packages/hummingbird.repo packages/nvidia-container.repo packages/utah-packages.repo /etc/yum.repos.d/
 COPY packages/RPM-GPG-KEY-redhat-release-2 /etc/pki/rpm-gpg/
 COPY scripts/install-packages.py \
@@ -283,9 +283,9 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
     # above it (tests/test_hummingbird_repo_day.py).
     : > /etc/crypttab && \
     /usr/local/libexec/utah-install-packages \
-      /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
+      /usr/share/utah/base.toml /usr/share/utah/utah.toml && \
     IMAGE_FLAVOR=main /usr/local/libexec/utah-verify-rpm-contract \
-      /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
+      /usr/share/utah/base.toml /usr/share/utah/utah.toml && \
     /usr/local/libexec/utah-fix-home-labels && \
     DNF="$(command -v dnf5 || command -v dnf)" && \
     "$DNF" clean all && rm -rf /var/cache/libdnf5 /var/cache/dnf && \
@@ -411,7 +411,7 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
       main|nvidia) ;; \
     esac && \
     IMAGE_FLAVOR="${IMAGE_FLAVOR}" /usr/local/libexec/utah-verify-rpm-contract \
-      /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
+      /usr/share/utah/base.toml /usr/share/utah/utah.toml && \
     /usr/local/libexec/utah-regenerate-initramfs && \
     # The package repository is now only ever bind mounted, so it is absent from
     # the committed image. Flip it disabled here -- the last step that installs
