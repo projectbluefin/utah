@@ -24,6 +24,25 @@ metadata:
 This overview covers the build, promotion, branch-sync, parity-sync, and
 post-build verification workflows, not the complete workflow inventory:
 
+- `.github/workflows/candidate-common.yml` -- manual dispatch from trusted
+  `main` only, with full Common and testsuite commit IDs. Common is built once
+  from its actual source in an isolated runner-temp checkout without inherited
+  credentials or environment. Native flavors consume its local layer through
+  `COMMON_IMAGE_REF`; ordinary builds retain the existing pin. Each job uses
+  the verified kernel cache, canonicalizes gzip layer bytes before booting its
+  real local candidate through the unchanged offline LUKS/desktop harness,
+  and compares its installed manifest with that exact local manifest
+  and builds DEBUG=0 media. Main also runs the existing tacklebox builder
+  attestation, size and live-boot gates on local bytes. Publication follows
+  these gates and rejects digest changes or existing candidate tags. The
+  `candidate-manifest/candidate-manifest.json` artifact binds source commits,
+  Common layer and native image digests; full configured testsuite suites use
+  those digests with matching fixed workflow/test pins. No promotion tags or
+  statuses move. Feature-branch dispatches fail closed: reviewed workflow code
+  must land on main before proof. Same-job local ISO execution does not broaden
+  the external-image provenance verifier. DEBUG=0 media keeps the existing
+  SELinux-permissive live-media caveat; green is not release-ready evidence.
+
 - `.github/workflows/build.yml` -- pull requests, merge queue groups
   (`merge_group`), pushes to `testing`, a manual dispatch. Top-level
   `permissions: {}`; each job grants its own. Cancels in-progress runs per

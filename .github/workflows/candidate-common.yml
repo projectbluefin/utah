@@ -1,0 +1,302 @@
+name: Native Common candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      common_sha:
+        description: Exact projectbluefin/common source commit
+        required: true
+        type: string
+      testsuite_sha:
+        description: Exact pinned testsuite workflow and test commit
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  pinned_fetches:
+    if: github.repository == 'projectbluefin/utah' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    uses: projectbluefin/actions/.github/workflows/reusable-pinned-fetches.yml@3adf1194c894fe7b1ae54e583c56306c6a2382ee # v1
+    with:
+      mode: fail
+
+  source:
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+    outputs:
+      consumer_sha: ${{ steps.source.outputs.consumer_sha }}
+      matrix: ${{ steps.source.outputs.matrix }}
+      common_layer_digest: ${{ steps.common.outputs.digest }}
+    steps:
+      - name: Reject untrusted workflow refs and invalid source inputs
+        env:
+          COMMON_SHA: ${{ inputs.common_sha }}
+          TESTSUITE_SHA: ${{ inputs.testsuite_sha }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = projectbluefin/utah
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          [[ "$COMMON_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$TESTSUITE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          test "$TESTSUITE_SHA" = 948274b7bd76db65f1c69e4b5aab2bec0d63e8eb
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - id: source
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          echo "consumer_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          jq -c '{include: [.flavors[] as $f | {flavor:$f,suites:.suites[$f]}]}' config/flavors.json | sed 's/^/matrix=/' >> "$GITHUB_OUTPUT"
+      - name: Prepare source-only Common builder
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman skopeo
+      - id: common
+        name: Build exact Common source without inherited environment or auth
+        env:
+          COMMON_SHA: ${{ inputs.common_sha }}
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/common-source"
+          mkdir -p "$work/home" "$work/auth" "$work/runtime"
+          chmod 0700 "$work/runtime"
+          env -i PATH="$PATH" HOME="$work/home" git clone --no-checkout https://github.com/projectbluefin/common.git "$work/repo"
+          env -i PATH="$PATH" HOME="$work/home" git -C "$work/repo" checkout --detach "$COMMON_SHA"
+          test "$(git -C "$work/repo" rev-parse 'HEAD^{commit}')" = "$COMMON_SHA"
+          env -i PATH="$PATH" HOME="$work/home" git -C "$work/repo" submodule update --init --recursive
+          env -i PATH="$PATH" HOME="$work/home" XDG_RUNTIME_DIR="$work/runtime" REGISTRY_AUTH_FILE="$work/auth/config.json" DOCKER_CONFIG="$work/auth" \
+            podman build --file "$work/repo/Containerfile" --tag localhost/common:candidate "$work/repo"
+          env -i PATH="$PATH" HOME="$work/home" XDG_RUNTIME_DIR="$work/runtime" podman save --format oci-archive --output "$RUNNER_TEMP/common.oci.tar" localhost/common:candidate
+          digest=$(env -i PATH="$PATH" HOME="$work/home" XDG_RUNTIME_DIR="$work/runtime" skopeo inspect --raw "oci-archive:$RUNNER_TEMP/common.oci.tar" | sha256sum | cut -d ' ' -f1)
+          echo "digest=sha256:$digest" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: common-local-layer
+          path: ${{ runner.temp }}/common.oci.tar
+          if-no-files-found: error
+          retention-days: 1
+
+  candidate:
+    needs: [source, pinned_fetches]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 360
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.source.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ needs.source.outputs.consumer_sha }}
+          submodules: recursive
+          persist-credentials: false
+      - uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: common-local-layer
+          path: ${{ runner.temp }}
+      - name: Prepare native build and boot host
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          sudo apt-get update
+          sudo apt-get install -y podman skopeo uidmap slirp4netns fuse-overlayfs acl \
+            squashfs-tools xorriso dosfstools mtools qemu-system-x86 qemu-utils \
+            ovmf sshpass ffmpeg tesseract-ocr
+          test -c /dev/kvm
+          sudo setfacl -m "u:$(id -u):rw" /dev/kvm
+          test -r /dev/kvm && test -w /dev/kvm
+          mkdir -p output evidence
+          podman load --input "$RUNNER_TEMP/common.oci.tar"
+      - name: Run native source and package contracts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 -m pip install -q -r tests/requirements.txt
+          just check
+          just test
+          just check-parity
+          auth=$(mktemp -d "$RUNNER_TEMP/contracts-auth.XXXXXX")
+          trap 'rm -rf "$auth"' EXIT
+          export REGISTRY_AUTH_FILE="$auth/auth.json"
+          echo "$GITHUB_TOKEN" | podman login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          just check-repos
+      - name: Build native image on verified kernel cache
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          COMMON_IMAGE_REF: localhost/common:candidate
+          REGISTRY_CACHE_WRITE: "0"
+          ENABLE_SSHD: "0"
+          FLAVOR: ${{ matrix.flavor }}
+          COMMON_LAYER_DIGEST: ${{ needs.source.outputs.common_layer_digest }}
+          COMMON_SHA: ${{ inputs.common_sha }}
+          CONSUMER_SHA: ${{ needs.source.outputs.consumer_sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CONSUMER_SHA"
+          loaded=$(podman unshare skopeo inspect --raw containers-storage:localhost/common:candidate | sha256sum | cut -d ' ' -f1)
+          test "sha256:$loaded" = "$COMMON_LAYER_DIGEST"
+          just build-ghcr utah testing "$FLAVOR" 2>&1 | tee evidence/image-build.log
+          image=$(python3 scripts/flavors.py image "$FLAVOR")
+          tag="common-$COMMON_SHA-$CONSUMER_SHA-$GITHUB_RUN_ID"
+          local_ref="localhost/$image:$tag"
+          built_ref="localhost/$image:testing"
+          canonical=$(mktemp -d "$RUNNER_TEMP/candidate-image.XXXXXX")
+          podman unshare skopeo copy --dest-compress --dest-compress-format gzip "containers-storage:$built_ref" "dir:$canonical"
+          podman rmi --no-prune "$built_ref"
+          podman unshare skopeo copy --preserve-digests "dir:$canonical" "containers-storage:$local_ref"
+          podman tag "$local_ref" "$built_ref"
+          echo "$local_ref" > evidence/local-ref.txt
+          echo "ghcr.io/projectbluefin/$image:$tag" > evidence/publish-ref.txt
+          podman unshare skopeo inspect --raw "containers-storage:$local_ref" > evidence/payload-manifest.json
+          cmp "$canonical/manifest.json" evidence/payload-manifest.json
+          rm -rf "$canonical"
+          sha256sum evidence/payload-manifest.json > evidence/payload-manifest.sha256
+          just check-desktop-contract "$local_ref"
+      - name: Compose local offline debug ISO
+        env:
+          UTAH_ISO_WORKDIR: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          ref=$(cat evidence/local-ref.txt)
+          bash iso/scripts/build-iso.sh "$ref" "$PWD/output/utah-live.iso" "Utah Candidate Live" 1 "$ref" 2>&1 | tee evidence/iso-build.log
+      - name: Verify LUKS offline install and graphical desktop against local bytes
+        env:
+          UTAH_E2E_WORK: ${{ runner.temp }}/utah-luks-e2e
+          UTAH_E2E_REQUIRE_SCREENSHOTS: "1"
+          UTAH_E2E_REQUIRE_FASTFETCH: "1"
+          UTAH_E2E_RAM: "6144"
+          UTAH_E2E_CPUS: "2"
+          UTAH_E2E_EXPECT_FLAVOR: ${{ matrix.flavor }}
+          UTAH_E2E_README: none
+        run: |
+          set -euo pipefail
+          bash iso/scripts/luks-e2e.sh "$PWD/output/utah-live.iso" "$(cat evidence/local-ref.txt)" 2>&1 | tee evidence/luks-test.log
+          test "$(jq -r .status.booted.image.imageDigest "$UTAH_E2E_WORK/bootc-status.json")" = "sha256:$(cut -d ' ' -f1 evidence/payload-manifest.sha256)"
+          cp "$UTAH_E2E_WORK/bootc-status.json" evidence/
+          rm output/utah-live.iso
+      - name: Compose production ISO from the same local candidate
+        env:
+          UTAH_ISO_WORKDIR: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          ref=$(cat evidence/local-ref.txt)
+          bash iso/scripts/build-iso.sh "$ref" "$PWD/output/utah-live.iso" "Utah Candidate Live" 0 "$ref" 2>&1 | tee evidence/production-iso.log
+          (cd output && sha256sum utah-live.iso > utah-live.iso.sha256)
+      - name: Verify main local tacklebox ISO and live boot
+        if: matrix.flavor == 'main'
+        env:
+          UTAH_ISO_BOOT_TIMEOUT: "1800"
+        run: |
+          set -euo pipefail
+          sudo bash iso/scripts/build-iso-tacklebox.sh main testing local "" 1 2>&1 | tee evidence/tbx-build.log
+          tacklebox_image=$(cat config/tacklebox-image)
+          [[ "$tacklebox_image" =~ ^[^[:space:]@]+@sha256:[a-f0-9]{64}$ ]]
+          sudo TACKLEBOX_IMAGE="$tacklebox_image" bash iso/scripts/verify-tacklebox-attestation.sh
+          sudo podman pull "$tacklebox_image"
+          sudo podman run --rm --privileged --security-opt label=disable -v /dev:/dev -v "$PWD/output:/out:ro" "$tacklebox_image" verify /out/utah-main-tacklebox.iso 2>&1 | tee evidence/tbx-verify.log
+          test "$(stat -c %s output/utah-main-tacklebox.iso)" -le "$((8 * 1024 * 1024 * 1024))"
+          bash iso/scripts/tacklebox-boot-gate.sh "$PWD/output/utah-main-tacklebox.iso" UTAH_LIVE_READY 2>&1 | tee evidence/tbx-boot.log
+          sudo rm output/utah-main-tacklebox.iso
+      - name: Publish only tested candidate bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FLAVOR: ${{ matrix.flavor }}
+        run: |
+          set -euo pipefail
+          auth=$(mktemp -d "$RUNNER_TEMP/candidate-auth.XXXXXX")
+          trap 'rm -rf "$auth"' EXIT
+          export REGISTRY_AUTH_FILE="$auth/auth.json"
+          echo "$GH_TOKEN" | podman login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          ref=$(cat evidence/publish-ref.txt)
+          skopeo list-tags "docker://${ref%:*}" > evidence/registry-tags.json
+          jq -e --arg tag "${ref##*:}" '.Tags | index($tag) == null' evidence/registry-tags.json
+          podman push --compression-format gzip --force-compression=false --digestfile evidence/pushed.digest "$(cat evidence/local-ref.txt)" "docker://$ref"
+          digest=$(cat evidence/pushed.digest)
+          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          test "$digest" = "sha256:$(cut -d ' ' -f1 evidence/payload-manifest.sha256)"
+          exact="${ref%:*}@$digest"
+          test "$(skopeo inspect --format '{{.Digest}}' "docker://$exact")" = "$digest"
+          jq -n --arg flavor "$FLAVOR" --arg digest "$digest" --arg ref "$exact" '{flavor:$flavor,digest:$digest,ref:$ref}' > evidence/candidate-image.json
+      - name: Retain production media only
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: candidate-production-iso-${{ matrix.flavor }}
+          path: output/utah-live.iso*
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: candidate-image-${{ matrix.flavor }}
+          path: evidence/candidate-image.json
+          if-no-files-found: error
+      - name: Retain diagnostics without debug media or test disks
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: candidate-evidence-${{ matrix.flavor }}
+          path: |
+            evidence/
+            ${{ runner.temp }}/utah-luks-e2e/*.log
+            ${{ runner.temp }}/utah-luks-e2e/*.json
+            ${{ runner.temp }}/utah-luks-e2e/fastfetch-ocr.txt
+            ${{ runner.temp }}/utah-luks-e2e/screenshots/
+          retention-days: 14
+
+  manifest:
+    needs: [source, candidate]
+    runs-on: ubuntu-26.04
+    permissions: {}
+    outputs:
+      matrix: ${{ steps.manifest.outputs.matrix }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          pattern: candidate-image-*
+          path: images
+      - id: manifest
+        env:
+          COMMON_SHA: ${{ inputs.common_sha }}
+          CONSUMER_SHA: ${{ needs.source.outputs.consumer_sha }}
+          TESTSUITE_SHA: ${{ inputs.testsuite_sha }}
+          COMMON_LAYER_DIGEST: ${{ needs.source.outputs.common_layer_digest }}
+          FLAVORS: ${{ needs.source.outputs.matrix }}
+        run: |
+          set -euo pipefail
+          jq -s --arg common "$COMMON_SHA" --arg consumer "$CONSUMER_SHA" --arg tests "$TESTSUITE_SHA" --arg layer "$COMMON_LAYER_DIGEST" \
+            '{common_sha:$common,consumer_sha:$consumer,testsuite_sha:$tests,common_layer_digest:$layer,images:sort_by(.flavor)}' images/*/candidate-image.json > candidate-manifest.json
+          jq -e --argjson flavors "$FLAVORS" '([.images[].flavor]|sort) == ([$flavors.include[].flavor]|sort) and all(.images[]; (.digest|test("^sha256:[a-f0-9]{64}$")) and (.ref == ("ghcr.io/projectbluefin/" + (if .flavor == "main" then "utah" else "utah-" + .flavor end) + "@" + .digest)))' candidate-manifest.json
+          matrix=$(jq -c --argjson flavors "$FLAVORS" '{include:[.images[] as $i | $flavors.include[] | select(.flavor==$i.flavor) | . + {ref:$i.ref}]}' candidate-manifest.json)
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: candidate-manifest
+          path: candidate-manifest.json
+          if-no-files-found: error
+
+  testsuite:
+    needs: manifest
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.manifest.outputs.matrix) }}
+    uses: projectbluefin/testsuite/.github/workflows/e2e.yml@948274b7bd76db65f1c69e4b5aab2bec0d63e8eb # candidate
+    with:
+      image: ${{ matrix.ref }}
+      compose_image: false
+      suites: ${{ matrix.suites }}
+      test_repository: projectbluefin/testsuite
+      test_ref: 948274b7bd76db65f1c69e4b5aab2bec0d63e8eb # candidate
