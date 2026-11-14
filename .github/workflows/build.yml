@@ -69,7 +69,7 @@ jobs:
   pinned_fetches:
     permissions:
       contents: read
-    uses: projectbluefin/actions/.github/workflows/reusable-pinned-fetches.yml@3adf1194c894fe7b1ae54e583c56306c6a2382ee # v1
+    uses: projectbluefin/actions/.github/workflows/reusable-pinned-fetches.yml@d1f65645c53d413462117fe1f05d00b9d9382f89 # v1
     with:
       mode: fail
 
@@ -279,7 +279,7 @@ jobs:
   build_main:
     needs: [contract, kernel_cache]
     if: ${{ github.event_name != 'merge_group' && !cancelled() && !inputs.contract_only && needs.contract.result == 'success' && needs.kernel_cache.result == 'success' && needs.kernel_cache.outputs.available == 'true' && needs.contract.outputs.main_flavors != '[]' }}
-    uses: projectbluefin/actions/.github/workflows/reusable-build.yml@3adf1194c894fe7b1ae54e583c56306c6a2382ee # v1
+    uses: projectbluefin/actions/.github/workflows/reusable-build.yml@d1f65645c53d413462117fe1f05d00b9d9382f89 # v1
     permissions:
       contents: read
       packages: write
@@ -329,7 +329,7 @@ jobs:
   build_kernel:
     needs: [contract, kernel_cache]
     if: ${{ github.event_name != 'merge_group' && !cancelled() && !inputs.contract_only && needs.contract.result == 'success' && needs.kernel_cache.result == 'success' && needs.kernel_cache.outputs.available == 'true' && needs.contract.outputs.kernel_flavors != '[]' }}
-    uses: projectbluefin/actions/.github/workflows/reusable-build.yml@3adf1194c894fe7b1ae54e583c56306c6a2382ee # v1
+    uses: projectbluefin/actions/.github/workflows/reusable-build.yml@d1f65645c53d413462117fe1f05d00b9d9382f89 # v1
     permissions:
       contents: read
       packages: write
