@@ -129,6 +129,8 @@ files = [
   # symlink units are intentionally not shipped.
   "/usr/lib/systemd/system/ublue-firstboot-date.service",
   "/usr/lib/systemd/system/ublue-booted-image.service",
+  "/usr/lib/systemd/system/ublue-booted-image-sync.service",
+  "/usr/lib/tmpfiles.d/ublue-booted-image.conf",
   "/usr/bin/ublue-booted-image-sync",
   # Common files configure-services.sh patches or checks for Dakota parity.
   # file_contains skips missing files, so list them here to fail the build if
@@ -347,6 +349,7 @@ enabled = [
   # Dakota desktop parity (#675).
   "ublue-firstboot-date.service",
   "ublue-booted-image.service",
+  "ublue-booted-image-sync.service",
   "bootc-unified-storage.timer",
   "brew-setup.service",
   "cups.socket",

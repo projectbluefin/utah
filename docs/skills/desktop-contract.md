@@ -80,15 +80,16 @@ The TOML's sections are the contract's table of contents:
   `input-remapper.service`, `ModemManager.service`, `thermald.service`, `intel_lpmd.service`,
   `sysstat.service`, `sysstat-collect.timer`, `sysstat-summary.timer`,
   `projectbluefin-countme.timer`, `cups.socket`, `systemd-boot-update.service`, `uupd.timer`,
-  `bluefin-stats-refresh.timer`, `ublue-firstboot-date.service`, `ublue-booted-image.service`.
+  `bluefin-stats-refresh.timer`, `ublue-firstboot-date.service`, `ublue-booted-image.service`,
+  `ublue-booted-image-sync.service`.
   Update policy delegates background updates to `uupd.timer`; `bootc-fetch-apply-updates.timer` and
   `bootc-fetch-apply-updates.service` are masked in `/etc` and `/usr/lib` (and disabled in
   `85-utah-desktop.preset`) so cross-vendor `/etc` 3-way merges (e.g. switching from Bluefin) do not
   carry active `timers.target.wants` symlinks that bypass uupd staging or undo manual rollbacks.
   Switchers can also manually verify or mask them if a local `/etc` symlink was preserved.
 
-  The last two units are Dakota parity (#675): install-date stamping and the
-  booted-image snapshot Common's `/usr/libexec/ublue-booted-image` falls back to.
+  The last three units are Dakota parity (#675): install-date stamping and the booted-image
+  snapshot Common's `/usr/libexec/ublue-booted-image` falls back to (two units: [image-info](desktop-contract/references/image-info.md)).
   `configure-services.sh` enables them, patches Common's fastfetch ([stats](desktop-contract/references/stats-refresh.md))
   and `uwelcome.sh` (non-interactive shells skip the greeting), and checks image-info ([bootc compatibility](desktop-contract/references/image-info.md)).
   Wallpaper rotation is deliberately NOT Dakota parity: Common's per-user `bluefin-dynamic-wallpaper`

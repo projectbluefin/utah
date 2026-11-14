@@ -1028,6 +1028,20 @@ ssh_target "
 " || fail "logrotate state directory or service failed on the installed system"
 echo "  logrotate.service: succeeded with a nonempty state file"
 
+# ublue-booted-image.service runs bootc as its own ExecStart so bootc's chcon
+# probe is not denied mac_admin (#1198), and ublue-booted-image-sync.service
+# turns its JSON into the ref unprivileged fastfetch reads.
+echo "Verifying the booted-image record on the installed system..."
+ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' sh -eu -c 'systemctl is-active --quiet ublue-booted-image.service; systemctl is-active --quiet ublue-booted-image-sync.service; test -s /run/ublue-os/booted-image; cat /run/ublue-os/booted-image'" \
+    > "${WORK}/booted-image.txt" || fail "booted-image units did not leave /run/ublue-os/booted-image"
+echo "  /run/ublue-os/booted-image: $(cat "${WORK}/booted-image.txt")"
+ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' sh -c 'grep -hF avc: /var/log/audit/audit.log 2>/dev/null; journalctl -b --no-pager -o cat 2>/dev/null | grep -F avc:; true'" \
+    > "${WORK}/avc.log" || fail "could not read the installed system's AVC records"
+if grep -E 'denied .*comm="(chcon|bootc)"' "${WORK}/avc.log" >&2; then
+    fail "bootc's chcon probe was denied again (#1198)"
+fi
+echo "  bootc chcon AVC denials: none"
+
 echo "=== Phase 7/7: log in and prove the desktop starts ==="
 ssh_target 'systemctl is-active gdm.service' 2>/dev/null | grep -qx active \
     || fail "gdm is not running on the installed system"

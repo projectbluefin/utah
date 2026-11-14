@@ -5,12 +5,17 @@
 # query is dead in user sessions, and the baked image tag is the compose-time
 # tag. The booted ref cannot change within a boot, so one write per boot is
 # always accurate. Parity with Dakota (projectbluefin/utah#675).
+#
+# This script never runs bootc. ublue-booted-image.service runs `bootc status
+# --json` as its own ExecStart, so bootc enters its SELinux domain instead of
+# being denied mac_admin by its relabelling chcon probe (#1198), and writes the
+# JSON this script reads.
 set -euo pipefail
 
-bootc_json="$(bootc status --json 2>/dev/null || true)"
-ref="$(jq -r '.status.booted.image.image.image // empty' <<<"${bootc_json}" 2>/dev/null || true)"
+json="${1:-/run/ublue-os/booted-image.json}"
+ref="$(jq -r '.status.booted.image.image.image // empty' "${json}" 2>/dev/null || true)"
 if [ -z "${ref}" ]; then
-    echo "no booted bootc image found; leaving no state file" >&2
+    echo "no booted bootc image found in ${json}; leaving no state file" >&2
     exit 0
 fi
 
