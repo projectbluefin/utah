@@ -100,12 +100,13 @@ fi
 # attempt at a source build. It is needed only to compile against, so it goes in
 # here and comes out again below.
 #
-# Every build starts FROM the kernel cache image (Containerfile.kernel), and
-# the Containerfile's `utah-install-fedora-kernel check` fails any build whose
-# base kernel is not Utah's patched rebuild of Fedora's. That kernel is in no
-# repository and not on Koji, so its kernel-devel comes from the cache, which
-# carries it in /utah-cache/fedora-kernel/. The enabled repositories are tried
-# next. There used to be a third source, a Koji download checked against a
+# Every image build starts FROM the kernel cache image (Containerfile.kernel),
+# and the Containerfile's `utah-install-fedora-kernel check` fails any build
+# whose base kernel is not Utah's patched rebuild of Fedora's. That kernel is in
+# no repository and not on Koji, so its kernel-devel comes from the cache, which
+# carries it in /utah-cache/fedora-kernel/. The cache's own builder installs
+# that kernel-devel before running this script, so it never needs to look. The
+# enabled repositories are tried after the cache. There used to be a third source, a Koji download checked against a
 # hash recorded here for one stock Fedora kernel; it could not match the
 # patched kernel and had gone stale, so it is gone. If neither source has it,
 # the cache image is broken and the right fix is rebuilding it.
@@ -142,8 +143,8 @@ ensure_toolchain() {
       installed_kernel_devel="kernel-devel-${kernel}"
     else
       echo "kernel-devel-${kernel} is neither in ${CACHE_DIR}/fedora-kernel/ nor in" >&2
-      echo "the enabled repositories. Every build is FROM the kernel cache image," >&2
-      echo "which carries it; rebuild that image (just build-kernel-cache)." >&2
+      echo "the enabled repositories. Image builds start FROM the kernel cache" >&2
+      echo "image, which carries it; rebuild that image (just build-kernel-cache)." >&2
       diagnose
       exit 1
     fi
