@@ -214,6 +214,13 @@ files = [
 "/usr/share/glib-2.0/schemas/zz3-bluefin-unsupported-stuff.gschema.override" = [
   "disable-extension-version-validation=true",
   "tilingshell@ferrarodomenico.com",
+  # Bluefin smoke checks these Quick Settings extensions are enabled.
+  "quicksettings-audio-devices-hider@marcinjahn.com",
+  "quicksettings-audio-devices-renamer@marcinjahn.com",
+  "tailscale-gnome-qs@tailscale-qs.github.io",
+  # Bluefin smoke checks Copyous and the upstream Syncthing toggle are enabled.
+  "copyous@boerdereinar.dev",
+  "syncthing-toggle@rehhouari.github.com",
 ]
 "/etc/dconf/db/distro.d/02-bluefin-keybindings" = [
   "xdg-terminal-exec",
@@ -340,7 +347,7 @@ enabled = [
   # Dakota desktop parity (#675).
   "ublue-firstboot-date.service",
   "ublue-booted-image.service",
-  "bootc-unified-storage.service",
+  "bootc-unified-storage.timer",
   "brew-setup.service",
   "cups.socket",
   "bluefin-stats-refresh.timer",
