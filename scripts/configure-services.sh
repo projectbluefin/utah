@@ -65,6 +65,10 @@ enable_unit flatpak-preinstall.service
 # bluez installed. Enable it next to the other desktop units; see #98.
 enable_unit gdm.service
 enable_unit bluetooth.service
+# GNOME's system services, from gnome-build-meta's 80-gnome.preset as Dakota
+# ships it (files/systemd-presets/system-preset/80-gnome.preset).
+enable_unit colord.service
+enable_unit accounts-daemon.service
 # Bluefin defaults for mDNS discovery and hybrid-GPU application launching.
 enable_unit avahi-daemon.service
 enable_unit avahi-daemon.socket
@@ -180,12 +184,14 @@ enable_unit ModemManager.service
 # power-profiles-daemon, not TuneD, and no intel_lpmd.
 enable_unit power-profiles-daemon.service
 enable_unit thermald.service
-# sysstat accounting, as Fedora's preset enables it for Bluefin (#263).
 # nfs-client.target is turned off: see 85-utah-desktop.preset.
 disable_unit nfs-client.target
-enable_unit sysstat.service
-enable_unit sysstat-collect.timer
-enable_unit sysstat-summary.timer
+# sysstat collection is opt-in, as in Dakota (elements/bluefin/sysstat.bst);
+# the package stays for on-demand sar/iostat. See 85-utah-desktop.preset.
+disable_unit sysstat.service
+disable_unit sysstat-collect.timer
+disable_unit sysstat-summary.timer
+disable_unit sysstat-rotate.timer
 # Printing on demand, as Fedora's preset enables it for Bluefin; Hummingbird's
 # 99-default-disable would leave it off.
 enable_unit cups.socket
@@ -278,9 +284,12 @@ fi
 # asserts the result (services.user_enabled).
 # grub-boot-success.timer is deliberately absent: /boot is read-only at runtime
 # so the mark can never be written (see the user preset, #364).
+# speech-dispatcher.socket and xdg-desktop-portal-rewrite-launchers.service
+# follow Dakota, which inherits them from gnome-build-meta's user presets.
 for unit in pipewire.socket pipewire-pulse.socket wireplumber.service \
             xdg-user-dirs.service \
-            obex.service mpris-proxy.service; do
+            obex.service mpris-proxy.service \
+            speech-dispatcher.socket xdg-desktop-portal-rewrite-launchers.service; do
     if user_unit_exists "${unit}"; then
         systemctl --global enable "${unit}"
     else

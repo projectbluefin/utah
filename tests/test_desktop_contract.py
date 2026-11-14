@@ -450,6 +450,48 @@ class ServiceMaskParityTests(unittest.TestCase):
                 self.assertIn(f"enable_unit {unit}", services)
                 self.assertTrue((ROOT / "system_files/shared/usr/lib/systemd/system" / unit).is_file())
 
+    def test_dakota_gnome_system_units_enabled_in_contract_preset_and_script(self):
+        # Dakota inherits these from gnome-build-meta's 80-gnome.preset.
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset").read_text()
+        services = (ROOT / "scripts/configure-services.sh").read_text()
+        for unit in ("colord.service", "accounts-daemon.service"):
+            with self.subTest(unit=unit):
+                self.assertIn(unit, contract["services"]["enabled"])
+                self.assertIn(f"enable {unit}\n", preset)
+                self.assertIn(f"enable_unit {unit}\n", services)
+
+    def test_dakota_gnome_user_units_enabled_in_contract_preset_and_script(self):
+        # Dakota inherits these from gnome-build-meta's user presets.
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        preset = (ROOT / "system_files/shared/usr/lib/systemd/user-preset/85-utah-desktop.preset").read_text()
+        services = (ROOT / "scripts/configure-services.sh").read_text()
+        user_loop = services.split("for unit in pipewire.socket", 1)[1].split("; do", 1)[0]
+        for unit in ("speech-dispatcher.socket", "xdg-desktop-portal-rewrite-launchers.service"):
+            with self.subTest(unit=unit):
+                self.assertIn(unit, contract["services"]["user_enabled"])
+                self.assertIn(f"enable {unit}\n", preset)
+                self.assertIn(unit, user_loop)
+
+    def test_sysstat_collection_is_opt_in_like_dakota(self):
+        # Dakota's elements/bluefin/sysstat.bst presets all four units off.
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset").read_text()
+        services = (ROOT / "scripts/configure-services.sh").read_text()
+        for unit in (
+            "sysstat.service",
+            "sysstat-collect.timer",
+            "sysstat-summary.timer",
+            "sysstat-rotate.timer",
+        ):
+            with self.subTest(unit=unit):
+                self.assertIn(unit, contract["services"]["disabled"])
+                self.assertNotIn(unit, contract["services"]["enabled"])
+                self.assertIn(f"disable {unit}\n", preset)
+                self.assertNotIn(f"enable {unit}\n", preset)
+                self.assertIn(f"disable_unit {unit}\n", services)
+                self.assertNotIn(f"enable_unit {unit}\n", services)
+
     def test_dakota_parity_patch_targets_are_required_files(self):
         contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
         files = contract["configuration"]["files"]

@@ -2,6 +2,11 @@
 # Keep these in /usr/lib so bootc's first-boot preset application sees them.
 enable gdm.service
 enable bluetooth.service
+# GNOME's system services, as Dakota inherits them from gnome-build-meta's
+# files/systemd-presets/system-preset/80-gnome.preset: colour management and
+# the AccountsService daemon Settings and GDM use to manage users.
+enable colord.service
+enable accounts-daemon.service
 # Match Bluefin discovery and hybrid-GPU defaults.
 enable avahi-daemon.service
 enable avahi-daemon.socket
@@ -42,11 +47,15 @@ enable ModemManager.service
 # Hummingbird's 99-default-disable would leave both off.
 enable power-profiles-daemon.service
 enable thermald.service
-# System activity accounting, enabled by Fedora's 90-default.preset for Bluefin
-# (#263).
-enable sysstat.service
-enable sysstat-collect.timer
-enable sysstat-summary.timer
+# System activity accounting is opt-in, as in Dakota
+# (elements/bluefin/sysstat.bst writes 80-sysstat.preset disabling all four):
+# sar/iostat/mpstat/pidstat work on demand without the collectors. Enable with
+# `systemctl enable --now sysstat.service`. Listed explicitly, as Dakota does,
+# rather than left to Hummingbird's 99-default-disable.
+disable sysstat.service
+disable sysstat-collect.timer
+disable sysstat-summary.timer
+disable sysstat-rotate.timer
 # nfs-client.target is enabled by both Fedora's and Hummingbird's 90-default
 # preset, and is turned off here on purpose. Installing nfs-common-utils (#263)
 # made it start gssproxy.service (target -> auth-rpcgss-module.service ->

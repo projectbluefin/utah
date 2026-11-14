@@ -35,8 +35,11 @@ Rules applied while choosing names:
   to read whether a unit is enabled. It enables `thermald.service`,
   `intel_lpmd.service`, `tuned.service`, `tuned-ppd.service`, `smartd.service`,
   `nfs-client.target`, `sysstat.service` and its two timers, but not
-  `rpcbind`, `autofs`, `brltty`, `dnsmasq`, `saned` or `ipp-usb`. Utah wires
-  `sysstat*` and disables `nfs-client.target` (Hummingbird's own preset enables
+  `rpcbind`, `autofs`, `brltty`, `dnsmasq`, `saned` or `ipp-usb`. Utah follows
+  Dakota rather than Fedora on `sysstat*`: collection is opt-in
+  (`elements/bluefin/sysstat.bst` disables `sysstat.service` and its three
+  timers), so the preset disables them and the contract's `disabled` list holds
+  them off. Utah also disables `nfs-client.target` (Hummingbird's own preset enables
   it): it pulls in `gssproxy.service`, which failed to start in the review VM
   (`STATE_DIRECTORY`, Permission denied; cause not diagnosed).
   `smartmontools` is not installable, so its unit stays unwired.
