@@ -151,6 +151,15 @@ files = [
   "/usr/share/wireplumber/wireplumber.conf.d/51-disable-pcsp.conf",
   "/usr/lib/sysctl.d/60-kexec-disable.conf",
   "/usr/share/polkit-1/rules.d/org.freedesktop.NetworkManager.rules",
+  # Dakota's elements/bluefin/uupd.bst: the update units, user-startable
+  # manual updates, and the hardware-check config that replaces Common's
+  # distrobox-only one. file_contains below pins the units' contents.
+  "/usr/bin/uupd",
+  "/usr/lib/systemd/system/uupd.service",
+  "/usr/lib/systemd/system/uupd.timer",
+  "/usr/lib/systemd/system/uupd-manual.service",
+  "/etc/polkit-1/rules.d/uupd.rules",
+  "/etc/uupd/config.json",
 ]
 
 [configuration.file_contains]
@@ -266,6 +275,17 @@ files = [
   'action.id == "org.freedesktop.NetworkManager.settings.modify.system"',
   'subject.isInGroup("wheel")',
   "subject.local",
+]
+# Dakota's elements/bluefin/uupd.bst units: configure-services.sh installs
+# upstream's daily timer over Common's four-a-day one, and adds the flag.
+"/usr/lib/systemd/system/uupd.timer" = [
+  "OnCalendar=*-*-* 04:00:00",
+]
+"/usr/lib/systemd/system/uupd.service" = [
+  "ExecStart=/usr/bin/uupd --disable-module-distrobox --log-level=debug --json",
+]
+"/etc/uupd/config.json" = [
+  '"bat-min-percent": 20',
 ]
 
 [flatpak]

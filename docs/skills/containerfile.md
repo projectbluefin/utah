@@ -73,7 +73,10 @@ In summary:
   pass the package transaction and cache-stamp equality checks.
 - External executable release assets (such as `uupd`) are pinned by version
   and verified with explicit sha256 checksums (`UUPD_SHA256`) before
-  extraction.
+  extraction. `UUPD_VERSION` follows Dakota's `elements/bluefin/uupd.bst`;
+  the unit digests (`UUPD_SERVICE_SHA256`, `UUPD_TIMER_SHA256`) cover the
+  raw files at that tag and may be unchanged across releases (v1.4.0 and
+  v1.5.5 serve identical units).
 - Artwork reaches the image through the throwaway `artwork` stage, which keeps
   the fetch tooling and unprocessed sources out of every layer.
   `WALLPAPERS_IMAGE`/`WALLPAPERS_IMAGE_SHA` pin the multi-arch index digest of

@@ -315,11 +315,17 @@ authselect enable-feature with-mdns4
 
 # uupd is distributed as a release binary, not an RPM in the Hummingbird
 # repositories. Keep its version pinned by the Containerfile argument.
+# Dakota's elements/bluefin/uupd.bst writes the same upstream units, with the
+# distrobox flag below, so the downloads give Dakota's units. Installing them
+# here replaces Common's uupd.timer (four runs a day) with upstream's daily
+# 04:00 timer, which is also what wins on Dakota: BuildStream stages
+# bluefin/uupd.bst after bluefin/common.bst. uupd-manual.service, its polkit
+# rule and /etc/uupd/config.json come from Dakota via system_files.
 install -Dm0755 /tmp/uupd/uupd /usr/bin/uupd
 install -Dm0644 /tmp/uupd/uupd.service /usr/lib/systemd/system/uupd.service
 install -Dm0644 /tmp/uupd/uupd.timer /usr/lib/systemd/system/uupd.timer
 systemctl enable uupd.timer
-# Avoid pulling the distrobox module on every update, as in Bluefin LTS.
+# Avoid pulling the distrobox module on every update, as in Dakota's uupd.service.
 sed -i 's|uupd|& --disable-module-distrobox|' /usr/lib/systemd/system/uupd.service
 
 # Hummingbird's resolved unit defaults to a disconnected private /tmp. The
