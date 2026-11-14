@@ -67,6 +67,11 @@ check:
     grep -q 'serial-getty@ttyS0.service' contracts/bluefin-desktop.toml
     test -f scripts/configure-services.sh
     test -f scripts/configure-branding.sh
+    test -f scripts/relocate-selinux-store.sh
+    test -f iso/scripts/verify-selinux-store.sh
+    # The SELinux module store must leave Hummingbird's read-only
+    # /usr/lib/selinux before the home-label policy rebuild (#551).
+    grep -q '/usr/local/libexec/utah-relocate-selinux-store' Containerfile
     test -f scripts/verify-desktop-contract.py
     test -f scripts/verify-gnome-extensions.py
     test -f scripts/mirror-shim.sh

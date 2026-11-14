@@ -95,6 +95,18 @@ This file gate complements deployment-to-entry matching (issue #361 / PR #571);
 it does not itself prove which deployment an entry represents. Fixture tests
 run the same guest checker via `python3 -m unittest discover -s tests -p test_boot_files.py`.
 
+Phases 1, 3 and 4 run `iso/scripts/verify-selinux-store.sh` (#551; evidence
+`selinux-<mode>-<phase>.txt`): store location, sample local changes, the running
+policy against the candidate's compiled policy rule by rule, then the rollback.
+Modes are in the script header; the store design is in `containerfile.md`.
+The SELinux verifier requires `/run/ostree-booted` before probing, mutating
+or comparing policy. Composefs runs fail explicitly at that gate; they do not
+establish SELinux acceptance. The `/usr/etc` pristine policy and previous-boot
+`ostree-finalize-staged` log are OSTree-specific. Capture that log before
+policy comparison so a mismatch retains its finalization diagnostics.
+Keep #551 held until booted update/rollback evidence exists on the new head;
+host fixtures do not prove either backend's update behavior.
+
 The baseline image (default `ghcr.io/projectbluefin/utah:testing`, the target
 ref `just iso testing` builds with) is the ref a live ISO installs its offline
 payload under, and phase 1 fails unless the booted deployment tracks it. The
