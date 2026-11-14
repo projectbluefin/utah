@@ -84,9 +84,10 @@ installs it into the base image itself (`install`, which also removes Fedora's
 tree), so everything built `FROM` the cache -- the Containerfile's
 v4l2loopback stage included -- sees it as the base kernel. `kernel-devel`
 stays in `/utah-cache/fedora-kernel/`, where `install-v4l2loopback.sh` and
-`install-nvidia.sh` take it before trying Koji. The Containerfile runs
-`utah-install-fedora-kernel check` first, so a build on the pristine
-Hummingbird base fails instead of shipping the bug.
+`install-nvidia.sh` take it. `install-v4l2loopback.sh` falls back to Koji's
+signed path; `install-nvidia.sh` has no Koji fallback and fails if the cache
+lacks it. The Containerfile runs `utah-install-fedora-kernel check` first, so
+a build on the pristine Hummingbird base fails instead of shipping the bug.
 
 A/B evidence for the patch (2026-11-07, VM, 6700 fs-verity files on btrfs, 10
 cold-read passes each): Fedora `7.2.15-200.fc44` logged 18 `FILE CORRUPTED`
@@ -178,7 +179,7 @@ and one for the OGC kernel, so a single cache image serves all three flavors
 (comment, `Containerfile.kernel`).
 
 The vendor installer is verified against `NVIDIA_RUN_SHA256`, a digest
-committed in `install-nvidia.sh` beside `KERNEL_DEVEL_SHA256`, on both the
+committed in `install-nvidia.sh`, on both the
 download path and the `/utah-cache` path — the cache image is addressed by an
 input-hash tag, not an immutable digest, so a cached installer gets the same
 check as a fresh one. Bumping `UTAH_NVIDIA_DRIVER_VERSION` means updating
