@@ -19,6 +19,7 @@
 (unowned)	/usr/lib/systemd/system/bluefin-stats-refresh.timer
 (unowned)	/usr/lib/systemd/system/bootc-generic-growpart.service
 (unowned)	/usr/lib/systemd/system/bootc-unified-storage.service
+(unowned)	/usr/lib/systemd/system/bootc-unified-storage.timer
 (unowned)	/usr/lib/systemd/system/brew-setup.service
 (unowned)	/usr/lib/systemd/system/brew-update.service
 (unowned)	/usr/lib/systemd/system/brew-update.timer

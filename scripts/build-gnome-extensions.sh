@@ -59,6 +59,26 @@ meson install -C "${gsconnect_dir}/_build" --skip-subprojects
 # Tailscale Quick Settings
 mv /usr/share/gnome-shell/extensions/tmp/tailscale-gnome-qs/tailscale-gnome-qs@tailscale-qs.github.io /usr/share/gnome-shell/extensions/tailscale-gnome-qs@tailscale-qs.github.io
 
+# Syncthing Toggle (rehhouari): the upstream toggle Bluefin smoke checks.
+# Bling's syncthing-toggle@projectbluefin.io below declares the same schema id
+# (org.gnome.shell.extensions.syncthing-toggle) with a superset of these keys,
+# and only one file per id may be installed globally, so drop this copy and
+# let Bling's schema serve both.
+syncthing_toggle_dir="/usr/share/gnome-shell/extensions/syncthing-toggle@rehhouari.github.com"
+mv -T /usr/share/gnome-shell/extensions/tmp/syncthing-toggle-rehhouari "${syncthing_toggle_dir}"
+rm -rf "${syncthing_toggle_dir}/schemas" "${syncthing_toggle_dir}/.git"
+# Bluefin calls this control "Sync Folder" (Bling's toggle, Dakota's docs and
+# the Bluefin documentation's Sync Folder page), and Bluefin smoke checks the
+# pill and menu header carry that label. Upstream labels both "Syncthing".
+# Rename exactly those two strings and fail if upstream moved them.
+sed -i "s/title: _('Syncthing'),/title: _('Sync Folder'),/; s/setHeader(syncthingIcon, _('Syncthing'))/setHeader(syncthingIcon, _('Sync Folder'))/" \
+    "${syncthing_toggle_dir}/toggle.js"
+test "$(grep -c "_('Sync Folder')" "${syncthing_toggle_dir}/toggle.js")" -eq 2
+if grep -n "_('Syncthing')" "${syncthing_toggle_dir}/toggle.js"; then
+    echo "syncthing-toggle@rehhouari.github.com still labels a control Syncthing" >&2
+    exit 1
+fi
+
 # Bluefin Bling: install every upstream extension, without enabling any.
 # Keep UUID validation aligned with bling_extensions in the source verifier.
 for extension in /usr/share/gnome-shell/extensions/tmp/bluefin-bling/extensions/*/; do
@@ -108,6 +128,16 @@ echo "${renamer_sha256}  ${renamer_zip}" | sha256sum --check --strict
 mkdir -p "${renamer_dir}"
 unzip -o "${renamer_zip}" -d "${renamer_dir}"
 rm -f "${renamer_zip}"
+
+# Copyous clipboard manager (Gda/libgda-sqlite come from packages/bluefin.toml)
+copyous_zip="/tmp/copyous@boerdereinar.dev.zip"
+copyous_sha256="e4af596ffeab8137c90b0c178b44160e9fc4dfb1296fb5573ae36871e485a90a"
+copyous_dir="/usr/share/gnome-shell/extensions/copyous@boerdereinar.dev"
+curl -fsSL "https://github.com/boerdereinar/copyous/releases/download/v2.1.2/copyous@boerdereinar.dev.zip" -o "${copyous_zip}"
+echo "${copyous_sha256}  ${copyous_zip}" | sha256sum --check --strict
+mkdir -p "${copyous_dir}"
+unzip -o "${copyous_zip}" -d "${copyous_dir}"
+rm -f "${copyous_zip}"
 
 rm -rf /usr/share/gnome-shell/extensions/tmp
 

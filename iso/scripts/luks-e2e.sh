@@ -1445,7 +1445,7 @@ EOF
     # stacking. Only a green run reaches here, so the badge on the front page
     # always reflects a real end-to-end pass. UTAH_E2E_README=none to skip.
     README="${UTAH_E2E_README:-${ROOT}/README.md}"
-    shot_rel="docs/verification/screenshots/installed-fastfetch.png"
+    shot_rel="https://github.com/projectbluefin/utah/raw/verification/screenshots/installed-fastfetch.png"
     if [[ "${README}" != "none" && -f "${README}" && -f "${DOCS}/screenshots/installed-fastfetch.png" ]]; then
         python3 - "${README}" "${shot_rel}" "${captured}" <<'PYEMBED'
 import sys, re
@@ -1453,13 +1453,13 @@ readme, shot, captured = sys.argv[1], sys.argv[2], sys.argv[3]
 begin, end = "<!-- BEGIN E2E VERIFICATION -->", "<!-- END E2E VERIFICATION -->"
 block = (
     f"{begin}\n"
-    f"[![Verified end to end]({shot})](docs/verification/README.md)\n\n"
-    f"*Verified end to end on {captured}: installed to a LUKS2-encrypted disk, "
+    f"[![Latest published CI desktop]({shot})](https://github.com/projectbluefin/utah/blob/verification/README.md)\n\n"
+    f"*Verified locally on {captured}: installed to a LUKS2-encrypted disk, "
     f"unlocked at the Plymouth prompt, and logged in to a GNOME session — "
-    f"the shot above is fastfetch inside that booted install. "
-    f"Full record and more screenshots in "
-    f"[docs/verification](docs/verification/README.md), refreshed by "
-    f"`just luks-test`.*\n"
+    f"this local run's record is in `docs/verification/README.md`. "
+    f"The image above and "
+    f"[published CI record](https://github.com/projectbluefin/utah/tree/verification) "
+    f"come from CI and may describe a different run.*\n"
     f"{end}"
 )
 text = open(readme, encoding="utf-8").read()

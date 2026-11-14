@@ -150,7 +150,7 @@ of those, not the filesystem type of `/sysroot`. bootupd's
 and failed in every live session; `bootloader-update.service.d/
 10-utah-ostree-only.conf` adds `ConditionPathExists=/run/ostree-booted`.
 `configure-live.sh` masks the units that must not run there at all
-(`bootc-unified-storage.service`). On a booted live ISO, `systemctl --failed`
+(`bootc-unified-storage.service` and its timer). On a booted live ISO, `systemctl --failed`
 should be empty.
 
 ### Supported and unsupported boot paths

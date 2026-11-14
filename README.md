@@ -1,9 +1,9 @@
 # Utahraptor
 
 <!-- BEGIN E2E VERIFICATION -->
-[![Verified ISO desktop](docs/verification/screenshots/installed-fastfetch.png)](docs/verification/README.md)
+[![Verified ISO desktop](https://github.com/projectbluefin/utah/raw/107d6b8035d2a3437f9af3a7eebf6ee6d36150a9/screenshots/installed-fastfetch.png)](https://github.com/projectbluefin/utah/blob/107d6b8035d2a3437f9af3a7eebf6ee6d36150a9/README.md)
 
-*LUKS ISO test passed for commit `df81798f2661`. [CI run](https://github.com/projectbluefin/utah/actions/runs/41063306779) also runs independent desktop tests that do not gate this record; the LUKS and production ISO jobs passed; [screenshots and provenance](docs/verification/README.md).*
+*LUKS ISO test passed for commit `d9ff787d873b`. [CI run](https://github.com/projectbluefin/utah/actions/runs/43616240548) also runs independent desktop tests that do not gate this record; the LUKS and production ISO jobs passed; [screenshots and provenance](https://github.com/projectbluefin/utah/tree/107d6b8035d2a3437f9af3a7eebf6ee6d36150a9).*
 <!-- END E2E VERIFICATION -->
 
 †Utahraptor ostrommaysi
@@ -16,7 +16,7 @@ Bluefin built on Fedora Hummingbird. The more ... civilized murder machine.
 end in local QEMU validation: the live ISO's bootc-installer creates a
 LUKS2-encrypted disk from the ISO's embedded container store with no
 network, and the installed system boots on its own to GDM and a GNOME
-session (verified record: [docs/verification](docs/verification/README.md)).
+session (verified record: [docs/verification](https://github.com/projectbluefin/utah/tree/verification)).
 Testing container images and live ISOs are available for hardware testing,
 but nothing here is ready to run on a machine you care about yet. [Filing
 issues](https://github.com/projectbluefin/utah/issues) is the whole point.

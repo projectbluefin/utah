@@ -22,6 +22,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import yaml
+
 TESTS_DIR = Path(__file__).resolve().parent
 REPO = TESTS_DIR.parent
 RUNNER = TESTS_DIR / "run_suite.py"
@@ -149,6 +151,21 @@ class TestJustfileUsesTheRunner(unittest.TestCase):
             "just test", self.justfile,
             "`check` must call `test`; build.yml only runs `just check`",
         )
+
+
+class TestBuildWorkflowDependencies(unittest.TestCase):
+    def test_requirements_are_installed_before_manifest_validation(self):
+        workflow = yaml.safe_load(
+            (REPO / ".github/workflows/build.yml").read_text(encoding="utf-8")
+        )
+        steps = workflow["jobs"]["contract"]["steps"]
+        commands = [step.get("run", "") for step in steps]
+        install = next(
+            i for i, command in enumerate(commands)
+            if "pip install" in command and "-r tests/requirements.txt" in command
+        )
+        check = next(i for i, command in enumerate(commands) if "just check" in command)
+        self.assertLess(install, check)
 
 
 def _discover(root: Path) -> list[Path]:

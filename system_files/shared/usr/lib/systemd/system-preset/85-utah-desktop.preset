@@ -19,7 +19,7 @@ enable systemd-resolved.service
 # gates the service on a boot through systemd-boot, so GRUB and BIOS systems
 # skip it and bootupd keeps managing their grub and shim.
 enable systemd-boot-update.service
-enable bootc-unified-storage.service
+enable bootc-unified-storage.timer
 enable dconf-update.service
 # Dakota desktop parity (#675): first-boot install-date stamping and the
 # booted-image snapshot fastfetch reads. Wallpaper rotation stays with

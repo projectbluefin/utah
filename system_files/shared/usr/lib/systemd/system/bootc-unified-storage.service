@@ -9,11 +9,17 @@
 # layers for Utah -- before re-importing it. On a booted
 # testing-20261001-41873b5 that took 77 seconds on a datacenter link.
 #
-# It must not hold up boot. A target adds an implicit After= on every unit it
-# Wants unless that unit sets DefaultDependencies=no, so as a plain oneshot
-# wanted by multi-user.target this held multi-user.target and graphical.target
-# for the whole pull (graphical.target at 1min 32s, 82s of it this unit). With
-# DefaultDependencies=no the explicit ordering below is all there is.
+# It must not run during boot. bootc-unified-storage.timer starts it 15
+# minutes after boot instead. As a unit wanted by multi-user.target it first
+# held multi-user.target and graphical.target for the whole pull
+# (graphical.target at 1min 32s, 82s of it this unit). With
+# DefaultDependencies=no it no longer held the targets, but the pull still ran
+# from 11s to 77s of first boot, and Nice=19 with IOSchedulingClass=idle did
+# not stop it starving the session coming up: geoclue never took its bus name
+# and hit its start timeout, gnome-shell's PowerProfiles call timed out, and
+# TuneD waited on the ostree sysroot lock the pull holds. Nothing waits on
+# unified storage; only the next upgrade uses it. No [Install] section: the
+# timer is the only thing that starts it.
 #
 # ExecStart must stay the bare bootc binary. Its install_exec_t label is the
 # entrypoint into bootc's SELinux domain; wrapped in `sh -c` it ran as
@@ -47,6 +53,3 @@ Restart=on-failure
 RestartSec=15min
 Nice=19
 IOSchedulingClass=idle
-
-[Install]
-WantedBy=multi-user.target

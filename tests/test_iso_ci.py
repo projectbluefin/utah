@@ -253,11 +253,19 @@ class EvidenceTests(unittest.TestCase):
     def test_readme_update_is_idempotent_and_preserves_other_text(self):
         update = load("update-e2e-readme").update
         proof = {"source_sha": "a" * 40, "e2e_run": "123"}
+        record_commit = "b" * 40
         text = "# Utah\n\nKeep this paragraph.\n"
-        result = update(text, proof)
-        self.assertEqual(update(result, proof), result)
+        result = update(text, proof, record_commit)
+        self.assertEqual(update(result, proof, record_commit), result)
         self.assertIn("Keep this paragraph.", result)
         self.assertIn("actions/runs/123", result)
+        # The evidence links pin to the record's own commit, not the mutable
+        # `verification` branch, so a frozen block stays self-consistent.
+        self.assertIn(f"raw/{record_commit}/screenshots", result)
+        self.assertIn(f"tree/{record_commit}", result)
+        # The record now lives on the `verification` branch, so the block must
+        # not embed any local docs/verification/ path.
+        self.assertNotIn("docs/verification/", result)
         self.assertIn("independent desktop tests that do not gate this record", result)
         self.assertNotIn("failure", result)
         self.assertIn("the LUKS and production ISO jobs passed", result)

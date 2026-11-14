@@ -75,7 +75,7 @@ the base image's kernel (Koji's copy signed with the Fedora 44 key, also
 checked against a recorded SHA-256) with `packages/kernel-patches/*.patch`
 concatenated into the spec's `linux-kernel-test.patch` hook. Base variant only:
 no debug kernels, debuginfo, UKI, tools or headers. The release gains
-`.1.utah1` (`7.2.15-200.1.utah1.fc44`), which sorts above Fedora's build and
+`.1.utah1` (`7.3.3-200.1.utah1.fc44`), which sorts above Fedora's build and
 below any later one.
 
 The builder installs the result, with its `kernel-devel`, before the NVIDIA
@@ -84,9 +84,10 @@ installs it into the base image itself (`install`, which also removes Fedora's
 tree), so everything built `FROM` the cache -- the Containerfile's
 v4l2loopback stage included -- sees it as the base kernel. `kernel-devel`
 stays in `/utah-cache/fedora-kernel/`, where `install-v4l2loopback.sh` and
-`install-nvidia.sh` take it before trying Koji. The Containerfile runs
-`utah-install-fedora-kernel check` first, so a build on the pristine
-Hummingbird base fails instead of shipping the bug.
+`install-nvidia.sh` take it. `install-v4l2loopback.sh` falls back to Koji's
+signed path; `install-nvidia.sh` has no Koji fallback and fails if the cache
+lacks it. The Containerfile runs `utah-install-fedora-kernel check` first, so
+a build on the pristine Hummingbird base fails instead of shipping the bug.
 
 A/B evidence for the patch (2026-11-07, VM, 6700 fs-verity files on btrfs, 10
 cold-read passes each): Fedora `7.2.15-200.fc44` logged 18 `FILE CORRUPTED`
@@ -97,9 +98,13 @@ script, its `COPY`s, the `check` in the Containerfile and the
 `/utah-cache/fedora-kernel` lookups), and `main` can return to the pristine
 base. Moving `BASE_IMAGE` to a new kernel before then means moving
 `FEDORA_KERNEL_VERSION`, `FEDORA_KERNEL_RELEASE` and
-`FEDORA_KERNEL_SRPM_SHA256` with it; the `check` fails the build until they
-agree. Secure Boot: the rebuild is not signed by Fedora's key, so with Secure
-Boot enforcing, shim refuses it just as it refuses the OGC kernel.
+`FEDORA_KERNEL_SRPM_SHA256` in the same transaction. Otherwise the builder
+compiles the old kernel successfully, then `rpm -U` rejects replacing the
+newer base kernel. Never use `--oldpackage` to hide a stale source pin; rebuild
+the base's exact Fedora version and retain source signature and digest checks.
+The `check` also rejects a cache with the wrong module tree. Secure Boot: the
+rebuild is not signed by Fedora's key, so with Secure Boot enforcing, shim
+refuses it just as it refuses the OGC kernel.
 
 ## What the tag hashes
 
@@ -174,7 +179,7 @@ and one for the OGC kernel, so a single cache image serves all three flavors
 (comment, `Containerfile.kernel`).
 
 The vendor installer is verified against `NVIDIA_RUN_SHA256`, a digest
-committed in `install-nvidia.sh` beside `KERNEL_DEVEL_SHA256`, on both the
+committed in `install-nvidia.sh`, on both the
 download path and the `/utah-cache` path — the cache image is addressed by an
 input-hash tag, not an immutable digest, so a cached installer gets the same
 check as a fresh one. Bumping `UTAH_NVIDIA_DRIVER_VERSION` means updating
