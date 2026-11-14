@@ -166,17 +166,19 @@ there.
 requires the `e2e/post-testing/<image>` status for the digest `:testing` points
 at, on the commit that digest was built from.
 
-A separate least-privilege job proposes the main desktop's screenshots in
-`automation/iso-verification`, a documentation PR. It also depends on
-`production-iso`, so a failed production-ISO composition blocks this
-screenshot-refresh PR too, not just testing-tag promotion — a LUKS-only
-concern in `docs/verification` still has to wait on the whole matrix
-composing cleanly. It updates only the README evidence block and
-`docs/verification/`, preserving the current README's other content. The
-README links to the whole run, which also holds the independent testsuite legs;
-those do not gate the record and may still be running or red, so the README
-says so without predicting either outcome. The evidence update requires the
-LUKS and production-ISO jobs to pass.
+A separate least-privilege job publishes the main desktop's record to a
+`verification` branch and proposes a documentation PR that relinks the README
+evidence block to it. The branch is an orphan: each passing run force-pushes it
+as a single commit holding only the newest record, so screenshots never
+accumulate in `main`'s history and clones stop growing. It also depends on
+`production-iso`, so a failed production-ISO composition blocks this relink PR
+too, not just testing-tag promotion — the record still has to wait on the whole
+matrix composing cleanly. It updates only the README evidence link, preserving
+the current README's other content; the superseded `docs/verification/` path is
+replaced by the branch. The README links to the whole run, which also holds the
+independent testsuite legs; those do not gate the record and may still be
+running or red, so the README says so without predicting either outcome. The
+evidence update requires the LUKS and production-ISO jobs to pass.
 The repository must allow Actions to create pull requests; a denied write fails
 this job visibly, without deleting test artifacts. It does not auto-merge
 the evidence PR or imply a fresh pass for a different commit.
