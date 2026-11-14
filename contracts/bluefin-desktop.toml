@@ -144,6 +144,13 @@ files = [
   "/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2",
   # Plymouth stays graphical with Hummingbird's console=ttyS0 karg (#461).
   "/usr/lib/bootc/kargs.d/10-utah-plymouth.toml",
+  # Dakota system defaults (projectbluefin/dakota elements/bluefin/
+  # wireplumber-pcsp.bst, kexec-disable.bst, networkmanager-polkit.bst).
+  # Hummingbird's NetworkManager RPM already ships Dakota's wheel rule at the
+  # same path, so Utah asserts it but must not overlay its own copy.
+  "/usr/share/wireplumber/wireplumber.conf.d/51-disable-pcsp.conf",
+  "/usr/lib/sysctl.d/60-kexec-disable.conf",
+  "/usr/share/polkit-1/rules.d/org.freedesktop.NetworkManager.rules",
 ]
 
 [configuration.file_contains]
@@ -239,6 +246,22 @@ files = [
 # a refactor that drops it fails the build rather than the boot (#585).
 "/usr/lib/systemd/system/systemd-remount-fs.service.d/10-utah-composefs-skip.conf" = [
   "ConditionPathIsReadWrite=/",
+]
+# Dakota parity: the PC-speaker ALSA card must stay hidden so it never
+# becomes the default sink after resume (projectbluefin/dakota#1248).
+"/usr/share/wireplumber/wireplumber.conf.d/51-disable-pcsp.conf" = [
+  'device.name = "alsa_card.platform-pcspkr"',
+  "device.disabled = true",
+]
+# Dakota parity: kexec is disabled for Easy Anti-Cheat's measured boot chain.
+"/usr/lib/sysctl.d/60-kexec-disable.conf" = [
+  "kernel.kexec_load_disabled = 1",
+]
+# Dakota parity: local wheel users add system connections without a password.
+"/usr/share/polkit-1/rules.d/org.freedesktop.NetworkManager.rules" = [
+  'action.id == "org.freedesktop.NetworkManager.settings.modify.system"',
+  'subject.isInGroup("wheel")',
+  "subject.local",
 ]
 
 [flatpak]

@@ -6,13 +6,9 @@
 
 set -eoux pipefail
 
-# Match Bluefin's laptop defaults from 40-services.sh.
-if [ -f /usr/lib/systemd/logind.conf ]; then
-    sed -i 's/^#HandleLidSwitch=.*/HandleLidSwitch=suspend-then-hibernate/' /usr/lib/systemd/logind.conf
-    sed -i 's/^#HandleLidSwitchDocked=.*/HandleLidSwitchDocked=suspend-then-hibernate/' /usr/lib/systemd/logind.conf
-    sed -i 's/^#HandleLidSwitchExternalPower=.*/HandleLidSwitchExternalPower=suspend-then-hibernate/' /usr/lib/systemd/logind.conf
-    sed -i 's/^#SleepOperation=.*/SleepOperation=suspend-then-hibernate/' /usr/lib/systemd/logind.conf
-fi
+# Lid and sleep actions stay at systemd-logind's defaults (suspend), as on
+# Dakota, which ships no logind or sleep override. Utah has only zram swap,
+# so suspend-then-hibernate has no resume target and cannot work.
 
 unit_exists() {
     systemctl cat "$1" >/dev/null 2>&1
