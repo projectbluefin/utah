@@ -23,7 +23,7 @@ metadata:
 # Desktop Contract
 `contracts/bluefin-desktop.toml` is the runtime contract for Utah's
 Bluefin-derived desktop experience on top of Hummingbird. It is intentionally
-separate from `packages/bluefin.toml`: package parity proves RPMs; this file
+separate from `packages/base.toml`: package parity proves RPMs; this file
 proves Utah identity, Bluefin desktop defaults, and first-boot Flatpak policy
 (header comment, `contracts/bluefin-desktop.toml`). The contract is data; two
 verifiers enforce it — `scripts/verify-desktop-contract.py` for the TOML
@@ -149,7 +149,7 @@ On a fresh installed VM, check `systemctl --user status brew-preinstall`,
 settings persist and authenticated system update staging works; static gates
 prove image wiring, not a completed first-login download or GUI behavior.
 Homebrew native compilation invariants, the `/var/home` symlink for the brew prefix, and the polkit update-staging path are in the
-[ChairLift reference](desktop-contract/references/chairlift-runtime-invariants.md); `packages/bluefin.toml` `[fedora]` retains `make`, `gcc`, `gcc-c++`.
+[ChairLift reference](desktop-contract/references/chairlift-runtime-invariants.md); `packages/base.toml` `[fedora]` retains `make`, `gcc`, `gcc-c++`.
 
 ## NoNewPrivileges and SELinux domain transitions
 
@@ -456,7 +456,8 @@ fails the build if `dnsmasq.service`, `rpcbind.service`/`.socket`,
 `ipp-usb.service`, `httpd.service`, `httpd.socket`, `httpd@.service` or
 `htcacheclean.service` is enabled; masked, static or absent units count as
 off (Apache httpd, #948: WebDAV runs its own per-session httpd, so port 80
-stays closed). Keep it in sync with `baselines/triage.toml`.
+stays closed). When Dakota parity work (`baselines/triage.toml`) adds another
+network daemon that must stay off, list it here too.
 
 ### The fwupd-refresh unit pins a static user (#385)
 

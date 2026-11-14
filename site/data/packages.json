@@ -3,8 +3,8 @@
   "generator": "scripts/generate-site-data.py",
   "groups": [
     {
-      "blurb": "Packages Utah installs because Bluefin's own manifest asks for them. This file is a byte-for-byte copy of upstream's.",
-      "id": "bluefin",
+      "blurb": "Packages Utah installs because its base manifest asks for them. Frozen from Bluefin's base.toml, edited by hand since.",
+      "id": "base",
       "packages": [
         "adw-gtk3-theme",
         "adwaita-fonts-all",
@@ -68,7 +68,7 @@
         "zenity",
         "zsh"
       ],
-      "title": "Bluefin contract",
+      "title": "Base manifest",
       "transient": false
     },
     {

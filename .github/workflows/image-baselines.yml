@@ -1,10 +1,11 @@
 name: Refresh image baselines
 
-# Re-measures Utah against the published Bluefin and Dakota images (see
-# scripts/image-baseline.py) and proposes the refreshed snapshots as a pull
-# request. The contract job's `just check` then fails that pull request if a
-# Bluefin package Utah lacks is not in baselines/triage.toml, so a new gap
-# cannot land without a decision.
+# Re-measures Utah against Dakota, its parity target (see
+# scripts/image-baseline.py): ghcr.io/projectbluefin/dakota:testing and
+# ghcr.io/projectbluefin/utah:testing. It proposes the refreshed snapshots as a
+# pull request. The contract job's `just check` then fails that pull request if
+# a Dakota item Utah lacks is not in baselines/triage.toml, so a new gap cannot
+# land without a decision.
 
 on:
   schedule:
@@ -55,11 +56,11 @@ jobs:
         with:
           token: ${{ steps.app-token.outputs.token }}
           branch: automation/image-baselines
-          title: 'chore(baselines): refresh Bluefin, Dakota and Utah image baselines'
-          commit-message: 'chore(baselines): refresh Bluefin, Dakota and Utah image baselines'
+          title: 'chore(baselines): refresh Dakota and Utah image baselines'
+          commit-message: 'chore(baselines): refresh Dakota and Utah image baselines'
           body: |
             Weekly re-measurement by `just baselines`. Read `baselines/GAP.md`:
-            rows marked **new** are Bluefin packages Utah lacks that are not yet
+            rows marked **new** are Dakota items Utah lacks that are not yet
             in `baselines/triage.toml`, and `just check` fails until each one is
             triaged. Drop entries the check reports as no longer gaps.
           add-paths: |

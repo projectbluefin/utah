@@ -129,7 +129,7 @@ mkdir -p "${renamer_dir}"
 unzip -o "${renamer_zip}" -d "${renamer_dir}"
 rm -f "${renamer_zip}"
 
-# Copyous clipboard manager (Gda/libgda-sqlite come from packages/bluefin.toml)
+# Copyous clipboard manager (Gda/libgda-sqlite come from packages/base.toml)
 copyous_zip="/tmp/copyous@boerdereinar.dev.zip"
 copyous_sha256="e4af596ffeab8137c90b0c178b44160e9fc4dfb1296fb5573ae36871e485a90a"
 copyous_dir="/usr/share/gnome-shell/extensions/copyous@boerdereinar.dev"

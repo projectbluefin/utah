@@ -73,42 +73,6 @@ post-build verification workflows, not the complete workflow inventory:
 - `.github/workflows/sync-main-to-testing.yml` -- source pushes to `main`,
   nightly cron, and manual dispatch; explicitly dispatches the testing build
   after syncing. Token-authenticated branch pushes alone do not start CI.
-- `.github/workflows/update-bluefin-parity.yml` -- nightly and manual
-  dispatch. It resolves Bluefin `main` and uses one fixed branch,
-  `automation/bluefin-parity`, so `create-pull-request` updates the existing
-  review rather than opening duplicates. It does not auto-merge. That branch is
-  disposable: `create-pull-request` rebuilds it from `main` plus the generated
-  changes each run and force-resets it when the result differs, so a commit
-  pushed onto the open bump PR is discarded at the next run. Overlay fixes the
-  bump needs go in their own pull request against `main`, not onto the bump
-  branch; see `package-contract.md`. Before
-  proposing, it reruns `scripts/generate-site-data.py` and
-  `scripts/check-doc-counts.py --write`, so the bump carries the new
-  `site/data/packages.json` and the README / `package-contract.md` counts
-  that `just check` compares against the manifests. The generator is passed
-  `--generated-at` with the upstream commit date rather than defaulting to
-  today, so an unchanged upstream ref regenerates byte-identical files and
-  `create-pull-request` leaves the open bump branch alone.
-  The proposal action runs even when upstream equals `main`: it must see the
-  empty diff to close a previously opened bump after an upstream reversion.
-  Its body file is created on both paths, while explicit CI dispatch remains
-  restricted to `created`/`updated` proposals.
-
-  The bump PR would otherwise arrive with **no checks**: GitHub does not
-  start `on: pull_request` workflows for pull requests created with the
-  default `GITHUB_TOKEN`. The workflow's last step dispatches
-  `gh workflow run build.yml --ref automation/bluefin-parity -f
-  contract_only=true` right after `create-pull-request` runs, so the run
-  attaches to the branch head, which is the PR head, and
-  `check`/`check-parity`/`check-repos` report on the bump PR itself. It is
-  contract-only on purpose: a dispatch is not a `pull_request` event, so a
-  full build would push and sign `testing` images from an upstream package
-  set no maintainer has reviewed yet. The images are built when the merged
-  change reaches `testing`. Needs `actions: write`, which the job holds.
-  Gated on `create-pull-request`'s own `pull-request-operation` output being
-  `created` or `updated` (not on the parity diff alone), so a nightly run
-  against an unmerged, unchanged bump branch does not re-dispatch for
-  nothing.
 - `.github/workflows/update-gnome-extensions.yml` -- weekly and manual
   submodule updates. `prepare-gnome-extension-bumps.py` validates each
   tracked-branch head; missing or invalid metadata keeps that source pinned,
@@ -129,7 +93,8 @@ post-build verification workflows, not the complete workflow inventory:
   A successful image build is not proof of a reported rendering/CPU fix:
   retain #992/#997 until actual runtime evidence addresses them.
 - `.github/workflows/image-baselines.yml` -- weekly and manual
-  re-measurement of the Bluefin, Dakota and Utah image baselines. Like the
+  re-measurement of the Dakota and Utah image baselines (Dakota is the only
+  parity target; see `baselines/README.md`). Like the
   extension updater, trusted `main` alone mints a repository-scoped Mergeraptor
   App token after `just baselines` has run, and uses it only to create or
   update the proposal, so the normal contract and image-build checks run on
@@ -185,7 +150,7 @@ queue:
 | --- | --- | --- |
 | `prow.yml` (tide, `cncf/prow-github-actions` v3.5.0; `tide.merge_queue: auto`, `merge_method: squash` in `projectbluefin/.project/prow.yaml`) | On `lgtm` + `approved`, enqueues with `enqueuePullRequest` on the job's `GITHUB_TOKEN` (no `token` secret is passed) | At risk: GitHub starts no workflow for an event `GITHUB_TOKEN` caused, so a group prow enqueues may get no `merge_group` runs and time out (prow's own docs say this is "being verified live"). Pass prow a GitHub App `token` that may enqueue, or have a maintainer click "Merge when ready" |
 | Renovate (`renovate.json`, `local>projectbluefin/renovate-config` = `config:recommended`) | No automerge; the `utah-packages` digest group sets `automerge: false` | A maintainer (or prow) enqueues |
-| `update-bluefin-parity.yml`, `update-gnome-extensions.yml`, `image-baselines.yml`, `promote-testing-to-main.yml` | Open or maintain pull requests only | A maintainer (or prow) enqueues |
+| `update-gnome-extensions.yml`, `image-baselines.yml`, `promote-testing-to-main.yml` | Open or maintain pull requests only | A maintainer (or prow) enqueues |
 | `sync-main-to-testing.yml` | Pushes `testing`, not `main` | Unaffected |
 
 Queue activation also requires the App's permissions, not just its secrets.

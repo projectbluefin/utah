@@ -204,7 +204,7 @@ class MainTests(unittest.TestCase):
         return calls
 
     def manifest(self):
-        return str(ROOT / "packages/bluefin.toml")
+        return str(ROOT / "packages/base.toml")
 
     def test_resolves_against_the_digest_pinned_images_from_the_containerfile(self):
         args = dict(re.findall(r"^ARG ([A-Z_]+)=(\S+)$", (ROOT / "Containerfile").read_text(), re.M))
@@ -223,7 +223,7 @@ class MainTests(unittest.TestCase):
         )
 
     def test_honours_an_explicitly_named_overlay(self):
-        overlay = ROOT / "packages/bluefin.toml"
+        overlay = ROOT / "packages/base.toml"
         calls = self.run_main([self.manifest(), str(overlay)])
 
         self.assertIn(f"{overlay}:/tmp/utah.toml:ro,Z", calls["command"])
@@ -248,7 +248,7 @@ class MainTests(unittest.TestCase):
 
         self.assertEqual(
             command[-4:],
-            ["/tmp/install-packages.py", "--resolve", "/tmp/bluefin.toml", "/tmp/utah.toml"],
+            ["/tmp/install-packages.py", "--resolve", "/tmp/base.toml", "/tmp/utah.toml"],
         )
         self.assertIn(f"{ROOT / 'packages'}:/etc/yum.repos.d:ro,Z", command)
         self.assertIn(
@@ -286,7 +286,7 @@ class CheckUnavailableTests(unittest.TestCase):
                 for name in names}
 
     def run_check(self, overlay=None, **kwargs):
-        argv = ["--check-unavailable", str(ROOT / "packages/bluefin.toml")]
+        argv = ["--check-unavailable", str(ROOT / "packages/base.toml")]
         if overlay is not None:
             argv.append(str(overlay))
         return MainTests().run_main(argv, **kwargs)
