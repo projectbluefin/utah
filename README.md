@@ -56,7 +56,7 @@ Like Bluefin, Utah builds four hardware flavors (`utah`, `utah-nvidia`,
 | Tag | Stream | Status |
 | ---: | ---: | :--- |
 | `:testing` | Testing | Published at `ghcr.io/projectbluefin/utah:testing` after end-to-end ISO validation passes. |
-| `:stable` | Stable | Rolling tag, moved from `:testing` on each promotion to `main` after the release gate passes on the exact candidate digests. Pre-alpha like everything here. |
+| `:stable` | Stable | Rolling tag, moved from `:testing` on each promotion to `main` after the release gate passes on the exact candidate digests, and by a daily check once `:stable` is over a week old and `:testing` has moved on. Pre-alpha like everything here. |
 
 ## Package parity with Bluefin
 

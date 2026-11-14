@@ -1,7 +1,7 @@
 ---
 name: ci-workflows
-version: "1.3"
-last_updated: "2026-10-31"
+version: "1.4"
+last_updated: "2026-11-07"
 id: ci-workflows
 one_line_purpose: Navigate Utah's build, promote, and sync workflow topology.
 entry_point: docs/skills/ci-workflows.md
@@ -142,12 +142,17 @@ post-build verification workflows, not the complete workflow inventory:
   run never block promotion and an older run never moves it backwards
   (`scripts/promotion-ratchet.py`; details in
   [iso-e2e](ci-workflows/references/iso-e2e.md)).
-- `.github/workflows/execute-release.yml` -- promotion pushes to `main` and
-  manual dispatch retag `:stable`. Its `e2e-evidence` job gates the release on
+- `.github/workflows/execute-release.yml` -- promotion pushes to `main`,
+  manual dispatch and a daily 06:00 UTC check retag `:stable`. The daily run
+  releases only when `:stable` last moved over seven days ago (or is missing)
+  and `:testing` points at a different digest, and otherwise posts a
+  `::notice` saying why not. `scripts/release-trigger.py` dates `:stable` by
+  the retag step of past runs, never by image metadata
+  ([release-cadence](ci-workflows/references/release-cadence.md)). Its
+  `e2e-evidence` job gates every release on
   the E2E evidence recorded for the exact digests `:testing` points at, not on
   the `testing` branch tip, then hands the reusable release the
-  commit-addressed source tags it verified
-  ([release-cadence](ci-workflows/references/release-cadence.md)).
+  commit-addressed source tags it verified.
 - `.github/workflows/prow.yml` -- slash commands on issues and pull requests,
   roster authorization via `projectbluefin/.project/.github/workflows/prow-authorize.yml`,
   issue transfers via `prow-transfer.yml`, and label syncing via

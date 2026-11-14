@@ -3,11 +3,17 @@ name: Execute stable release
 on:
   push:
     branches: [main]
-  # The weekly stable release (#336): every Monday after the nightly cycle has
-  # settled. It goes through the same e2e-evidence gate and release gate as a
-  # manual run, so a week with no E2E-green :testing releases nothing.
+  # The daily stable check: "if :stable is over a week old and :testing
+  # passes, we promote it". scripts/release-trigger.py releases only when
+  # :stable last moved more than 7 days ago (or is missing) and :testing points
+  # at something new; every other day it says why nothing moved. 06:00 UTC
+  # follows the nightly cycle: sync-main-to-testing at 22:20, the testing build
+  # it dispatches (about two hours), post-testing-e2e moving :testing (one to
+  # two hours more) and the 04:00 promotion-PR heartbeat. A release goes
+  # through the same e2e-evidence gate and release gate as a manual run, so a
+  # stale :stable with no E2E-green :testing still releases nothing.
   schedule:
-    - cron: "0 6 * * 1"
+    - cron: "0 6 * * *"
   workflow_dispatch:
 
 # One release at a time; a schedule that overlaps a manual run queues, never
@@ -34,23 +40,40 @@ jobs:
       - id: resolve
         run: echo "list=$(python3 scripts/flavors.py releases)" >> "$GITHUB_OUTPUT"
 
-  # Whether this push is the testing-to-main promotion. The commit subject used
-  # to be the only signal, which is silent when it is wrong: a merge commit
-  # subject ("Merge pull request #N from .../auto/promote-testing-to-main") does
-  # not match the prefix, so check-trigger succeeded, execute was skipped, the
-  # workflow reported green and no :stable tag moved -- indistinguishable from an
-  # ordinary merge. scripts/release-trigger.py also recognises a commit that came
-  # from the promotion branch, and annotates every outcome so a skipped release
-  # is legible instead of invisible.
+  # Whether this run releases. A push releases when it is the testing-to-main
+  # promotion. The commit subject used to be the only signal, which is silent
+  # when it is wrong: a merge commit subject ("Merge pull request #N from
+  # .../auto/promote-testing-to-main") does not match the prefix, so
+  # check-trigger succeeded, execute was skipped, the workflow reported green
+  # and no :stable tag moved -- indistinguishable from an ordinary merge.
+  # scripts/release-trigger.py also recognises a commit that came from the
+  # promotion branch, and annotates every outcome so a skipped release is
+  # legible instead of invisible. A scheduled run reads every flavor's
+  # :stable and :testing digests and the last execute-release run that
+  # retagged :stable; a manual dispatch always releases.
   check-trigger:
+    needs: [variants]
     runs-on: ubuntu-latest
+    # actions + checks: read the retag step of past execute-release runs;
+    # packages: read the :stable and :testing digests (scheduled runs only).
     permissions:
+      actions: read
+      checks: read
       contents: read
+      packages: read
       pull-requests: read
     outputs:
       is-promotion: ${{ steps.check.outputs.is-promotion }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Authenticate to GHCR
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          command -v skopeo >/dev/null || { sudo apt-get update && sudo apt-get install -y skopeo; }
+          echo "$GH_TOKEN" | skopeo login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
       - id: check
         env:
           GH_TOKEN: ${{ github.token }}
@@ -58,6 +81,8 @@ jobs:
           MESSAGE: ${{ github.event.head_commit.message }}
           SHA: ${{ github.sha }}
           REPOSITORY: ${{ github.repository }}
+          REGISTRY: ghcr.io/${{ github.repository_owner }}
+          VARIANTS: ${{ needs.variants.outputs.list }}
         run: python3 scripts/release-trigger.py
 
   # The release retags what :testing points at. :testing only ever moves
