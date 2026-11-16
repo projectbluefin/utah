@@ -28,8 +28,12 @@ files = [
   "/usr/share/bluefin-artwork-logos/bluefin-logo-dark.png",
   "/usr/share/icons/hicolor/scalable/actions/ublue-logo-symbolic.svg",
   "/usr/share/icons/hicolor/icon-theme.cache",
-  # The os-release LOGO icon; common ships Bluefin's raptor under this name.
-  "/usr/share/pixmaps/fedora-logo-icon.png",
+  # The os-release LOGO icon and the names GNOME looks up beside it, Bluefin's
+  # artwork wordmarks as Dakota installs them (common.bst, #1266).
+  "/usr/share/pixmaps/img-logo-icon.svg",
+  "/usr/share/pixmaps/img-logo-icon-dark.svg",
+  "/usr/share/pixmaps/img-logo-icon-text.svg",
+  "/usr/share/pixmaps/img-logo-icon-text-dark.svg",
   # The boot splash watermark the bgrt theme draws (Bluefin's raptor, from
   # common); fedora-logos owns and erases this path during the logo swap.
   "/usr/share/plymouth/themes/spinner/watermark.png",
@@ -38,8 +42,6 @@ files = [
   "/usr/share/backgrounds/bluefin/01-bluefin.xml",
   "/usr/share/backgrounds/bluefin/06-bluefin.xml",
   "/usr/share/glib-2.0/schemas/zz0-bluefin-modifications.gschema.override",
-  "/usr/share/ublue-os/fastfetch-user-count",
-  "/usr/share/ublue-os/bazaar-install-count",
   "/usr/bin/chairlift-helper",
   "/usr/share/polkit-1/actions/io.projectbluefin.chairlift.ublue.policy",
 ]
@@ -57,7 +59,7 @@ VENDOR_URL = "https://projectbluefin.io"
 DEFAULT_HOSTNAME = "bluefin"
 VERSION_CODENAME = "Utahraptor"
 IMAGE_ID = "utah"
-LOGO = "fedora-logo-icon"
+LOGO = "img-logo-icon"
 
 [branding.os_release_patterns]
 PRETTY_NAME = '^Bluefin \(Version: .+\)$'
@@ -135,15 +137,17 @@ files = [
   # Dakota desktop parity (#675): first-boot install-date stamping and the
   # booted-image snapshot for fastfetch, plus the one-shot removal of the live
   # ISO's installer Flatpak, all from dakota-config-firstboot-date (#1265).
-  # Wallpaper rotation stays with Common's per-user timer (see
-  # configure-services.sh), so the Dakota month symlink units are
-  # intentionally not shipped.
   "/usr/lib/systemd/system/ublue-firstboot-date.path",
   "/usr/lib/systemd/system/ublue-firstboot-date.service",
   "/usr/bin/ublue-firstboot-date",
   "/usr/lib/systemd/system/ublue-booted-image.service",
   "/usr/bin/ublue-booted-image-sync",
   "/usr/lib/systemd/system/bluefin-remove-installer.service",
+  # Dakota's two monthly-wallpaper units (#1266); the default wallpaper stays
+  # common's (see configure-services.sh).
+  "/usr/lib/systemd/system/ublue-wallpaper-month.service",
+  "/usr/lib/systemd/system/bluefin-wallpaper-month.service",
+  "/usr/libexec/bluefin-wallpaper-month-sync",
   # Common files configure-services.sh patches or checks for Dakota parity.
   # file_contains skips missing files, so list them here to fail the build if
   # Common drops one.
@@ -151,6 +155,7 @@ files = [
   "/usr/bin/ublue-image-info.sh",
   "/usr/libexec/ublue-booted-image",
   "/etc/profile.d/uwelcome.sh",
+  "/etc/skel/.config/ghostty/config.ghostty",
   # Dakota's shell defaults (projectbluefin/dakota elements/bluefin/common.bst).
   "/etc/profile.d/bluefin-shell-defaults.sh",
   # Common's Red Hat signature policy uses the unsuffixed key path. The pinned
@@ -215,9 +220,10 @@ files = [
 # by ublue-firstboot-date.service instead of inferring age from /var/log.
 "/usr/share/ublue-os/fastfetch.jsonc" = [
   "/var/lib/ublue-os/install-date",
-  # The community stats come from bluefin-stats-refresh.service's cache (#860).
-  "cat /var/cache/bluefin-stats/fastfetch-user-count 2>/dev/null || cat /usr/share/ublue-os/fastfetch-user-count",
-  "cat /var/cache/bluefin-stats/bazaar-install-count 2>/dev/null || cat /usr/share/ublue-os/bazaar-install-count",
+]
+# Dakota's patches/common/0002-ghostty-dual-theme.patch (#1266).
+"/etc/skel/.config/ghostty/config.ghostty" = [
+  "theme = light:Catppuccin Latte,dark:Catppuccin Mocha",
 ]
 # Dakota parity (#675): ublue-image-info.sh reads the booted tag through
 # Common's ublue-booted-image reader, which falls back to the boot-time
@@ -456,7 +462,8 @@ enabled = [
   "bootc-unified-storage.timer",
   "brew-setup.service",
   "cups.socket",
-  "bluefin-stats-refresh.timer",
+  "ublue-wallpaper-month.service",
+  "bluefin-wallpaper-month.service",
   "dconf-update.service",
   "flatpak-nuke-fedora.service",
   "flatpak-preinstall.service",
