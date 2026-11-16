@@ -31,27 +31,17 @@ class ShellVersionReportTests(unittest.TestCase):
             )
             self.assertEqual(MODULE.shell_versions(extension), "51")
 
-    def test_uses_verifier_metadata_location_for_nested_sources(self) -> None:
+    def test_uses_verifier_metadata_location_for_submodule_sources(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
-            extension = base / "tmp/tilingshell@ferrarodomenico.com"
-            (extension / "resources").mkdir(parents=True)
-            (extension / "resources/metadata.json").write_text('{"shell-version": ["51"]}')
-            self.assertEqual(MODULE.shell_versions(extension, base), "51")
-
-    def test_reports_each_extension_in_multi_extension_submodule(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            base = Path(tmp)
-            extension = base / "tmp/bluefin-bling"
-            for name, version in (("syncthing-toggle", "50"), ("power-status-color", "51")):
-                (extension / "extensions" / name).mkdir(parents=True)
-                (extension / "extensions" / name / "metadata.json").write_text(
-                    '{"uuid": "%s@projectbluefin.io", "shell-version": ["%s"]}' % (name, version)
-                )
+            extension = base / "gsconnect@andyholmes.github.io"
+            (extension / "data").mkdir(parents=True)
+            (extension / "data/metadata.json.in").write_text('{"shell-version": ["51"]}')
             self.assertEqual(
-                MODULE.shell_versions(extension, base),
-                "power-status-color@projectbluefin.io: 51; syncthing-toggle@projectbluefin.io: 50",
+                MODULE.metadata_files(extension, base),
+                [("gsconnect@andyholmes.github.io", extension / "data/metadata.json.in")],
             )
+            self.assertEqual(MODULE.shell_versions(extension, base), "51")
 
     def test_every_submodule_maps_to_verifier_metadata(self) -> None:
         paths = subprocess.run(
@@ -105,17 +95,6 @@ class ShellVersionReportTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 1)
             self.assertEqual(result.stdout, "")
-
-    def test_missing_member_of_multi_extension_submodule_is_rejected(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            base = Path(tmp)
-            extension = base / "tmp/bluefin-bling"
-            metadata = extension / "extensions/syncthing-toggle/metadata.json"
-            metadata.parent.mkdir(parents=True)
-            metadata.write_text('{"uuid": "syncthing-toggle@projectbluefin.io", "shell-version": ["51"]}')
-            (extension / "extensions/missing-metadata").mkdir()
-            with self.assertRaises(ValueError):
-                MODULE.shell_versions(extension, base)
 
 
 if __name__ == "__main__":

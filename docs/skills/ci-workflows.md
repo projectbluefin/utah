@@ -74,11 +74,12 @@ post-build verification workflows, not the complete workflow inventory:
   nightly cron, and manual dispatch; explicitly dispatches the testing build
   after syncing. Token-authenticated branch pushes alone do not start CI.
 - `.github/workflows/update-gnome-extensions.yml` -- weekly and manual
-  submodule updates. `prepare-gnome-extension-bumps.py` validates each
+  submodule updates (GSConnect is the only extension submodule; the rest are
+  factory RPMs, #1235). `prepare-gnome-extension-bumps.py` validates each
   tracked-branch head; missing or invalid metadata keeps that source pinned,
   warns in the run summary, and does not block other candidates. It uses the
   metadata paths in `scripts/verify-gnome-extensions.py`
-  (`SOURCE_EXTENSIONS`); update that map when adding an extension. Paths are
+  (`SOURCE_EXTENSIONS`); update that map when adding a submodule. Paths are
   passed as argv and `shell-version` values are allow-listed in the report.
   Trusted `main` alone may mint a repository-scoped Mergeraptor App token,
   with contents and pull-request write permissions, after metadata

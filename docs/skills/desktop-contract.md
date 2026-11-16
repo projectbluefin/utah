@@ -243,75 +243,60 @@ The scan covers unit files only: a shell script may still use `--force` on a
 throwaway remote it created itself, as `iso/live/src/install-flatpaks.sh` does
 for the live image's own `installer-local` remote.
 
-## GNOME extensions are pinned submodules
+## GNOME extensions are factory RPMs
 
-Utah deliberately differs from Bluefin Classic's RPM path: selected GNOME Shell
-extensions are pinned Git submodules and built into the image. `.gitmodules`
-has 16 trees under `system_files/shared/usr/share/gnome-shell/extensions/`;
-gitlinks pin exact commits. Weekly automation proposes valid tracked-branch
-heads; missing or invalid metadata keeps that source pinned and does not block
-other candidates. Only matching Utah submodules represent extensions; do not
-add RPM recipes for an extension already covered here. A repository-scoped
-App token is minted on trusted `main` only, after the preparer validates each
-pin; that App opens or updates the proposal, so the normal `pull_request`
-contract and image-build CI run on its exact head instead of a contract-only
-dispatch. Hive review, required checks and the normal merge policy still
-govern landing, and no automated merge is enabled. Source metadata alone does
-not prove GNOME 51 runtime compatibility. Edit `.gitmodules` for source URL or branch changes; automation advances existing pins.
-Search Light was dropped: GNOME 51 removed `set_shader_source`, which its shader code calls, so it failed ISO tests. Only Dakota's extension set is enabled by default ([Dakota desktop defaults](desktop-contract/references/dakota-desktop-defaults.md)).
+Utah installs Dakota's extension set (`elements/bluefin/gnome-shell-extensions.bst`)
+from factory RPMs listed in `packages/utah.toml` `[parity]` (#1235): Fedora's
+recipes for AppIndicator, Blur my Shell, Caffeine and Dash to Dock, and the
+factory's `gnome-shell-extension-*` recipes for Bluefin's own eleven, pinned to
+Dakota's element refs (utah-packages `docs/skills/gnome-shell-extension-recipes.md`).
+Each RPM installs its schema in `/usr/share/glib-2.0/schemas` with 0644/0755
+modes. Copyous, Quick Settings Audio Panel and the rest of bluefin-bling are
+not shipped, as on Dakota. The Syncthing toggle is bling's
+`syncthing-toggle@projectbluefin.io` ("Sync Folder"), as on Dakota; Utah no longer
+renames rehhouari's. Only Dakota's extension set is enabled by default
+([Dakota desktop defaults](desktop-contract/references/dakota-desktop-defaults.md)),
+and `disable-extension-version-validation=true` stays in the `zz3` override:
+several of the RPMs declare only GNOME 50, which is also how Dakota runs them.
 
-`scripts/verify-gnome-extensions.py` checks GNOME 51 support and provenance:
+GSConnect is the one pinned submodule left (`.gitmodules`), built with meson by
+`scripts/build-gnome-extensions.sh`. Weekly automation
+(`update-gnome-extensions.yml`) proposes valid upstream heads for it; an App
+token minted on trusted `main` opens the proposal so normal CI runs on its head.
 
-- **Source mode** — `--source` checks the submodule metadata and indexed
-  gitlinks in the working tree; this is what `just check` runs.
+`scripts/verify-gnome-extensions.py` maps every UUID either to the submodule
+(`SOURCE_EXTENSIONS`) or to its package (`PACKAGED_EXTENSIONS`):
+
+- **Source mode** — `--source` (run by `just check`) checks GSConnect's
+  submodule metadata and indexed gitlink, and that every packaged extension's
+  RPM is requested in `packages/utah.toml` `[parity]`.
 - **Installed mode** — checks `/usr/share/gnome-shell/extensions` under an image
-  root. The Containerfile runs
-  `/usr/local/libexec/utah-verify-gnome-extensions --record-provenance` after
-  `utah-build-gnome-extensions`. Files must be world-readable and not
-  group/world-writable: release zips kept `0600` metadata, so gnome-shell hit
-  "Permission denied". The build normalizes with `chmod -R u+rwX,go+rX,go-w`.
-- **Provenance** — `--print-provenance` (host, build recipes) resolves UUIDs to
-  `.gitmodules` entries and indexed gitlinks; `--source` runs the same check.
-  `--record-provenance` (image) writes `/usr/share/utah/provenance.json`.
-  See [Image provenance](containerfile.md#image-provenance).
+  root: every UUID present and declaring GNOME 51 (or validation disabled), no
+  `<uuid>/schemas`, files world-readable and not group/world-writable, and every
+  `org/gnome/shell/extensions/*` section in `/etc/dconf/db/distro.d` naming a
+  `path=` an installed schema declares
+  ([extension dconf defaults](desktop-contract/references/extension-dconf-defaults.md)).
+- **Provenance** — `--print-provenance` (host) resolves GSConnect to its
+  gitlink; `--record-provenance` (image) adds each packaged extension's owning
+  RPM NEVRA (`rpm -qf`, which must name the expected package) and writes
+  `/usr/share/utah/provenance.json`. See [Image provenance](containerfile.md#image-provenance).
 
 GSConnect's meson install skips `update_desktop_database`: Hummingbird and Utah lack `desktop-file-utils`.
 Extension schemas are global and common's overrides must resolve: see [extension schemas](desktop-contract/references/extension-schemas.md).
 
-Declaring GNOME 51 in `metadata.json` is necessary, not sufficient: the
-GSConnect and Dash to Dock failures below passed the metadata check, built
-cleanly, and only showed up in a booted session's journal
-(`journalctl _UID=1000 | grep -i extension`). Blur my Shell's pin update is
-separate and still needs boot testing.
-
-- **Blur my Shell** is pinned to upstream `master` v77 (`b973ec8f`), beyond v76;
-  it fixes popup first-open handling, modal blur, and excess allocation while
-  painting. Metadata declares GNOME 51, but boot testing is still required.
-- **GSConnect** tracks v74. v73 removed final
-  `GjsPrivate.DBusImplementation` subclassing that had stopped its daemon at
-  login; the build scans all sources for regressions. Upstream declares GNOME 51.
-- **Dash to Dock** tracks v110 on `master` (no EGO branch past v106); v106's
-  removed `pointerWatcher.js` import was replaced by `Meta.CursorTracker`.
-
-`tests/test_gnome_extensions.py` checks the GSConnect and Dash to Dock pinned
-sources. On a booted VM, copy the changed tree under `bootc usr-overlay`,
-restart `gdm`, then verify
-`gnome-extensions info <uuid>` reports `State: ACTIVE`; inspect the session
-journal for load errors. At first login, poll for `ACTIVE` within the retry
-budget; see [extension startup states](ci-workflows/references/iso-e2e.md#extension-startup-states).
+Declaring GNOME 51 in `metadata.json` is necessary, not sufficient: GSConnect's
+final-type failure passed the metadata check and only showed up in a booted
+session's journal (`journalctl _UID=1000 | grep -i extension`). GSConnect
+tracks v74; v73 removed the final `GjsPrivate.DBusImplementation` subclassing
+that had stopped its daemon at login, and the build scans all sources for
+regressions (`tests/test_gnome_extensions.py`). On a booted VM, verify
+`gnome-extensions info <uuid>` reports `State: ACTIVE`; at first login, poll
+within the retry budget ([extension startup states](ci-workflows/references/iso-e2e.md#extension-startup-states)).
 For a persistent failure, query `org.gnome.Shell.Extensions.GetExtensionErrors`
 with `gdbus call --session --dest org.gnome.Shell.Extensions --object-path
-/org/gnome/Shell/Extensions --method` and the UUID (#969); the LUKS test
-prints this diagnostic because the journal can miss it. SSH probes must
-set `XDG_RUNTIME_DIR=/run/user/<uid>`
-and `DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/<uid>/bus`, because SSH does
-not inherit the graphical session's D-Bus environment. Extension dconf
-defaults in `08-dakota-extension-defaults` use short schema paths, never the
-UUID folder name, and GNOME applies a dconf key only when a shipped schema
-declares that path. The guard in
-[`references/extension-dconf-defaults.md`](references/extension-dconf-defaults.md)
-(`tests/test_dakota_extension_defaults.py`) asserts every section header matches
-a `path=` the extensions ship; it skips when the submodules are not checked out.
+/org/gnome/Shell/Extensions --method` and the UUID (#969). SSH probes must set
+`XDG_RUNTIME_DIR=/run/user/<uid>` and
+`DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/<uid>/bus`.
 
 ## The OS logo is an os-release key
 

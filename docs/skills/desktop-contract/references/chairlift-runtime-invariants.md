@@ -23,7 +23,7 @@ the build closure must therefore hold:
   explicit override, it belongs in `[parity]` with a comment, never by
   shadowing the contract.
 - `scripts/configure-services.sh` removes the build-time extension
-  toolchain (`dbus-devel`, `glib2-devel`, `meson`, `sassc`) before the
+  toolchain (`dbus-devel`, `glib2-devel`, `meson`) before the
   image is shipped. The `make`/`gcc`/`gcc-c++` triple is not in the
   removal list; adding any of them breaks the Homebrew native compile
   path. The removal is followed by a `for pkg in ... ; do rpm -q "$pkg"`
@@ -81,7 +81,7 @@ invariants above:
 - `HomebrewToolchainRetentionTests` pins `make`/`gcc`/`gcc-c++` in
   `packages/base.toml` `[fedora]` and rejects their removal in
   `configure-services.sh`, while keeping the build-time toolchain
-  (`dbus-devel`, `glib2-devel`, `meson`, `sassc`) intact.
+  (`dbus-devel`, `glib2-devel`, `meson`) intact.
 - `HomebrewSymlinkPathTests` pins both spellings of the brewed prefix
   across the contract and the system_files hooks.
 - `DesktopContractTestsClean` runs

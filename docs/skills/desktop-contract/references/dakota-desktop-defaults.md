@@ -9,10 +9,11 @@ Paths below are in the Dakota repository.
 in Dakota's order (`elements/bluefin/shell-extensions/disable-ext-validator.bst`):
 Caffeine, AppIndicator, Bazaar integration, Blur my Shell, Dash to Dock, Fuzzy
 App Search, Gradia, GSConnect, Custom Command List, BudsLink-Companion and
-Tiling Shell. The audio-device hider and renamer, Tailscale QS, Copyous, the
-Syncthing toggle, Quick Settings Audio Panel and the bling extensions stay
-installed but opt-in. A user who has changed their extension list keeps it; an
-untouched profile follows the default.
+Tiling Shell. The audio-device hider and renamer, Tailscale QS, the Sync
+Folder toggle (`syncthing-toggle@projectbluefin.io`) and Power Status Color
+are installed but opt-in, as on Dakota; Copyous, Quick Settings Audio Panel and
+the rest of bluefin-bling are not shipped (#1235). A user who has changed their
+extension list keeps it; an untouched profile follows the default.
 
 `[gsettings.values]` in `contracts/bluefin-desktop.toml` pins the exact list
 `gsettings get org.gnome.shell enabled-extensions` prints in the image.

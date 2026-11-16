@@ -340,18 +340,16 @@ add or remove bytes, or do the edit in the layer that first writes the file.
 
 Canonical build recipes pass the full Utah commit and extension provenance
 through late build arguments. `verify-gnome-extensions.py --print-provenance`
-resolves each installed UUID to `.gitmodules` and the index gitlink, rejecting
-mismatched or modified checkouts. Resolve this in a standalone shell assignment
-before invoking the build engine, so `set -e` stops on a failed pin check;
-command substitutions inside build arguments do not propagate their failure.
-Two Bluefin Bling extensions share one pin.
-Release-archive extensions record the verified download URL and SHA256 as
-well as their reference source commit; that commit does not identify the
-archive's built bytes.
+resolves each submodule extension (GSConnect) to `.gitmodules` and the index
+gitlink, rejecting mismatched or modified checkouts. Resolve this in a
+standalone shell assignment before invoking the build engine, so `set -e`
+stops on a failed pin check; command substitutions inside build arguments do
+not propagate their failure.
 
 After extension installation, `--record-provenance` writes
-`/usr/share/utah/provenance.json`, including installed metadata versions and
-the image references actually passed to the build. For kernel flavors,
+`/usr/share/utah/provenance.json`, including installed metadata versions, the
+owning RPM's NEVRA for every packaged extension (#1235) and the image
+references actually passed to the build. For kernel flavors,
 `build-ghcr` and `check-reproducible-build.sh` replace `BASE_IMAGE` with the
 cosign-verified kernel cache, so `base_image` identifies `utah-kernel-cache`,
 not the Hummingbird pin declared at the top of the Containerfile. The declared

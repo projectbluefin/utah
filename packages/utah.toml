@@ -146,10 +146,6 @@ libadwaita = "1"
 # image's repodata. Without it, colour emoji fell back to whatever symbol
 # font matched, which in GNOME 51 mostly meant empty boxes in chats and web
 # content.
-#
-# unzip is also in [build]; it is listed here because configure-services.sh
-# removes the build tooling after the extension build, and Bluefin ships
-# unzip to users. The removal line skips it for that reason.
 packages = [
     # Networking
     "NetworkManager-config-connectivity-fedora",
@@ -549,6 +545,29 @@ packages = [
     "papers-libs",
     "papers-thumbnailer",
     "papers-nautilus",
+    # GNOME Shell extensions, as Dakota installs them
+    # (elements/bluefin/gnome-shell-extensions.bst), from factory RPMs instead
+    # of vendored submodules (#1235): Fedora's recipes for the four Fedora
+    # ships (utah-packages#1023) and the factory's for Bluefin's own
+    # (utah-packages#1028). Each installs its schema globally. GSConnect is
+    # still a pinned submodule (scripts/build-gnome-extensions.sh).
+    # scripts/verify-gnome-extensions.py maps each UUID to its package and
+    # records the installed NEVRA as provenance.
+    "gnome-shell-extension-appindicator",
+    "gnome-shell-extension-blur-my-shell",
+    "gnome-shell-extension-caffeine",
+    "gnome-shell-extension-dash-to-dock",
+    "gnome-shell-extension-bazaar-companion",
+    "gnome-shell-extension-budslink-companion",
+    "gnome-shell-extension-custom-command-menu",
+    "gnome-shell-extension-fuzzy-application-search",
+    "gnome-shell-extension-gradia-capture",
+    "gnome-shell-extension-power-status-color",
+    "gnome-shell-extension-quicksettings-audio-devices-hider",
+    "gnome-shell-extension-quicksettings-audio-devices-renamer",
+    "gnome-shell-extension-syncthing-toggle",
+    "gnome-shell-extension-tailscale-qs",
+    "gnome-shell-extension-tilingshell",
     #
     # Left out (resolved against sha256:d3b5bac2):
     #   tuned, tuned-ppd            Dakota runs power-profiles-daemon, which is
@@ -621,22 +640,13 @@ packages = [
 ]
 
 [build]
-# Build dependencies for scripts/build-gnome-extensions.sh.
-#
-# cmake is deliberately absent, though Bluefin lists it. Every cmake in the
-# Hummingbird repository -- 4.3.0-2.1.hum1 through 4.3.0-5.1.hum1 -- requires
-# libjsoncpp.so.26, and the only jsoncpp there provides libjsoncpp.so.27, so
-# cmake cannot be installed from Hummingbird at all. It is a missed rebuild on
-# their side after the jsoncpp bump, not a gap this image has to answer for,
-# and nothing in build-gnome-extensions.sh invokes cmake: it runs make, meson,
-# unzip and glib-compile-schemas. Restore this entry once Hummingbird rebuilds
-# cmake, or if an extension ever needs it.
+# Build dependencies for scripts/build-gnome-extensions.sh, which now builds
+# only GSConnect with meson; the other extensions are factory RPMs ([parity]).
+# configure-services.sh removes these again before the image ships.
 packages = [
     "dbus-devel",
     "glib2-devel",
     "meson",
-    "sassc",
-    "unzip",
 ]
 
 [services]
@@ -1049,4 +1059,19 @@ parity = [
     "papers-libs",
     "papers-thumbnailer",
     "papers-nautilus",
+    "gnome-shell-extension-appindicator",
+    "gnome-shell-extension-blur-my-shell",
+    "gnome-shell-extension-caffeine",
+    "gnome-shell-extension-dash-to-dock",
+    "gnome-shell-extension-bazaar-companion",
+    "gnome-shell-extension-budslink-companion",
+    "gnome-shell-extension-custom-command-menu",
+    "gnome-shell-extension-fuzzy-application-search",
+    "gnome-shell-extension-gradia-capture",
+    "gnome-shell-extension-power-status-color",
+    "gnome-shell-extension-quicksettings-audio-devices-hider",
+    "gnome-shell-extension-quicksettings-audio-devices-renamer",
+    "gnome-shell-extension-syncthing-toggle",
+    "gnome-shell-extension-tailscale-qs",
+    "gnome-shell-extension-tilingshell",
 ]
