@@ -162,6 +162,17 @@ files = [
   # same path, so Utah asserts it but must not overlay its own copy.
   "/usr/share/wireplumber/wireplumber.conf.d/51-disable-pcsp.conf",
   "/usr/lib/sysctl.d/60-kexec-disable.conf",
+  # Dakota's zswap and disk-backed swapfile (elements/bluefin/zswap-config.bst,
+  # swapfile.bst), plus the zstd initramfs driver and swapfile_t label Utah's
+  # kernel and SELinux need (#1224). The swap unit is wanted statically.
+  "/usr/lib/bootc/kargs.d/20-zswap.toml",
+  "/usr/lib/sysctl.d/60-zswap.conf",
+  "/usr/lib/dracut/dracut.conf.d/50-utah-zswap-zstd.conf",
+  "/usr/libexec/bluefin-swapfile-init",
+  "/usr/lib/systemd/system/bluefin-swapfile-init.service",
+  "/usr/lib/systemd/system/var-swap-swapfile.swap",
+  "/usr/lib/systemd/system/swap.target.wants/var-swap-swapfile.swap",
+  "/usr/share/selinux/packages/utah-swapfile.cil",
   # GNOME OS firewall zone and fallback DNS (gnome-os-config subpackages).
   "/usr/lib/firewalld/zones/lax.xml",
   "/usr/lib/systemd/resolved.conf.d/50-gnome-os-fallback-dns.conf",
@@ -289,6 +300,28 @@ files = [
 # Dakota parity: kexec is disabled for Easy Anti-Cheat's measured boot chain.
 "/usr/lib/sysctl.d/60-kexec-disable.conf" = [
   "kernel.kexec_load_disabled = 1",
+]
+# Dakota parity (#1224): zswap in front of /var/swap/swapfile.
+"/usr/lib/bootc/kargs.d/20-zswap.toml" = [
+  '"zswap.enabled=1"',
+  '"zswap.compressor=zstd"',
+  '"zswap.max_pool_percent=20"',
+  '"zswap.shrinker_enabled=1"',
+]
+"/usr/lib/sysctl.d/60-zswap.conf" = [
+  "vm.swappiness = 100",
+  "vm.watermark_scale_factor = 200",
+  "vm.watermark_boost_factor = 0",
+]
+"/usr/lib/dracut/dracut.conf.d/50-utah-zswap-zstd.conf" = [
+  'add_drivers+=" zstd "',
+]
+"/usr/lib/systemd/system/var-swap-swapfile.swap" = [
+  "What=/var/swap/swapfile",
+  "Requires=bluefin-swapfile-init.service",
+]
+"/usr/libexec/bluefin-swapfile-init" = [
+  'restorecon "${SWAPFILE}"',
 ]
 # Dakota parity: GNOME OS's lax zone is the default, with loose IPv6 rpfilter.
 "/etc/firewalld/firewalld.conf" = [

@@ -356,9 +356,7 @@
         "nss-mdns",
         "systemd-boot-unsigned",
         "systemd-resolved",
-        "tailscale",
-        "zram-generator",
-        "zram-generator-defaults"
+        "tailscale"
       ],
       "title": "Desktop services",
       "transient": false
@@ -378,7 +376,7 @@
     }
   ],
   "totals": {
-    "installed": 321,
+    "installed": 319,
     "unavailable": 5
   },
   "unavailable": [

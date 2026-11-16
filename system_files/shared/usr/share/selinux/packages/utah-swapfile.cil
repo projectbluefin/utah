@@ -1,0 +1,5 @@
+; Label Dakota's zswap backing store (/usr/libexec/bluefin-swapfile-init).
+; Fedora's policy has no rule for /var/swap, so the file would be var_t and
+; swapon(2) would be denied. scripts/configure-services.sh installs this module
+; into the image's policy store (#1224).
+(filecon "/var/swap/swapfile" file (system_u object_r swapfile_t ((s0) (s0))))

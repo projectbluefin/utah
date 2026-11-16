@@ -636,17 +636,12 @@ packages = [
 # no-Secure-Boot posture; GRUB and shim stay the Secure Boot story and keep
 # flowing through bootupd.
 #
-# zram-generator + zram-generator-defaults are the bare-metal swap (#384). The
-# audit found swapon -s empty and zramctl showing nothing: the server base
-# ships no swap at all. zram-generator-defaults ships
-# /usr/lib/systemd/zram-generator.conf, which the generator reads at boot, so
-# installing the two packages both adds the swap and enables the generator --
-# one zram device sized zram-size = min(ram, 8192), i.e. all of RAM capped at
-# 8 GiB. That is exactly what Bluefin ships (it has no custom zram config of
-# its own), so the size is the package default, not something restated here.
-# Not verified in-tree: #384's acceptance check is `swapon -s` showing a zram
-# device on a booted install, and no e2e job here asserts in-VM swap. Run it
-# against the next `testing` image before closing #384.
+# Swap is Dakota's zswap over a disk-backed /var/swap/swapfile (#1224), not
+# zram: the server base ships no swap at all (#384), and Dakota drops GNOME
+# OS's zram default. The swapfile, its init unit, the zswap kargs and sysctls
+# are files under system_files (desktop-contract's Dakota system defaults
+# reference), so no package is needed; zram-generator(-defaults) are gone.
+#
 # systemd-oomd runs enabled, as on Dakota (#1233): GNOME OS enables it through
 # its enable-by-default preset policy and ships no oomd.conf.d or ManagedOOM
 # drop-ins of its own, so Utah enables the daemon and adds no
@@ -665,8 +660,6 @@ packages = [
     "systemd-boot-unsigned",
     "systemd-resolved",
     "tailscale",
-    "zram-generator",
-    "zram-generator-defaults",
 ]
 
 [unavailable]
