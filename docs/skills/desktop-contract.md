@@ -71,7 +71,8 @@ The TOML's sections are the contract's table of contents:
 - **`[flatpak]`** — first-boot policy: the Flathub and TunaOS remotes, the Bazaar,
   Ghostty and BudsLink preinstalls, the `99-flatpaks.sh` hook, and the system-flatpaks
   Brewfile whose app list the contract enumerates (common's, minus Papers, Sushi and baobab, which ship natively, #1270).
-- **`[media]`** — GStreamer decoders that must load, not merely be installed: `openh264dec`.
+- **`[media]`** — GStreamer decoders that must load, not merely be installed: `openh264dec` and
+  `dav1ddec` (gstreamer-plugins-rs, installed with its rsrtp/gif/hlssink3/spotify plugins as Dakota ships them; #12).
   The factory libav is built on `ffmpeg-free` (no H.264), so `avdec_h264` is not asserted (#1116).
 - **`[services]`** — systemd units the preset must enable: `gdm.service`, `colord.service`,
   `accounts-daemon.service`, `avahi-daemon.service`, `avahi-daemon.socket`, `bluetooth.service`,

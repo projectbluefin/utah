@@ -221,6 +221,7 @@
         "google-noto-serif-cjk-vf-fonts",
         "google-noto-serif-vf-fonts",
         "gssproxy",
+        "gstreamer-plugins-rs",
         "gstreamer1-plugin-dav1d",
         "gstreamer1-plugin-libav",
         "gstreamer1-plugin-openh264",
@@ -424,7 +425,7 @@
     }
   ],
   "totals": {
-    "installed": 369,
+    "installed": 370,
     "unavailable": 7
   },
   "unavailable": [

@@ -531,6 +531,10 @@ packages = [
     # and audio libraries Bluefin carries (argyllcms backs gnome-color-manager).
     "gstreamer1-plugin-libav",
     "gstreamer1-plugin-dav1d",
+    # The rest of freedesktop-sdk's gstreamer-plugins-rs as Dakota ships it
+    # (components/gstreamer-plugins-rs.bst: rsrtp, gif, hlssink3, spotify);
+    # the factory builds dav1d from the same source now (utah-packages#1153).
+    "gstreamer-plugins-rs",
     "gnome-epub-thumbnailer",
     "argyllcms",
     "lcms",
@@ -1084,6 +1088,7 @@ parity = [
     "words",
     "gstreamer1-plugin-libav",
     "gstreamer1-plugin-dav1d",
+    "gstreamer-plugins-rs",
     "gnome-epub-thumbnailer",
     "argyllcms",
     "lcms",
