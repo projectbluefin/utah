@@ -202,6 +202,7 @@
         "google-noto-sans-math-fonts",
         "google-noto-sans-mono-vf-fonts",
         "google-noto-sans-symbols-2-fonts",
+        "google-noto-serif-cjk-vf-fonts",
         "google-noto-serif-vf-fonts",
         "gssproxy",
         "gstreamer1-plugin-dav1d",
@@ -254,6 +255,7 @@
         "mtr",
         "nano",
         "nano-default-editor",
+        "nerd-fonts-symbols",
         "nfs-client-utils",
         "nfs-common-utils",
         "nfs-utils",
@@ -400,7 +402,7 @@
     }
   ],
   "totals": {
-    "installed": 343,
+    "installed": 345,
     "unavailable": 6
   },
   "unavailable": [

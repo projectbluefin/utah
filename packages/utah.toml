@@ -210,6 +210,14 @@ packages = [
     # it, stays out until its own parity ticket (#263); this adds the font
     # itself (#382).
     "stix-fonts",
+    # Dakota's other two fonts (#1240): GNOME OS ships Noto Serif CJK next to
+    # the Sans CJK the base manifest carries, and Dakota's
+    # bluefin/nerd-fonts-symbols.bst adds Symbols Nerd Font as the icon
+    # fallback for common's fastfetch config. nerd-fonts-symbols ships
+    # 10-nerd-font-symbols.conf in conf.avail and enables it from
+    # /etc/fonts/conf.d itself, as the element does.
+    "google-noto-serif-cjk-vf-fonts",
+    "nerd-fonts-symbols",
     # Shell and tooling Bluefin users reach for
     "bash-completion",
     "man-db",
@@ -1049,4 +1057,6 @@ parity = [
     "papers-libs",
     "papers-thumbnailer",
     "papers-nautilus",
+    "google-noto-serif-cjk-vf-fonts",
+    "nerd-fonts-symbols",
 ]
