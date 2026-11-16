@@ -341,6 +341,38 @@ class FlatpaksModeTests(unittest.TestCase):
             self.assertEqual(cm.exception.code, 2)
 
 
+class ServicesModeTests(unittest.TestCase):
+    """`--services LIST CONTRACT` prints one [services] list, one unit per line.
+
+    luks-e2e.sh reads the installed contract this way to check every listed
+    unit on the booted system (#19). It must not run the image checks.
+    """
+
+    def run_services(self, kind):
+        contract = ROOT / "contracts/bluefin-desktop.toml"
+        with patch.object(desktop.sys, "argv", ["verify", "--services", kind, str(contract)]), \
+                patch.object(desktop, "unit_enabled") as unit, \
+                patch("sys.stdout", new_callable=__import__("io").StringIO) as out:
+            rc = desktop.main()
+        unit.assert_not_called()
+        return rc, out.getvalue().splitlines()
+
+    def test_prints_each_list_from_the_contract(self):
+        services = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())["services"]
+        for kind in ("enabled", "user_enabled"):
+            rc, units = self.run_services(kind)
+            self.assertEqual(rc, 0)
+            self.assertEqual(units, services[kind])
+            self.assertTrue(units, kind)
+
+    def test_rejects_other_lists(self):
+        with patch.object(desktop.sys, "argv", ["verify", "--services", "masked", "x.toml"]), \
+                patch.object(desktop.sys, "stderr"):
+            with self.assertRaises(SystemExit) as cm:
+                desktop.main()
+        self.assertEqual(cm.exception.code, 2)
+
+
 class GnomeExtensionTests(unittest.TestCase):
     def shipped_tree(self, tmp, versions="51", uuids=None):
         # Modes as the build leaves them, independent of the caller's umask.
