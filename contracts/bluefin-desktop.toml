@@ -177,6 +177,13 @@ files = [
   "/usr/bin/oo7-cli",
   "/etc/pam.d/passwd",
   "/usr/share/xdg-desktop-portal/gnome-portals.conf",
+  # kmscon on the VTs, as gnome-build-meta gnomeos-deps/kmscon.bst ships it
+  # (#1237): Adwaita Mono font config and gdm's hand-over of tty1.
+  "/usr/bin/kmscon",
+  "/usr/lib/systemd/system/kmsconvt@.service",
+  "/usr/lib64/kmscon/mod-pango.so",
+  "/etc/kmscon/kmscon.conf",
+  "/usr/lib/systemd/system/gdm.service.d/kmscon.conf",
   # Dakota's shell defaults (projectbluefin/dakota elements/bluefin/common.bst).
   "/etc/profile.d/bluefin-shell-defaults.sh",
   # Common's Red Hat signature policy uses the unsuffixed key path. The pinned
@@ -610,6 +617,8 @@ enabled = [
   # enable` is a no-op (the nvidia/gaming image builds failed on it).
   "accounts-daemon.service",
   "ModemManager.service",
+  # kmscon on the VTs in place of getty@ (#1237).
+  "kmsconvt@.service",
   "power-profiles-daemon.service",
   # Dakota's effective service state (#1233): on by enable-by-default
   # (98-utah-enable-default.preset), measured on a booted Dakota.
@@ -745,6 +754,9 @@ disabled = [
   "sysstat-rotate.timer",
   # Key remapping is opt-in, as on Dakota (#1222).
   "kanata.service",
+  # getty@ and kmscon.service are off; kmsconvt@ owns the VTs (#1237).
+  "getty@.service",
+  "kmscon.service",
   # Utah-only units Dakota does not run (#1233).
   "multipathd.service",
   "lm_sensors.service",
