@@ -315,6 +315,8 @@ systemctl --global enable brew-preinstall.service
 # is present in the Hummingbird base.
 authselect enable-feature with-silent-lastlog
 authselect enable-feature with-fingerprint
+# Resolve .local names over mDNS through nss-mdns, as Dakota and Bluefin do.
+authselect enable-feature with-mdns4
 
 # uupd is distributed as a release binary, not an RPM in the Hummingbird
 # repositories. Keep its version pinned by the Containerfile argument.

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-28",
+  "generated_at": "2026-11-16",
   "generator": "scripts/generate-site-data.py",
   "groups": [
     {
@@ -348,6 +348,7 @@
         "cryptsetup",
         "flatpak",
         "fwupd",
+        "nss-mdns",
         "systemd-boot-unsigned",
         "systemd-resolved",
         "tailscale",
@@ -372,8 +373,8 @@
     }
   ],
   "totals": {
-    "installed": 315,
-    "unavailable": 7
+    "installed": 316,
+    "unavailable": 6
   },
   "unavailable": [
     {
@@ -403,12 +404,6 @@
         253
       ],
       "name": "grub2-efi-x64-cdboot"
-    },
-    {
-      "issues": [
-        499
-      ],
-      "name": "nss-mdns"
     },
     {
       "issues": [

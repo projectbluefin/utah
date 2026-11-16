@@ -81,7 +81,7 @@ hardware establishes that its radio works.
 It covers both kinds of parity gap: names in the copied `base.toml` contract,
 and names Bluefin's published image ships from a build file outside that
 contract (recorded in `baselines/bluefin/rpms.tsv` and triaged in
-`baselines/triage.toml` — `nss-mdns` is the current example). Each entry
+`baselines/triage.toml`). Each entry
 **MUST carry a tracking issue**: the list is the documented parity debt, not
 a dumping ground for packages that are merely inconvenient (header comment,
 `packages/utah.toml`).
@@ -363,8 +363,8 @@ Raise the overlay change as its own pull request against `main`; the bump PR
 then picks the fix up on its next rebuild.
 
 Current counts, per the README "Package parity" section: 61 Bluefin contract
-packages installed, 254 Utah additions (GNOME 51, base-image parity, device
-firmware, desktop services), 7 genuinely unavailable. `scripts/check-doc-counts.py` (part of
+packages installed, 255 Utah additions (GNOME 51, base-image parity, device
+firmware, desktop services), 6 genuinely unavailable. `scripts/check-doc-counts.py` (part of
 `just check`) recomputes these from the manifests and fails if either
 document drifts from `site/data/packages.json`.
 
