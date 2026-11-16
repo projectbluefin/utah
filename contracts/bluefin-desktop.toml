@@ -128,10 +128,15 @@ files = [
   # Dakota desktop parity (#675): first-boot install-date stamping and the
   # booted-image snapshot for fastfetch. Wallpaper rotation stays with
   # Common's per-user timer (see configure-services.sh), so the Dakota month
-  # symlink units are intentionally not shipped.
+  # symlink units are intentionally not shipped. The install date is written
+  # once timesyncd reports a sync (Dakota's ublue-firstboot-date.path, #1228).
+  "/usr/lib/systemd/system/ublue-firstboot-date.path",
   "/usr/lib/systemd/system/ublue-firstboot-date.service",
+  "/usr/bin/ublue-firstboot-date",
   "/usr/lib/systemd/system/ublue-booted-image.service",
   "/usr/bin/ublue-booted-image-sync",
+  # GNOME OS's fallback NTP server for systemd-timesyncd (#1228).
+  "/usr/lib/systemd/timesyncd.conf.d/10-gnome-os-fallback-ntp.conf",
   # Common files configure-services.sh patches or checks for Dakota parity.
   # file_contains skips missing files, so list them here to fail the build if
   # Common drops one.
@@ -188,6 +193,11 @@ files = [
 "/usr/share/glib-2.0/schemas/zz0-bluefin-modifications.gschema.override" = [
   "io.github.kolunmi.Bazaar.desktop",
   "picture-uri='file:///usr/share/backgrounds/bluefin/",
+]
+# GNOME OS's fallback NTP server; Hummingbird's compiled-in pool does not
+# resolve publicly (#594, #1228).
+"/usr/lib/systemd/timesyncd.conf.d/10-gnome-os-fallback-ntp.conf" = [
+  "FallbackNTP=gnome.pool.ntp.org",
 ]
 # Dakota parity (#675): fastfetch reads the first-boot install date stamped
 # by ublue-firstboot-date.service instead of inferring age from /var/log.
@@ -415,7 +425,7 @@ enabled = [
   "avahi-daemon.socket",
   "bluetooth.service",
   # Dakota desktop parity (#675).
-  "ublue-firstboot-date.service",
+  "ublue-firstboot-date.path",
   "ublue-booted-image.service",
   "bootc-unified-storage.timer",
   "brew-setup.service",
@@ -472,6 +482,10 @@ enabled = [
   # Hummingbird's 90-default.preset disables it; 85-utah-desktop.preset
   # turns it back on (#363).
   "systemd-boot-update.service",
+  # Time sync is systemd-timesyncd, as on GNOME OS and Dakota (#1228);
+  # Hummingbird's 90-default.preset disables it, 85-utah-desktop.preset
+  # turns it back on.
+  "systemd-timesyncd.service",
   # Dakota's 80-pcrlock.preset; no-ops unless booted from a measured UKI.
   "systemd-pcrlock-make-policy.service",
   "systemd-pcrlock-machine-id.service",
@@ -557,4 +571,7 @@ disabled = [
   "cups-browsed.service",
   "powertop.service",
   "systemd-homed-firstboot.service",
+  # chrony is not installed (#1228); absent counts as off, and this fails the
+  # build if a dependency ever pulls it back in enabled beside timesyncd.
+  "chronyd.service",
 ]

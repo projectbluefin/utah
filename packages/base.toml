@@ -126,6 +126,9 @@ packages = [
 [excluded]
 # Packages removed from the base image — conflicts with or replaced by image content.
 packages = [
+    # Hummingbird's base ships chrony; Utah syncs time with systemd-timesyncd
+    # as GNOME OS and Dakota do (#1228).
+    "chrony",
     "default-fonts-cjk-sans",
     "fedora-bookmarks",
     "fedora-chromium-config",

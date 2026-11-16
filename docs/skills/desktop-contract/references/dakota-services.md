@@ -40,7 +40,7 @@ are never enabled by a preset.
 - Utah-only units 99-default-disable used to keep off: `authselect-first-boot`
   (would re-select `@system-default` on first boot and drop the build's
   authselect features) and `authselect-apply-changes`, `dbus-daemon` (would
-  claim dbus-broker's alias), `livesys*`, chrony's companions, `rpm-ostree*`,
+  claim dbus-broker's alias), `livesys*`, `rpm-ostree*`,
   `dnf5-offline-transaction`, `flatpak-add-fedora-repos`, network servers
   (autofs, dnsmasq, httpd, openvpn, saned, ipp-usb, samba, wsdd, cups-browsed,
   gssproxy, nftables beside firewalld), containerd and CNI, and helpers that
@@ -66,7 +66,7 @@ they are harmless: `ratbagd.service` (D-Bus alias), `selinux-check-proper-disabl
 ### Units the contract asserts
 
 `[services].enabled` asserts, in the built image: `avahi-daemon.service`,
-`avahi-daemon.socket`, `bluetooth.service`, `ublue-firstboot-date.service`,
+`avahi-daemon.socket`, `bluetooth.service`, `ublue-firstboot-date.path`,
 `ublue-booted-image.service`, `bootc-unified-storage.timer`,
 `brew-setup.service`, `cups.socket`, `bluefin-stats-refresh.timer`,
 `dconf-update.service`, `flatpak-nuke-fedora.service`,
@@ -87,6 +87,7 @@ they are harmless: `ratbagd.service` (D-Bus alias), `selinux-check-proper-disabl
 `projectbluefin-countme.timer`, `switcheroo-control.service`,
 `ublue-system-setup.service`, `uupd.timer`, `tailscaled.service`,
 `firewalld.service`, `fwupd-refresh.timer`, `systemd-boot-update.service`,
+`systemd-timesyncd.service` (#1228; chrony is not installed),
 `systemd-pcrlock-make-policy.service`, `systemd-pcrlock-machine-id.service`,
 `systemd-pcrlock-secureboot-authority.service`, `podman.service`,
 `netavark-dhcp-proxy.socket`. `[services].disabled` holds the network

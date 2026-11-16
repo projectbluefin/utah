@@ -106,17 +106,20 @@ In summary:
 
 ## Clock synchronization and TLS failures
 
-The desktop RUN appends `pool pool.ntp.org iburst` to `/etc/chrony.conf`
-when it is absent, preserving the vendor pool (#594). An unreachable NTP
-source can leave a fresh VM clock behind certificate validity dates; verify
-`chronyc sources` and clock synchronization before treating that failure as
-missing CA certificates. The public pool requires network access too.
-
-Keep the fallback idempotent and folded into the existing RUN, before its
-final metadata normalization so the configuration has a stable mtime. Validate
-changes with the download-integrity guard and `just check`; inspect the
-composed configuration and demonstrate chrony recovery on a booted VM for
-runtime acceptance. A source-string assertion alone cannot prove time sync.
+Time sync is `systemd-timesyncd`, as on GNOME OS and Dakota (#1228): chrony
+is in `packages/base.toml` `[excluded]`, `85-utah-desktop.preset` enables
+timesyncd over Hummingbird's `90-default.preset` disable, and
+`/usr/lib/systemd/timesyncd.conf.d/10-gnome-os-fallback-ntp.conf` sets
+`FallbackNTP=gnome.pool.ntp.org`, the server gnome-build-meta compiles in
+(`core-deps/systemd-base.bst`). Hummingbird's compiled-in
+`*.hummingbird.pool.ntp.org` does not resolve publicly, and NetworkManager
+does not pass DHCP NTP servers to timesyncd, so without the drop-in a fresh VM
+clock can sit behind certificate validity dates (#594). Before treating a TLS
+"not yet valid" failure as missing CA certificates, check
+`timedatectl timesync-status` on the booted machine. Dakota's
+`ublue-firstboot-date.path` starts the install-date stamp only once
+`/run/systemd/timesync/synchronized` exists. A source-string assertion alone
+cannot prove time sync; confirm it on a booted VM.
 
 ## Where the build time goes
 

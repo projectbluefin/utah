@@ -85,7 +85,7 @@ The TOML's sections are the contract's table of contents:
   carry active `timers.target.wants` symlinks that bypass uupd staging or undo manual rollbacks.
   Switchers can mask them by hand if a local `/etc` symlink survived. uupd matches Dakota ([uupd](desktop-contract/references/uupd.md)).
 
-  `ublue-firstboot-date.service` and `ublue-booted-image.service` are Dakota parity (#675): install-date stamping and the
+  `ublue-firstboot-date.path` (Dakota's, waits for timesyncd's first sync, #1228) and `ublue-booted-image.service` are Dakota parity (#675): install-date stamping and the
   booted-image snapshot Common's `/usr/libexec/ublue-booted-image` falls back to.
   `configure-services.sh` patches Common's fastfetch ([stats](desktop-contract/references/stats-refresh.md))
   and `uwelcome.sh` (non-interactive shells skip the greeting), checks image-info ([bootc compatibility](desktop-contract/references/image-info.md)), and applies [Dakota's desktop defaults](desktop-contract/references/dakota-desktop-defaults.md).

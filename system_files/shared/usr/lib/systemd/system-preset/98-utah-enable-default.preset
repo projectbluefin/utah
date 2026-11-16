@@ -97,9 +97,6 @@ disable dbus-daemon.service
 # Live-media session setup from livesys-scripts; never on an installed system.
 disable livesys.service
 disable livesys-late.service
-# chrony's companions; chronyd-restricted conflicts with chronyd.
-disable chrony-wait.service
-disable chronyd-restricted.service
 # Image updates go through bootc and uupd, not rpm-ostree or dnf. Flathub is
 # the only Flatpak remote, so Fedora's remote stays unregistered.
 disable rpm-ostree*
