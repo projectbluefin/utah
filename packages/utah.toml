@@ -266,18 +266,6 @@ packages = [
     "pipewire-utils",
     "pulseaudio-utils",
     "glycin-thumbnailer",
-    # Video thumbnailer for the media codec parity work (#383). The factory
-    # published it after the Intel runtimes landed in #397, so it resolves
-    # today against the pinned factory repodata (sha256:0f8595d) + Hummingbird
-    # primary: ffmpegthumbnailer-libs and the libav*-free 9.0.1 libraries it
-    # links (libavcodec/libavformat/libavutil/libavfilter) come from the
-    # factory, plus libjpeg-turbo/libpng from Hummingbird. libavformat-free and
-    # libavfilter-free are new to the image and pull zeromq, libssh, and
-    # libvmaf from Hummingbird, so expect image growth. The other thumbnailers
-    # and GStreamer plugins (gnome-epub-thumbnailer, papers-thumbnailer,
-    # gstreamer1-plugin-libav, -dav1d, -bad-free, -ugly-free) are requested in
-    # the parity block below (#383).
-    "ffmpegthumbnailer",
     "samba-client",
     "samba-common-tools",
     "krb5-workstation",
@@ -529,6 +517,14 @@ packages = [
     # daemons (gnome-build-meta files/opensc/opensc.module); Utah ships that
     # file as /etc/pkcs11/modules/opensc.module, which outranks the RPM's copy.
     "opensc",
+    # GNOME's video and audio thumbnailers, as Dakota ships them (#1262;
+    # gnome-build-meta core/gst-thumbnailers.bst, 1.1.0). They replace
+    # ffmpegthumbnailer, which Dakota doesn't ship: both register for
+    # video/mp4, video/webm, video/x-matroska and most other video types, and
+    # GNOME's thumbnail factory uses one thumbnailer per MIME type.
+    # gst-video-thumbnailer decodes through GStreamer, so H.264 previews go
+    # through openh264dec; ffmpegthumbnailer's ffmpeg-free has no H.264 (#1116).
+    "gst-thumbnailers",
     #
     # Left out (resolved against sha256:d3b5bac2):
     #   tuned, tuned-ppd            Dakota runs power-profiles-daemon, which is
@@ -893,7 +889,7 @@ parity = [
     "libva-intel-media-driver",
     "intel-mediasdk",
     "intel-vpl-gpu-rt",
-    "ffmpegthumbnailer",
+    "gst-thumbnailers",
     "totem-pl-parser",
     "gstreamer1-plugin-openh264",
     "openh264",
