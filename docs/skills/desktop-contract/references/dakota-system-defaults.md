@@ -21,6 +21,14 @@ each in `contracts/bluefin-desktop.toml` (`[configuration].files` plus
   (`required`, `clean`, `smudge`, `process`). Hummingbird's `git-lfs` RPM
   writes the same four keys from its `%post` (`git lfs install --system`), so
   Utah installs the package and asserts the stanza; it ships no copy.
+- `system_files/shared/etc/pkcs11/modules/opensc.module` (#1257) is GNOME OS's
+  `files/opensc/opensc.module`: `disable-in` keeps goa-daemon, gsd-smartcard,
+  the two Evolution data-server factories and gnome-shell from loading opensc,
+  so they never hold a smart card open and GnuPG keeps exclusive access.
+  p11-kit reads `/etc/pkcs11/modules/` in place of a same-named file in
+  `/usr/share/p11-kit/modules/`, where the opensc RPM's plain copy lives;
+  Utah's file can't go there, because the package transaction runs after
+  `system_files` is copied and would overwrite it.
 
 ## Firewall and fallback DNS
 

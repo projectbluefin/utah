@@ -1,0 +1,15 @@
+# GNOME OS's opensc.module, as Dakota ships it (gnome-build-meta
+# files/opensc/opensc.module at 8a89846df11e). p11-kit reads a module config
+# in /etc/pkcs11/modules in place of the same-named file the opensc RPM ships
+# in /usr/share/p11-kit/modules.
+module: opensc-pkcs11.so
+# FIXME: Smart cards have notion of exclusive access to be used for
+# example with PIN, so that other applications cannot send commands
+# when the card is unlocked. An example of such a use is GnuPG. But
+# if user daemons keep hold of smart cards, then that exclusive access
+# cannot be given. Which means for GnuPG, either the user forces
+# shared access (which is dangerous), or restarts pcscd now and then
+# to disconnect other users.
+# Until there is a solution provided by either pcsc-lite, GnuPG or opensc,
+# we should just disable opensc module to user services that use pkcs#11.
+disable-in: goa-daemon gsd-smartcard evolution-source-registry evolution-calendar-factory gnome-shell

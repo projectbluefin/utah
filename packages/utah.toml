@@ -522,6 +522,12 @@ packages = [
     # app documents over libimobiledevice, which libimobiledevice-utils above
     # already brings in.
     "ifuse",
+    # Smart card tools and PKCS#11 module as Dakota ships them (#1257;
+    # freedesktop-sdk-extra components/opensc.bst, 0.27.1). pcscd.socket is
+    # already enabled. GNOME OS keeps the module out of the desktop's own
+    # daemons (gnome-build-meta files/opensc/opensc.module); Utah ships that
+    # file as /etc/pkcs11/modules/opensc.module, which outranks the RPM's copy.
+    "opensc",
     #
     # Left out (resolved against sha256:d3b5bac2):
     #   tuned, tuned-ppd            Dakota runs power-profiles-daemon, which is
@@ -1009,4 +1015,5 @@ parity = [
     "papers-thumbnailer",
     "papers-nautilus",
     "ifuse",
+    "opensc",
 ]

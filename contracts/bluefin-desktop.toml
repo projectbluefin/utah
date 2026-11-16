@@ -170,6 +170,8 @@ files = [
   # Dakota ships freedesktop-sdk's git-lfs with a system LFS filter; the
   # git-lfs RPM's %post writes it (`git lfs install --system`).
   "/etc/gitconfig",
+  # GNOME OS's opensc.module (#1257): keeps opensc out of GNOME's own daemons.
+  "/etc/pkcs11/modules/opensc.module",
 ]
 
 [configuration.file_contains]
@@ -311,6 +313,13 @@ files = [
   "clean = git-lfs clean -- %f",
   "smudge = git-lfs smudge -- %f",
   "process = git-lfs filter-process",
+]
+# Dakota parity (#1257): gnome-build-meta files/opensc/opensc.module. Smart
+# cards grant exclusive access, so GNOME OS keeps the user daemons from holding
+# the card open and starving GnuPG and other PIN users.
+"/etc/pkcs11/modules/opensc.module" = [
+  "module: opensc-pkcs11.so",
+  "disable-in: goa-daemon gsd-smartcard evolution-source-registry evolution-calendar-factory gnome-shell",
 ]
 
 [flatpak]
