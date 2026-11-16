@@ -491,6 +491,16 @@ enabled = [
   "systemd-storage-fs.socket",
   "systemd-udev-load-credentials.service",
   "systemd-userdb-load-credentials.service",
+  # More upstream preset units Dakota runs (#1271, #1272).
+  "nvmf-autoconnect.service",
+  "nvmefc-boot-connections.service",
+  "systemd-imdsd.socket",
+  "speech-dispatcherd.service",
+  "podman.service",
+  "netavark-dhcp-proxy.socket",
+  "netavark-dhcp-proxy.service",
+  "netavark-firewalld-reload.service",
+  "netavark-nftables-reload.service",
   "thermald.service",
   "projectbluefin-countme.timer",
   "switcheroo-control.service",
@@ -555,4 +565,9 @@ disabled = [
   # Utah-only units Dakota does not run (#1233).
   "multipathd.service",
   "lm_sensors.service",
+  # mdadm's scrub and reminder timers: raid-check.timer scrubs instead
+  # (#1268, #1271); see 85-utah-desktop.preset.
+  "mdcheck_start.timer",
+  "mdcheck_continue.timer",
+  "mdmonitor-oneshot.timer",
 ]

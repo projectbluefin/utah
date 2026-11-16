@@ -225,6 +225,20 @@ enable_unit systemd-storage-block.socket
 enable_unit systemd-storage-fs.socket
 enable_unit systemd-udev-load-credentials.service
 enable_unit systemd-userdb-load-credentials.service
+# More upstream preset units Dakota runs (#1271, #1272); mdadm's own timers
+# stay off beside raid-check.timer. See 85-utah-desktop.preset.
+enable_unit nvmf-autoconnect.service
+enable_unit nvmefc-boot-connections.service
+enable_unit systemd-imdsd.socket
+enable_unit speech-dispatcherd.service
+enable_unit podman.service
+enable_unit netavark-dhcp-proxy.socket
+enable_unit netavark-dhcp-proxy.service
+enable_unit netavark-firewalld-reload.service
+enable_unit netavark-nftables-reload.service
+disable_unit mdcheck_start.timer
+disable_unit mdcheck_continue.timer
+disable_unit mdmonitor-oneshot.timer
 disable_unit multipathd.service
 disable_unit lm_sensors.service
 # nfs-client.target is turned off: see 85-utah-desktop.preset.

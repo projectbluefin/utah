@@ -90,6 +90,30 @@ enable systemd-storage-block.socket
 enable systemd-storage-fs.socket
 enable systemd-udev-load-credentials.service
 enable systemd-userdb-load-credentials.service
+# More upstream preset units a booted Dakota runs (#1271, #1272): nvme-cli's
+# NVMe-oF boot connections (each gated on NVMe-oF config or FC hardware by its
+# own Condition), systemd's cloud instance-metadata socket, the system
+# speech-dispatcher daemon, rootful podman's API service, and netavark's DHCP
+# proxy and firewall-reload hooks.
+enable nvmf-autoconnect.service
+enable nvmefc-boot-connections.service
+enable systemd-imdsd.socket
+enable speech-dispatcherd.service
+enable podman.service
+enable netavark-dhcp-proxy.socket
+enable netavark-dhcp-proxy.service
+enable netavark-firewalld-reload.service
+enable netavark-nftables-reload.service
+# mdadm's scrub and reminder timers, which Dakota runs, stay off (#1271).
+# raid-check.timer already scrubs every array weekly (kept by #1268), so
+# mdcheck_start/mdcheck_continue would schedule a second scrub of the same
+# arrays. All three are WantedBy=mdmonitor.service, which Fedora's preset
+# starts on every boot (Dakota starts it only when udev assembles an array),
+# so mdmonitor-oneshot.timer would run `mdadm --monitor --oneshot --scan`
+# daily on machines without an mdadm.conf alert address, where it exits 1.
+disable mdcheck_start.timer
+disable mdcheck_continue.timer
+disable mdmonitor-oneshot.timer
 # Utah-only units Dakota does not run: no multipath on a desktop, and
 # lm_sensors is disabled by Dakota's 80-lm-sensors.preset.
 disable multipathd.service

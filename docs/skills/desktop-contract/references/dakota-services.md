@@ -58,6 +58,24 @@ user), `scripts/configure-services.sh`, and `contracts/bluefin-desktop.toml`
   are in `[services].disabled`. To re-measure, run `systemctl --root=/
   preset-all` inside both images and diff `systemctl --root=/
   list-unit-files`.
+- More upstream preset units Dakota runs (#1271, #1272), enabled the same
+  three ways: nvme-cli's `nvmf-autoconnect.service` and
+  `nvmefc-boot-connections.service` (each skipped by its own
+  `ConditionPathExists=` unless NVMe-oF config or FC-NVMe hardware is
+  present), `systemd-imdsd.socket`, the system `speech-dispatcherd.service`,
+  `podman.service`, and netavark's `netavark-dhcp-proxy.socket`,
+  `netavark-dhcp-proxy.service`, `netavark-firewalld-reload.service` and
+  `netavark-nftables-reload.service`.
+  `systemd-homed-firstboot.service` goes with #1238.
+- mdadm's `mdcheck_start.timer`, `mdcheck_continue.timer` and
+  `mdmonitor-oneshot.timer` stay off, in `[services].disabled`, although
+  Dakota runs them. Utah keeps Fedora's `raid-check.timer` (#1268), and the
+  mdcheck pair would schedule a second scrub of the same arrays. All three are
+  `WantedBy=mdmonitor.service`. Fedora's preset starts that service on every
+  boot, while Dakota starts it only when udev assembles an array. So the
+  oneshot reminder would run daily everywhere, and
+  `mdadm --monitor --oneshot --scan` exits 1 when `mdadm.conf` has no alert
+  address.
 
 `ServiceMaskParityTests` in `tests/test_desktop_contract.py` pins the
 three-way agreement for each group.

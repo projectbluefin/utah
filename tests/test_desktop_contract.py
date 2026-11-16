@@ -506,6 +506,40 @@ class ServiceMaskParityTests(unittest.TestCase):
                 self.assertIn(f"disable_unit {unit}\n", services)
                 self.assertNotIn(f"enable_unit {unit}\n", services)
 
+    def test_dakota_upstream_preset_units_enabled_in_contract_preset_and_script(self):
+        # Units upstream presets enable that a booted Dakota runs (#1271, #1272).
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset").read_text()
+        services = (ROOT / "scripts/configure-services.sh").read_text()
+        for unit in (
+            "nvmf-autoconnect.service",
+            "nvmefc-boot-connections.service",
+            "systemd-imdsd.socket",
+            "speech-dispatcherd.service",
+            "podman.service",
+            "netavark-dhcp-proxy.socket",
+            "netavark-dhcp-proxy.service",
+            "netavark-firewalld-reload.service",
+            "netavark-nftables-reload.service",
+        ):
+            with self.subTest(unit=unit):
+                self.assertIn(unit, contract["services"]["enabled"])
+                self.assertIn(f"enable {unit}\n", preset)
+                self.assertIn(f"enable_unit {unit}\n", services)
+
+    def test_mdadm_timers_stay_off_beside_raid_check(self):
+        # raid-check.timer is the scrub scheduler (#1268); mdadm's own timers
+        # would scrub the same arrays again (#1271).
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset").read_text()
+        services = (ROOT / "scripts/configure-services.sh").read_text()
+        for unit in ("mdcheck_start.timer", "mdcheck_continue.timer", "mdmonitor-oneshot.timer"):
+            with self.subTest(unit=unit):
+                self.assertIn(unit, contract["services"]["disabled"])
+                self.assertIn(f"disable {unit}\n", preset)
+                self.assertIn(f"disable_unit {unit}\n", services)
+                self.assertNotIn(f"enable_unit {unit}\n", services)
+
     def test_dakota_parity_patch_targets_are_required_files(self):
         contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
         files = contract["configuration"]["files"]
