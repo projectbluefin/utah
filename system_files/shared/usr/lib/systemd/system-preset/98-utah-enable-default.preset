@@ -147,8 +147,5 @@ disable man-db-restart-cache-update.service
 # The community-stats fetch runs from bluefin-stats-refresh.timer, not at
 # every boot.
 disable bluefin-stats-refresh.service
-# systemd-homed-firstboot asks on the console for a first user; enabling it
-# waits for the homed PAM integration (#1238).
-disable systemd-homed-firstboot.service
 
 enable *
