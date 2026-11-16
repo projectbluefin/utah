@@ -379,7 +379,7 @@
   ],
   "totals": {
     "installed": 321,
-    "unavailable": 7
+    "unavailable": 6
   },
   "unavailable": [
     {
@@ -387,10 +387,6 @@
         83
       ],
       "name": "anaconda-live"
-    },
-    {
-      "issues": [],
-      "name": "evolution-ews-core"
     },
     {
       "issues": [

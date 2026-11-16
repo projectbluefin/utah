@@ -12,7 +12,6 @@
 # Sections:
 #   [multimedia_overrides]   packages synced from fedora-multimedia repo
 #   [fedora]                 base Fedora packages, all versions
-#   [fedora_v42]             additions for Fedora 42 only
 #   [fedora_v43]             additions for Fedora 43 only
 #   [fedora_v44]             additions for Fedora 44 only
 #   [excluded]               packages removed from the base image
@@ -106,15 +105,8 @@ packages = [
     "zsh",
 ]
 
-[fedora_v42]
-# TODO: remove when F42 is dropped
-packages = [
-    "evolution-ews-core",
-]
-
 [fedora_v43]
 packages = [
-    "evolution-ews-core",
     "gnupg2-scdaemon",
 ]
 
