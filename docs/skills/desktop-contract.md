@@ -79,7 +79,8 @@ The TOML's sections are the contract's table of contents:
   `flatpak-nuke-fedora.service`, `brew-setup.service`, `dconf-update.service`, `bootc-unified-storage.timer`,
   `input-remapper.service`, `ModemManager.service`, `power-profiles-daemon.service`, `thermald.service`,
   `projectbluefin-countme.timer`, `cups.socket`, `systemd-boot-update.service`, `uupd.timer`,
-  `bluefin-stats-refresh.timer`, `ublue-firstboot-date.path`, `ublue-booted-image.service`, `bluefin-remove-installer.service`.
+  `ublue-wallpaper-month.service`, `bluefin-wallpaper-month.service`, `ublue-firstboot-date.path`,
+  `ublue-booted-image.service`, `bluefin-remove-installer.service`.
   [Dakota service presets](desktop-contract/references/dakota-services.md): GNOME units, user units, opt-in sysstat.
   Update policy delegates background updates to `uupd.timer`; `bootc-fetch-apply-updates.timer` and
   `bootc-fetch-apply-updates.service` are masked in `/etc` and `/usr/lib` (and disabled in
@@ -87,14 +88,11 @@ The TOML's sections are the contract's table of contents:
   carry active `timers.target.wants` symlinks that bypass uupd staging or undo manual rollbacks.
   Switchers can mask them by hand if a local `/etc` symlink survived. uupd matches Dakota ([uupd](desktop-contract/references/uupd.md)).
 
-  The last two units are Dakota parity (#675): install-date stamping and the
-  booted-image snapshot Common's `/usr/libexec/ublue-booted-image` falls back to.
-  `configure-services.sh` enables them, patches Common's fastfetch ([stats](desktop-contract/references/stats-refresh.md))
-  and `uwelcome.sh` (non-interactive shells skip the greeting), checks image-info ([bootc compatibility](desktop-contract/references/image-info.md)), and applies [Dakota's desktop defaults](desktop-contract/references/dakota-desktop-defaults.md).
-  Wallpaper rotation is deliberately NOT Dakota parity: Common's per-user `bluefin-dynamic-wallpaper`
-  timer is hemisphere-aware and rotates live at month boundaries, while
-  Dakota's boot-time month symlink is northern-only and stale until reboot, so
-  repointing the default would stand the better rotator down (#675 decision).
+  The firstboot-date, booted-image and remove-installer units are Dakota parity (#675): install-date
+  stamping and the booted-image snapshot Common's `/usr/libexec/ublue-booted-image` falls back to.
+  `configure-services.sh` enables them, applies [Dakota's edits to Common](desktop-contract/references/dakota-common-edits.md)
+  (month units, weekly stats, Ghostty theme, logos; #1266),
+  patches `uwelcome.sh` (non-interactive shells skip the greeting), checks image-info ([bootc compatibility](desktop-contract/references/image-info.md)), and applies [Dakota's desktop defaults](desktop-contract/references/dakota-desktop-defaults.md).
 
   A unit being enabled in the built image is not the same as it being enabled
   on a booted one. bootc applies presets on first boot, and Hummingbird's
@@ -305,12 +303,11 @@ with `gdbus call --session --dest org.gnome.Shell.Extensions --object-path
 
 GNOME Initial Setup's welcome page shows the icon named by os-release
 `LOGO`. Distributor builds of Settings > About use the compiled PNG paths
-described below. Fedora sets `LOGO=fedora-logo-icon` and
-Bluefin keeps it; common overlays the raptor at
-`/usr/share/pixmaps/fedora-logo-icon.png`. Hummingbird's os-release has no
-`LOGO`, so Utah showed the generic GNOME foot with the raptor already on disk.
-`configure-branding.sh` sets it, and the contract asserts both the key and the
-icon file. To check without a build: `bootc usr-overlay`, append the key to
+described below. Hummingbird's os-release has no `LOGO`, so Utah showed the
+generic GNOME foot. `configure-branding.sh` sets `LOGO=img-logo-icon` as
+Dakota does, and the `artwork` stage installs Dakota's four
+`/usr/share/pixmaps/img-logo-icon*.svg` wordmarks (#1266); the contract asserts
+the key and the files. To check without a build: `bootc usr-overlay`, append the key to
 `/usr/lib/os-release`, `systemctl restart gdm`, and look at Initial Setup.
 
 ## The GDM greeter logo is Bluefin, not Fedora (#378)

@@ -48,6 +48,9 @@ RUN /usr/local/libexec/utah-install-v4l2loopback base /out
 #  - /out/branding/bluefin-logo-dark.svg is the source for the GDM greeter logo,
 #    which configure-branding.sh renders after the package transaction because
 #    nothing in this stage can rasterize an SVG.
+#  - img-logo-icon{,-dark,-text,-text-dark}.svg are the os-release LOGO icon
+#    and the variants Settings looks up beside it: the light and dark Bluefin
+#    wordmarks, as Dakota's common.bst installs them (#1266).
 # Sources other than the wallpaper image are commit-pinned with sha256 in
 # config/artwork.lock and verified by scripts/fetch-artwork.sh.
 FROM ${BASE_IMAGE} AS artwork
@@ -67,7 +70,13 @@ RUN set -eu; \
     /artwork/scripts/fetch-artwork.sh assets/vector/icons/logo-menu/logo-utahraptor-menu.svg \
       /out/overlay/usr/share/icons/hicolor/scalable/actions/ublue-logo-symbolic.svg; \
     /artwork/scripts/fetch-artwork.sh assets/vector/logos/bluefin/bluefin-logo-dark.svg \
-      /out/branding/bluefin-logo-dark.svg
+      /out/branding/bluefin-logo-dark.svg; \
+    pix=/out/overlay/usr/share/pixmaps; \
+    /artwork/scripts/fetch-artwork.sh assets/vector/logos/bluefin/bluefin-logo-light.svg \
+      "$pix/img-logo-icon.svg"; \
+    install -m0644 "$pix/img-logo-icon.svg" "$pix/img-logo-icon-text.svg"; \
+    install -m0644 /out/branding/bluefin-logo-dark.svg "$pix/img-logo-icon-dark.svg"; \
+    install -m0644 /out/branding/bluefin-logo-dark.svg "$pix/img-logo-icon-text-dark.svg"
 
 # Stage source origins without committing their COPY mtimes to the runtime image.
 FROM scratch AS inputs

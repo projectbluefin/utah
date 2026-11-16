@@ -17,7 +17,10 @@ enable fwupd-refresh.timer
 enable tailscaled.service
 enable uupd.timer
 enable projectbluefin-countme.timer
-enable bluefin-stats-refresh.timer
+# Dakota's monthly-wallpaper links (#1266); configure-services.sh explains
+# why the default wallpaper does not read them.
+enable ublue-wallpaper-month.service
+enable bluefin-wallpaper-month.service
 enable ublue-system-setup.service
 enable systemd-resolved.service
 # Keep the ESP boot manager current on systemd-boot systems (#363). A drop-in

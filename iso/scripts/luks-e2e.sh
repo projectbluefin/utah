@@ -430,7 +430,7 @@ verify_setup_state() {
     check_system_unit_state flatpak-preinstall.service true true "${boot_pass}"
     check_system_unit_state ublue-system-setup.service true true "${boot_pass}"
     check_system_unit_state brew-setup.service true false "${boot_pass}"
-    for unit in input-remapper.service bluefin-stats-refresh.timer uupd.timer; do
+    for unit in input-remapper.service ublue-wallpaper-month.service bluefin-wallpaper-month.service uupd.timer; do
         check_system_unit_state "${unit}" true false "${boot_pass}"
     done
     check_user_setup_unit "${boot_pass}"

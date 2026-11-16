@@ -1,0 +1,12 @@
+[Unit]
+Description=Point Dakota wallpaper at the current month
+After=local-fs.target
+Before=display-manager.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'mkdir -p /var/lib/ublue-os; month="$(date +%%m)"; target="/usr/share/backgrounds/bluefin/${month}-bluefin.xml"; [ -e "$target" ] || target="/usr/share/backgrounds/bluefin/12-bluefin.xml"; ln -sfn "$target" /var/lib/ublue-os/current-bluefin.xml'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

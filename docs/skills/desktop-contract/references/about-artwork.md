@@ -25,8 +25,12 @@ Wallpapers: `/usr/share/backgrounds/bluefin/*` and
 `bluefin-wallpapers-gnome` image, overlaid after Common's copy (see the
 Containerfile skill). `01-bluefin.xml` and `06-bluefin.xml` are contract files.
 The mascot the live installer shows is the Utah black-outline art, staged into
-`iso/live/src/images/utahraptor.png` by the ISO builders; the os-release `LOGO`
-raptor (`fedora-logo-icon.png`) remains Common's.
+`iso/live/src/images/utahraptor.png` by the ISO builders. The os-release `LOGO`
+is `img-logo-icon`, as on Dakota: artwork's `bluefin-logo-light.svg` installed
+as `/usr/share/pixmaps/img-logo-icon.svg` and `img-logo-icon-text.svg`, and
+`bluefin-logo-dark.svg` as the two `-dark` names, all from the
+`config/artwork.lock` commit (the bytes match Dakota's pins at artwork
+`de74de65`; #1266).
 
 ## GDM greeter logo
 
