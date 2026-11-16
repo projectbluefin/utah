@@ -26,8 +26,8 @@ apparmor = { status = "planned", area = "auth-security", issue = "#1226", reason
 oo7-cli = { status = "planned", area = "auth-security", issue = "#1227" }
 oo7-daemon = { status = "planned", area = "auth-security", issue = "#1227", reason = "Installed from the factory in place of gnome-keyring; gap closes on the next baseline" }
 oo7-portal = { status = "planned", area = "auth-security", issue = "#1227" }
-uutils-coreutils = { status = "planned", area = "cli-tools", issue = "#1229" }
-sudo = { status = "planned", area = "auth-security", issue = "#1229", reason = "sudo_logsrvd and sudo_sendlog; Dakota's sudo is sudo-rs" }
+uutils-coreutils = { status = "planned", area = "cli-tools", issue = "#1229", reason = "Installed beside GNU coreutils as uutils-<prog> and uu_<prog>; Dakota overwrites the GNU names" }
+sudo = { status = "planned", area = "auth-security", issue = "#1229", reason = "sudo_logsrvd and sudo_sendlog; Dakota's sudo is sudo-rs, which Utah links as /usr/bin/sudo" }
 fish = { status = "unavailable", area = "shells", issue = "#1230", reason = "packages/utah.toml [unavailable]" }
 libvirt = { status = "planned", area = "virt-dev", issue = "#1232", reason = "Installed and disabled by preset in Dakota; ujust setup-virtualization turns it on" }
 qemu = { status = "planned", area = "virt-dev", issue = "#1232" }
