@@ -430,8 +430,9 @@ enabled = [
   "flatpak-preinstall.service",
   "gdm.service",
   # GNOME's system services: gnome-build-meta's 80-gnome.preset, as Dakota
-  # ships it.
-  "colord.service",
+  # ships it. colord.service is not listed: the factory's colord ships it
+  # without an [Install] section, so it is D-Bus activated and `systemctl
+  # enable` is a no-op (the nvidia/gaming image builds failed on it).
   "accounts-daemon.service",
   "input-remapper.service",
   "ModemManager.service",

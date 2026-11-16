@@ -471,9 +471,12 @@ class ServiceMaskParityTests(unittest.TestCase):
         services = (ROOT / "scripts/configure-services.sh").read_text()
         for unit in ("colord.service", "accounts-daemon.service"):
             with self.subTest(unit=unit):
-                self.assertIn(unit, contract["services"]["enabled"])
                 self.assertIn(f"enable {unit}\n", preset)
                 self.assertIn(f"enable_unit {unit}\n", services)
+        # colord has no [Install] section in the factory build, so the image
+        # contract cannot require it to be enabled.
+        self.assertNotIn("colord.service", contract["services"]["enabled"])
+        self.assertIn("accounts-daemon.service", contract["services"]["enabled"])
 
     def test_dakota_gnome_user_units_enabled_in_contract_preset_and_script(self):
         # Dakota inherits these from gnome-build-meta's user presets.

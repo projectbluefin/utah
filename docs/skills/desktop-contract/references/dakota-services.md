@@ -7,7 +7,9 @@ user), `scripts/configure-services.sh`, and `contracts/bluefin-desktop.toml`
 
 - `colord.service` and `accounts-daemon.service` are enabled. Dakota inherits
   them from gnome-build-meta's `files/systemd-presets/system-preset/80-gnome.preset`.
-  They are in `[services].enabled`.
+  Only `accounts-daemon.service` is in `[services].enabled`: the factory's
+  colord ships no `[Install]` section, so it is D-Bus activated and cannot be
+  asserted enabled.
 - `speech-dispatcher.socket` and `xdg-desktop-portal-rewrite-launchers.service`
   are globally enabled user units, from gnome-build-meta's
   `user-preset/80-speechd.preset` and `80-xdg.preset`. They are in the

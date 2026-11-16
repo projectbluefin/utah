@@ -73,7 +73,7 @@ The TOML's sections are the contract's table of contents:
   hook, and the system-flatpaks Brewfile whose app list the contract enumerates.
 - **`[media]`** — GStreamer decoders that must load, not merely be installed: `openh264dec`.
   The factory libav is built on `ffmpeg-free` (no H.264), so `avdec_h264` is not asserted (#1116).
-- **`[services]`** — systemd units the preset must enable: `gdm.service`, `colord.service`,
+- **`[services]`** — systemd units the preset must enable: `gdm.service`,
   `accounts-daemon.service`, `avahi-daemon.service`, `avahi-daemon.socket`, `bluetooth.service`,
   `switcheroo-control.service`, `ublue-system-setup.service`, `flatpak-preinstall.service`,
   `flatpak-nuke-fedora.service`, `brew-setup.service`, `dconf-update.service`, `bootc-unified-storage.timer`,
