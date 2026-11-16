@@ -380,6 +380,35 @@ packages = [
     # the lax zone; the resolved drop-in applies on its own.
     "gnome-os-config-firewalld",
     "gnome-os-config-resolved-fallback-dns",
+    # The rest of Dakota's and GNOME OS's configuration elements, packaged by
+    # the factory (utah-packages packages/dakota-config and gnome-os-config,
+    # docs/skills/config-packages.md) instead of copied into system_files
+    # (#1265). Each subpackage installs one element's files at the element's
+    # paths; the desktop contract asserts the ones Utah relies on.
+    # dakota-config-firstboot-date's ublue-firstboot-date.path waits for
+    # systemd-timesyncd's sync flag, so it records the install date only once
+    # timesyncd replaces chrony (#1228).
+    "dakota-config-composefs-loop-udisks-ignore",
+    "dakota-config-custom-command-menu-dconf",
+    "dakota-config-firstboot-date",
+    "dakota-config-flatpak-apps",
+    "dakota-config-kexec-disable",
+    "dakota-config-network",
+    "dakota-config-ntsync-modules-load",
+    "dakota-config-rpcbind-preset",
+    "dakota-config-sudo-linuxbrew-path",
+    "dakota-config-tailscale-preset",
+    "dakota-config-tailscale-setup",
+    "dakota-config-udev-groups",
+    "dakota-config-user-avatars",
+    "dakota-config-uupd",
+    "dakota-config-wireplumber-pcsp",
+    "gnome-os-config-hidraw-udev",
+    "gnome-os-config-journald-config",
+    "gnome-os-config-modprobe-config",
+    "gnome-os-config-systemd-presets",
+    "gnome-os-config-uinput",
+    "gnome-os-config-wpa-supplicant-config",
     # Everyday command-line tools (#392). xdg-utils supplies xdg-open, which
     # nothing else in the image provides. nano-default-editor sets EDITOR.
     "xdg-utils",
@@ -926,6 +955,27 @@ parity = [
     "uresourced",
     "gnome-os-config-firewalld",
     "gnome-os-config-resolved-fallback-dns",
+    "dakota-config-composefs-loop-udisks-ignore",
+    "dakota-config-custom-command-menu-dconf",
+    "dakota-config-firstboot-date",
+    "dakota-config-flatpak-apps",
+    "dakota-config-kexec-disable",
+    "dakota-config-network",
+    "dakota-config-ntsync-modules-load",
+    "dakota-config-rpcbind-preset",
+    "dakota-config-sudo-linuxbrew-path",
+    "dakota-config-tailscale-preset",
+    "dakota-config-tailscale-setup",
+    "dakota-config-udev-groups",
+    "dakota-config-user-avatars",
+    "dakota-config-uupd",
+    "dakota-config-wireplumber-pcsp",
+    "gnome-os-config-hidraw-udev",
+    "gnome-os-config-journald-config",
+    "gnome-os-config-modprobe-config",
+    "gnome-os-config-systemd-presets",
+    "gnome-os-config-uinput",
+    "gnome-os-config-wpa-supplicant-config",
     "xdg-utils",
     "rsync",
     "nano",

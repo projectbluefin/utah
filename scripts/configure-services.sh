@@ -93,11 +93,16 @@ enable_unit systemd-resolved.service
 # See the preset: gated on systemd-boot by drop-in, skipped elsewhere (#363).
 enable_unit systemd-boot-update.service
 enable_unit bootc-unified-storage.timer
-# Dakota desktop parity (#675). The units ship in
-# system_files/shared/usr/lib/systemd/system/; the preset agrees so bootc's
-# first-boot preset application keeps them enabled (see #98).
-enable_unit ublue-firstboot-date.service
+# Dakota desktop parity (#675): dakota-config-firstboot-date ships these units
+# with Dakota's static multi-user.target.wants links (#1265); the preset
+# agrees so bootc's first-boot preset application keeps them enabled (see
+# #98). ublue-firstboot-date.service has no [Install]: its path unit starts it
+# once systemd-timesyncd reports a sync, which needs timesyncd in place of
+# chrony (#1228).
+enable_unit ublue-firstboot-date.path
 enable_unit ublue-booted-image.service
+# Removes the live ISO's bootc installer Flatpak from an installed system, once.
+enable_unit bluefin-remove-installer.service
 # Apply Dakota's runtime desktop integrations onto common's files. Each patch
 # is guarded: already-patched is a no-op, an unrecognized upstream file fails
 # the build loudly instead of silently shipping unpatched behavior.
@@ -271,9 +276,9 @@ grep -q '^DeployCollectionID=' /etc/flatpak/remotes.d/flathub.flatpakrepo ||
 grep -qx 'DeployCollectionID=org.flathub.Stable' /etc/flatpak/remotes.d/flathub.flatpakrepo
 # BudsLink backs the BudsLink-Companion extension enabled by default; Dakota
 # appends it to common's system Flatpaks and preinstalls it
-# (projectbluefin/dakota elements/bluefin/common.bst,
-# files/oci/bluefin-flatpak/preinstall.d/io.github.maniacx.BudsLink.preinstall).
-# The desktop contract's [flatpak] apps list fails the build if it is missing.
+# (projectbluefin/dakota elements/bluefin/common.bst; the preinstall comes from
+# the factory's dakota-config-flatpak-apps). The desktop contract's [flatpak]
+# apps list fails the build if it is missing.
 SYSTEM_FLATPAKS=/usr/share/ublue-os/homebrew/system-flatpaks.Brewfile
 if [ -f "${SYSTEM_FLATPAKS}" ] && ! grep -qxF 'flatpak "io.github.maniacx.BudsLink"' "${SYSTEM_FLATPAKS}"; then
     echo 'flatpak "io.github.maniacx.BudsLink"' >>"${SYSTEM_FLATPAKS}"
@@ -378,19 +383,11 @@ authselect enable-feature with-silent-lastlog
 authselect enable-feature with-fingerprint
 
 # uupd is distributed as a release binary, not an RPM in the Hummingbird
-# repositories. Keep its version pinned by the Containerfile argument.
-# Dakota's elements/bluefin/uupd.bst writes the same upstream units, with the
-# distrobox flag below, so the downloads give Dakota's units. Installing them
-# here replaces Common's uupd.timer (four runs a day) with upstream's daily
-# 04:00 timer, which is also what wins on Dakota: BuildStream stages
-# bluefin/uupd.bst after bluefin/common.bst. uupd-manual.service, its polkit
-# rule and /etc/uupd/config.json come from Dakota via system_files.
+# repositories. Keep its version pinned by the Containerfile argument. Its
+# units, uupd-manual.service, polkit rule and /etc/uupd/config.json come from
+# dakota-config-uupd (Dakota's elements/bluefin/uupd.bst), which replaces
+# Common's four-a-day uupd.timer with the daily 04:00 one, as on Dakota.
 install -Dm0755 /tmp/uupd/uupd /usr/bin/uupd
-install -Dm0644 /tmp/uupd/uupd.service /usr/lib/systemd/system/uupd.service
-install -Dm0644 /tmp/uupd/uupd.timer /usr/lib/systemd/system/uupd.timer
-systemctl enable uupd.timer
-# Avoid pulling the distrobox module on every update, as in Dakota's uupd.service.
-sed -i 's|uupd|& --disable-module-distrobox|' /usr/lib/systemd/system/uupd.service
 
 # Hummingbird's resolved unit defaults to a disconnected private /tmp. The
 # Bluefin LTS workaround is needed for bootc's early-boot DNS path.
