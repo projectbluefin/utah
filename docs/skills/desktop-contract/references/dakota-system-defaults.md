@@ -17,6 +17,25 @@ each in `contracts/bluefin-desktop.toml` (`[configuration].files` plus
   `/usr/share/polkit-1/rules.d/`. Utah asserts it in the contract and does not
   overlay a copy over the package-owned file.
 
+## Firewall and fallback DNS
+
+Both come from the factory's `gnome-os-config` package, built from
+gnome-build-meta at the commit Dakota's junction tracks:
+
+- `gnome-os-config-firewalld` ships GNOME OS's `lax` zone
+  (`/usr/lib/firewalld/zones/lax.xml`): ssh, mDNS, Samba client,
+  DHCPv6 client, TCP/UDP 1025-65535 and forwarding. `configure-services.sh`
+  applies `gnomeos-deps/firewalld.bst`'s two `firewalld.conf` edits,
+  `DefaultZone=lax` and `IPv6_rpfilter=loose`, with `sed --follow-symlinks`
+  so firewalld's variant symlink stays. Bluefin classic used Silverblue's
+  FedoraWorkstation zone, which is the same zone without mDNS.
+- `gnome-os-config-resolved-fallback-dns` ships
+  `/usr/lib/systemd/resolved.conf.d/50-gnome-os-fallback-dns.conf`, generated
+  from `core-deps/systemd-base.bst`'s `fallback-dns-servers` (Cloudflare,
+  DNS-over-TLS server names included). GNOME OS compiles that list into
+  systemd-resolved; Fedora builds with none. resolved only uses it when no
+  link or global DNS server is configured.
+
 ## Lid and sleep
 
 Lid and sleep handling stays at systemd-logind's defaults (suspend). Dakota

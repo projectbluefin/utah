@@ -176,6 +176,8 @@
         "glycin-thumbnailer",
         "gnome-disk-utility",
         "gnome-epub-thumbnailer",
+        "gnome-os-config-firewalld",
+        "gnome-os-config-resolved-fallback-dns",
         "gnupg2-scdaemon",
         "google-noto-sans-math-fonts",
         "google-noto-sans-mono-vf-fonts",
@@ -374,7 +376,7 @@
     }
   ],
   "totals": {
-    "installed": 317,
+    "installed": 319,
     "unavailable": 6
   },
   "unavailable": [
