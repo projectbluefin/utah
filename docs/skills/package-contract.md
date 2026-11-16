@@ -357,7 +357,7 @@ describe the same image as its `surface.tsv`; after a refresh,
 
 Current counts, per the README "Parity with Dakota" section: 60 base manifest
 packages installed, 267 Utah additions (GNOME 51, base-image parity, device
-firmware, desktop services), 9 genuinely unavailable. `scripts/check-doc-counts.py` (part of
+firmware, desktop services), 8 genuinely unavailable. `scripts/check-doc-counts.py` (part of
 `just check`) recomputes these from the manifests and fails if either
 document drifts from `site/data/packages.json`.
 

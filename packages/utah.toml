@@ -705,18 +705,6 @@ packages = [
 # Each entry MUST carry a tracking issue: this list is the documented parity
 # debt, not a dumping ground for packages that are merely inconvenient.
 #
-# evolution-ews-core
-#
-#   The Exchange Web Services plugin for Evolution (fedora_v43 section of
-#   the base manifest). Building it requires both the evolution-data-server
-#   stack -- camel, libebook, libecal, libedata-book -- and Evolution itself,
-#   which is where evolution-mail and evolution-shell come from.
-#   utah-packages now builds evolution-data-server (3.61.3), so the EDS half of
-#   that closure is covered. The remaining gap is two recipes the factory does
-#   not have: evolution, and evolution-ews itself. Move this entry out of
-#   [unavailable] into the contract once utah-packages builds both; tracked by
-#   #10.
-#
 # firefox
 #   Neither enabled repository provides the firefox RPM: the factory does
 #   not build it and Hummingbird's server repository does not carry it.
@@ -756,7 +744,6 @@ packages = [
 packages = [
     "grub2-efi-x64-cdboot",
     "anaconda-live",
-    "evolution-ews-core",
     "firefox",
     "libvirt-client",
     "libvirt-daemon-config-network",
