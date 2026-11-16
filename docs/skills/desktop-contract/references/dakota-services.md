@@ -90,7 +90,9 @@ they are harmless: `ratbagd.service` (D-Bus alias), `selinux-check-proper-disabl
 `systemd-timesyncd.service` (#1228; chrony is not installed),
 `systemd-pcrlock-make-policy.service`, `systemd-pcrlock-machine-id.service`,
 `systemd-pcrlock-secureboot-authority.service`, `podman.service`,
-`netavark-dhcp-proxy.socket`. `[services].disabled` holds the network
+`netavark-dhcp-proxy.socket`, `bluefin-migrate-var-home-passwd.service`
+(Dakota's legacy `/var/home` passwd migration for the `/home` bind mount,
+#1234). `[services].disabled` holds the network
 servers, sysstat, and the units enable-by-default must not reach.
 
 ### User units

@@ -12,15 +12,19 @@ TARGET_IMAGE="${TARGET_IMAGE:-ghcr.io/projectbluefin/utah:testing}"
 systemctl mask bootc-unified-storage.service bootc-unified-storage.timer || true
 
 # The image's useradd default is HOME=/home (scripts/fix-home-labels.sh), and
-# /home is a symlink to var/home, which does not exist yet at build time, so
-# `useradd -m` under /home fails (#281). Name the real path.
+# /home is an empty bind-mount point that home.mount covers with /var/home at
+# boot (#1234). A build has no mounts, so `useradd -m` would write into the
+# image's /home, hidden at runtime (#281). Create the home in /var/home, then
+# point the passwd field at /home/liveuser, the path the booted system uses
+# (bluefin-migrate-var-home-passwd would rewrite /var/home on every live boot).
 useradd --create-home --home-dir /var/home/liveuser --uid 1000 --user-group --comment 'Live User' liveuser || true
+usermod --home /home/liveuser liveuser
 passwd --delete liveuser
 printf 'liveuser ALL=(ALL) NOPASSWD: ALL\n' >/etc/sudoers.d/liveuser
 chmod 0440 /etc/sudoers.d/liveuser
-mkdir -p /home/liveuser/.config
-: >/home/liveuser/.config/gnome-initial-setup-done
-chown -R liveuser:liveuser /home/liveuser/.config
+mkdir -p /var/home/liveuser/.config
+: >/var/home/liveuser/.config/gnome-initial-setup-done
+chown -R liveuser:liveuser /var/home/liveuser/.config
 
 mkdir -p /etc/gdm
 cat >/etc/gdm/custom.conf <<'EOF'

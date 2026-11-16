@@ -252,15 +252,25 @@ transaction. The lint that checks the result runs in the same layer
 change between the two (comment, `Containerfile`).
 
 The one deliberate exception is `/var/home`, created after clean-stage but
-before lint in that same RUN. `/home` is a symlink to `var/home` and
-useradd ships `HOME=/home` (#576), so any `useradd --create-home` fails on
-a dangling symlink -- the installer chroot on a fresh install (no tmpfiles
-has run there yet), the tacklebox customize container, and the live ISO
-build all broke with `cannot create directory /home`, exit 12 (#602).
-clean-stage strips all of `/var` except cache, so the mkdir cannot go
-earlier; placing it before lint keeps lint proving the directory is covered
-by the `utah-home.conf` tmpfiles entry. A tmpfiles `d` line alone is not
-enough -- it only runs at boot, never in the installer chroot.
+before lint in that same RUN. useradd ships `HOME=/home` (#576) and
+`home.mount` binds `/var/home` over `/home` (Dakota's bind mount, #1234), so
+the homes live in `/var/home`: the installer pre-creates it in the
+stateroot, and the tacklebox customize container and live ISO build create
+liveuser's home there (#602). clean-stage strips all of `/var` except cache,
+so the mkdir cannot go earlier; placing it before lint keeps lint proving
+the directory is covered by the `utah-home.conf` tmpfiles entry.
+
+The same RUN replaces Hummingbird's `/home -> var/home` symlink with an
+empty directory, the bind-mount point, and fails if anything is in it:
+`home.mount` hides it. A build has no mounts, so build-time code that
+creates a home must write `/var/home/<user>`, not `/home/<user>`.
+
+Installer note: fisherman's ostree path runs `chroot <deployment> useradd
+--create-home`, which now writes a skel copy into the deployment's own
+`/home`, hidden at boot. The account still gets its home: fisherman also
+writes a tmpfiles `C /var/home/<user> - /etc/skel` rule that the first boot
+applies. Anything else an installer writes into `/home/<user>` before the
+first boot is lost the same way.
 
 ## `just` override and the 1.56 floor
 
