@@ -16,6 +16,11 @@ each in `contracts/bluefin-desktop.toml` (`[configuration].files` plus
   with an identical rule body, by Hummingbird's NetworkManager RPM at
   `/usr/share/polkit-1/rules.d/`. Utah asserts it in the contract and does not
   overlay a copy over the package-owned file.
+- Dakota's `/etc/gitconfig` (#1259) is freedesktop-sdk `components/git-lfs.bst`'s
+  integration command, which appends the `[filter "lfs"]` stanza
+  (`required`, `clean`, `smudge`, `process`). Hummingbird's `git-lfs` RPM
+  writes the same four keys from its `%post` (`git lfs install --system`), so
+  Utah installs the package and asserts the stanza; it ships no copy.
 
 ## Firewall and fallback DNS
 

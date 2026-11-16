@@ -172,6 +172,7 @@
         "gamemode",
         "gdbm",
         "ghostscript",
+        "git-lfs",
         "glycin-thumbnailer",
         "gnome-disk-utility",
         "gnome-epub-thumbnailer",
@@ -381,7 +382,7 @@
     }
   ],
   "totals": {
-    "installed": 324,
+    "installed": 325,
     "unavailable": 9
   },
   "unavailable": [

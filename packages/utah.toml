@@ -362,6 +362,12 @@ packages = [
     "qt6-qtbase",
     "python3-charset-normalizer",
     "python3-idna",
+    # Dakota's git-lfs (#1259; freedesktop-sdk components/git-lfs.bst, pulled
+    # in by projectbluefin/dakota elements/bluefin/deps.bst). Hummingbird
+    # builds it. Its %post runs `git lfs install --system`, which writes the
+    # [filter "lfs"] stanza fdsdk's integration command appends to
+    # /etc/gitconfig; contracts/bluefin-desktop.toml asserts the stanza.
+    "git-lfs",
     # Factory-published Bluefin tools consumed from the pinned image (#263).
     # Everything below is built by utah-packages and is asserted in
     # [factory].parity. Flatpak-first applies: no RPM here duplicates a
