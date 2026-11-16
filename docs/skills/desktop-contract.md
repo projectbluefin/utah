@@ -1,7 +1,7 @@
 ---
 name: desktop-contract
 version: "1.0"
-last_updated: "2026-11-07"
+last_updated: "2026-11-16"
 id: desktop-contract
 one_line_purpose: Maintain Bluefin Utah identity, Bluefin desktop defaults, and first-boot Flatpak policy.
 entry_point: docs/skills/desktop-contract.md
@@ -73,6 +73,7 @@ The TOML's sections are the contract's table of contents:
   hook, and the system-flatpaks Brewfile whose app list the contract enumerates.
 - **`[media]`** — GStreamer decoders that must load, not merely be installed: `openh264dec`.
   The factory libav is built on `ffmpeg-free` (no H.264), so `avdec_h264` is not asserted (#1116).
+- **`[selinux]`** — policy modules `semodule -l` must list, loaded by the build: `utah_bootc_probe` ([SELinux modules](desktop-contract/references/selinux-modules.md), #1198).
 - **`[services]`** — systemd units the preset must enable: `gdm.service`,
   `accounts-daemon.service`, `avahi-daemon.service`, `avahi-daemon.socket`, `bluetooth.service`,
   `switcheroo-control.service`, `ublue-system-setup.service`, `flatpak-preinstall.service`,
@@ -161,7 +162,7 @@ known case (#443): it exited 255 every start, so mDNS never worked.
 `avahi-daemon.service.d/10-utah-selinux.conf` sets `NoNewPrivileges=no`; the
 daemon still runs confined as `avahi_t`. Spot others on a booted VM with
 `journalctl -b | grep nnp_transition` and `ps -eZ` (a daemon showing
-`init_t` is the symptom).
+`init_t` is the symptom). Policy modules: [SELinux modules](desktop-contract/references/selinux-modules.md).
 
 ## First-boot work must not gate graphical.target
 
