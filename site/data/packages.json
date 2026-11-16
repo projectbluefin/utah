@@ -202,6 +202,7 @@
         "htop",
         "hyperv-daemons",
         "ibus-gtk4",
+        "ifuse",
         "intel-gmmlib",
         "intel-mediasdk",
         "intel-vpl-gpu-rt",
@@ -382,7 +383,7 @@
     }
   ],
   "totals": {
-    "installed": 325,
+    "installed": 326,
     "unavailable": 9
   },
   "unavailable": [
