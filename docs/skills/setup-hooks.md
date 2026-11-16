@@ -133,8 +133,9 @@ the `/etc` merge, so `20-home-labels.sh` rewrites a lingering exact
 `HOME=/var/home` to `HOME=/home` and warns about any other non-`/home`
 value. `utah-fix-home-labels --check` at the image's last step repeats that
 rebuild and fails the build if `file_contexts.homedirs` changes. Build-time
-`useradd -m` must name `/var/home/<user>` explicitly: `/var/home` does not
-exist in a container, so the `/home` symlink dangles (#281).
+`useradd -m` must name `/var/home/<user>` explicitly: a container build has
+no `home.mount`, so `/home` is the image's empty mount point and anything
+written there is hidden at boot (#281, #1234).
 
 ## Tests
 

@@ -143,7 +143,7 @@ On a fresh installed VM, check `systemctl --user status brew-preinstall`,
 `brew list --cask chairlift`, and launch Control Center from GNOME. Confirm
 settings persist and authenticated system update staging works; static gates
 prove image wiring, not a completed first-login download or GUI behavior.
-Homebrew native compilation invariants, the `/var/home` symlink for the brew prefix, and the polkit update-staging path are in the
+Homebrew native compilation invariants, the `/home` bind mount and the brew prefix, and the polkit update-staging path are in the
 [ChairLift reference](desktop-contract/references/chairlift-runtime-invariants.md); `packages/base.toml` `[fedora]` retains `make`, `gcc`, `gcc-c++`.
 
 ## NoNewPrivileges and SELinux domain transitions

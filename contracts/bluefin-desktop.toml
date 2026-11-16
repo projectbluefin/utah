@@ -173,6 +173,14 @@ files = [
   "/usr/lib/systemd/system/var-swap-swapfile.swap",
   "/usr/lib/systemd/system/swap.target.wants/var-swap-swapfile.swap",
   "/usr/share/selinux/packages/utah-swapfile.cil",
+  # Dakota's /home bind mount (elements/bluefin/bindmounts.bst) and the
+  # passwd migration for legacy /var/home fields (migrate-var-home-passwd.bst),
+  # #1234. home.mount is wanted statically by local-fs.target.
+  "/usr/lib/systemd/system/home.mount",
+  "/usr/lib/systemd/system/local-fs.target.wants/home.mount",
+  "/usr/libexec/bluefin-migrate-var-home-passwd",
+  "/usr/lib/systemd/system/bluefin-migrate-var-home-passwd.service",
+  "/usr/lib/systemd/system-preset/80-bluefin-migrate-var-home-passwd.preset",
   # GNOME OS firewall zone and fallback DNS (gnome-os-config subpackages).
   "/usr/lib/firewalld/zones/lax.xml",
   "/usr/lib/systemd/resolved.conf.d/50-gnome-os-fallback-dns.conf",
@@ -472,6 +480,8 @@ enabled = [
   "avahi-daemon.service",
   "avahi-daemon.socket",
   "bluetooth.service",
+  # Rewrites legacy /var/home passwd fields before any login (#1234).
+  "bluefin-migrate-var-home-passwd.service",
   # Dakota desktop parity (#675).
   "ublue-firstboot-date.path",
   "ublue-booted-image.service",

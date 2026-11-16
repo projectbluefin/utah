@@ -448,14 +448,23 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
 # /var/home is created after clean-stage (which strips all of /var except
 # cache) but before lint, so lint still proves the directory is covered by a
 # tmpfiles.d entry (utah-home.conf). The directory must ship in the image:
-# /home is a symlink to var/home and useradd ships HOME=/home (#576), so any
-# `useradd --create-home` fails on a dangling symlink -- the installer chroot
-# on a fresh install, the tacklebox customize container, and the live ISO
-# build all broke with "cannot create directory /home", exit 12 (#602).
+# useradd ships HOME=/home (#576) and home.mount binds /var/home over /home,
+# so the homes live there -- the installer pre-creates it in the stateroot,
+# and the tacklebox customize container and live ISO build create liveuser's
+# home in it (#602).
+#
+# /home itself becomes an empty directory, Dakota's bind-mount point (#1234),
+# in place of Hummingbird's /home -> var/home symlink. It must stay empty:
+# home.mount hides whatever the image carries there.
 RUN --mount=type=bind,from=inputs,source=/tmp/utah-scripts,target=/utah-build-tools,ro \
     /usr/local/libexec/utah-fix-home-labels --check && \
     /usr/local/libexec/utah-clean-stage && \
     mkdir -p /var/home && \
+    if [ -L /home ]; then rm /home; fi && \
+    mkdir -p -m 0755 /home && \
+    if [ -n "$(ls -A /home)" ]; then \
+      echo "ERROR: /home is not empty; home.mount would hide its contents" >&2; exit 1; \
+    fi && \
     bootc container lint --fatal-warnings --skip nonempty-boot && \
     python3 /utah-build-tools/pin-build-mtimes.py
 
