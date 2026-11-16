@@ -22,6 +22,15 @@ user), `scripts/configure-services.sh`, and `contracts/bluefin-desktop.toml`
   `disabled` list holds them off. The package still ships, so `sar` and
   `iostat` work on demand; enable collection with
   `systemctl enable --now sysstat.service`.
+- Key remapping is kanata plus ydotool, as on Dakota (#1222), and
+  input-remapper is gone. The factory's `kanata` ships Dakota's
+  `kanata.service` (DynamicUser, `input` group, `/dev/uinput`) and its
+  `80-kanata.preset` (`disable kanata.service`). Utah's preset,
+  `configure-services.sh` and the contract's `disabled` list keep it off as
+  well. The unit has `ConditionPathExists=/etc/kanata/kanata.kbd`, so opt in
+  by writing that file and running `systemctl enable --now kanata`. `ydotool`
+  brings Dakota's `80-ydotool.rules` (uinput to `input`, uaccess) and the
+  `uinput` modules-load drop-in (utah-packages#1134).
 
 - Dakota's effective service state (#1233). Dakota has no system `disable *`
   preset, so a booted Dakota runs every installed unit with `[Install]` that
