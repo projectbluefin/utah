@@ -109,7 +109,11 @@ files = [
   "/etc/dconf/db/distro.d/02-bluefin-keybindings",
   "/etc/dconf/db/distro.d/03-bluefin-ptyxis-palette",
   "/etc/dconf/db/distro.d/04-bluefin-custom-command-menu",
+  # Dakota's extension defaults and keybindings (dakota-config-custom-command-menu-dconf).
+  "/etc/dconf/db/distro.d/06-dakota-keybindings",
   "/etc/dconf/db/distro.d/08-dakota-extension-defaults",
+  # Dakota's avatar directories (dakota-config-user-avatars).
+  "/etc/dconf/db/distro.d/07-dakota-avatar-directories",
   "/etc/dconf/db/distro.d/locks/01-bluefin-locked-settings",
   # GDM greeter logo. GDM uses its own "gdm" dconf profile (provided by the
   # gdm RPM at /etc/dconf/profile/gdm); without this keyfile gnome-shell
@@ -129,12 +133,17 @@ files = [
   # fails the health check. The drop-in widens the burst window; #741.
   "/usr/lib/systemd/system/projectbluefin-countme.service.d/10-utah-burst-tolerance.conf",
   # Dakota desktop parity (#675): first-boot install-date stamping and the
-  # booted-image snapshot for fastfetch. Wallpaper rotation stays with
-  # Common's per-user timer (see configure-services.sh), so the Dakota month
-  # symlink units are intentionally not shipped.
+  # booted-image snapshot for fastfetch, plus the one-shot removal of the live
+  # ISO's installer Flatpak, all from dakota-config-firstboot-date (#1265).
+  # Wallpaper rotation stays with Common's per-user timer (see
+  # configure-services.sh), so the Dakota month symlink units are
+  # intentionally not shipped.
+  "/usr/lib/systemd/system/ublue-firstboot-date.path",
   "/usr/lib/systemd/system/ublue-firstboot-date.service",
+  "/usr/bin/ublue-firstboot-date",
   "/usr/lib/systemd/system/ublue-booted-image.service",
   "/usr/bin/ublue-booted-image-sync",
+  "/usr/lib/systemd/system/bluefin-remove-installer.service",
   # Common files configure-services.sh patches or checks for Dakota parity.
   # file_contains skips missing files, so list them here to fail the build if
   # Common drops one.
@@ -151,19 +160,25 @@ files = [
   "/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2",
   # Plymouth stays graphical with Hummingbird's console=ttyS0 karg (#461).
   "/usr/lib/bootc/kargs.d/10-utah-plymouth.toml",
-  # Dakota system defaults (projectbluefin/dakota elements/bluefin/
-  # wireplumber-pcsp.bst, kexec-disable.bst, networkmanager-polkit.bst).
-  # Hummingbird's NetworkManager RPM already ships Dakota's wheel rule at the
-  # same path, so Utah asserts it but must not overlay its own copy.
+  # Dakota system defaults, from the factory's dakota-config and
+  # gnome-os-config subpackages (#1265): wireplumber-pcsp, kexec-disable,
+  # udev-groups, composefs-loop-udisks-ignore, journald-config.
+  # Hummingbird's NetworkManager RPM already ships Dakota's wheel rule
+  # (networkmanager-polkit.bst) at the same path, so Utah asserts it but must
+  # not overlay its own copy.
   "/usr/share/wireplumber/wireplumber.conf.d/51-disable-pcsp.conf",
   "/usr/lib/sysctl.d/60-kexec-disable.conf",
+  "/usr/lib/sysusers.d/bluefin-udev-groups.conf",
+  "/usr/lib/udev/rules.d/90-hide-composefs-loop.rules",
+  "/usr/lib/systemd/journald.conf.d/90-persistent-journal.conf",
   # GNOME OS firewall zone and fallback DNS (gnome-os-config subpackages).
   "/usr/lib/firewalld/zones/lax.xml",
   "/usr/lib/systemd/resolved.conf.d/50-gnome-os-fallback-dns.conf",
   "/usr/share/polkit-1/rules.d/org.freedesktop.NetworkManager.rules",
   # Dakota's elements/bluefin/uupd.bst: the update units, user-startable
   # manual updates, and the hardware-check config that replaces Common's
-  # distrobox-only one. file_contains below pins the units' contents.
+  # distrobox-only one (dakota-config-uupd; the binary is downloaded by the
+  # Containerfile). file_contains below pins the units' contents.
   "/usr/bin/uupd",
   "/usr/lib/systemd/system/uupd.service",
   "/usr/lib/systemd/system/uupd.timer",
@@ -280,6 +295,11 @@ files = [
 "/usr/lib/sysctl.d/60-kexec-disable.conf" = [
   "kernel.kexec_load_disabled = 1",
 ]
+# Udev rules name these groups; dakota-config-udev-groups creates them (#444).
+"/usr/lib/sysusers.d/bluefin-udev-groups.conf" = [
+  "g plugdev",
+  "g nintendo_switch",
+]
 # Dakota parity: GNOME OS's lax zone is the default, with loose IPv6 rpfilter.
 "/etc/firewalld/firewalld.conf" = [
   "DefaultZone=lax",
@@ -315,7 +335,7 @@ files = [
   # Spacebar file previews in Files (Sushi), from Flathub (#1015).
   "/usr/share/flatpak/preinstall.d/nautilus-previewer.preinstall",
   # BudsLink backs the default-enabled BudsLink-Companion extension
-  # (projectbluefin/dakota files/oci/bluefin-flatpak/preinstall.d/).
+  # (dakota-config-flatpak-apps: Dakota's files/oci/bluefin-flatpak/preinstall.d/).
   "/usr/share/flatpak/preinstall.d/io.github.maniacx.BudsLink.preinstall",
   "/etc/flatpak/remotes.d/tuna-os.flatpakrepo",
   "/usr/share/ublue-os/privileged-setup.hooks.d/99-flatpaks.sh",
@@ -429,9 +449,10 @@ enabled = [
   "avahi-daemon.service",
   "avahi-daemon.socket",
   "bluetooth.service",
-  # Dakota desktop parity (#675).
-  "ublue-firstboot-date.service",
+  # Dakota desktop parity (#675, #1265).
+  "ublue-firstboot-date.path",
   "ublue-booted-image.service",
+  "bluefin-remove-installer.service",
   "bootc-unified-storage.timer",
   "brew-setup.service",
   "cups.socket",

@@ -451,18 +451,24 @@ class ServiceMaskParityTests(unittest.TestCase):
         self.assertIn("enable_unit bluefin-stats-refresh.timer", services)
 
     def test_dakota_parity_units_enabled_in_contract_preset_and_script(self):
+        # dakota-config-firstboot-date ships the units (#1265); Utah wires them.
         contract = (ROOT / "contracts/bluefin-desktop.toml").read_text()
         preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset").read_text()
         services = (ROOT / "scripts/configure-services.sh").read_text()
+        manifest = tomllib.loads((ROOT / "packages/utah.toml").read_text())["parity"]["packages"]
+        self.assertIn("dakota-config-firstboot-date", manifest)
         for unit in (
-            "ublue-firstboot-date.service",
+            "ublue-firstboot-date.path",
             "ublue-booted-image.service",
+            "bluefin-remove-installer.service",
         ):
             with self.subTest(unit=unit):
                 self.assertIn(f'"{unit}"', contract)
                 self.assertIn(f"enable {unit}", preset)
                 self.assertIn(f"enable_unit {unit}", services)
-                self.assertTrue((ROOT / "system_files/shared/usr/lib/systemd/system" / unit).is_file())
+                self.assertFalse((ROOT / "system_files/shared/usr/lib/systemd/system" / unit).exists())
+        # The service has no [Install]; only its path unit can be enabled.
+        self.assertNotIn('"ublue-firstboot-date.service"', contract.split("[services]", 1)[1])
 
     def test_dakota_gnome_system_units_enabled_in_contract_preset_and_script(self):
         # Dakota inherits these from gnome-build-meta's 80-gnome.preset.
@@ -523,11 +529,14 @@ class ServiceMaskParityTests(unittest.TestCase):
                 self.assertIn(path, files)
                 self.assertIn(path, file_contains)
 
-    def test_dakota_uupd_files_shipped_and_required(self):
-        # Dakota's elements/bluefin/uupd.bst ships these beside the binary.
+    def test_dakota_uupd_files_come_from_the_factory_and_are_required(self):
+        # Dakota's elements/bluefin/uupd.bst ships these beside the binary;
+        # dakota-config-uupd packages them (#1265), so Utah keeps no copy.
         contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
         files = contract["configuration"]["files"]
         file_contains = contract["configuration"]["file_contains"]
+        manifest = tomllib.loads((ROOT / "packages/utah.toml").read_text())["parity"]["packages"]
+        self.assertIn("dakota-config-uupd", manifest)
         for path in (
             "/usr/lib/systemd/system/uupd-manual.service",
             "/etc/polkit-1/rules.d/uupd.rules",
@@ -535,14 +544,13 @@ class ServiceMaskParityTests(unittest.TestCase):
         ):
             with self.subTest(path=path):
                 self.assertIn(path, files)
-                self.assertTrue((ROOT / "system_files/shared" / path.lstrip("/")).is_file())
-        # The downloaded units land after Common's copy; pin which one ships.
-        for path in ("/usr/lib/systemd/system/uupd.timer", "/usr/lib/systemd/system/uupd.service"):
+                self.assertFalse((ROOT / "system_files/shared" / path.lstrip("/")).exists())
+        # The package's units replace Common's copies; pin which one ships.
+        for path in ("/usr/lib/systemd/system/uupd.timer", "/usr/lib/systemd/system/uupd.service",
+                     "/etc/uupd/config.json"):
             with self.subTest(path=path):
                 self.assertIn(path, files)
                 self.assertIn(path, file_contains)
-        config = json.loads((ROOT / "system_files/shared/etc/uupd/config.json").read_text())
-        self.assertTrue(config["checks"]["hardware"]["enable"])
 
     def test_bootc_fetch_apply_updates_masked_and_disabled(self):
         preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset").read_text()

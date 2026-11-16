@@ -331,12 +331,9 @@ ARG ENABLE_SSHD=0
 # is otherwise unverified. Both move together, so Renovate updates both.
 ARG UUPD_VERSION=v1.5.5
 ARG UUPD_SHA256=d8d420a153de11589abad3292eef2131a75ac3487414065a2661a558ef0d027c
-# The two systemd units come from raw.githubusercontent at the same tag, and a
-# git tag move changes what raw.* serves for them without touching the release
-# asset the checksum above covers. uupd.service runs as root on a timer, so
-# verify the units against their own digests too; all four ARGs move together.
-ARG UUPD_SERVICE_SHA256=65dd2b64dcb6a9f77227612aa624ef17fe43b32eb835b51d7d22a22755dc21a8
-ARG UUPD_TIMER_SHA256=bbb5f098ec33d047bdef571e0bc112364df157e0f92d73e0febab703c4a3c099
+# The units, uupd-manual.service, the polkit rule and /etc/uupd/config.json
+# are Dakota's (elements/bluefin/uupd.bst), installed by the factory's
+# dakota-config-uupd package; only the binary is downloaded here.
 
 # Hummingbird defaults to a server preset and disables unlisted services.
 # configure-services is the Utah equivalent of bluefin-lts's 40-services.sh:
@@ -365,12 +362,6 @@ RUN --mount=type=bind,from=artwork,source=/out/branding,target=/tmp/utah-artwork
       -o /tmp/uupd/uupd_Linux_x86_64.tar.gz && \
     echo "${UUPD_SHA256}  /tmp/uupd/uupd_Linux_x86_64.tar.gz" | sha256sum --check --strict && \
     tar -xzf /tmp/uupd/uupd_Linux_x86_64.tar.gz -C /tmp/uupd && \
-    curl -fsSL "https://raw.githubusercontent.com/ublue-os/uupd/${UUPD_VERSION}/uupd.service" \
-      -o /tmp/uupd/uupd.service && \
-    curl -fsSL "https://raw.githubusercontent.com/ublue-os/uupd/${UUPD_VERSION}/uupd.timer" \
-      -o /tmp/uupd/uupd.timer && \
-    echo "${UUPD_SERVICE_SHA256}  /tmp/uupd/uupd.service" | sha256sum --check --strict && \
-    echo "${UUPD_TIMER_SHA256}  /tmp/uupd/uupd.timer" | sha256sum --check --strict && \
     /usr/local/libexec/utah-build-gnome-extensions && \
     /usr/local/libexec/utah-verify-gnome-extensions --record-provenance && \
     glib-compile-schemas /usr/share/glib-2.0/schemas && \

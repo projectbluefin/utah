@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-16",
+  "generated_at": "2026-11-18",
   "generator": "scripts/generate-site-data.py",
   "groups": [
     {
@@ -149,6 +149,21 @@
         "cups-client",
         "cups-filters",
         "cups-ipptool",
+        "dakota-config-composefs-loop-udisks-ignore",
+        "dakota-config-custom-command-menu-dconf",
+        "dakota-config-firstboot-date",
+        "dakota-config-flatpak-apps",
+        "dakota-config-kexec-disable",
+        "dakota-config-network",
+        "dakota-config-ntsync-modules-load",
+        "dakota-config-rpcbind-preset",
+        "dakota-config-sudo-linuxbrew-path",
+        "dakota-config-tailscale-preset",
+        "dakota-config-tailscale-setup",
+        "dakota-config-udev-groups",
+        "dakota-config-user-avatars",
+        "dakota-config-uupd",
+        "dakota-config-wireplumber-pcsp",
         "dbus-daemon",
         "dbus-tools",
         "default-fonts-core-emoji",
@@ -177,7 +192,13 @@
         "gnome-disk-utility",
         "gnome-epub-thumbnailer",
         "gnome-os-config-firewalld",
+        "gnome-os-config-hidraw-udev",
+        "gnome-os-config-journald-config",
+        "gnome-os-config-modprobe-config",
         "gnome-os-config-resolved-fallback-dns",
+        "gnome-os-config-systemd-presets",
+        "gnome-os-config-uinput",
+        "gnome-os-config-wpa-supplicant-config",
         "gnupg2-scdaemon",
         "google-noto-sans-math-fonts",
         "google-noto-sans-mono-vf-fonts",
@@ -378,7 +399,7 @@
     }
   ],
   "totals": {
-    "installed": 321,
+    "installed": 342,
     "unavailable": 6
   },
   "unavailable": [

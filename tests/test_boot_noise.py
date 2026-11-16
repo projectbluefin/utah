@@ -21,10 +21,17 @@ def directives(path: Path) -> list[str]:
 
 class BootNoiseTests(unittest.TestCase):
     def test_udev_rule_groups_are_created(self):
-        groups = {line.split()[1] for line in directives(
-            SHARED / "usr/lib/sysusers.d/utah-udev-groups.conf")
-            if line.startswith("g ")}
-        self.assertEqual(groups, {"plugdev", "nintendo_switch"})
+        # Dakota's bluefin/udev-groups.bst, packaged as dakota-config-udev-groups
+        # (#1265); the contract asserts both groups in the installed file.
+        import tomllib
+        manifest = tomllib.loads((ROOT / "packages/utah.toml").read_text())
+        self.assertIn("dakota-config-udev-groups", manifest["parity"]["packages"])
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        self.assertEqual(
+            contract["configuration"]["file_contains"]["/usr/lib/sysusers.d/bluefin-udev-groups.conf"],
+            ["g plugdev", "g nintendo_switch"],
+        )
+        self.assertFalse((SHARED / "usr/lib/sysusers.d/utah-udev-groups.conf").exists())
 
     def test_mail_spool_exists_for_useradd(self):
         rules = directives(SHARED / "usr/lib/tmpfiles.d/utah-mail.conf")

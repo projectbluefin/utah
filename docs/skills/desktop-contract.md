@@ -79,8 +79,8 @@ The TOML's sections are the contract's table of contents:
   `ublue-system-setup.service`, `flatpak-preinstall.service`, `flatpak-nuke-fedora.service`,
   `brew-setup.service`, `dconf-update.service`, `bootc-unified-storage.timer`, `input-remapper.service`,
   `ModemManager.service`, `power-profiles-daemon.service`, `thermald.service`, `projectbluefin-countme.timer`,
-  `cups.socket`, `systemd-boot-update.service`, `uupd.timer`, `bluefin-stats-refresh.timer`, `ublue-firstboot-date.service`,
-  `ublue-booted-image.service`. [Dakota service presets](desktop-contract/references/dakota-services.md): GNOME units, user units, opt-in sysstat.
+  `cups.socket`, `systemd-boot-update.service`, `uupd.timer`, `bluefin-stats-refresh.timer`, `ublue-firstboot-date.path`,
+  `ublue-booted-image.service`, `bluefin-remove-installer.service`. [Dakota service presets](desktop-contract/references/dakota-services.md): GNOME units, user units, opt-in sysstat.
   Update policy delegates background updates to `uupd.timer`; `bootc-fetch-apply-updates.timer` and
   `bootc-fetch-apply-updates.service` are masked in `/etc` and `/usr/lib` (and disabled in
   `85-utah-desktop.preset`) so cross-vendor `/etc` 3-way merges (e.g. switching from Bluefin) do not
@@ -187,7 +187,7 @@ one is pending a composefs boot check (see below):
 
 - `Failed to resolve group 'plugdev'` / `'nintendo_switch'`, about 100 lines:
   udev rules from libfido2 and common name groups nothing creates.
-  `sysusers.d/utah-udev-groups.conf` creates them.
+  `sysusers.d/bluefin-udev-groups.conf` (`dakota-config-udev-groups`, #1265) creates them.
 - `fchmod() of / failed: Read-only file system`: systemd's `root.conf`
   (`z / 555`) cannot apply to the composefs root. `/etc/tmpfiles.d/root.conf`
   masks it by name with a comment-only file.
