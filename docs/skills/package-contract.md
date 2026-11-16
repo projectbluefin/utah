@@ -65,6 +65,10 @@ Flatpak (`contracts/bluefin-desktop.toml` `[flatpak]`). Transitional native
 payloads need an inline drop condition in `packages/utah.toml`; the factory
 follows the same rule when importing recipes.
 
+Utah requests available Dakota input engines and language libraries in `[parity]` (#1256).
+Keep the base manifest's Mozc and Unikey; ibus-anthy and ibus-typing-booster await
+`kasumi-unicode` and `cldr-emoji-annotation`, which neither the factory nor Hummingbird publishes.
+
 ## Wi-Fi documentation currency
 
 Wi-Fi needs both `[hardware]` firmware and the `[parity]` userspace stack:
@@ -356,7 +360,7 @@ describe the same image as its `surface.tsv`; after a refresh,
 [remove resolved triage entries](package-contract/references/factory-consumption.md#closing-baseline-gaps).
 
 Current counts, per the README "Parity with Dakota" section: 61 base manifest
-packages installed, 258 Utah additions (GNOME 51, base-image parity, device
+packages installed, 264 Utah additions (GNOME 51, base-image parity, device
 firmware, desktop services), 6 genuinely unavailable. `scripts/check-doc-counts.py` (part of
 `just check`) recomputes these from the manifests and fails if either
 document drifts from `site/data/packages.json`.
