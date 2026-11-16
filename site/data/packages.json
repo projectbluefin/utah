@@ -340,6 +340,7 @@
         "splix",
         "stix-fonts",
         "stoken-libs",
+        "sudo-rs",
         "sushi",
         "sysstat",
         "system-config-printer-libs",
@@ -357,6 +358,7 @@
         "uresourced",
         "uriparser",
         "usermode",
+        "uutils-coreutils",
         "vim-enhanced",
         "vpnc",
         "vpnc-script",
@@ -420,7 +422,7 @@
     }
   ],
   "totals": {
-    "installed": 365,
+    "installed": 367,
     "unavailable": 7
   },
   "unavailable": [

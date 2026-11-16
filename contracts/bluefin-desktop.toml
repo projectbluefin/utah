@@ -170,6 +170,15 @@ files = [
   "/usr/bin/oo7-cli",
   "/etc/pam.d/passwd",
   "/usr/share/xdg-desktop-portal/gnome-portals.conf",
+  # sudo-rs and uutils-coreutils, as on Dakota (#1229): /usr/bin/sudo links to
+  # sudo-rs, which reads C sudo's PAM stack and sudoers; uutils runs beside GNU
+  # coreutils under its uutils-<prog> and uu_<prog> names.
+  "/usr/bin/sudo-rs",
+  "/etc/pam.d/sudo",
+  "/etc/sudoers",
+  "/usr/bin/uutils-coreutils",
+  "/usr/bin/uutils-ls",
+  "/usr/bin/uu_ls",
   # Dakota's shell defaults (projectbluefin/dakota elements/bluefin/common.bst).
   "/etc/profile.d/bluefin-shell-defaults.sh",
   # Common's Red Hat signature policy uses the unsuffixed key path. The pinned
