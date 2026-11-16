@@ -6,13 +6,9 @@
 
 set -eoux pipefail
 
-# Match Bluefin's laptop defaults from 40-services.sh.
-if [ -f /usr/lib/systemd/logind.conf ]; then
-    sed -i 's/^#HandleLidSwitch=.*/HandleLidSwitch=suspend-then-hibernate/' /usr/lib/systemd/logind.conf
-    sed -i 's/^#HandleLidSwitchDocked=.*/HandleLidSwitchDocked=suspend-then-hibernate/' /usr/lib/systemd/logind.conf
-    sed -i 's/^#HandleLidSwitchExternalPower=.*/HandleLidSwitchExternalPower=suspend-then-hibernate/' /usr/lib/systemd/logind.conf
-    sed -i 's/^#SleepOperation=.*/SleepOperation=suspend-then-hibernate/' /usr/lib/systemd/logind.conf
-fi
+# Lid and sleep actions stay at systemd-logind's defaults (suspend), as on
+# Dakota, which ships no logind or sleep override. Utah has only zram swap,
+# so suspend-then-hibernate has no resume target and cannot work.
 
 unit_exists() {
     systemctl cat "$1" >/dev/null 2>&1
@@ -65,11 +61,26 @@ enable_unit flatpak-preinstall.service
 # bluez installed. Enable it next to the other desktop units; see #98.
 enable_unit gdm.service
 enable_unit bluetooth.service
+# GNOME's system services, from gnome-build-meta's 80-gnome.preset as Dakota
+# ships it (files/systemd-presets/system-preset/80-gnome.preset).
+enable_unit colord.service
+enable_unit accounts-daemon.service
 # Bluefin defaults for mDNS discovery and hybrid-GPU application launching.
 enable_unit avahi-daemon.service
 enable_unit avahi-daemon.socket
 enable_unit switcheroo-control.service
 enable_unit firewalld.service
+# Workstation firewall as Dakota ships it: GNOME OS's lax zone (open
+# 1025-65535, mDNS, Samba client, ssh) as the default, with a loose IPv6
+# reverse-path filter. gnome-os-config-firewalld ships the zone; these are
+# gnome-build-meta gnomeos-deps/firewalld.bst's two firewalld.conf edits.
+# --follow-symlinks keeps firewalld's variant symlink in place.
+test -f /usr/lib/firewalld/zones/lax.xml
+sed -i --follow-symlinks \
+    -e 's/^DefaultZone=.*/DefaultZone=lax/' \
+    -e 's/^IPv6_rpfilter=.*/IPv6_rpfilter=loose/' /etc/firewalld/firewalld.conf
+grep -qx 'DefaultZone=lax' /etc/firewalld/firewalld.conf
+grep -qx 'IPv6_rpfilter=loose' /etc/firewalld/firewalld.conf
 enable_unit fwupd.service
 enable_unit fwupd-refresh.timer
 enable_unit dconf-update.service
@@ -171,20 +182,59 @@ esac' "${UWELCOME_SH}"
         exit 1
     fi
 fi
+# Common's System Update, Community and Documentation launchers duplicate
+# Control Center (updates, the Community link, docs); Dakota drops all three
+# (projectbluefin/dakota elements/bluefin/common.bst). `ujust update` stays.
+rm -f /usr/share/applications/system-update.desktop \
+    /usr/share/applications/discourse.desktop \
+    /usr/share/applications/documentation.desktop
 # input-remapper is installed by Bluefin's package set, but without its root
 # daemon running, udev autoload fails on input devices and the GUI prompts for
 # root credentials on launch. Enable it next to the desktop units; see #99.
 enable_unit input-remapper.service
 enable_unit ModemManager.service
-# Thermal management, as Fedora's preset enables it for Bluefin (#388).
+# Power profiles and thermal management as Dakota ships them (#388):
+# power-profiles-daemon, not TuneD, and no intel_lpmd.
+enable_unit power-profiles-daemon.service
 enable_unit thermald.service
-enable_unit intel_lpmd.service
-# sysstat accounting, as Fedora's preset enables it for Bluefin (#263).
+# Dakota's effective service state (#1233); see 85-utah-desktop.preset.
+enable_unit rtkit-daemon.service
+enable_unit uresourced.service
+enable_unit upower.service
+enable_unit udisks2.service
+enable_unit polkit-agent-helper.socket
+enable_unit cups.service
+enable_unit pcscd.socket
+enable_unit gnome-remote-desktop.service
+enable_unit gnome-remote-desktop-configuration.service
+enable_unit malcontent-timerd.service
+enable_unit malcontent-timer-extension-agent.service
+enable_unit malcontent-webd.service
+enable_unit malcontent-webd-update.timer
+enable_unit systemd-oomd.service
+enable_unit systemd-oomd.socket
+enable_unit wpa_supplicant.service
+enable_unit podman.socket
+enable_unit podman-auto-update.timer
+enable_unit podman-restart.service
+enable_unit podman-clean-transient.service
+enable_unit systemd-sysext.socket
+enable_unit systemd-factory-reset.socket
+enable_unit systemd-pcrextend.socket
+enable_unit systemd-storage-block.socket
+enable_unit systemd-storage-fs.socket
+enable_unit systemd-udev-load-credentials.service
+enable_unit systemd-userdb-load-credentials.service
+disable_unit multipathd.service
+disable_unit lm_sensors.service
 # nfs-client.target is turned off: see 85-utah-desktop.preset.
 disable_unit nfs-client.target
-enable_unit sysstat.service
-enable_unit sysstat-collect.timer
-enable_unit sysstat-summary.timer
+# sysstat collection is opt-in, as in Dakota (elements/bluefin/sysstat.bst);
+# the package stays for on-demand sar/iostat. See 85-utah-desktop.preset.
+disable_unit sysstat.service
+disable_unit sysstat-collect.timer
+disable_unit sysstat-summary.timer
+disable_unit sysstat-rotate.timer
 # Printing on demand, as Fedora's preset enables it for Bluefin; Hummingbird's
 # 99-default-disable would leave it off.
 enable_unit cups.socket
@@ -219,19 +269,17 @@ grep -q '^DeployCollectionID=' /etc/flatpak/remotes.d/flathub.flatpakrepo ||
     sed -i '/^\[Flatpak Repo\]$/a DeployCollectionID=org.flathub.Stable' \
         /etc/flatpak/remotes.d/flathub.flatpakrepo
 grep -qx 'DeployCollectionID=org.flathub.Stable' /etc/flatpak/remotes.d/flathub.flatpakrepo
+# BudsLink backs the BudsLink-Companion extension enabled by default; Dakota
+# appends it to common's system Flatpaks and preinstalls it
+# (projectbluefin/dakota elements/bluefin/common.bst,
+# files/oci/bluefin-flatpak/preinstall.d/io.github.maniacx.BudsLink.preinstall).
+# The desktop contract's [flatpak] apps list fails the build if it is missing.
+SYSTEM_FLATPAKS=/usr/share/ublue-os/homebrew/system-flatpaks.Brewfile
+if [ -f "${SYSTEM_FLATPAKS}" ] && ! grep -qxF 'flatpak "io.github.maniacx.BudsLink"' "${SYSTEM_FLATPAKS}"; then
+    echo 'flatpak "io.github.maniacx.BudsLink"' >>"${SYSTEM_FLATPAKS}"
+fi
 
 disable_unit flatpak-add-fedora-repos.service
-
-# Keep TuneD off the ostree sysroot lock: its bootloader plugin would run
-# `bootc loader-entries set-options-for-source` on every power-profile switch
-# and hang behind bootc-unified-storage or an upgrade. The profile explains;
-# TuneD merges a post-loaded profile into every profile it applies, including
-# the ones tuned-ppd switches to. Written here, after the package transaction,
-# because the tuned RPM owns this %config(noreplace) file.
-if rpm -q --quiet tuned; then
-    test -f /usr/lib/tuned/profiles/utah-bootc-kargs-off/tuned.conf
-    printf '%s\n' utah-bootc-kargs-off > /etc/tuned/post_loaded_profile
-fi
 
 # Keep image updates under uupd/bootc rather than the legacy rpm-ostree path.
 # Mask in /usr/lib as well as /etc so the mask survives cross-vendor /etc 3-way merges
@@ -288,9 +336,12 @@ fi
 # asserts the result (services.user_enabled).
 # grub-boot-success.timer is deliberately absent: /boot is read-only at runtime
 # so the mark can never be written (see the user preset, #364).
+# speech-dispatcher.socket and xdg-desktop-portal-rewrite-launchers.service
+# follow Dakota, which inherits them from gnome-build-meta's user presets.
 for unit in pipewire.socket pipewire-pulse.socket wireplumber.service \
             xdg-user-dirs.service \
-            obex.service mpris-proxy.service; do
+            obex.service mpris-proxy.service \
+            speech-dispatcher.socket xdg-desktop-portal-rewrite-launchers.service; do
     if user_unit_exists "${unit}"; then
         systemctl --global enable "${unit}"
     else
@@ -320,11 +371,17 @@ authselect enable-feature with-mdns4
 
 # uupd is distributed as a release binary, not an RPM in the Hummingbird
 # repositories. Keep its version pinned by the Containerfile argument.
+# Dakota's elements/bluefin/uupd.bst writes the same upstream units, with the
+# distrobox flag below, so the downloads give Dakota's units. Installing them
+# here replaces Common's uupd.timer (four runs a day) with upstream's daily
+# 04:00 timer, which is also what wins on Dakota: BuildStream stages
+# bluefin/uupd.bst after bluefin/common.bst. uupd-manual.service, its polkit
+# rule and /etc/uupd/config.json come from Dakota via system_files.
 install -Dm0755 /tmp/uupd/uupd /usr/bin/uupd
 install -Dm0644 /tmp/uupd/uupd.service /usr/lib/systemd/system/uupd.service
 install -Dm0644 /tmp/uupd/uupd.timer /usr/lib/systemd/system/uupd.timer
 systemctl enable uupd.timer
-# Avoid pulling the distrobox module on every update, as in Bluefin LTS.
+# Avoid pulling the distrobox module on every update, as in Dakota's uupd.service.
 sed -i 's|uupd|& --disable-module-distrobox|' /usr/lib/systemd/system/uupd.service
 
 # Hummingbird's resolved unit defaults to a disconnected private /tmp. The

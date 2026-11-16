@@ -1,10 +1,11 @@
-# Utah's package overlay on top of the Bluefin package contract.
+# Utah's package overlay on top of its base manifest.
 #
-# packages/bluefin.toml is a byte-for-byte copy of projectbluefin/bluefin's
-# build_files/packages/base.toml and must stay that way -- it is the parity
-# contract, and any drift there is a parity bug.  Everything Utah needs *in
-# addition to* (or *instead of*) that contract lives here.  Flatpak-first:
-# never add an RPM for an end-user app Utah ships as a Flatpak (see
+# packages/base.toml is Utah's frozen base manifest (copied from
+# projectbluefin/bluefin's base.toml once, edited by hand since). Dakota
+# (projectbluefin/dakota) is the parity target: baselines/GAP.md lists what
+# Dakota ships that Utah lacks. Everything Utah needs *in addition to* (or
+# *instead of*) the base manifest lives here.  Flatpak-first: never add an RPM
+# for an end-user app Utah ships as a Flatpak (see
 # contracts/bluefin-desktop.toml [flatpak]); drop conditions ride inline.
 #
 # Sections:
@@ -13,9 +14,8 @@
 #   [hardware]     device firmware the bootable base leaves out entirely
 #   [build]        toolchain needed to build the pinned GNOME extensions
 #   [services]     desktop daemons enabled after the server base (cryptsetup, flatpak, fwupd, ...)
-#   [unavailable]  Bluefin parity gaps none of Utah's enabled repositories
-#                  provide -- from the copied base.toml contract or from the
-#                  published Bluefin image snapshot (baselines/bluefin/rpms.tsv)
+#   [unavailable]  parity gaps none of Utah's enabled repositories provide --
+#                  from the base manifest or from a measured image baseline
 #
 # Bluefin's [multimedia_overrides] selects replacement builds from negativo17.
 # Utah does not enable that repository or install that section wholesale.
@@ -114,7 +114,7 @@ gtk4 = "4"
 libadwaita = "1"
 
 [parity]
-# Packages Bluefin's image carries without naming them in bluefin.toml, because
+# Packages Bluefin's image carries without naming them in its base.toml, because
 # Fedora's Silverblue base supplies them, and which Hummingbird's repository
 # has but its server-shaped bootable base leaves out. Measured, not guessed:
 # the image-level parity report (#117, scripts/check-image-parity.py) listed
@@ -251,8 +251,8 @@ packages = [
     "lm_sensors",
     "libimobiledevice-utils",
     "vim-enhanced",
-    # GPU process monitor. Bluefin's published image ships it from a build
-    # file outside the copied base.toml (baselines/bluefin/rpms.tsv); the
+    # GPU process monitor. Bluefin's published image shipped it from a build
+    # file outside its base.toml (measured in the retired Bluefin baseline); the
     # Homebrew formula is deprecated, so the factory build published by
     # utah-packages#311 is the source. Tracked by #451.
     "nvtop",
@@ -317,7 +317,7 @@ packages = [
     # repository. All of these stay out until utah-packages builds their
     # missing dependencies (#263).
     "samba",
-    # Screen reader stack Bluefin ships (baselines/bluefin/rpms.tsv: orca 50.2,
+    # Screen reader stack Bluefin shipped (retired Bluefin baseline: orca 50.2,
     # speech-dispatcher 0.12.1) and the upstream testsuite asserts. Published
     # by the pinned factory image (#741, utah-packages#447).
     "orca",
@@ -356,13 +356,24 @@ packages = [
     # in Bluefin's [excluded] list. Each name was resolved against the pinned
     # image by CI's package availability step.
     #
-    # Power and thermal policy (#388). Fedora's preset (redhat-systemd-presets
-    # 90-default.preset, which Bluefin inherits) enables thermald and
-    # intel_lpmd; the matching enablements are in 85-utah-desktop.preset and
+    # Power and thermal policy (#388), as Dakota ships it: power-profiles-daemon
+    # (gnome-build-meta core-deps) backs GNOME's power-profile switch, and
+    # thermald handles thermal limits. Dakota ships neither TuneD/tuned-ppd nor
+    # intel-lpmd. The matching enablements are in 85-utah-desktop.preset and
     # configure-services.sh.
+    "power-profiles-daemon",
     "thermald",
-    "intel-lpmd",
     "powerstat",
+    # Resource allocation for the active user (#1239), as GNOME OS ships it
+    # (gnome-build-meta gnomeos-deps/uresourced.bst): memory/IO/CPU protection
+    # for the foreground session. The factory already builds it.
+    "uresourced",
+    # GNOME OS's firewall zone and fallback DNS, as Dakota ships them, built by
+    # the factory from gnome-build-meta at the commit Dakota's junction tracks
+    # (utah-packages packages/gnome-os-config). configure-services.sh selects
+    # the lax zone; the resolved drop-in applies on its own.
+    "gnome-os-config-firewalld",
+    "gnome-os-config-resolved-fallback-dns",
     # Everyday command-line tools (#392). xdg-utils supplies xdg-open, which
     # nothing else in the image provides. nano-default-editor sets EDITOR.
     "xdg-utils",
@@ -465,9 +476,9 @@ packages = [
     # (libutempter, libhandy, gssproxy, quota, python3-pillow, python3-cups,
     # usbutils, net-snmp, libtraceevent/libtracefs, libsrtp, gtksourceview5,
     # djvulibre, liba52, libmpeg2) are published, so the names they gated resolve.
-    # sysstat's units are the ones Fedora's preset enables and Utah wires
-    # (85-utah-desktop.preset, configure-services.sh, desktop contract);
-    # nfs-client.target is disabled, see 85-utah-desktop.preset.
+    # sysstat ships for on-demand sar/iostat; its collection units are opt-in
+    # and preset-disabled, as in Dakota (elements/bluefin/sysstat.bst; see
+    # 85-utah-desktop.preset). nfs-client.target is disabled there too.
     "tmux",
     "powertop",
     "sysstat",
@@ -502,12 +513,9 @@ packages = [
     "papers-nautilus",
     #
     # Left out (resolved against sha256:d3b5bac2):
-    #   tuned, tuned-ppd (#388)     Requires (rpm-ostree if bootc). bootc is in
-    #                               the image, rpm-ostree is waived (Utah updates
-    #                               with bootc) and published nowhere. Bluefin
-    #                               runs tuned-ppd instead of
-    #                               power-profiles-daemon, so the latter is not
-    #                               installed as a stand-in.
+    #   tuned, tuned-ppd            Dakota runs power-profiles-daemon, which is
+    #                               installed above; the two claim the same
+    #                               D-Bus name, so never install both.
     #   gstreamer1-plugins-good-qt  Qt5 (libQt5Qml, libQt5Quick,
     #                               libQt5WaylandClient, libQt5X11Extras);
     #                               Bluefin also ships the -qt6 split, which is
@@ -636,12 +644,11 @@ packages = [
 # Not verified in-tree: #384's acceptance check is `swapon -s` showing a zram
 # device on a booted install, and no e2e job here asserts in-VM swap. Run it
 # against the next `testing` image before closing #384.
-# systemd-oomd-defaults is the related memory-pressure half of #384 and is
-# deliberately not taken here: #404 kept itself to one logical change (the
-# swap device), and the issue left the OOM decision to its author. Utah
-# therefore runs with zram swap and stock kernel OOM handling, not
-# systemd-oomd's pressure-based kills. Revisit it as its own change against
-# #384's OOM question rather than assuming the omission was an oversight.
+# systemd-oomd runs enabled, as on Dakota (#1233): GNOME OS enables it through
+# its enable-by-default preset policy and ships no oomd.conf.d or ManagedOOM
+# drop-ins of its own, so Utah enables the daemon and adds no
+# systemd-oomd-defaults either. Pressure-based kills therefore only apply to
+# units that opt in with ManagedOOM*=, exactly as on Dakota.
 packages = [
     "avahi",
     # .local hostname resolution over mDNS (#499), as Dakota (freedesktop-sdk
@@ -660,15 +667,15 @@ packages = [
 ]
 
 [unavailable]
-# Bluefin parity gaps none of Utah's enabled repositories provide.  Two kinds
-# of gap land here and both count as parity debt:
+# Parity gaps none of Utah's enabled repositories provide.  Two kinds of gap
+# land here and both count as parity debt:
 #
-#   contract gaps  names in packages/bluefin.toml (the copied base.toml) that
-#                  neither utah-packages nor Hummingbird's repository carries
-#   image gaps     names Bluefin's published image ships from a build file
-#                  outside the copied contract, recorded in the snapshot at
-#                  baselines/bluefin/rpms.tsv and triaged in
-#                  baselines/triage.toml
+#   contract gaps  names in packages/base.toml that neither utah-packages nor
+#                  Hummingbird's repository carries
+#   image gaps     names a measured image ships outside the base manifest.
+#                  Dakota is the parity target: its gaps are recorded in
+#                  baselines/GAP.md and triaged in baselines/triage.toml;
+#                  older entries came from the retired Bluefin image baseline
 #
 # Each entry MUST carry a tracking issue: this list is the documented parity
 # debt, not a dumping ground for packages that are merely inconvenient.
@@ -676,7 +683,7 @@ packages = [
 # evolution-ews-core
 #
 #   The Exchange Web Services plugin for Evolution (fedora_v43 section of
-#   the Bluefin manifest). Building it requires both the evolution-data-server
+#   the base manifest). Building it requires both the evolution-data-server
 #   stack -- camel, libebook, libecal, libedata-book -- and Evolution itself,
 #   which is where evolution-mail and evolution-shell come from.
 #   utah-packages now builds evolution-data-server (3.61.3), so the EDS half of
@@ -688,7 +695,8 @@ packages = [
 # fish
 #   Deliberately excluded, not blocked: the factory builds it and it resolves,
 #   but Bluefin classic shipping every shell was a mistake Utah does not repeat.
-#   Users who want fish get it from Homebrew. Tracked by #419.
+#   Users who want fish get it from Homebrew. Tracked by #419. Dakota ships
+#   fish from GNOME OS; whether Utah follows is #1230.
 #
 # firefox
 #   Neither enabled repository provides the firefox RPM: the factory does
@@ -876,9 +884,12 @@ parity = [
     "gstreamer1-plugin-openh264",
     "openh264",
     # Bluefin tools consumed from the pinned factory (#263, #388, #392).
+    "power-profiles-daemon",
     "thermald",
-    "intel-lpmd",
     "powerstat",
+    "uresourced",
+    "gnome-os-config-firewalld",
+    "gnome-os-config-resolved-fallback-dns",
     "xdg-utils",
     "rsync",
     "nano",

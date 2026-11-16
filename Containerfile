@@ -3,7 +3,7 @@ ARG BASE_IMAGE=quay.io/hummingbird-community/os-minimal:latest@sha256:a98c8cf505
 # Keep this pin in Utah so an image build is reproducible and can be reviewed
 # against the exact package set it consumes.
 ARG PACKAGE_IMAGE=ghcr.io/projectbluefin/utah-packages
-ARG PACKAGE_IMAGE_SHA=sha256:e220319b5346c00828079376bcea96b777a8fa7dfaf9919575cf229196418554
+ARG PACKAGE_IMAGE_SHA=sha256:0b0664cb8591ccf8f2b42e7bcb1cb0f27d5da91eaf450dfa64c7982730be38c1
 # CI keeps PACKAGE_IMAGE_SHA pinned. PACKAGE_IMAGE_REF supports a local image
 # in containers-storage, where no registry digest is available.
 ARG PACKAGE_IMAGE_REF=${PACKAGE_IMAGE}@${PACKAGE_IMAGE_SHA}
@@ -76,7 +76,7 @@ COPY Containerfile /usr/share/utah/agent/build-source.Containerfile
 COPY .gitmodules /usr/share/utah/agent/gitmodules
 COPY config/flavors.json /usr/share/utah/agent/flavors.json
 COPY scripts/build-gnome-extensions.sh /usr/share/utah/agent/build-gnome-extensions.sh.txt
-COPY packages/bluefin.toml packages/utah.toml contracts/bluefin-desktop.toml /usr/share/utah/
+COPY packages/base.toml packages/utah.toml contracts/bluefin-desktop.toml /usr/share/utah/
 COPY packages/hummingbird.repo packages/nvidia-container.repo packages/utah-packages.repo /etc/yum.repos.d/
 COPY packages/RPM-GPG-KEY-redhat-release-2 /etc/pki/rpm-gpg/
 COPY scripts/install-packages.py \
@@ -281,9 +281,9 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
     # above it (tests/test_hummingbird_repo_day.py).
     : > /etc/crypttab && \
     /usr/local/libexec/utah-install-packages \
-      /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
+      /usr/share/utah/base.toml /usr/share/utah/utah.toml && \
     IMAGE_FLAVOR=main /usr/local/libexec/utah-verify-rpm-contract \
-      /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
+      /usr/share/utah/base.toml /usr/share/utah/utah.toml && \
     /usr/local/libexec/utah-fix-home-labels && \
     DNF="$(command -v dnf5 || command -v dnf)" && \
     "$DNF" clean all && rm -rf /var/cache/libdnf5 /var/cache/dnf && \
@@ -325,11 +325,12 @@ ARG GNOME_EXTENSION_PROVENANCE
 # ENABLE_SSHD=1, following tunaOS's debug-image convention.
 ARG ENABLE_SSHD=0
 # Renovate can update this pinned release independently of the base image.
+# The version follows Dakota's elements/bluefin/uupd.bst (its x86_64 source).
 # UUPD_SHA256 is the x86_64 tarball digest from the release's published
 # uupd_<version>_checksums.txt; a mutable download that executed in the image
 # is otherwise unverified. Both move together, so Renovate updates both.
-ARG UUPD_VERSION=v1.4.0
-ARG UUPD_SHA256=c7463f193cd35b92cde2ee05496501d6ac13808899bd26e17e027b7ee9ee1acc
+ARG UUPD_VERSION=v1.5.5
+ARG UUPD_SHA256=d8d420a153de11589abad3292eef2131a75ac3487414065a2661a558ef0d027c
 # The two systemd units come from raw.githubusercontent at the same tag, and a
 # git tag move changes what raw.* serves for them without touching the release
 # asset the checksum above covers. uupd.service runs as root on a timer, so
@@ -408,7 +409,7 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
       main|nvidia) ;; \
     esac && \
     IMAGE_FLAVOR="${IMAGE_FLAVOR}" /usr/local/libexec/utah-verify-rpm-contract \
-      /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
+      /usr/share/utah/base.toml /usr/share/utah/utah.toml && \
     /usr/local/libexec/utah-regenerate-initramfs && \
     # The package repository is now only ever bind mounted, so it is absent from
     # the committed image. Flip it disabled here -- the last step that installs

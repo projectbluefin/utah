@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Fail when the hand-written package counts drift from the manifests.
 
-README.md's "Package parity with Bluefin" table and docs/skills/
+README.md's "Parity with Dakota" table and docs/skills/
 package-contract.md's "Current counts" sentence quote the same three numbers
-by hand: how many Bluefin contract packages Utah installs as-is, how many it
+by hand: how many base manifest packages Utah installs as-is, how many it
 adds or supplies itself, and how many are genuinely unavailable. Those
 numbers already drifted once -- packages/utah.toml's [unavailable] list grew
 from 4 to 9 entries while both documents kept quoting 4 -- so this recomputes
@@ -33,13 +33,13 @@ def load_generator():
 
 
 def expected_counts() -> tuple[int, int, int]:
-    """(Bluefin contract installed, Utah additions, genuinely unavailable)."""
+    """(base manifest installed, Utah additions, genuinely unavailable)."""
     data = load_generator().build(ROOT)
-    bluefin = next(g for g in data["groups"] if g["id"] == "bluefin")
-    bluefin_count = len(bluefin["packages"])
+    base = next(g for g in data["groups"] if g["id"] == "base")
+    base_count = len(base["packages"])
     installed = data["totals"]["installed"]
     unavailable = data["totals"]["unavailable"]
-    return bluefin_count, installed - bluefin_count, unavailable
+    return base_count, installed - base_count, unavailable
 
 
 def count_sites() -> list[tuple[Path, str, str, int]]:
@@ -47,13 +47,13 @@ def count_sites() -> list[tuple[Path, str, str, int]]:
     number. Patterns use \\s+ between words because package-contract.md wraps
     the sentence across lines. Built per call so tests can repoint the paths."""
     return [
-        (README, "README.md Bluefin contract installed",
-         r"Bluefin contract installed \| \*\*(\d+)\*\*", 0),
+        (README, "README.md Base manifest installed",
+         r"Base manifest installed \| \*\*(\d+)\*\*", 0),
         (README, "README.md Utah additions", r"Utah additions \([^)]*\) \| (\d+)", 1),
         (README, "README.md Genuinely unavailable",
          r"Genuinely unavailable \| \*\*(\d+)\*\*", 2),
-        (PACKAGE_CONTRACT_SKILL, "package-contract.md Bluefin contract installed",
-         r"(\d+)\s+Bluefin\s+contract\s+packages\s+installed", 0),
+        (PACKAGE_CONTRACT_SKILL, "package-contract.md base manifest installed",
+         r"(\d+)\s+base\s+manifest\s+packages\s+installed", 0),
         (PACKAGE_CONTRACT_SKILL, "package-contract.md Utah additions",
          r"(\d+)\s+Utah\s+additions\s+\([^)]*\)", 1),
         (PACKAGE_CONTRACT_SKILL, "package-contract.md genuinely unavailable",
@@ -68,7 +68,7 @@ def main(argv: list[str] | None = None) -> int:
         print("usage: check-doc-counts.py [--write]", file=sys.stderr)
         return 2
     counts = expected_counts()
-    bluefin, additions, unavailable = counts
+    base, additions, unavailable = counts
 
     sites = count_sites()
     texts = {path: path.read_text() for path in {site[0] for site in sites}}
@@ -99,7 +99,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {label}: documented {actual}, manifests say {want}", file=sys.stderr)
         return 1
 
-    print(f"documented package counts are current: {bluefin} Bluefin contract, "
+    print(f"documented package counts are current: {base} base manifest, "
           f"{additions} Utah additions, {unavailable} genuinely unavailable")
     return 0
 

@@ -3,13 +3,19 @@
 Status: Final. Accepted by the owner in the grill session of 2026-09-26
 ("ok finalize decioms").
 
+> **Historical.** This record measured Utah against Bluefin classic, which is
+> no longer a parity target. Dakota is: see `baselines/GAP.md` and
+> `baselines/triage.toml` for the current gap list, and #1236 for the
+> structural differences. The decisions below (D1 in particular, which
+> `scripts/configure-services.sh` and `tests/test_iso_ci.py` cite) still stand.
+
 ## Evidence
 
 - `podman run --rm ghcr.io/projectbluefin/bluefin:stable rpm -qa` → 1770 packages (`/tmp/rpms-bluefin-stable.txt`)
 - `podman run --rm ghcr.io/projectbluefin/utah:testing rpm -qa` → 1047 packages (`/tmp/rpms-utah-testing.txt`)
 - 982 shared names; 973 differ (Utah retags `.hum1`/`.hum1.bfin` at newer upstreams: GNOME/Adwaita 51 vs 50, NM 1.58 vs 1.56).
 - 785 names only in Bluefin; 62 only in Utah.
-- Repo ground truth: `packages/utah.toml` (398 lines, documents most gaps with tracking issues), `packages/bluefin.toml`.
+- Repo ground truth: `packages/utah.toml` (398 lines, documents most gaps with tracking issues) and the Bluefin base manifest, now Utah's own `packages/base.toml`.
 
 ## Clusters
 

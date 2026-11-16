@@ -1,9 +1,9 @@
 # Utahraptor
 
 <!-- BEGIN E2E VERIFICATION -->
-[![Verified ISO desktop](https://github.com/projectbluefin/utah/raw/e0ab176b910920b468b0384912bc53f94c373fd5/screenshots/installed-fastfetch.png)](https://github.com/projectbluefin/utah/blob/e0ab176b910920b468b0384912bc53f94c373fd5/README.md)
+[![Verified ISO desktop](https://github.com/projectbluefin/utah/raw/107d6b8035d2a3437f9af3a7eebf6ee6d36150a9/screenshots/installed-fastfetch.png)](https://github.com/projectbluefin/utah/blob/107d6b8035d2a3437f9af3a7eebf6ee6d36150a9/README.md)
 
-*LUKS ISO test passed for commit `b0484919808a`. [CI run](https://github.com/projectbluefin/utah/actions/runs/43771896520) also runs independent desktop tests that do not gate this record; the LUKS and production ISO jobs passed; [screenshots and provenance](https://github.com/projectbluefin/utah/tree/e0ab176b910920b468b0384912bc53f94c373fd5).*
+*LUKS ISO test passed for commit `d9ff787d873b`. [CI run](https://github.com/projectbluefin/utah/actions/runs/43616240548) also runs independent desktop tests that do not gate this record; the LUKS and production ISO jobs passed; [screenshots and provenance](https://github.com/projectbluefin/utah/tree/107d6b8035d2a3437f9af3a7eebf6ee6d36150a9).*
 <!-- END E2E VERIFICATION -->
 
 †Utahraptor ostrommaysi
@@ -58,14 +58,22 @@ Like Bluefin, Utah builds four hardware flavors (`utah`, `utah-nvidia`,
 | `:testing` | Testing | Published at `ghcr.io/projectbluefin/utah:testing` after end-to-end ISO validation passes. |
 | `:stable` | Stable | Rolling tag, moved from `:testing` on each promotion to `main` after the release gate passes on the exact candidate digests. Pre-alpha like everything here. |
 
-## Package parity with Bluefin
+## Parity with Dakota
 
-`packages/bluefin.toml` is a byte-for-byte copy of Bluefin's `base.toml`, checked in CI on every run so the package list never drifts silently.
+Utah's parity target is [Dakota](https://github.com/projectbluefin/dakota), the
+Bluefin built on GNOME OS (`ghcr.io/projectbluefin/dakota:testing`).
+[`baselines/GAP.md`](baselines/GAP.md) lists every user-visible file Dakota
+ships that Utah lacks, and each one is triaged in `baselines/triage.toml`;
+structural differences (bootloader, security framework, swap, shells, service
+policy) are tracked under [#1236](https://github.com/projectbluefin/utah/issues/1236).
+
+`packages/base.toml` is Utah's own base manifest. It started as a copy of
+Bluefin's `base.toml` and is now edited by hand as Dakota parity work lands.
 
 | | count |
 | --- | --- |
-| Bluefin contract installed | **61** |
-| Utah additions (GNOME 51, base-image parity, device firmware, desktop services) | 255 |
+| Base manifest installed | **61** |
+| Utah additions (GNOME 51, base-image parity, device firmware, desktop services) | 258 |
 | Genuinely unavailable | **6** |
 
 ## Known gaps
@@ -78,6 +86,7 @@ Why this is still pre-alpha:
 - **Hardware, codecs, and drivers need real-world testing.** Intel/Linux Wi-Fi firmware and Intel media drivers are included, and the OGC kernel (`sched_ext`, `binderfs`) and open NVIDIA module compile, but hardware video decoding, Wi-Fi, and gaming flavors still need testing on physical machines (#383).
 - **The Wi-Fi password prompt can freeze the desktop on some laptops.** On at least one Intel AX201 machine, typing into the desktop's Wi-Fi password dialog stops GNOME Shell responding; the kernel and Wi-Fi stack keep running. Connect from a terminal instead: `sudo nmcli --ask device wifi connect <SSID>` (#354).
 - **CUDA is excluded** to save 7.68 GB in the base image. Use the included NVIDIA Container Toolkit to run CUDA inside containers.
+- **Dakota parity is incomplete.** Dakota ships kanata, native Ghostty, systemd-boot with a signed chain, AppArmor, oo7, sudo-rs, libvirt/QEMU and more that Utah does not yet; see [`baselines/GAP.md`](baselines/GAP.md) and #1236.
 
 See the [open issues](https://github.com/projectbluefin/utah/issues) to track progress or report bugs.
 

@@ -2,6 +2,11 @@
 # Keep these in /usr/lib so bootc's first-boot preset application sees them.
 enable gdm.service
 enable bluetooth.service
+# GNOME's system services, as Dakota inherits them from gnome-build-meta's
+# files/systemd-presets/system-preset/80-gnome.preset: colour management and
+# the AccountsService daemon Settings and GDM use to manage users.
+enable colord.service
+enable accounts-daemon.service
 # Match Bluefin discovery and hybrid-GPU defaults.
 enable avahi-daemon.service
 enable avahi-daemon.socket
@@ -36,15 +41,59 @@ enable flatpak-preinstall.service
 enable flatpak-nuke-fedora.service
 enable input-remapper.service
 enable ModemManager.service
-# Laptop thermal management (#388). Fedora's 90-default.preset enables both for
-# desktops; Hummingbird's 99-default-disable would leave them off.
+# Power profiles and thermal management as Dakota ships them (#388):
+# power-profiles-daemon backs GNOME's power-mode switch and thermald handles
+# thermal limits. Utah ships neither TuneD/tuned-ppd nor intel_lpmd.
+# Hummingbird's 99-default-disable would leave both off.
+enable power-profiles-daemon.service
 enable thermald.service
-enable intel_lpmd.service
-# System activity accounting, enabled by Fedora's 90-default.preset for Bluefin
-# (#263).
-enable sysstat.service
-enable sysstat-collect.timer
-enable sysstat-summary.timer
+# System activity accounting is opt-in, as in Dakota
+# (elements/bluefin/sysstat.bst writes 80-sysstat.preset disabling all four):
+# sar/iostat/mpstat/pidstat work on demand without the collectors. Enable with
+# `systemctl enable --now sysstat.service`. Listed explicitly, as Dakota does,
+# rather than left to Hummingbird's 99-default-disable.
+disable sysstat.service
+disable sysstat-collect.timer
+disable sysstat-summary.timer
+disable sysstat-rotate.timer
+# Dakota's effective service state (#1233). Dakota has no system `disable *`
+# preset, so every installed unit with [Install] is on unless a preset turns it
+# off; Hummingbird's 99-default-disable inverts that. These are the units
+# Utah ships that a booted Dakota (ghcr.io/projectbluefin/dakota:testing after
+# preset-all) has enabled: D-Bus daemons started at boot, parental controls,
+# remote desktop, pcscd, systemd-oomd, rootful podman's socket and timers, and
+# upstream systemd's own 90-systemd.preset sockets.
+enable rtkit-daemon.service
+enable uresourced.service
+enable upower.service
+enable udisks2.service
+enable polkit-agent-helper.socket
+enable cups.service
+enable pcscd.socket
+enable gnome-remote-desktop.service
+enable gnome-remote-desktop-configuration.service
+enable malcontent-timerd.service
+enable malcontent-timer-extension-agent.service
+enable malcontent-webd.service
+enable malcontent-webd-update.timer
+enable systemd-oomd.service
+enable systemd-oomd.socket
+enable wpa_supplicant.service
+enable podman.socket
+enable podman-auto-update.timer
+enable podman-restart.service
+enable podman-clean-transient.service
+enable systemd-sysext.socket
+enable systemd-factory-reset.socket
+enable systemd-pcrextend.socket
+enable systemd-storage-block.socket
+enable systemd-storage-fs.socket
+enable systemd-udev-load-credentials.service
+enable systemd-userdb-load-credentials.service
+# Utah-only units Dakota does not run: no multipath on a desktop, and
+# lm_sensors is disabled by Dakota's 80-lm-sensors.preset.
+disable multipathd.service
+disable lm_sensors.service
 # nfs-client.target is enabled by both Fedora's and Hummingbird's 90-default
 # preset, and is turned off here on purpose. Installing nfs-common-utils (#263)
 # made it start gssproxy.service (target -> auth-rpcgss-module.service ->

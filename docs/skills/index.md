@@ -16,6 +16,6 @@ schema 1.0 · 12 skills
 | [kernel-cache](kernel-cache.md) | image-build | active | Understand and rebuild the kernel cache image (patched Fedora kernel, OGC kernel, NVIDIA module). |
 | [lifecycle-e2e](lifecycle-e2e.md) | testing | active | Run the QEMU lifecycle harness and validate bootc upgrade, rollback, and BLS boot files. |
 | [local-testing](local-testing.md) | testing | active | Build, install, and boot Utah locally in a VM or live ISO. |
-| [package-contract](package-contract.md) | contracts | active | Maintain Bluefin package parity and Utah's overlay manifest. |
+| [package-contract](package-contract.md) | contracts | active | Maintain Utah's base manifest, overlay and Dakota parity triage. |
 | [setup-hooks](setup-hooks.md) | meta | active | Change a first-boot setup hook without breaking the once-only contract. |
 | [skill-improvement](skill-improvement.md) | meta | active | Capture durable agent learnings in maintained docs. |
