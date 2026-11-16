@@ -540,6 +540,32 @@ class ServiceMaskParityTests(unittest.TestCase):
                 self.assertIn(f"disable_unit {unit}\n", services)
                 self.assertNotIn(f"enable_unit {unit}\n", services)
 
+    def test_nfs_client_target_enabled_with_gssproxy_state_dirs(self):
+        # Dakota enables nfs-client.target; on Utah it pulls in gssproxy, whose
+        # StateDirectory= systemd cannot create under SELinux on the stripped
+        # /var, so tmpfiles must ship the RPM's directories (#1269).
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset").read_text()
+        services = (ROOT / "scripts/configure-services.sh").read_text()
+        self.assertIn("nfs-client.target", contract["services"]["enabled"])
+        self.assertIn("enable nfs-client.target\n", preset)
+        self.assertNotIn("disable nfs-client.target\n", preset)
+        self.assertIn("enable_unit nfs-client.target\n", services)
+        self.assertNotIn("disable_unit nfs-client.target\n", services)
+        tmpfiles = [
+            line.split()
+            for line in (ROOT / "system_files/shared/usr/lib/tmpfiles.d/utah-gssproxy.conf").read_text().splitlines()
+            if line.strip() and not line.startswith("#")
+        ]
+        self.assertEqual(
+            tmpfiles,
+            [
+                ["d", "/var/lib/gssproxy", "0755", "root", "root", "-"],
+                ["d", "/var/lib/gssproxy/clients", "0700", "root", "root", "-"],
+                ["d", "/var/lib/gssproxy/rcache", "0700", "root", "root", "-"],
+            ],
+        )
+
     def test_dakota_parity_patch_targets_are_required_files(self):
         contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
         files = contract["configuration"]["files"]

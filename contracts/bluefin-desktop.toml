@@ -501,6 +501,8 @@ enabled = [
   "netavark-dhcp-proxy.service",
   "netavark-firewalld-reload.service",
   "netavark-nftables-reload.service",
+  # NFS client services, as on Dakota (#1269); see 85-utah-desktop.preset.
+  "nfs-client.target",
   "thermald.service",
   "projectbluefin-countme.timer",
   "switcheroo-control.service",

@@ -118,14 +118,15 @@ disable mdmonitor-oneshot.timer
 # lm_sensors is disabled by Dakota's 80-lm-sensors.preset.
 disable multipathd.service
 disable lm_sensors.service
-# nfs-client.target is enabled by both Fedora's and Hummingbird's 90-default
-# preset, and is turned off here on purpose. Installing nfs-common-utils (#263)
-# made it start gssproxy.service (target -> auth-rpcgss-module.service ->
-# gssproxy.service), which failed every boot in the review VM with
-# status=238/STATE_DIRECTORY, Permission denied creating /var/lib/gssproxy
-# (cause not diagnosed). mount.nfs starts rpc-statd on demand, so NFS mounts do
-# not need the target.
-disable nfs-client.target
+# NFS client services, as Dakota enables them (projectbluefin/dakota
+# elements/bluefin/nfs-utils.bst writes 80-nfs-client.preset). The target
+# pulls in gssproxy.service (target -> auth-rpcgss-module.service ->
+# gssproxy.service; the Wants= applies even without /etc/krb5.keytab), which
+# failed every boot with status=238/STATE_DIRECTORY until
+# tmpfiles.d/utah-gssproxy.conf recreated its state directories on the /var
+# clean-stage strips (#1269). Dakota's nfs-utils is built --disable-gss, so it
+# runs no gssproxy at all; Utah keeps Fedora's GSS-capable build.
+enable nfs-client.target
 # Printing on demand, as Fedora's preset enables it for Bluefin.
 enable cups.socket
 enable cups.path

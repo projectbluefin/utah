@@ -241,8 +241,8 @@ disable_unit mdcheck_continue.timer
 disable_unit mdmonitor-oneshot.timer
 disable_unit multipathd.service
 disable_unit lm_sensors.service
-# nfs-client.target is turned off: see 85-utah-desktop.preset.
-disable_unit nfs-client.target
+# NFS client services, as on Dakota; see 85-utah-desktop.preset (#1269).
+enable_unit nfs-client.target
 # sysstat collection is opt-in, as in Dakota (elements/bluefin/sysstat.bst);
 # the package stays for on-demand sar/iostat. See 85-utah-desktop.preset.
 disable_unit sysstat.service

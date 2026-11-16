@@ -40,9 +40,11 @@ Rules applied while choosing names:
   Dakota rather than Fedora on `sysstat*`: collection is opt-in
   (`elements/bluefin/sysstat.bst` disables `sysstat.service` and its three
   timers), so the preset disables them and the contract's `disabled` list holds
-  them off. Utah also disables `nfs-client.target` (Hummingbird's own preset enables
-  it): it pulls in `gssproxy.service`, which failed to start in the review VM
-  (`STATE_DIRECTORY`, Permission denied; cause not diagnosed).
+  them off. `nfs-client.target` is enabled, as on Dakota. It pulls in
+  `gssproxy.service`, whose `StateDirectory=` can't create `clients/` and
+  `rcache/` itself, because SELinux gives init_t no `add_name` on
+  `gssproxy_var_lib_t`. `tmpfiles.d/utah-gssproxy.conf` recreates them on the
+  `/var` that clean-stage strips (#1269).
   `smartmontools` is not installable, so its unit stays unwired.
 - Power profiles follow Dakota, not Bluefin: Utah installs and enables
   `power-profiles-daemon` and ships no TuneD. Never install `tuned-ppd`

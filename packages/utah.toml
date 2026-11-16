@@ -484,7 +484,8 @@ packages = [
     # djvulibre, liba52, libmpeg2) are published, so the names they gated resolve.
     # sysstat ships for on-demand sar/iostat; its collection units are opt-in
     # and preset-disabled, as in Dakota (elements/bluefin/sysstat.bst; see
-    # 85-utah-desktop.preset). nfs-client.target is disabled there too.
+    # 85-utah-desktop.preset). nfs-client.target is enabled there, as on Dakota;
+    # tmpfiles.d/utah-gssproxy.conf gives gssproxy its state directories (#1269).
     "tmux",
     "powertop",
     "sysstat",

@@ -76,6 +76,15 @@ user), `scripts/configure-services.sh`, and `contracts/bluefin-desktop.toml`
   oneshot reminder would run daily everywhere, and
   `mdadm --monitor --oneshot --scan` exits 1 when `mdadm.conf` has no alert
   address.
+- `nfs-client.target` is enabled, as Dakota's `elements/bluefin/nfs-utils.bst`
+  presets it (#1269). Dakota builds nfs-utils `--disable-gss`, but Utah's Fedora
+  build pulls in `gssproxy.service` (through `auth-rpcgss-module.service`, whose
+  `Wants=` applies even without a keytab). The service's
+  `StateDirectory=gssproxy/clients gssproxy/rcache` failed with
+  `238/STATE_DIRECTORY`: clean-stage strips `/var`, and SELinux gives systemd
+  (init_t) no `add_name` on `gssproxy_var_lib_t`, so systemd can't create the
+  subdirectories. `usr/lib/tmpfiles.d/utah-gssproxy.conf` recreates all three
+  directories with the RPM's modes, and systemd-tmpfiles is allowed to.
 
 `ServiceMaskParityTests` in `tests/test_desktop_contract.py` pins the
 three-way agreement for each group.
