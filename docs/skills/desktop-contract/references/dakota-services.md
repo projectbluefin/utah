@@ -47,7 +47,6 @@ are never enabled by a preset.
   need configuration or change the system unasked (brltty, fancontrol,
   powertop, xfs_healer, canberra sounds, lastlog2 import, man-db cache).
   `bluefin-stats-refresh.service` runs from its timer only.
-  `systemd-homed-firstboot.service` waits for #1238.
 
 ### What enable-by-default turned on
 
@@ -92,9 +91,27 @@ they are harmless: `ratbagd.service` (D-Bus alias), `selinux-check-proper-disabl
 `systemd-pcrlock-secureboot-authority.service`, `podman.service`,
 `netavark-dhcp-proxy.socket`, `bluefin-migrate-var-home-passwd.service`
 (Dakota's legacy `/var/home` passwd migration for the `/home` bind mount,
-#1234), `vmtoolsd.service` and `qemu-guest-agent.service` (#1232).
+#1234), `vmtoolsd.service` and `qemu-guest-agent.service` (#1232),
+`systemd-homed.service` and `systemd-homed-firstboot.service` (#1238).
 `[services].disabled` holds the network servers, sysstat, libvirt's sockets,
 and the units enable-by-default must not reach.
+
+### systemd-homed (#1238)
+
+As on Dakota, whose freedesktop-sdk PAM stack carries `-pam_systemd_home`,
+homed users can log in: `configure-services.sh` enables authselect's
+`with-systemd-homed`, which adds `pam_systemd_home.so` to `system-auth` and
+`password-auth`. The `local` profile's nsswitch already resolves
+`passwd`/`group`/`shadow` through `systemd`. `systemd-homed-firstboot.service`
+is enabled by `enable *`. Its only condition is `ConditionFirstBoot=yes`;
+`homectl firstboot` (systemd 261) applies `home.create.*`/`home.register.*`
+credentials, then prompts on the console for a first user unless a regular
+user exists. The installer recipe has no user step, so on a fresh install no
+user exists and that prompt would run before GDM, ahead of
+gnome-initial-setup. The drop-in `10-utah-initial-setup.conf` sets
+`SYSTEMD_HOME_FIRSTBOOT_OVERRIDE=0`, which keeps the credential import and
+drops the prompt; gnome-initial-setup creates the first account. The contract
+asserts the feature, the PAM lines, nsswitch, the drop-in and both units.
 
 ### Virtualization (#1232)
 

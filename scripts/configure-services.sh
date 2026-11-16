@@ -267,6 +267,9 @@ systemctl --global enable brew-preinstall.service
 # is present in the Hummingbird base.
 authselect enable-feature with-silent-lastlog
 authselect enable-feature with-fingerprint
+# Let systemd-homed users log in, as freedesktop-sdk's PAM stack does on Dakota
+# (#1238): adds pam_systemd_home to system-auth and password-auth.
+authselect enable-feature with-systemd-homed
 
 # Dakota's swapfile (/var/swap/swapfile, created at boot by
 # bluefin-swapfile-init) needs the swapfile_t label under Utah's SELinux

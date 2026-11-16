@@ -193,11 +193,27 @@ files = [
   "/usr/lib/systemd/system/uupd-manual.service",
   "/etc/polkit-1/rules.d/uupd.rules",
   "/etc/uupd/config.json",
+  # homed users log in through authselect's with-systemd-homed (#1238);
+  # gnome-initial-setup, not homectl's console prompt, creates the first user.
+  "/etc/pam.d/system-auth",
+  "/etc/pam.d/password-auth",
+  "/etc/nsswitch.conf",
+  "/usr/lib/systemd/system/systemd-homed-firstboot.service.d/10-utah-initial-setup.conf",
 ]
 
 [configuration.file_contains]
 "/usr/lib/bootc/kargs.d/10-utah-plymouth.toml" = [
   'kargs = ["plymouth.ignore-serial-consoles"]',
+]
+"/etc/authselect/authselect.conf" = ["with-systemd-homed"]
+"/etc/pam.d/system-auth" = ["pam_systemd_home.so"]
+"/etc/pam.d/password-auth" = ["pam_systemd_home.so"]
+"/etc/nsswitch.conf" = [
+  "passwd:     files systemd",
+  "group:      files systemd",
+]
+"/usr/lib/systemd/system/systemd-homed-firstboot.service.d/10-utah-initial-setup.conf" = [
+  "Environment=SYSTEMD_HOME_FIRSTBOOT_OVERRIDE=0",
 ]
 "/usr/share/applications/io.projectbluefin.chairlift.desktop" = [
   "Name=Control Center",
@@ -467,6 +483,9 @@ enabled = [
   "avahi-daemon.service",
   "avahi-daemon.socket",
   "bluetooth.service",
+  # homed and its first-boot credential import, as on Dakota (#1238).
+  "systemd-homed.service",
+  "systemd-homed-firstboot.service",
   # Rewrites legacy /var/home passwd fields before any login (#1234).
   "bluefin-migrate-var-home-passwd.service",
   # VM guest agents, enabled as on Dakota (80-open-vm-tools.preset and its
@@ -626,7 +645,6 @@ disabled = [
   "nftables.service",
   "cups-browsed.service",
   "powertop.service",
-  "systemd-homed-firstboot.service",
   # chrony is not installed (#1228); absent counts as off, and this fails the
   # build if a dependency ever pulls it back in enabled beside timesyncd.
   "chronyd.service",
