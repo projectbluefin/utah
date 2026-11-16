@@ -106,6 +106,11 @@ The TOML's sections are the contract's table of contents:
   script and the preset in agreement. Check a booted VM with `systemctl
   is-enabled <unit>` when in doubt.
 
+  Storage parity with Dakota enables the mdadm check and monitoring timers and
+  the NVMe-over-Fabrics autoconnect services. Fedora's `raid-check.timer` is
+  disabled to avoid scheduling a second array check. The image contract checks
+  all six states; keep the build-time enablement and first-boot preset aligned.
+
   The Flathub remote is a `/etc/flatpak/remotes.d` descriptor, applied to the
   repo once, when `/var/lib/flatpak/repo` is created. Flathub's descriptor has
   no collection ID, while common's preinstall entries pin

@@ -185,6 +185,13 @@ disable_unit nfs-client.target
 enable_unit sysstat.service
 enable_unit sysstat-collect.timer
 enable_unit sysstat-summary.timer
+# Use Dakota's mdadm checks rather than Fedora's overlapping raid-check.
+disable_unit raid-check.timer
+enable_unit mdcheck_start.timer
+enable_unit mdcheck_continue.timer
+enable_unit mdmonitor-oneshot.timer
+enable_unit nvmf-autoconnect.service
+enable_unit nvmefc-boot-connections.service
 # Printing on demand, as Fedora's preset enables it for Bluefin; Hummingbird's
 # 99-default-disable would leave it off.
 enable_unit cups.socket

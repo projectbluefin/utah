@@ -45,6 +45,13 @@ enable intel_lpmd.service
 enable sysstat.service
 enable sysstat-collect.timer
 enable sysstat-summary.timer
+# Match Dakota's array checks and NVMe-over-Fabrics discovery.
+disable raid-check.timer
+enable mdcheck_start.timer
+enable mdcheck_continue.timer
+enable mdmonitor-oneshot.timer
+enable nvmf-autoconnect.service
+enable nvmefc-boot-connections.service
 # nfs-client.target is enabled by both Fedora's and Hummingbird's 90-default
 # preset, and is turned off here on purpose. Installing nfs-common-utils (#263)
 # made it start gssproxy.service (target -> auth-rpcgss-module.service ->

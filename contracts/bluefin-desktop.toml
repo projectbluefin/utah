@@ -362,6 +362,12 @@ enabled = [
   "sysstat.service",
   "sysstat-collect.timer",
   "sysstat-summary.timer",
+  # Dakota storage maintenance and network storage discovery.
+  "mdcheck_start.timer",
+  "mdcheck_continue.timer",
+  "mdmonitor-oneshot.timer",
+  "nvmf-autoconnect.service",
+  "nvmefc-boot-connections.service",
   "projectbluefin-countme.timer",
   "switcheroo-control.service",
   "ublue-system-setup.service",
@@ -397,6 +403,7 @@ masked = [
 # also socket-activated, and saned is socket-activated from sane-backends-daemon
 # (not installed today, so saned.socket reports not-found until it is).
 disabled = [
+  "raid-check.timer",
   "dnsmasq.service",
   "rpcbind.service",
   "rpcbind.socket",
