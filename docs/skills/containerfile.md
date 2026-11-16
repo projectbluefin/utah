@@ -237,7 +237,9 @@ After the final NVIDIA, OGC, and v4l2loopback package steps, the flavor layer
 runs `utah-regenerate-initramfs`. The helper selects the exact bootc kernel,
 promotes the OGC kernel for gaming flavors, rebuilds that release's initramfs,
 and verifies early microcode plus the installed TPM/passkey/smart-card unlock
-modules before the image can commit.
+modules, the Plymouth theme, and (where the kernel builds it as a module) the
+zstd driver `zswap.compressor=zstd` needs at init (#1224), before the image
+can commit.
 
 ## Clean and lint share a layer
 

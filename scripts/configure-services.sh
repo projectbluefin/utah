@@ -7,8 +7,9 @@
 set -eoux pipefail
 
 # Lid and sleep actions stay at systemd-logind's defaults (suspend), as on
-# Dakota, which ships no logind or sleep override. Utah has only zram swap,
-# so suspend-then-hibernate has no resume target and cannot work.
+# Dakota, which ships no logind or sleep override. Utah's swap is zswap over
+# /var/swap/swapfile with no resume= argument, as on Dakota, so
+# suspend-then-hibernate has no resume target and cannot work.
 
 user_unit_exists() {
     for dir in /usr/lib/systemd/user /usr/local/lib/systemd/user /etc/systemd/user; do
@@ -266,6 +267,18 @@ systemctl --global enable brew-preinstall.service
 # is present in the Hummingbird base.
 authselect enable-feature with-silent-lastlog
 authselect enable-feature with-fingerprint
+
+# Dakota's swapfile (/var/swap/swapfile, created at boot by
+# bluefin-swapfile-init) needs the swapfile_t label under Utah's SELinux
+# policy, which has no rule for that path (#1224). Install the one-line module
+# into the policy store, which Hummingbird keeps under /usr/lib/selinux, so it
+# ships in the image and survives ostree's per-deployment policy rebuild.
+# -n: no reload; an image build has no selinuxfs to load it into.
+semodule -n -i /usr/share/selinux/packages/utah-swapfile.cil
+if ! matchpathcon /var/swap/swapfile | grep -q ':swapfile_t:'; then
+    echo "ERROR: /var/swap/swapfile does not label as swapfile_t; swapon would be denied" >&2
+    exit 1
+fi
 
 # uupd is distributed as a release binary, not an RPM in the Hummingbird
 # repositories. Keep its version pinned by the Containerfile argument.

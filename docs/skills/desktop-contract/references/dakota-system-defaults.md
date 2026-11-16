@@ -36,9 +36,39 @@ gnome-build-meta at the commit Dakota's junction tracks:
   systemd-resolved; Fedora builds with none. resolved only uses it when no
   link or global DNS server is configured.
 
+## Swap: zswap over /var/swap/swapfile
+
+Swap follows Dakota (#1224), not zram: `zram-generator(-defaults)` are gone.
+
+- `usr/lib/bootc/kargs.d/20-zswap.toml` and `usr/lib/sysctl.d/60-zswap.conf`
+  are Dakota's `elements/bluefin/zswap-config.bst`, byte for byte.
+- `bluefin-swapfile-init` (+ `.service`) and `var-swap-swapfile.swap` are
+  Dakota's `files/swapfile/`. The init unit writes min(RAM/2, 8 GiB) on first
+  need and skips small disks and filesystems that cannot hold a swapfile (the
+  live ISO's overlay). The `.swap` unit is pulled in by a static
+  `swap.target.wants` link, so existing installs get it on upgrade.
+- Utah-only: Hummingbird builds zstd as a module (`CONFIG_CRYPTO_ZSTD=m`),
+  and zswap resolves `zswap.compressor=zstd` during kernel init, before the
+  root is mounted. `usr/lib/dracut/dracut.conf.d/50-utah-zswap-zstd.conf`
+  puts the module in the initramfs, and `scripts/regenerate-initramfs.sh`
+  fails the build when a modular zstd is missing from it. Without it zswap
+  falls back to lzo with only a kernel log line.
+- Utah-only: Dakota has no SELinux. Fedora's policy has no rule for
+  `/var/swap`, so the file would be `var_t` and swapon denied.
+  `usr/share/selinux/packages/utah-swapfile.cil` labels
+  `/var/swap/swapfile` `swapfile_t`; `configure-services.sh` installs it with
+  `semodule -n -i` into the store under `/usr/lib/selinux` (so ostree's
+  per-deployment rebuild keeps it) and checks `matchpathcon`. The init
+  script runs `restorecon` on the file before writing it.
+- The gaming flavors' OGC kernel is built from `x86_64_defconfig` plus
+  `scripts/install-ogc-kernel.sh`'s options; if it lacks `CONFIG_ZSWAP` the
+  kargs are ignored and the swapfile is plain swap. Enabling zswap there is
+  a kernel-cache change (`docs/skills/kernel-cache.md`).
+
 ## Lid and sleep
 
 Lid and sleep handling stays at systemd-logind's defaults (suspend). Dakota
-ships no logind or sleep override, and Utah's only swap is zram, so the
-suspend-then-hibernate override inherited from bluefin-lts's `40-services.sh`
-had no resume target and was removed from `scripts/configure-services.sh`.
+ships no logind or sleep override, and Utah's swapfile has no `resume=`
+argument (nor has Dakota's), so the suspend-then-hibernate override inherited
+from bluefin-lts's `40-services.sh` has no resume target and was removed from
+`scripts/configure-services.sh`.

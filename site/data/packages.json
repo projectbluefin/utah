@@ -353,9 +353,7 @@
         "fwupd",
         "systemd-boot-unsigned",
         "systemd-resolved",
-        "tailscale",
-        "zram-generator",
-        "zram-generator-defaults"
+        "tailscale"
       ],
       "title": "Desktop services",
       "transient": false
@@ -375,7 +373,7 @@
     }
   ],
   "totals": {
-    "installed": 318,
+    "installed": 316,
     "unavailable": 6
   },
   "unavailable": [
