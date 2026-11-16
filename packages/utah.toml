@@ -517,6 +517,11 @@ packages = [
     "papers-libs",
     "papers-thumbnailer",
     "papers-nautilus",
+    # iOS file access as Dakota ships it (#1261; projectbluefin/dakota
+    # elements/bluefin/ifuse.bst, 1.2.1): ifuse mounts an iPhone's media and
+    # app documents over libimobiledevice, which libimobiledevice-utils above
+    # already brings in.
+    "ifuse",
     #
     # Left out (resolved against sha256:d3b5bac2):
     #   tuned, tuned-ppd            Dakota runs power-profiles-daemon, which is
@@ -1003,4 +1008,5 @@ parity = [
     "papers-libs",
     "papers-thumbnailer",
     "papers-nautilus",
+    "ifuse",
 ]

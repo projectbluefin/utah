@@ -202,6 +202,7 @@
         "hplip-libs",
         "htop",
         "ibus-gtk4",
+        "ifuse",
         "intel-gmmlib",
         "intel-mediasdk",
         "intel-vpl-gpu-rt",
@@ -376,7 +377,7 @@
     }
   ],
   "totals": {
-    "installed": 319,
+    "installed": 320,
     "unavailable": 7
   },
   "unavailable": [
