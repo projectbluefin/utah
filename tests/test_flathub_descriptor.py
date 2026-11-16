@@ -30,6 +30,17 @@ class FlathubDescriptorIntegrityTests(unittest.TestCase):
         user_units = self.root / "usr/lib/systemd/user"
         user_units.mkdir(parents=True)
         (user_units / "brew-preinstall.service").write_text("[Service]\nExecStart=/usr/bin/brew-preinstall\n")
+        # Hummingbird's firewalld: firewalld.conf is a symlink to the
+        # standard variant; gnome-os-config-firewalld adds the lax zone.
+        zones = self.root / "usr/lib/firewalld/zones"
+        zones.mkdir(parents=True)
+        (zones / "lax.xml").write_text("<zone/>\n")
+        firewalld = self.root / "etc/firewalld"
+        firewalld.mkdir(parents=True)
+        (firewalld / "firewalld-standard.conf").write_text(
+            "DefaultZone=public\nIPv6_rpfilter=strict\nFirewallBackend=nftables\n"
+        )
+        (firewalld / "firewalld.conf").symlink_to("firewalld-standard.conf")
         uupd = self.root / "tmp/uupd"
         uupd.mkdir(parents=True)
         (uupd / "uupd").write_text("#!/bin/sh\nexit 0\n")
@@ -78,6 +89,18 @@ curl() {
         self.assertEqual([installed[0]] + installed[2:], pinned)
         self.assertEqual(self.destination.stat().st_mode & 0o777, 0o644)
         self.assertFalse((self.root / "tmp/flathub.flatpakrepo").exists())
+
+    def test_firewall_defaults_to_gnome_os_lax_zone_through_the_symlink(self):
+        result = self.run_script()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        conf = self.root / "etc/firewalld/firewalld.conf"
+        # firewalld owns the variant symlink; replacing it with a plain file
+        # would stop package updates from reaching the config.
+        self.assertTrue(conf.is_symlink())
+        self.assertEqual(
+            conf.read_text().splitlines(),
+            ["DefaultZone=lax", "IPv6_rpfilter=loose", "FirewallBackend=nftables"],
+        )
 
     def test_changed_descriptor_is_rejected_without_replacing_existing_remote(self):
         self.input.write_bytes(self.input.read_bytes() + b"Url=https://example.invalid/attacker\n")

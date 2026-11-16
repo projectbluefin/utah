@@ -70,6 +70,17 @@ enable_unit avahi-daemon.service
 enable_unit avahi-daemon.socket
 enable_unit switcheroo-control.service
 enable_unit firewalld.service
+# Workstation firewall as Dakota ships it: GNOME OS's lax zone (open
+# 1025-65535, mDNS, Samba client, ssh) as the default, with a loose IPv6
+# reverse-path filter. gnome-os-config-firewalld ships the zone; these are
+# gnome-build-meta gnomeos-deps/firewalld.bst's two firewalld.conf edits.
+# --follow-symlinks keeps firewalld's variant symlink in place.
+test -f /usr/lib/firewalld/zones/lax.xml
+sed -i --follow-symlinks \
+    -e 's/^DefaultZone=.*/DefaultZone=lax/' \
+    -e 's/^IPv6_rpfilter=.*/IPv6_rpfilter=loose/' /etc/firewalld/firewalld.conf
+grep -qx 'DefaultZone=lax' /etc/firewalld/firewalld.conf
+grep -qx 'IPv6_rpfilter=loose' /etc/firewalld/firewalld.conf
 enable_unit fwupd.service
 enable_unit fwupd-refresh.timer
 enable_unit dconf-update.service

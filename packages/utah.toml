@@ -368,6 +368,12 @@ packages = [
     # (gnome-build-meta gnomeos-deps/uresourced.bst): memory/IO/CPU protection
     # for the foreground session. The factory already builds it.
     "uresourced",
+    # GNOME OS's firewall zone and fallback DNS, as Dakota ships them, built by
+    # the factory from gnome-build-meta at the commit Dakota's junction tracks
+    # (utah-packages packages/gnome-os-config). configure-services.sh selects
+    # the lax zone; the resolved drop-in applies on its own.
+    "gnome-os-config-firewalld",
+    "gnome-os-config-resolved-fallback-dns",
     # Everyday command-line tools (#392). xdg-utils supplies xdg-open, which
     # nothing else in the image provides. nano-default-editor sets EDITOR.
     "xdg-utils",
@@ -891,6 +897,8 @@ parity = [
     "thermald",
     "powerstat",
     "uresourced",
+    "gnome-os-config-firewalld",
+    "gnome-os-config-resolved-fallback-dns",
     "xdg-utils",
     "rsync",
     "nano",

@@ -154,6 +154,9 @@ files = [
   # same path, so Utah asserts it but must not overlay its own copy.
   "/usr/share/wireplumber/wireplumber.conf.d/51-disable-pcsp.conf",
   "/usr/lib/sysctl.d/60-kexec-disable.conf",
+  # GNOME OS firewall zone and fallback DNS (gnome-os-config subpackages).
+  "/usr/lib/firewalld/zones/lax.xml",
+  "/usr/lib/systemd/resolved.conf.d/50-gnome-os-fallback-dns.conf",
   "/usr/share/polkit-1/rules.d/org.freedesktop.NetworkManager.rules",
   # Dakota's elements/bluefin/uupd.bst: the update units, user-startable
   # manual updates, and the hardware-check config that replaces Common's
@@ -269,6 +272,15 @@ files = [
 # Dakota parity: kexec is disabled for Easy Anti-Cheat's measured boot chain.
 "/usr/lib/sysctl.d/60-kexec-disable.conf" = [
   "kernel.kexec_load_disabled = 1",
+]
+# Dakota parity: GNOME OS's lax zone is the default, with loose IPv6 rpfilter.
+"/etc/firewalld/firewalld.conf" = [
+  "DefaultZone=lax",
+  "IPv6_rpfilter=loose",
+]
+# Dakota parity: GNOME OS's compiled-in fallback DNS (Cloudflare).
+"/usr/lib/systemd/resolved.conf.d/50-gnome-os-fallback-dns.conf" = [
+  "FallbackDNS=1.1.1.1#one.one.one.one 1.0.0.1#one.one.one.one 2606:4700:4700::1111#one.one.one.one 2606:4700:4700::1001#one.one.one.one",
 ]
 # Dakota parity: local wheel users add system connections without a password.
 "/usr/share/polkit-1/rules.d/org.freedesktop.NetworkManager.rules" = [
