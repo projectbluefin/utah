@@ -12,6 +12,12 @@
 # 90-default.preset disables it.
 enable systemd-boot-update.service
 
+# Time sync is systemd-timesyncd, as on GNOME OS and Dakota (#1228); chrony is
+# not installed. Hummingbird's 90-default.preset disables timesyncd in favour
+# of chronyd. ublue-firstboot-date.path waits for its first sync.
+enable systemd-timesyncd.service
+disable chronyd.service
+
 # Hummingbird's 90-default.preset enables these server units; Dakota does not
 # run them. No multipath on a desktop; lm_sensors is Dakota's
 # 80-lm-sensors.preset.

@@ -381,10 +381,6 @@ RUN --mount=type=bind,from=artwork,source=/out/branding,target=/tmp/utah-artwork
     /usr/local/libexec/utah-verify-desktop-contract /usr/share/utah/bluefin-desktop.toml && \
     /usr/local/libexec/utah-mirror-shim && \
     /usr/local/libexec/utah-verify-efi-chain && \
-    # Preserve the vendor pool and add a public fallback (#594), before
-    # generated metadata is normalized for this layer.
-    (grep -q '^pool pool\.ntp\.org' /etc/chrony.conf || \
-      echo 'pool pool.ntp.org iburst' >> /etc/chrony.conf) && \
     rm -f /usr/lib/sysimage/libdnf5/transaction_history.sqlite \
           /usr/lib/sysimage/libdnf5/transaction_history.sqlite-shm \
           /usr/lib/sysimage/libdnf5/transaction_history.sqlite-wal \

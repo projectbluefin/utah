@@ -516,7 +516,7 @@ class ServiceMaskParityTests(unittest.TestCase):
             "projectbluefin-countme.timer",
             "uupd.timer",
             "accounts-daemon.service",
-            "ublue-firstboot-date.service",
+            "ublue-firstboot-date.path",
             "ublue-booted-image.service",
         ):
             with self.subTest(unit=unit):
@@ -526,7 +526,7 @@ class ServiceMaskParityTests(unittest.TestCase):
         # the contract cannot require it enabled; the preset still turns it on.
         self.assertNotIn("colord.service", enabled)
         self.assertEqual(preset_verdict("colord.service")[0], "enable")
-        for unit in ("ublue-firstboot-date.service", "ublue-booted-image.service"):
+        for unit in ("ublue-firstboot-date.path", "ublue-booted-image.service"):
             self.assertTrue((ROOT / "system_files/shared/usr/lib/systemd/system" / unit).is_file())
 
     def test_dakota_gnome_user_units_enabled_in_contract_preset_and_script(self):
