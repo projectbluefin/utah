@@ -215,6 +215,8 @@ files = [
 # .local names resolve over mDNS (nss-mdns + authselect with-mdns4, #499).
 "/etc/nsswitch.conf" = [
   "mdns4_minimal [NOTFOUND=return]",
+  "passwd:     files systemd",
+  "group:      files systemd",
 ]
 "/usr/lib/bootc/kargs.d/10-utah-plymouth.toml" = [
   'kargs = ["plymouth.ignore-serial-consoles"]',
@@ -222,10 +224,6 @@ files = [
 "/etc/authselect/authselect.conf" = ["with-systemd-homed"]
 "/etc/pam.d/system-auth" = ["pam_systemd_home.so"]
 "/etc/pam.d/password-auth" = ["pam_systemd_home.so"]
-"/etc/nsswitch.conf" = [
-  "passwd:     files systemd",
-  "group:      files systemd",
-]
 "/usr/lib/systemd/system/systemd-homed-firstboot.service.d/10-utah-initial-setup.conf" = [
   "Environment=SYSTEMD_HOME_FIRSTBOOT_OVERRIDE=0",
 ]
