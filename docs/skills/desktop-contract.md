@@ -80,36 +80,30 @@ The TOML's sections are the contract's table of contents:
   `input-remapper.service`, `ModemManager.service`, `thermald.service`, `intel_lpmd.service`,
   `sysstat.service`, `sysstat-collect.timer`, `sysstat-summary.timer`,
   `projectbluefin-countme.timer`, `cups.socket`, `systemd-boot-update.service`, `uupd.timer`,
+  `mdcheck_start.timer`, `mdcheck_continue.timer`, `mdmonitor-oneshot.timer`,
+  `nvmf-autoconnect.service`, `nvmefc-boot-connections.service`,
   `bluefin-stats-refresh.timer`, `ublue-firstboot-date.service`, `ublue-booted-image.service`.
+  Storage parity disables Fedora's `raid-check.timer` to avoid a second array check.
   Update policy delegates background updates to `uupd.timer`; `bootc-fetch-apply-updates.timer` and
   `bootc-fetch-apply-updates.service` are masked in `/etc` and `/usr/lib` (and disabled in
   `85-utah-desktop.preset`) so cross-vendor `/etc` 3-way merges (e.g. switching from Bluefin) do not
   carry active `timers.target.wants` symlinks that bypass uupd staging or undo manual rollbacks.
   Switchers can also manually verify or mask them if a local `/etc` symlink was preserved.
 
-  The last two units are Dakota parity (#675): install-date stamping and the
-  booted-image snapshot Common's `/usr/libexec/ublue-booted-image` falls back to.
-  `configure-services.sh` enables them, patches Common's fastfetch ([stats](desktop-contract/references/stats-refresh.md))
-  and `uwelcome.sh` (non-interactive shells skip the greeting), and checks image-info ([bootc compatibility](desktop-contract/references/image-info.md)).
-  Wallpaper rotation is deliberately NOT Dakota parity: Common's per-user `bluefin-dynamic-wallpaper`
-  timer is hemisphere-aware and rotates live at month boundaries, while
-  Dakota's boot-time month symlink is northern-only and stale until reboot, so
-  repointing the default would stand the better rotator down (#675 decision).
+  The last two units are Dakota parity (#675): install-date stamping and Common's
+  booted-image snapshot. `configure-services.sh` enables them, patches Common's
+  fastfetch ([stats](desktop-contract/references/stats-refresh.md)) and `uwelcome.sh`
+  (non-interactive shells skip the greeting), and checks [image-info](desktop-contract/references/image-info.md).
+  Wallpaper rotation is not Dakota parity: Common's per-user timer is
+  hemisphere-aware and rotates live, unlike Dakota's northern-only boot-time
+  symlink, which remains stale until reboot (#675 decision).
 
-  A unit being enabled in the built image is not the same as it being enabled
-  on a booted one. bootc applies presets on first boot, and Hummingbird's
-  `99-default-disable.preset` turns off every unit no preset names, so a build
-  -time `systemctl enable` without a line in `85-utah-desktop.preset` (or a
-  vendor preset such as brew's `01-homebrew.preset`) is undone. That is how
-  `flatpak-preinstall.service` shipped "enabled" and booted disabled, leaving
-  non-ISO installs without Bazaar. `DesktopUnitEnablementTests` holds the
-  script and the preset in agreement. Check a booted VM with `systemctl
-  is-enabled <unit>` when in doubt.
-
-  Storage parity with Dakota enables the mdadm check and monitoring timers and
-  the NVMe-over-Fabrics autoconnect services. Fedora's `raid-check.timer` is
-  disabled to avoid scheduling a second array check. The image contract checks
-  all six states; keep the build-time enablement and first-boot preset aligned.
+  A unit enabled in the built image may be disabled on boot: bootc applies
+  presets, and Hummingbird's `99-default-disable.preset` disables unnamed units.
+  Build-time enablement needs `85-utah-desktop.preset` or a vendor preset such
+  as brew's `01-homebrew.preset`; otherwise first-boot Flatpak installs can be
+  lost. `DesktopUnitEnablementTests` holds the script and preset in agreement.
+  Check a booted VM with `systemctl is-enabled <unit>` when in doubt.
 
   The Flathub remote is a `/etc/flatpak/remotes.d` descriptor, applied to the
   repo once, when `/var/lib/flatpak/repo` is created. Flathub's descriptor has
