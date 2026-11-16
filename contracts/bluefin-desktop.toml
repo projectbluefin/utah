@@ -448,7 +448,8 @@ enabled = [
   "input-remapper.service",
   "ModemManager.service",
   "power-profiles-daemon.service",
-  # Dakota's effective service state (#1233); see 85-utah-desktop.preset.
+  # Dakota's effective service state (#1233): on by enable-by-default
+  # (98-utah-enable-default.preset), measured on a booted Dakota.
   "rtkit-daemon.service",
   "uresourced.service",
   "upower.service",
@@ -481,7 +482,19 @@ enabled = [
   "switcheroo-control.service",
   "ublue-system-setup.service",
   "uupd.timer",
+  "tailscaled.service",
+  "firewalld.service",
+  "fwupd-refresh.timer",
+  # Hummingbird's 90-default.preset disables it; 85-utah-desktop.preset
+  # turns it back on (#363).
   "systemd-boot-update.service",
+  # Dakota's 80-pcrlock.preset; no-ops unless booted from a measured UKI.
+  "systemd-pcrlock-make-policy.service",
+  "systemd-pcrlock-machine-id.service",
+  "systemd-pcrlock-secureboot-authority.service",
+  # Container networking and API, as on Dakota.
+  "podman.service",
+  "netavark-dhcp-proxy.socket",
 ]
 # Per-user services, checked with `systemctl --global is-enabled`. Hummingbird's
 # user preset disables everything but dbus; without these an installed Utah had
@@ -507,7 +520,8 @@ masked = [
 ]
 # Network daemons added by the parity package rollout (#868): dnsmasq, rpcbind,
 # autofs, openvpn, saned (sane-backends) and ipp-usb. None is meant to run on a
-# desktop; Hummingbird's 99-default-disable keeps them off. This list is the
+# desktop. Utah enables every unit no preset turns off (#1233), so
+# 98-utah-enable-default.preset disables each of them. This list is the
 # machine-checked half of that promise -- without it the build passes as long as
 # the enabled and masked sets are right, and any one of these flipping on would
 # go undetected. Assert they stay disabled. Names are the units the packages
@@ -540,4 +554,23 @@ disabled = [
   # Utah-only units Dakota does not run (#1233).
   "multipathd.service",
   "lm_sensors.service",
+  # GNOME OS and Dakota presets (98-utah-enable-default.preset): no
+  # systemd-networkd beside NetworkManager, no NFS or iSCSI server side.
+  "systemd-networkd.service",
+  "systemd-networkd.socket",
+  "nfs-server.service",
+  "iscsid.socket",
+  # Enable-by-default must not reach these (#1233): authselect-first-boot
+  # would reset the build's authselect features on first boot, livesys is
+  # live-media setup, dbus-daemon would claim dbus-broker's alias, nftables
+  # loads a ruleset beside firewalld's, and cups-browsed listens on UDP 631.
+  "authselect-first-boot.service",
+  "authselect-apply-changes.service",
+  "livesys.service",
+  "livesys-late.service",
+  "dbus-daemon.service",
+  "nftables.service",
+  "cups-browsed.service",
+  "powertop.service",
+  "systemd-homed-firstboot.service",
 ]

@@ -1,18 +1,14 @@
 #!/usr/bin/bash
 # Configure Utah's desktop services in the image, following bluefin-lts's
 # build_scripts/40-services.sh. Hummingbird deliberately ships a server preset;
-# these enablements are the part that turns the installed GNOME packages into a
-# booting workstation.
+# Utah's presets and the configuration here are the part that turns the
+# installed GNOME packages into a booting workstation.
 
 set -eoux pipefail
 
 # Lid and sleep actions stay at systemd-logind's defaults (suspend), as on
 # Dakota, which ships no logind or sleep override. Utah has only zram swap,
 # so suspend-then-hibernate has no resume target and cannot work.
-
-unit_exists() {
-    systemctl cat "$1" >/dev/null 2>&1
-}
 
 user_unit_exists() {
     for dir in /usr/lib/systemd/user /usr/local/lib/systemd/user /etc/systemd/user; do
@@ -21,17 +17,12 @@ user_unit_exists() {
     return 1
 }
 
-enable_unit() {
-    unit_exists "$1" && systemctl enable "$1" || true
-}
-
-disable_unit() {
-    unit_exists "$1" && systemctl disable "$1" || true
-}
-
-# Services shared with Bluefin LTS. Optional units are guarded because
-# Hummingbird intentionally does not ship every Bluefin integration package.
-# Not enabled: rechunker-group-fix.service. It exists to repair the
+# System services follow the presets, enabled by default as on Dakota (#1233):
+# 98-utah-enable-default.preset turns on every installed unit no preset turns
+# off, and 85-utah-desktop.preset overrides the Hummingbird base where Utah
+# differs. `systemctl preset-all` near the end of this script applies them.
+#
+# rechunker-group-fix.service is removed outright. It exists to repair the
 # /usr/lib/{group,gshadow} damage left by the legacy rechunker
 # (hhd-dev/rechunk) when rebasing to an image built without it. Utah has never
 # been through legacy-rechunk -- so there is nothing here for it to repair.
@@ -48,28 +39,10 @@ disable_unit() {
 # shell. Remove it outright: disabling only drops the preset's symlinks, and
 # anything that later pulls the unit in by name would bring the cycle back.
 # Strip the unit and its drop-in directory so nothing can order against it.
-disable_unit rechunker-group-fix.service
 rm -f /usr/lib/systemd/system/rechunker-group-fix.service
 rm -rf /usr/lib/systemd/system/rechunker-group-fix.service.d
 rm -f /usr/lib/systemd/system/*.wants/rechunker-group-fix.service \
       /etc/systemd/system/*.wants/rechunker-group-fix.service
-enable_unit brew-setup.service
-enable_unit flatpak-nuke-fedora.service
-enable_unit flatpak-preinstall.service
-# Bluetooth is firmware-less on the X230's BCM20702 (no BCM20702A1 blob is
-# needed), but the service was never enabled, so no adapter appears even with
-# bluez installed. Enable it next to the other desktop units; see #98.
-enable_unit gdm.service
-enable_unit bluetooth.service
-# GNOME's system services, from gnome-build-meta's 80-gnome.preset as Dakota
-# ships it (files/systemd-presets/system-preset/80-gnome.preset).
-enable_unit colord.service
-enable_unit accounts-daemon.service
-# Bluefin defaults for mDNS discovery and hybrid-GPU application launching.
-enable_unit avahi-daemon.service
-enable_unit avahi-daemon.socket
-enable_unit switcheroo-control.service
-enable_unit firewalld.service
 # Workstation firewall as Dakota ships it: GNOME OS's lax zone (open
 # 1025-65535, mDNS, Samba client, ssh) as the default, with a loose IPv6
 # reverse-path filter. gnome-os-config-firewalld ships the zone; these are
@@ -81,23 +54,6 @@ sed -i --follow-symlinks \
     -e 's/^IPv6_rpfilter=.*/IPv6_rpfilter=loose/' /etc/firewalld/firewalld.conf
 grep -qx 'DefaultZone=lax' /etc/firewalld/firewalld.conf
 grep -qx 'IPv6_rpfilter=loose' /etc/firewalld/firewalld.conf
-enable_unit fwupd.service
-enable_unit fwupd-refresh.timer
-enable_unit dconf-update.service
-enable_unit tailscaled.service
-enable_unit uupd.timer
-enable_unit projectbluefin-countme.timer
-enable_unit bluefin-stats-refresh.timer
-enable_unit ublue-system-setup.service
-enable_unit systemd-resolved.service
-# See the preset: gated on systemd-boot by drop-in, skipped elsewhere (#363).
-enable_unit systemd-boot-update.service
-enable_unit bootc-unified-storage.timer
-# Dakota desktop parity (#675). The units ship in
-# system_files/shared/usr/lib/systemd/system/; the preset agrees so bootc's
-# first-boot preset application keeps them enabled (see #98).
-enable_unit ublue-firstboot-date.service
-enable_unit ublue-booted-image.service
 # Apply Dakota's runtime desktop integrations onto common's files. Each patch
 # is guarded: already-patched is a no-op, an unrecognized upstream file fails
 # the build loudly instead of silently shipping unpatched behavior.
@@ -188,58 +144,6 @@ fi
 rm -f /usr/share/applications/system-update.desktop \
     /usr/share/applications/discourse.desktop \
     /usr/share/applications/documentation.desktop
-# input-remapper is installed by Bluefin's package set, but without its root
-# daemon running, udev autoload fails on input devices and the GUI prompts for
-# root credentials on launch. Enable it next to the desktop units; see #99.
-enable_unit input-remapper.service
-enable_unit ModemManager.service
-# Power profiles and thermal management as Dakota ships them (#388):
-# power-profiles-daemon, not TuneD, and no intel_lpmd.
-enable_unit power-profiles-daemon.service
-enable_unit thermald.service
-# Dakota's effective service state (#1233); see 85-utah-desktop.preset.
-enable_unit rtkit-daemon.service
-enable_unit uresourced.service
-enable_unit upower.service
-enable_unit udisks2.service
-enable_unit polkit-agent-helper.socket
-enable_unit cups.service
-enable_unit pcscd.socket
-enable_unit gnome-remote-desktop.service
-enable_unit gnome-remote-desktop-configuration.service
-enable_unit malcontent-timerd.service
-enable_unit malcontent-timer-extension-agent.service
-enable_unit malcontent-webd.service
-enable_unit malcontent-webd-update.timer
-enable_unit systemd-oomd.service
-enable_unit systemd-oomd.socket
-enable_unit wpa_supplicant.service
-enable_unit podman.socket
-enable_unit podman-auto-update.timer
-enable_unit podman-restart.service
-enable_unit podman-clean-transient.service
-enable_unit systemd-sysext.socket
-enable_unit systemd-factory-reset.socket
-enable_unit systemd-pcrextend.socket
-enable_unit systemd-storage-block.socket
-enable_unit systemd-storage-fs.socket
-enable_unit systemd-udev-load-credentials.service
-enable_unit systemd-userdb-load-credentials.service
-disable_unit multipathd.service
-disable_unit lm_sensors.service
-# nfs-client.target is turned off: see 85-utah-desktop.preset.
-disable_unit nfs-client.target
-# sysstat collection is opt-in, as in Dakota (elements/bluefin/sysstat.bst);
-# the package stays for on-demand sar/iostat. See 85-utah-desktop.preset.
-disable_unit sysstat.service
-disable_unit sysstat-collect.timer
-disable_unit sysstat-summary.timer
-disable_unit sysstat-rotate.timer
-# Printing on demand, as Fedora's preset enables it for Bluefin; Hummingbird's
-# 99-default-disable would leave it off.
-enable_unit cups.socket
-enable_unit cups.path
-
 # Bluefin's Brewfile and Bazaar preinstall hook need the Flathub remote before
 # first boot. Keep this as a .flatpakrepo descriptor so the remote is available
 # to both flatpak-preinstall and brew-setup without baking mutable /var state.
@@ -279,14 +183,12 @@ if [ -f "${SYSTEM_FLATPAKS}" ] && ! grep -qxF 'flatpak "io.github.maniacx.BudsLi
     echo 'flatpak "io.github.maniacx.BudsLink"' >>"${SYSTEM_FLATPAKS}"
 fi
 
-disable_unit flatpak-add-fedora-repos.service
-
 # Keep image updates under uupd/bootc rather than the legacy rpm-ostree path.
 # Mask in /usr/lib as well as /etc so the mask survives cross-vendor /etc 3-way merges
 # when switching from systems that have bootc-fetch-apply-updates enabled (such as Bluefin).
 # In a cross-vendor switch, ostree's 3-way /etc merge carries timers.target.wants/
 # symlinks into /etc, which would re-enable the timer if /usr/lib was unmasked.
-disable_unit rpm-ostree.service
+# rpm-ostree.service is off by 85-utah-desktop.preset.
 systemctl mask bootc-fetch-apply-updates.timer bootc-fetch-apply-updates.service
 ln -sf /dev/null /usr/lib/systemd/system/bootc-fetch-apply-updates.timer
 ln -sf /dev/null /usr/lib/systemd/system/bootc-fetch-apply-updates.service
@@ -317,14 +219,12 @@ rm -f /usr/lib/systemd/system/*.wants/serial-getty@ttyS0.service \
       /etc/systemd/system/*.wants/serial-getty@ttyS0.service
 
 # SSH follows TunaOS's convention: closed in published images, opt-in for a
-# local debug build. The preset must agree or first-boot preset-all will undo
-# the build-time enablement.
+# local debug build. preset-all below and first-boot preset application both
+# read the preset, so the debug build flips the preset line.
 if [[ "${ENABLE_SSHD:-0}" == "1" ]]; then
-    enable_unit sshd.service
     sed -i 's/^disable sshd.service$/enable sshd.service/' \
         /usr/lib/systemd/system-preset/85-utah-desktop.preset
-else
-    disable_unit sshd.service
+    grep -qx 'enable sshd.service' /usr/lib/systemd/system-preset/85-utah-desktop.preset
 fi
 
 # These are global user-service presets, so systemctl needs --global.
@@ -380,9 +280,13 @@ authselect enable-feature with-mdns4
 install -Dm0755 /tmp/uupd/uupd /usr/bin/uupd
 install -Dm0644 /tmp/uupd/uupd.service /usr/lib/systemd/system/uupd.service
 install -Dm0644 /tmp/uupd/uupd.timer /usr/lib/systemd/system/uupd.timer
-systemctl enable uupd.timer
 # Avoid pulling the distrobox module on every update, as in Dakota's uupd.service.
 sed -i 's|uupd|& --disable-module-distrobox|' /usr/lib/systemd/system/uupd.service
+
+# Apply the system presets to every installed unit, so the image carries the
+# state first-boot preset application would give it and the desktop contract
+# checks that state. Run after the last unit file lands (uupd above).
+systemctl preset-all
 
 # Hummingbird's resolved unit defaults to a disconnected private /tmp. The
 # Bluefin LTS workaround is needed for bootc's early-boot DNS path.
