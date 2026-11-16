@@ -43,7 +43,7 @@ are never enabled by a preset.
   claim dbus-broker's alias), `livesys*`, `rpm-ostree*`,
   `dnf5-offline-transaction`, `flatpak-add-fedora-repos`, network servers
   (autofs, dnsmasq, httpd, openvpn, saned, ipp-usb, samba, wsdd, cups-browsed,
-  gssproxy, nftables beside firewalld), containerd and CNI, and helpers that
+  gssproxy, nftables beside firewalld), CNI, and helpers that
   need configuration or change the system unasked (brltty, fancontrol,
   powertop, xfs_healer, canberra sounds, lastlog2 import, man-db cache).
   `bluefin-stats-refresh.service` runs from its timer only.
@@ -92,8 +92,23 @@ they are harmless: `ratbagd.service` (D-Bus alias), `selinux-check-proper-disabl
 `systemd-pcrlock-secureboot-authority.service`, `podman.service`,
 `netavark-dhcp-proxy.socket`, `bluefin-migrate-var-home-passwd.service`
 (Dakota's legacy `/var/home` passwd migration for the `/home` bind mount,
-#1234). `[services].disabled` holds the network
-servers, sysstat, and the units enable-by-default must not reach.
+#1234), `vmtoolsd.service` and `qemu-guest-agent.service` (#1232).
+`[services].disabled` holds the network servers, sysstat, libvirt's sockets,
+and the units enable-by-default must not reach.
+
+### Virtualization (#1232)
+
+QEMU/KVM, toolbox, systemd-container and the guest agents (qemu-guest-agent,
+spice-vdagent, open-vm-tools, hyperv-daemons) are installed, as on Dakota.
+Dakota's presets need no file of their own here: `80-libvirt.preset`'s
+disables are in `98-utah-enable-default.preset`, and the enables in its
+`80-open-vm-tools.preset` and `80-hyperv-daemons.preset` (`vmtoolsd`,
+`hypervfcopyd`) follow from `enable *`; each agent is gated on its hypervisor.
+`ujust setup-virtualization` and `manage-virtualization` (`60-custom.just`)
+run Dakota's `files/just-overrides/devmode.py`, shipped verbatim as
+`/usr/libexec/dakota-devmode`. libvirt and virtiofsd wait on the factory
+(`[unavailable]`, utah-packages#1021); until libvirt lands the recipes say so
+and exit. containerd and runc are excluded: podman runs on crun.
 
 ### User units
 

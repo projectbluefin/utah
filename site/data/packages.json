@@ -12,7 +12,6 @@
         "alsa-tools-firmware",
         "bootc",
         "bootupd",
-        "containerd",
         "ddcutil",
         "distrobox",
         "dracut-live",
@@ -200,6 +199,7 @@
         "hplip-common",
         "hplip-libs",
         "htop",
+        "hyperv-daemons",
         "ibus-gtk4",
         "intel-gmmlib",
         "intel-mediasdk",
@@ -240,6 +240,7 @@
         "nfsv4-client-utils",
         "nvme-cli",
         "nvtop",
+        "open-vm-tools",
         "openal-soft",
         "openconnect",
         "openh264",
@@ -273,6 +274,8 @@
         "python3-charset-normalizer",
         "python3-idna",
         "python3-pip",
+        "qemu-guest-agent",
+        "qemu-kvm",
         "qt6-qtbase",
         "quota",
         "rpcbind",
@@ -292,6 +295,7 @@
         "speech-dispatcher",
         "speech-dispatcher-espeak-ng",
         "speech-dispatcher-utils",
+        "spice-vdagent",
         "splix",
         "stix-fonts",
         "stoken-libs",
@@ -303,6 +307,7 @@
         "tcpdump",
         "thermald",
         "tmux",
+        "toolbox",
         "totem-pl-parser",
         "tpm2-tools",
         "tree",
@@ -376,8 +381,8 @@
     }
   ],
   "totals": {
-    "installed": 319,
-    "unavailable": 5
+    "installed": 324,
+    "unavailable": 9
   },
   "unavailable": [
     {
@@ -403,10 +408,26 @@
       "name": "grub2-efi-x64-cdboot"
     },
     {
+      "issues": [],
+      "name": "libvirt-client"
+    },
+    {
+      "issues": [],
+      "name": "libvirt-daemon-config-network"
+    },
+    {
+      "issues": [],
+      "name": "libvirt-daemon-kvm"
+    },
+    {
       "issues": [
         83
       ],
       "name": "slitherer"
+    },
+    {
+      "issues": [],
+      "name": "virtiofsd"
     }
   ]
 }

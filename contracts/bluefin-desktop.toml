@@ -181,6 +181,8 @@ files = [
   "/usr/libexec/bluefin-migrate-var-home-passwd",
   "/usr/lib/systemd/system/bluefin-migrate-var-home-passwd.service",
   "/usr/lib/systemd/system-preset/80-bluefin-migrate-var-home-passwd.preset",
+  # Dakota's devmode helper behind `ujust setup-virtualization` (#1232).
+  "/usr/libexec/dakota-devmode",
   # GNOME OS firewall zone and fallback DNS (gnome-os-config subpackages).
   "/usr/lib/firewalld/zones/lax.xml",
   "/usr/lib/systemd/resolved.conf.d/50-gnome-os-fallback-dns.conf",
@@ -482,6 +484,10 @@ enabled = [
   "bluetooth.service",
   # Rewrites legacy /var/home passwd fields before any login (#1234).
   "bluefin-migrate-var-home-passwd.service",
+  # VM guest agents, enabled as on Dakota (80-open-vm-tools.preset and its
+  # qemu-guest-agent unit); each starts only on its hypervisor (#1232).
+  "vmtoolsd.service",
+  "qemu-guest-agent.service",
   # Dakota desktop parity (#675).
   "ublue-firstboot-date.path",
   "ublue-booted-image.service",
@@ -586,6 +592,13 @@ masked = [
 # also socket-activated, and saned is socket-activated from sane-backends-daemon
 # (not installed today, so saned.socket reports not-found until it is).
 disabled = [
+  # Dakota's 80-libvirt.preset (carried in 98-utah-enable-default.preset):
+  # libvirt stays off until `ujust setup-virtualization` (#1232). Absent units
+  # count as off, so these hold once the factory publishes libvirt.
+  "libvirtd.socket",
+  "virtqemud.socket",
+  "virtqemud.service",
+  "virtnetworkd.socket",
   "dnsmasq.service",
   "rpcbind.service",
   "rpcbind.socket",
