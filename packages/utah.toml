@@ -695,12 +695,6 @@ packages = [
 #   [unavailable] into the contract once utah-packages builds both; tracked by
 #   #10.
 #
-# fish
-#   Deliberately excluded, not blocked: the factory builds it and it resolves,
-#   but Bluefin classic shipping every shell was a mistake Utah does not repeat.
-#   Users who want fish get it from Homebrew. Tracked by #419. Dakota ships
-#   fish from GNOME OS; whether Utah follows is #1230.
-#
 # firefox
 #   Neither enabled repository provides the firefox RPM: the factory does
 #   not build it and Hummingbird's server repository does not carry it.
@@ -734,7 +728,6 @@ packages = [
     "anaconda-live",
     "evolution-ews-core",
     "firefox",
-    "fish",
     "slitherer",
 ]
 

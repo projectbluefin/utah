@@ -399,10 +399,12 @@ class UnavailableContractTests(unittest.TestCase):
             block.append(line)
         return "\n".join([lines[starts[0]], *block])
 
-    def test_fish_stays_excluded(self):
-        self.assertIn("fish", self.names(),
-                      "Bluefin classic shipping every shell was a mistake Utah "
-                      "does not repeat (bare-metal audit #382)")
+    def test_fish_ships_and_zsh_does_not(self):
+        # Dakota ships fish from GNOME OS and no zsh (#1230).
+        self.assertNotIn("fish", self.names())
+        base = tomllib.loads((ROOT / "packages/base.toml").read_text())
+        self.assertIn("fish", base["fedora"]["packages"])
+        self.assertNotIn("zsh", base["fedora"]["packages"])
 
     def test_firefox_rpm_stays_excluded(self):
         self.assertIn("firefox", self.names(),

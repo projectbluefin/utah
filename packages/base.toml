@@ -103,7 +103,6 @@ packages = [
     "xdg-terminal-exec",
     "xorriso",
     "zenity",
-    "zsh",
 ]
 
 [fedora_v42]

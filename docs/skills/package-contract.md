@@ -63,8 +63,7 @@ policy for changing them.
 Flatpak-first (standing policy): no RPM for an end-user app Utah ships as a
 Flatpak (`contracts/bluefin-desktop.toml` `[flatpak]`). Transitional native
 payloads need an inline drop condition in `packages/utah.toml`; the factory
-follows the same rule when importing recipes. Dakota parity installs `wget2`
-and `wget2-wget` (the `wget` link); the desktop file contract checks both commands.
+follows the same rule when importing recipes.
 
 ## Wi-Fi documentation currency
 
@@ -358,7 +357,7 @@ describe the same image as its `surface.tsv`; after a refresh,
 
 Current counts, per the README "Parity with Dakota" section: 61 base manifest
 packages installed, 260 Utah additions (GNOME 51, base-image parity, device
-firmware, desktop services), 6 genuinely unavailable. `scripts/check-doc-counts.py` (part of
+firmware, desktop services), 5 genuinely unavailable. `scripts/check-doc-counts.py` (part of
 `just check`) recomputes these from the manifests and fails if either
 document drifts from `site/data/packages.json`.
 

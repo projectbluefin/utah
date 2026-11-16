@@ -19,6 +19,7 @@
         "evtest",
         "fastfetch",
         "firewall-config",
+        "fish",
         "flatpak-spawn",
         "fzf",
         "gcc",
@@ -65,8 +66,7 @@
         "wl-clipboard",
         "xdg-terminal-exec",
         "xorriso",
-        "zenity",
-        "zsh"
+        "zenity"
       ],
       "title": "Base manifest",
       "transient": false
@@ -379,7 +379,7 @@
   ],
   "totals": {
     "installed": 321,
-    "unavailable": 6
+    "unavailable": 5
   },
   "unavailable": [
     {
@@ -397,12 +397,6 @@
         35
       ],
       "name": "firefox"
-    },
-    {
-      "issues": [
-        419
-      ],
-      "name": "fish"
     },
     {
       "issues": [
