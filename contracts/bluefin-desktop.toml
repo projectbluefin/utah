@@ -593,6 +593,9 @@ enabled = [
   "nvmefc-boot-connections.service",
   "systemd-imdsd.socket",
   "speech-dispatcherd.service",
+  # NFS client services, as on Dakota (#1269): Hummingbird's 90-default.preset
+  # enables the target once 85-utah-desktop.preset no longer disables it.
+  "nfs-client.target",
   "thermald.service",
   "projectbluefin-countme.timer",
   "switcheroo-control.service",

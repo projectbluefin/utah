@@ -23,14 +23,6 @@ disable chronyd.service
 # 80-lm-sensors.preset.
 disable multipathd.service
 disable lm_sensors.service
-# nfs-client.target is enabled by both Fedora's and Hummingbird's 90-default
-# preset, and is turned off here on purpose. Installing nfs-common-utils (#263)
-# made it start gssproxy.service (target -> auth-rpcgss-module.service ->
-# gssproxy.service), which failed every boot in the review VM with
-# status=238/STATE_DIRECTORY, Permission denied creating /var/lib/gssproxy
-# (cause not diagnosed). mount.nfs starts rpc-statd on demand, so NFS mounts do
-# not need the target.
-disable nfs-client.target
 # Dakota's 50-iscsi.preset. Hummingbird's 90-default.preset enables the
 # initiator sockets, so the disables have to come before it.
 disable iscsi-init.service

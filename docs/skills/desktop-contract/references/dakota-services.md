@@ -12,7 +12,7 @@ order of their names; the first line that matches a unit wins.
 |---|---|---|
 | `00-`…`03-*.preset` | brew, uupd, common | vendor enables |
 | `80-hummingbird.preset` | Hummingbird | `disable dnf-makecache.timer`, `enable bootloader-update.service` |
-| `85-utah-desktop.preset` | Utah | overrides the base's 80/90 files: `enable systemd-boot-update.service`; `disable` sshd, multipathd, lm_sensors, nfs-client.target, Dakota's iSCSI set, the serial getty, rpm-ostree and bootc-fetch-apply-updates |
+| `85-utah-desktop.preset` | Utah | overrides the base's 80/90 files: `enable systemd-boot-update.service`; `disable` sshd, multipathd, lm_sensors, Dakota's iSCSI set, the serial getty, rpm-ostree and bootc-fetch-apply-updates |
 | `90-default.preset`, `90-systemd.preset` | Hummingbird | Fedora's server enables and disables, upstream systemd's list |
 | `98-utah-enable-default.preset` | Utah | GNOME OS's and Dakota's disables, Utah's own disables, then `enable *` |
 | `99-default-disable.preset` | Hummingbird | `disable *`; never reached |
@@ -105,7 +105,8 @@ they are harmless: `ratbagd.service` (D-Bus alias), `selinux-check-proper-disabl
 `bluefin-migrate-var-home-passwd.service`
 (Dakota's legacy `/var/home` passwd migration for the `/home` bind mount,
 #1234), `vmtoolsd.service` and `qemu-guest-agent.service` (#1232),
-`systemd-homed.service` and `systemd-homed-firstboot.service` (#1238).
+`systemd-homed.service` and `systemd-homed-firstboot.service` (#1238), and
+`nfs-client.target` (#1269).
 `[services].disabled` holds the network servers, sysstat, libvirt's sockets,
 mdadm's timers, and the units enable-by-default must not reach.
 
@@ -125,6 +126,19 @@ gnome-initial-setup. The drop-in `10-utah-initial-setup.conf` sets
 `SYSTEMD_HOME_FIRSTBOOT_OVERRIDE=0`, which keeps the credential import and
 drops the prompt; gnome-initial-setup creates the first account. The contract
 asserts the feature, the PAM lines, nsswitch, the drop-in and both units.
+
+### NFS client (#1269)
+
+`nfs-client.target` is enabled, as Dakota's `elements/bluefin/nfs-utils.bst`
+presets it: Hummingbird's `90-default.preset` enables it, and
+`85-utah-desktop.preset` no longer disables it. Dakota builds nfs-utils `--disable-gss`, but Utah's Fedora
+build pulls in `gssproxy.service` (through `auth-rpcgss-module.service`, whose
+`Wants=` applies even without a keytab). The service's
+`StateDirectory=gssproxy/clients gssproxy/rcache` failed with
+`238/STATE_DIRECTORY`: clean-stage strips `/var`, and SELinux gives systemd
+(init_t) no `add_name` on `gssproxy_var_lib_t`, so systemd can't create the
+subdirectories. `usr/lib/tmpfiles.d/utah-gssproxy.conf` recreates all three
+directories with the RPM's modes, and systemd-tmpfiles is allowed to.
 
 ### Virtualization (#1232)
 

@@ -60,6 +60,9 @@ disable virt*d-*.socket
 # 80-nethogs.preset
 disable usr-bin-nethogs.mount
 # 80-nfs-client.preset: a desktop is an NFS client, not a server.
+# nfs-client.target stays on, as there and in Hummingbird's 90-default.preset
+# (#1269); tmpfiles.d/utah-gssproxy.conf gives the gssproxy.service it pulls
+# in its state directories.
 disable nfs-server.service
 disable fsidd.service
 # 80-pam-pkcs11.preset

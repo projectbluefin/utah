@@ -37,10 +37,11 @@ Rules applied while choosing names:
   unit the desktop depends on belongs in `[services].enabled`. Dakota's
   presets are the reference: sysstat collection is opt-in
   (`elements/bluefin/sysstat.bst`), libvirt is socket-off until
-  `ujust setup-virtualization`. Utah also disables `nfs-client.target`
-  (Hummingbird's own preset enables it): it pulls in `gssproxy.service`,
-  which failed to start in the review VM (`STATE_DIRECTORY`, Permission
-  denied; cause not diagnosed).
+  `ujust setup-virtualization`. `nfs-client.target` is enabled, as on Dakota.
+  It pulls in `gssproxy.service`, whose `StateDirectory=` can't create
+  `clients/` and `rcache/` itself, because SELinux gives init_t no `add_name`
+  on `gssproxy_var_lib_t`. `tmpfiles.d/utah-gssproxy.conf` recreates them on
+  the `/var` that clean-stage strips (#1269).
 - Power profiles follow Dakota, not Bluefin: Utah installs and enables
   `power-profiles-daemon` and ships no TuneD. Never install `tuned-ppd`
   beside it: both claim `org.freedesktop.UPower.PowerProfiles`. TuneD also
