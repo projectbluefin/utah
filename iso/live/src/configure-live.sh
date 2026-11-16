@@ -82,24 +82,20 @@ systemctl enable var-tmp.mount || true
 # Utah installs with the ostree backend. The composefs default (#882, #938)
 # was never exercised by the LUKS e2e before it shipped and failed every
 # flavor (#1129); it stays off until the review VM passes for every flavor
-# with review_composefs_backend (docs/skills/local-testing.md). An empty
-# "image" with a "targetImgref" is the offline ostree shape: fisherman
-# installs from containers-storage.
-# The ISO builder embeds its OCI payload into /usr/lib/containers/storage, the
-# image store this platform already resolves to.
+# with review_composefs_backend (docs/skills/local-testing.md).
 #
-# There is deliberately no /etc/containers/storage.conf here. One used to
-# write driver = "vfs" and a graphroot under /var, and it did nothing:
-# Hummingbird ships /usr/share/containers/storage.conf.d/00-vendor.conf, and
-# drop-ins are read after /etc, so the driver stayed overlay and podman kept
-# looking in the vendor image store. The payload now lives where the platform
-# looks, which needs no override and cannot drift from one.
+# The install source is the payload the ISO builder embeds as a read-only OCI
+# layout, bound by /etc/bootc-installer/media-input.json
+# (iso/scripts/embed-oci-payload.sh). The live-iso-mode marker below makes
+# fisherman require that receipt and install only the image it names, so the
+# recipe names the published ref (the receipt's image) and never a
+# containers-storage: source: fisherman refuses any other source on live media.
 mkdir -p /etc/containers
 mkdir -p /var/fisherman-tmp
 
-# Installer branding/configuration. The custom recipe must reference the same
-# tag that the ISO builder imports into the VFS store, never the build host's
-# localhost source ref.
+# Installer branding/configuration. The custom recipe must reference the
+# published ref the ISO builder embeds, never the build host's localhost
+# source ref.
 mkdir -p /usr/share/bootc-installer/images /etc/bootc-installer
 # utahraptor.png is the Utah mascot: projectbluefin/artwork's black-outline
 # "utah-look" raster (2100x2100), pinned and checksummed in config/artwork.lock.
@@ -127,7 +123,6 @@ for path in (Path("/etc/bootc-installer/images.json"), Path("${SCRIPT_DIR}/etc/b
         data["imgref"] = ref
         data["targetImgref"] = ref
         data["image"] = ""
-        data["local_imgref"] = f"containers-storage:{ref}"
         data["bootloader"] = "grub2"
         data["composeFsBackend"] = False
     Path("/etc/bootc-installer" , path.name).write_text(json.dumps(data, indent=2) + "\n")

@@ -707,23 +707,50 @@ echo "  live session type: ${live_session_type:-unknown}"
 shot_until_drawn live-desktop "${MONITOR_LIVE}"
 
 echo "=== Phase 3/7: install onto an encrypted disk ==="
+# The live media binds the installer to its embedded payload: a read-only OCI
+# layout in the squashfs, named by /etc/bootc-installer/media-input.json
+# (iso/scripts/embed-oci-payload.sh). Fisherman refuses to install on live
+# media without that receipt, and refuses any image other than the one it
+# names. Check the binding first, so a broken one fails here with its cause
+# rather than as local_source_unavailable inside the installer.
+echo "Checking the live media's install-source receipt..."
+ssh_live 'cat /etc/bootc-installer/media-input.json' > "${WORK}/media-input.json" \
+    || fail "the live media has no /etc/bootc-installer/media-input.json: fisherman refuses to install without it"
+MEDIA_LAYOUT="$(python3 - "${WORK}/media-input.json" "${PAYLOAD_IMAGE}" <<'PY'
+import json
+import sys
+
+receipt = json.load(open(sys.argv[1]))
+payload = sys.argv[2]
+for key in ("image", "targetImgref"):
+    if receipt.get(key) != payload:
+        sys.exit(f"media-input.json {key} is {receipt.get(key)!r}, not the payload {payload!r}")
+layout = receipt.get("ociLayoutPath", "")
+if receipt.get("schemaVersion") != 1 or not layout.startswith("/run/rootfsbase/"):
+    sys.exit(f"media-input.json is not a v1 receipt for a layout under /run/rootfsbase: {receipt}")
+print(layout)
+PY
+)" || fail "the live media's install-source receipt does not bind the payload ${PAYLOAD_IMAGE}"
+ssh_live "findmnt -no OPTIONS -T '${MEDIA_LAYOUT}'" | grep -Eq '^ro(,|$)' \
+    || fail "the embedded payload ${MEDIA_LAYOUT} is not on a read-only mount: fisherman refuses it"
+echo "  receipt: ${PAYLOAD_IMAGE} from ${MEDIA_LAYOUT} (read-only)"
+
 # The ISO installs with the ostree backend (#1129): an empty "image" with a
-# "targetImgref" is the offline ostree shape, installing from
-# containers-storage without pulling.
+# "targetImgref" selects the source the receipt binds.
 #
-# UTAH_E2E_COMPOSEFS_BACKEND=1 opts in to the composefs backend. Fisherman then
-# needs an explicit source reference (containers-storage:...) to export an OCI
-# layout before running bootc install; targetImgref is kept for day-2 updates.
-# It is not the default until it passes for every flavor (#1129).
+# UTAH_E2E_COMPOSEFS_BACKEND=1 opts in to the composefs backend, naming the
+# receipt's image as the GUI installer does; fisherman installs it from the
+# embedded layout either way. It is not the default until it passes for
+# every flavor (#1129).
 #
 # The user block is what phase 6 logs in as. Without it the installed system
 # has no account at all and the greeter has nobody to offer.
 #
 # Deliberately no scratch disk mounted at /var/lib/containers: Bluefin's ISO
 # pulls the payload from a registry and needs real space for it; Utah's ISO
-# carries the image in the squashfs, and mounting over that path hides it.
+# carries the image in the squashfs.
 if [[ "${UTAH_E2E_COMPOSEFS_BACKEND:-0}" == 1 ]]; then
-    RECIPE_IMAGE="containers-storage:${PAYLOAD_IMAGE}"
+    RECIPE_IMAGE="${PAYLOAD_IMAGE}"
     RECIPE_COMPOSEFS_BACKEND=true
 else
     RECIPE_IMAGE=""
@@ -783,7 +810,7 @@ ssh_live 'theme=$(plymouth-set-default-theme) &&
 scp_live liveuser@127.0.0.1:/tmp/utah-plymouth-theme "${PLYMOUTH_THEME_FILE}"
 scp_live liveuser@127.0.0.1:/tmp/utah-plymouth-watermark.png "${PLYMOUTH_WATERMARK}"
 
-echo "Running the installer from the ISO's embedded store..."
+echo "Running the installer from the ISO's embedded OCI payload..."
 ssh_live 'sudo /usr/local/bin/fisherman /tmp/luks-recipe.json'
 
 # The installed system already boots with console=ttyS0, but also with
@@ -967,8 +994,8 @@ echo "  ssh: logged in as ${TEST_USER}"
 echo "Verifying the installed system booted the offline embedded payload..."
 # bootc's own view of what is booted is the ground truth for "the offline
 # payload survived the install": fisherman's recipe named targetImgref
-# exactly ${PAYLOAD_IMAGE}, formatted from the ISO's embedded
-# containers-storage with no network (phase 3), so the booted image
+# exactly ${PAYLOAD_IMAGE}, installed from the ISO's embedded read-only
+# OCI layout with no network (phase 3), so the booted image
 # reference matching it proves that payload -- not a substitute, and not one
 # reached over a network this guest does not have -- is what is running.
 # (/usr/share/utah/contract.txt, tried here in an earlier revision, is the
@@ -1392,7 +1419,7 @@ the check beside it passed.
    \`gdm.service\` active and \`gnome-shell\` running — not a text console
    that merely answers SSH.
 2. The installer creates a LUKS2 volume and installs from the ISO's embedded
-   container store, with no network.
+   read-only OCI payload, bound by its media-input.json receipt, with no network.
 3. The installed disk boots on its own, with no ISO attached.
 4. Plymouth draws its graphical passphrase prompt with the theme's watermark
    in place (not the text fallback), and the passphrase typed there opens the

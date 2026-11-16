@@ -109,7 +109,8 @@ check:
     python3 -m json.tool iso/live/src/etc/bootc-installer/images.json >/dev/null
     python3 -m json.tool iso/live/src/etc/bootc-installer/recipe.json >/dev/null
     grep -q 'org.bootcinstaller.Installer' iso/live/src/install-flatpaks.sh
-    grep -q 'containers-storage' iso/scripts/build-iso.sh
+    grep -q 'iso/scripts/embed-oci-payload.sh' iso/scripts/build-iso.sh
+    bash -n iso/scripts/embed-oci-payload.sh
     grep -q 'UTAH_LIVE' iso/scripts/build-iso.sh
     grep -q 'Documented exception (Issue #22)' iso/scripts/build-iso.sh
     if grep -q 'rd.utah.isofile' iso/scripts/build-iso.sh; then echo "rd.utah.isofile found in build-iso.sh" >&2; exit 1; fi

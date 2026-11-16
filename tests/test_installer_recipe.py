@@ -101,16 +101,36 @@ class InstallerBackendTests(unittest.TestCase):
     def test_configure_live_writes_the_offline_ostree_recipe(self):
         script = CONFIGURE_LIVE.read_text()
         self.assertIn('data["composeFsBackend"] = False', script)
-        # An empty image with targetImgref installs from containers-storage
-        # without pulling; a named image would pull from a registry.
+        # An empty image with targetImgref selects the source the live media's
+        # media-input.json binds; the GUI names imgref, the receipt's image.
         self.assertIn('data["image"] = ""', script)
+        self.assertIn('data["imgref"] = ref', script)
+        self.assertIn('data["targetImgref"] = ref', script)
+        self.assertIn("touch /etc/bootc-installer/live-iso-mode", script)
+
+    def test_no_containers_storage_source_override(self):
+        # With the live-iso-mode marker, fisherman installs only the image the
+        # receipt names, from its OCI layout: bootc-installer's local_imgref
+        # would send containers-storage:<ref>, which fisherman refuses.
+        self.assertNotIn("local_imgref", json.loads(RECIPE.read_text()))
+        self.assertNotIn("local_imgref", CONFIGURE_LIVE.read_text())
 
     def test_luks_e2e_defaults_to_ostree_and_keeps_the_composefs_opt_in(self):
         script = LUKS_E2E.read_text()
         self.assertIn('if [[ "${UTAH_E2E_COMPOSEFS_BACKEND:-0}" == 1 ]]; then', script)
-        self.assertIn('RECIPE_IMAGE="containers-storage:${PAYLOAD_IMAGE}"', script)
+        self.assertIn('RECIPE_IMAGE="${PAYLOAD_IMAGE}"', script)
+        self.assertNotIn("containers-storage:${PAYLOAD_IMAGE}", script)
         self.assertIn('"composeFsBackend": ${RECIPE_COMPOSEFS_BACKEND}', script)
         self.assertIn('"image": "${RECIPE_IMAGE}"', script)
+
+    def test_luks_e2e_checks_the_media_receipt_before_installing(self):
+        script = LUKS_E2E.read_text()
+        receipt = "ssh_live 'cat /etc/bootc-installer/media-input.json'"
+        self.assertIn(receipt, script)
+        self.assertIn('for key in ("image", "targetImgref"):', script)
+        self.assertIn("findmnt -no OPTIONS -T", script)
+        self.assertLess(script.index(receipt),
+                        script.index("sudo /usr/local/bin/fisherman"))
 
 
 if __name__ == "__main__":

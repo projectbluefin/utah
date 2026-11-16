@@ -111,11 +111,17 @@ class EvidenceTests(unittest.TestCase):
                         script.index("sudo /usr/local/bin/fisherman"))
 
     def test_offline_payload_preserves_manifest_digest(self):
-        script = (ROOT / "iso/scripts/build-iso.sh").read_text()
+        build = (ROOT / "iso/scripts/build-iso.sh").read_text()
+        self.assertIn('bash iso/scripts/embed-oci-payload.sh "${PAYLOAD_IMAGE}" '
+                      '"${PUBLISHED_IMAGE}" "${SQUASHFS_ROOT}" "${WORK}"', build)
+        self.assertNotIn("/usr/lib/containers/storage", build)
+        script = (ROOT / "iso/scripts/embed-oci-payload.sh").read_text()
         self.assertNotIn("oci-archive:", script)
+        self.assertNotIn("--dest-compress", script)
         self.assertEqual(script.count("--preserve-digests"), 2)
         self.assertIn('"dir:${PAYLOAD_EXPORT}"', script)
-        self.assertIn('dir:/payload "containers-storage:$1"', script)
+        self.assertIn('skopeo copy --preserve-digests "dir:${PAYLOAD_EXPORT}" '
+                      '"oci:${LAYOUT}:payload"', script)
 
     def test_iso_compression_level_reaches_unshare_assembly(self):
         script = (ROOT / "iso/scripts/build-iso.sh").read_text()
@@ -1477,3 +1483,125 @@ class IsoBakeParserTests(unittest.TestCase):
                          "the live-only installed path does not exist on bootc deployments")
         self.assertNotIn('"utah-verify-desktop-contract --flatpaks', text,
                          "bare parser name is not on the guest PATH")
+
+
+class EmbedOciPayloadTests(unittest.TestCase):
+    """Live media must carry the receipt fisherman requires (PR #1131).
+
+    Fisherman 58eaf29e refuses to install on live media (the live-iso-mode
+    marker) unless /etc/bootc-installer/media-input.json binds a verified OCI
+    layout on a read-only filesystem: review VM run 43815907502 failed every
+    flavor with local_source_unavailable. The builder is run here with skopeo
+    stubbed to write a real OCI layout, and the receipt is checked against
+    fisherman's v1 schema (internal/mediainput, PreflightBoundOCIMediaInput).
+    """
+
+    SCRIPT = ROOT / "iso/scripts/embed-oci-payload.sh"
+    LIVE_LAYOUT = "/run/rootfsbase/usr/lib/utah/payload"
+
+    FAKE_SKOPEO = r"""#!/usr/bin/env python3
+import hashlib, json, os, sys
+from pathlib import Path
+with open(os.environ["SKOPEO_LOG"], "a") as log:
+    log.write(" ".join(sys.argv[1:]) + "\n")
+src, dest = sys.argv[-2:]
+if dest.startswith("dir:"):
+    Path(dest[4:]).mkdir(parents=True)
+    Path(dest[4:], "manifest.json").write_text("{}")
+    sys.exit(0)
+assert src.startswith("dir:") and dest.startswith("oci:") and dest.endswith(":payload"), dest
+layout = Path(dest[4:-len(":payload")])
+blobs = layout / "blobs" / "sha256"
+blobs.mkdir(parents=True)
+def put(data):
+    digest = hashlib.sha256(data).hexdigest()
+    (blobs / digest).write_bytes(data)
+    return {"digest": "sha256:" + digest, "size": len(data)}
+config = put(json.dumps({"os": "linux", "architecture": "amd64"}).encode())
+layer = put(b"layer")
+manifest = put(json.dumps({"schemaVersion": 2, "config": config, "layers": [layer]}).encode())
+(layout / "oci-layout").write_text('{"imageLayoutVersion": "1.0.0"}')
+(layout / "index.json").write_text(json.dumps({"schemaVersion": 2, "manifests": [manifest]}))
+"""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(subprocess.run, ["rm", "-rf", str(self.tmp)])
+        bin_dir = self.tmp / "bin"
+        bin_dir.mkdir()
+        skopeo = bin_dir / "skopeo"
+        skopeo.write_text(self.FAKE_SKOPEO)
+        skopeo.chmod(0o755)
+        self.root = self.tmp / "root"
+        self.work = self.tmp / "work"
+        self.work.mkdir()
+        self.log = self.tmp / "skopeo.log"
+        self.env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}",
+                    "SKOPEO_LOG": str(self.log)}
+
+    def _live_root(self, ref):
+        etc = self.root / "etc/bootc-installer"
+        etc.mkdir(parents=True)
+        (etc / "recipe.json").write_text(json.dumps(
+            {"imgref": ref, "targetImgref": ref, "image": "", "composeFsBackend": False}))
+        (etc / "images.json").write_text(json.dumps(
+            {"default_image": ref, "images": [{"imgref": ref}]}))
+
+    def _run(self, payload, published):
+        return subprocess.run(
+            ["bash", str(self.SCRIPT), payload, published, str(self.root), str(self.work)],
+            capture_output=True, text=True, env=self.env)
+
+    def test_receipt_binds_the_read_only_layout(self):
+        ref = "ghcr.io/projectbluefin/utah:review-vm-abc"
+        self._live_root(ref)
+        result = self._run("localhost/utah:testing", ref)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        receipt = json.loads((self.root / "etc/bootc-installer/media-input.json").read_text())
+        layout = self.root / "usr/lib/utah/payload"
+        index = json.loads((layout / "index.json").read_text())
+        manifest_digest = index["manifests"][0]["digest"]
+        manifest = json.loads((layout / "blobs/sha256" / manifest_digest[7:]).read_text())
+        self.assertEqual(receipt, {
+            "schemaVersion": 1,
+            "kind": "utah-live",
+            "image": ref,
+            "platformManifestDigest": manifest_digest,
+            "configDigest": manifest["config"]["digest"],
+            "ociLayoutPath": self.LIVE_LAYOUT,
+            "targetImgref": ref,
+            "platform": "linux/amd64",
+        })
+        for digest in (receipt["platformManifestDigest"], receipt["configDigest"]):
+            self.assertRegex(digest, r"^sha256:[0-9a-f]{64}$")
+        # Local candidates export their own containers-storage and keep the
+        # manifest bytes through dir into the layout.
+        calls = self.log.read_text().splitlines()
+        self.assertEqual(calls[0].split()[-2], "containers-storage:localhost/utah:testing")
+        self.assertNotIn("--preserve-digests", calls[0])
+        self.assertTrue(calls[1].startswith("copy --preserve-digests dir:"), calls[1])
+        self.assertFalse((self.work / "utah-payload").exists())
+
+    def test_pinned_payload_copies_registry_blobs(self):
+        ref = "ghcr.io/projectbluefin/utah@sha256:" + "a" * 64
+        self._live_root(ref)
+        result = self._run(ref, ref)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        first = self.log.read_text().splitlines()[0]
+        self.assertIn("--preserve-digests", first)
+        self.assertEqual(first.split()[-2], f"docker://{ref}")
+
+    def test_pinned_payload_must_match_the_live_image(self):
+        ref = "ghcr.io/projectbluefin/utah@sha256:" + "a" * 64
+        self._live_root(ref)
+        result = self._run("localhost/utah:testing", ref)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("must match", result.stderr)
+
+    def test_recipe_naming_another_image_fails_the_build(self):
+        # Fisherman refuses a request naming another image than the receipt's.
+        self._live_root("ghcr.io/projectbluefin/utah:testing")
+        result = self._run("localhost/utah:testing", "ghcr.io/projectbluefin/utah:review-vm-abc")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("recipe.json imgref", result.stderr)
+        self.assertFalse((self.root / "etc/bootc-installer/media-input.json").exists())
