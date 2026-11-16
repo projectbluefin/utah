@@ -85,6 +85,20 @@ Swap follows Dakota (#1224), not zram: `zram-generator(-defaults)` are gone.
   `CRYPTO_ZSTD` and gates on both, so the kargs take effect there too
   (`docs/skills/kernel-cache.md`).
 
+## Fonts
+
+Dakota ships two fonts Utah's base manifest does not (#1240), both factory
+packages in `packages/utah.toml` `[parity]`:
+
+- `google-noto-serif-cjk-vf-fonts`: GNOME OS's Noto Serif CJK, next to the
+  Sans CJK set the base manifest already carries.
+- `nerd-fonts-symbols`: Dakota's `bluefin/nerd-fonts-symbols.bst`, the
+  icon-only Symbols Nerd Font that common's fastfetch config falls back to.
+  The package ships `10-nerd-font-symbols.conf` in
+  `/usr/share/fontconfig/conf.avail` and enables it with the same
+  `/etc/fonts/conf.d` link the element creates, so Utah adds no fontconfig
+  file of its own; the contract asserts both paths and the family name.
+
 ## Lid and sleep
 
 Lid and sleep handling stays at systemd-logind's defaults (suspend). Dakota
