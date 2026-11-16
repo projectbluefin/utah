@@ -631,12 +631,12 @@ class DesktopUnitEnablementTests(unittest.TestCase):
         self.assertEqual(stale, [], f"allowlisted but no longer enabled: {stale}")
 
     def test_the_reported_desktop_units_are_enabled(self):
-        # projectbluefin/utah#99: input-remapper package was installed and its
-        # unit never started. Name them so a refactor cannot drop one.
+        # projectbluefin/utah#99 named the first of these (input-remapper,
+        # replaced by the opt-in kanata in #1222). Name them so a refactor
+        # cannot drop one.
         # projectbluefin/utah#19: the first-boot Flatpak, setup, statistics,
         # update and Tailscale units have an explicit enablement policy too.
         for unit in (
-            "input-remapper.service",
             "flatpak-preinstall.service",
             "ublue-system-setup.service",
             "ublue-wallpaper-month.service",

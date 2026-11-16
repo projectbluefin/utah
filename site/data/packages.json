@@ -32,7 +32,6 @@
         "ibus-mozc",
         "ibus-unikey",
         "igt-gpu-tools",
-        "input-remapper",
         "isomd5sum",
         "just",
         "libappindicator-gtk3",
@@ -245,6 +244,7 @@
         "ipp-usb",
         "iptables-nft",
         "iw",
+        "kanata",
         "keyutils",
         "krb5-workstation",
         "langpacks-en",
@@ -363,6 +363,7 @@
         "xdg-utils",
         "xmlsec1",
         "xxd",
+        "ydotool",
         "zip"
       ],
       "title": "Base-image parity",
@@ -415,7 +416,7 @@
     }
   ],
   "totals": {
-    "installed": 360,
+    "installed": 361,
     "unavailable": 7
   },
   "unavailable": [

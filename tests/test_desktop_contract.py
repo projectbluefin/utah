@@ -60,11 +60,13 @@ class ValidateContractTests(unittest.TestCase):
         data = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
         self.assertEqual(desktop.validate_contract(data), [])
 
-    def test_shipped_contract_enables_input_remapper(self):
+    def test_shipped_contract_keeps_kanata_opt_in_without_input_remapper(self):
         import tomllib
 
         data = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
-        self.assertIn("input-remapper.service", data.get("services", {}).get("enabled", []))
+        services = data.get("services", {})
+        self.assertIn("kanata.service", services.get("disabled", []))
+        self.assertNotIn("input-remapper.service", services.get("enabled", []))
 
     def test_every_missing_section_is_named(self):
         errors = desktop.validate_contract({})

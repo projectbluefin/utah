@@ -77,7 +77,7 @@ The TOML's sections are the contract's table of contents:
   `accounts-daemon.service`, `avahi-daemon.service`, `avahi-daemon.socket`, `bluetooth.service`,
   `switcheroo-control.service`, `ublue-system-setup.service`, `flatpak-preinstall.service`,
   `flatpak-nuke-fedora.service`, `brew-setup.service`, `dconf-update.service`, `bootc-unified-storage.timer`,
-  `input-remapper.service`, `ModemManager.service`, `power-profiles-daemon.service`, `thermald.service`,
+  `ModemManager.service`, `power-profiles-daemon.service`, `thermald.service`,
   `projectbluefin-countme.timer`, `cups.socket`, `systemd-boot-update.service`, `uupd.timer`,
   `ublue-wallpaper-month.service`, `bluefin-wallpaper-month.service`, `ublue-firstboot-date.path`,
   `ublue-booted-image.service`, `bluefin-remove-installer.service`.
@@ -371,7 +371,7 @@ build.
 Hummingbird defaults to a server preset and disables unlisted services, so
 the desktop policy is applied explicitly. `scripts/configure-services.sh`
 mirrors bluefin-lts's `40-services.sh`: it applies the desktop presets,
-enables GDM, input-remapper, firmware updates, Tailscale, uupd, user setup and resolved,
+enables GDM, firmware updates, Tailscale, uupd, user setup and resolved, keeps kanata opt-in,
 configures authselect, and removes the extension build toolchain before
 cleanup. Lid/sleep stay at logind defaults; Dakota-copied sysctl, WirePlumber
 and polkit defaults: [Dakota system defaults](desktop-contract/references/dakota-system-defaults.md).

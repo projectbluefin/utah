@@ -425,6 +425,12 @@ packages = [
     "pinentry-gnome3",
     "brltty",
     "ptyxis",
+    # Key remapping as Dakota ships it (bluefin/kanata.bst, bluefin/ydotool.bst),
+    # in place of input-remapper (#1222). kanata.service stays off until the
+    # user writes /etc/kanata/kanata.kbd and enables it (the package's
+    # 80-kanata.preset); ydotool brings the uinput udev rule and modules-load.
+    "kanata",
+    "ydotool",
     # Network file systems and Windows domain clients (the NFS family follows
     # in the second-wave block below).
     "cifs-utils",
@@ -987,6 +993,8 @@ parity = [
     "pinentry-gnome3",
     "brltty",
     "ptyxis",
+    "kanata",
+    "ydotool",
     "cifs-utils",
     "rpcbind",
     "autofs",
