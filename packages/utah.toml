@@ -7,6 +7,8 @@
 # *instead of*) the base manifest lives here.  Flatpak-first: never add an RPM
 # for an end-user app Utah ships as a Flatpak (see
 # contracts/bluefin-desktop.toml [flatpak]); drop conditions ride inline.
+# Papers, Disk Usage Analyzer (baobab) and Sushi are the exceptions: they ship
+# natively as on Dakota, and their Flatpaks are dropped (#1270).
 #
 # Sections:
 #   [gnome]        GNOME 51 desktop contract Hummingbird does not ship
@@ -504,13 +506,20 @@ packages = [
     "gstreamer1-plugins-bad-free",
     "gstreamer1-plugins-bad-free-libs",
     "gstreamer1-plugins-ugly-free",
-    # Papers integration the sandboxed Flatpak cannot provide: the thumbnailer
-    # and Files property page run in the host's Nautilus. The Papers app itself
-    # stays the org.gnome.Papers Flatpak (Bluefin has no `papers` RPM), and
-    # papers-previewer is waived (triage.toml).
+    # Papers, Disk Usage Analyzer and Files' spacebar previewer (Sushi) as
+    # Dakota ships them (gnome-build-meta core/papers.bst, core/baobab.bst,
+    # core/sushi.bst), not as Flatpaks (#1270). The native Papers is also what
+    # the logo menu's Documentation entry opens: the Flatpak cannot read the
+    # host's /usr/share/doc (configure-services.sh retargets it, as Dakota's
+    # elements/bluefin/common.bst does). The thumbnailer and Files property
+    # page come with it.
+    "papers",
     "papers-libs",
+    "papers-previewer",
     "papers-thumbnailer",
     "papers-nautilus",
+    "baobab",
+    "sushi",
     #
     # Left out (resolved against sha256:d3b5bac2):
     #   tuned, tuned-ppd            Dakota runs power-profiles-daemon, which is
@@ -994,7 +1003,11 @@ parity = [
     "gstreamer1-plugins-bad-free",
     "gstreamer1-plugins-bad-free-libs",
     "gstreamer1-plugins-ugly-free",
+    "papers",
     "papers-libs",
+    "papers-previewer",
     "papers-thumbnailer",
     "papers-nautilus",
+    "baobab",
+    "sushi",
 ]

@@ -63,7 +63,9 @@ policy for changing them.
 Flatpak-first (standing policy): no RPM for an end-user app Utah ships as a
 Flatpak (`contracts/bluefin-desktop.toml` `[flatpak]`). Transitional native
 payloads need an inline drop condition in `packages/utah.toml`; the factory
-follows the same rule when importing recipes.
+follows the same rule when importing recipes. The owner-decided exceptions
+follow Dakota: Papers, baobab and Sushi ship natively and their Flatpaks are
+removed from common's Brewfile in `configure-services.sh` (#1270).
 
 ## Wi-Fi documentation currency
 
@@ -356,7 +358,7 @@ describe the same image as its `surface.tsv`; after a refresh,
 [remove resolved triage entries](package-contract/references/factory-consumption.md#closing-baseline-gaps).
 
 Current counts, per the README "Parity with Dakota" section: 61 base manifest
-packages installed, 257 Utah additions (GNOME 51, base-image parity, device
+packages installed, 261 Utah additions (GNOME 51, base-image parity, device
 firmware, desktop services), 7 genuinely unavailable. `scripts/check-doc-counts.py` (part of
 `just check`) recomputes these from the manifests and fails if either
 document drifts from `site/data/packages.json`.

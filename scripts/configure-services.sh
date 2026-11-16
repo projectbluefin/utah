@@ -278,6 +278,16 @@ SYSTEM_FLATPAKS=/usr/share/ublue-os/homebrew/system-flatpaks.Brewfile
 if [ -f "${SYSTEM_FLATPAKS}" ] && ! grep -qxF 'flatpak "io.github.maniacx.BudsLink"' "${SYSTEM_FLATPAKS}"; then
     echo 'flatpak "io.github.maniacx.BudsLink"' >>"${SYSTEM_FLATPAKS}"
 fi
+# Papers, baobab and Sushi ship as native packages, as on Dakota (#1270), so
+# their Flatpaks leave common's system set. The contract's [flatpak] apps list
+# is compared with the Brewfile line for line and fails if this misses.
+# Dakota also retargets common's logo-menu Documentation entry from the Papers
+# Flatpak to /usr/bin/papers; Utah's own 04-bluefin-custom-command-menu
+# replaces that entry with the docs.projectbluefin.io link, so there is
+# nothing to retarget here.
+if [ -f "${SYSTEM_FLATPAKS}" ]; then
+    sed -i -E '/^flatpak "org\.gnome\.(Papers|NautilusPreviewer|baobab)"$/d' "${SYSTEM_FLATPAKS}"
+fi
 
 disable_unit flatpak-add-fedora-repos.service
 

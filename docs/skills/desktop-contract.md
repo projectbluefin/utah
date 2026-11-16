@@ -69,8 +69,8 @@ The TOML's sections are the contract's table of contents:
   the pinned Hummingbird base supplies that key (fingerprint `567E…1D51`) alongside Utah's
   `RPM-GPG-KEY-redhat-release-2`, so no policy weakening or alias is needed.
 - **`[flatpak]`** — first-boot policy: the Flathub and TunaOS remotes, the Bazaar,
-  NautilusPreviewer (spacebar previews in Files), Ghostty and BudsLink preinstalls, the `99-flatpaks.sh`
-  hook, and the system-flatpaks Brewfile whose app list the contract enumerates.
+  Ghostty and BudsLink preinstalls, the `99-flatpaks.sh` hook, and the system-flatpaks
+  Brewfile whose app list the contract enumerates (common's, minus Papers, Sushi and baobab, which ship natively, #1270).
 - **`[media]`** — GStreamer decoders that must load, not merely be installed: `openh264dec`.
   The factory libav is built on `ffmpeg-free` (no H.264), so `avdec_h264` is not asserted (#1116).
 - **`[services]`** — systemd units the preset must enable: `gdm.service`, `colord.service`,

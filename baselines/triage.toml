@@ -60,6 +60,10 @@ ydotool = { status = "planned", area = "accessibility-input", issue = "#1236" }
 wget2 = { status = "planned", area = "cli-tools", issue = "#1236", reason = "Dakota's wget; Utah has no wget at all" }
 nethogs = { status = "planned", area = "cli-tools", issue = "#1236" }
 nicstat = { status = "planned", area = "cli-tools", issue = "#1236" }
+baobab = { status = "planned", area = "desktop-apps", issue = "#1270", reason = "Installed natively from the factory, as on Dakota; closes on the next Utah snapshot" }
+papers = { status = "planned", area = "desktop-apps", issue = "#1270", reason = "Installed natively from the factory, as on Dakota; closes on the next Utah snapshot" }
+sushi = { status = "planned", area = "desktop-apps", issue = "#1270", reason = "Installed natively from the factory, as on Dakota; closes on the next Utah snapshot" }
+"/usr/share/applications/org.gnome.NautilusPreviewer.desktop" = { status = "planned", area = "desktop-apps", issue = "#1270", reason = "Ships with the native sushi package" }
 tiptop = { status = "planned", area = "cli-tools", issue = "#1236" }
 trace-cmd = { status = "planned", area = "cli-tools", issue = "#1236" }
 numactl = { status = "planned", area = "cli-tools", issue = "#1236" }
@@ -72,10 +76,6 @@ uresourced = { status = "planned", area = "system-daemons", issue = "#1236" }
 
 # --- Deliberate differences -------------------------------------------------
 
-baobab = { status = "waived", reason = "Flatpak-first: Utah ships org.gnome.baobab from Flathub (contracts/bluefin-desktop.toml)" }
-papers = { status = "waived", reason = "Flatpak-first: Utah ships org.gnome.Papers from Flathub; papers-libs, papers-thumbnailer and papers-nautilus are installed on the host" }
-sushi = { status = "waived", reason = "Flatpak-first: Utah ships org.gnome.NautilusPreviewer from Flathub (#1015)" }
-"/usr/share/applications/org.gnome.NautilusPreviewer.desktop" = { status = "waived", reason = "Flatpak-first: Utah ships org.gnome.NautilusPreviewer from Flathub (#1015)" }
 yelp = { status = "waived", reason = "packages/base.toml [excluded] removes the yelp viewer; Utah keeps yelp-libs and yelp-xsl for help content" }
 snapd = { status = "waived", reason = "Flatpak-first: Utah's app channels are Flatpak and Homebrew" }
 dbus = { status = "waived", reason = "Utah runs dbus-broker; dbus-launch is an X11 session helper" }

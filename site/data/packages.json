@@ -129,6 +129,7 @@
         "attr",
         "autofs",
         "avahi-tools",
+        "baobab",
         "bash-completion",
         "bc",
         "bind-utils",
@@ -245,8 +246,10 @@
         "openh264",
         "openvpn",
         "orca",
+        "papers",
         "papers-libs",
         "papers-nautilus",
+        "papers-previewer",
         "papers-thumbnailer",
         "pciutils",
         "pcsc-lite",
@@ -295,6 +298,7 @@
         "splix",
         "stix-fonts",
         "stoken-libs",
+        "sushi",
         "sysstat",
         "system-config-printer-libs",
         "system-config-printer-udev",
@@ -375,7 +379,7 @@
     }
   ],
   "totals": {
-    "installed": 318,
+    "installed": 322,
     "unavailable": 7
   },
   "unavailable": [

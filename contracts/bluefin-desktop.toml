@@ -305,8 +305,6 @@ files = [
   "/etc/flatpak/remotes.d/flathub.flatpakrepo",
   "/usr/share/flatpak/preinstall.d/bazaar.preinstall",
   "/usr/share/flatpak/preinstall.d/ghostty.preinstall",
-  # Spacebar file previews in Files (Sushi), from Flathub (#1015).
-  "/usr/share/flatpak/preinstall.d/nautilus-previewer.preinstall",
   # BudsLink backs the default-enabled BudsLink-Companion extension
   # (projectbluefin/dakota files/oci/bluefin-flatpak/preinstall.d/).
   "/usr/share/flatpak/preinstall.d/io.github.maniacx.BudsLink.preinstall",
@@ -343,15 +341,12 @@ apps = [
   "org.gnome.Logs",
   "org.gnome.Loupe",
   "org.gnome.Maps",
-  "org.gnome.NautilusPreviewer",
-  "org.gnome.Papers",
   "org.gnome.Showtime",
   "org.gnome.SimpleScan",
   "org.gnome.Snapshot",
   "org.gnome.Decibels",
   "org.gnome.TextEditor",
   "org.gnome.Weather",
-  "org.gnome.baobab",
   "org.gnome.clocks",
   "org.gnome.font-viewer",
   "org.gtk.Gtk3theme.adw-gtk3",
@@ -370,6 +365,9 @@ apps = [
   # Not in common's Brewfile: configure-services.sh appends it, as Dakota does
   # (projectbluefin/dakota elements/bluefin/common.bst).
   "io.github.maniacx.BudsLink",
+  # configure-services.sh removes org.gnome.Papers, org.gnome.NautilusPreviewer
+  # and org.gnome.baobab from common's list: Papers, Sushi and baobab ship as
+  # native packages, as on Dakota (#1270).
 ]
 
 # Software decoders that must load, not merely be installed (#1116). Utah's
