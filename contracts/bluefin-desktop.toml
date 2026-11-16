@@ -164,6 +164,15 @@ files = [
   "/usr/bin/ydotool",
   "/usr/lib/udev/rules.d/80-ydotool.rules",
   "/usr/lib/modules-load.d/ydotool.conf",
+  # oo7 replaces gnome-keyring (#1227): daemon, PAM module, portal and CLI,
+  # and the passwd stack configure-services.sh points at pam_oo7.
+  "/usr/libexec/oo7-daemon",
+  "/usr/lib64/security/pam_oo7.so",
+  "/usr/libexec/oo7-portal",
+  "/usr/share/xdg-desktop-portal/portals/oo7-portal.portal",
+  "/usr/bin/oo7-cli",
+  "/etc/pam.d/passwd",
+  "/usr/share/xdg-desktop-portal/gnome-portals.conf",
   # Dakota's shell defaults (projectbluefin/dakota elements/bluefin/common.bst).
   "/etc/profile.d/bluefin-shell-defaults.sh",
   # Common's Red Hat signature policy uses the unsuffixed key path. The pinned
@@ -236,6 +245,18 @@ files = [
 # Dakota's patches/common/0002-ghostty-dual-theme.patch (#1266).
 "/etc/skel/.config/ghostty/config.ghostty" = [
   "theme = light:Catppuccin Latte,dark:Catppuccin Mocha",
+]
+# Dakota's bluefin/oo7-passwd-pam.bst: a password change re-encrypts the oo7
+# login keyring (#1227). gdm 51 and gnome-session 51 need no edit: their PAM
+# stacks and gnome-portals.conf already name pam_oo7 and oo7-portal.
+"/etc/pam.d/passwd" = [
+  "pam_oo7.so use_authtok",
+]
+"/usr/share/xdg-desktop-portal/gnome-portals.conf" = [
+  "org.freedesktop.impl.portal.Secret=oo7-portal",
+]
+"/usr/lib/pam.d/gdm-password" = [
+  "pam_oo7.so",
 ]
 # Dakota parity (#675): ublue-image-info.sh reads the booted tag through
 # Common's ublue-booted-image reader, which falls back to the boot-time
@@ -538,6 +559,8 @@ user_enabled = [
   # Dakota parity: gnome-build-meta's user presets (80-speechd, 80-xdg).
   "speech-dispatcher.socket",
   "xdg-desktop-portal-rewrite-launchers.service",
+  # The Secret Service, as GNOME OS starts it with the session (#1227).
+  "oo7-daemon.service",
 ]
 masked = [
   "bootc-fetch-apply-updates.service",

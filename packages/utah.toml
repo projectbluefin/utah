@@ -436,6 +436,16 @@ packages = [
     # 80-kanata.preset); ydotool brings the uinput udev rule and modules-load.
     "kanata",
     "ydotool",
+    # The Secret Service as Dakota/GNOME OS ship it (gnome-build-meta
+    # core-deps/oo7-daemon, oo7-pam, oo7-portal), in place of gnome-keyring
+    # (#1227): the daemon, the PAM module gdm 51's stacks already call
+    # (-auth/-password/-session optional pam_oo7.so), the portal
+    # gnome-session's gnome-portals.conf prefers, and the CLI. pam_oo7 and
+    # oo7-daemon obsolete gnome-keyring(-pam) < 51; [excluded] removes them.
+    "oo7-daemon",
+    "pam_oo7",
+    "oo7-portal",
+    "oo7-cli",
     # Network file systems and Windows domain clients (the NFS family follows
     # in the second-wave block below).
     "cifs-utils",
@@ -970,6 +980,10 @@ parity = [
     "ptyxis",
     "kanata",
     "ydotool",
+    "oo7-daemon",
+    "pam_oo7",
+    "oo7-portal",
+    "oo7-cli",
     "cifs-utils",
     "rpcbind",
     "autofs",

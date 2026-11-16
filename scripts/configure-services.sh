@@ -400,6 +400,11 @@ fi
 if user_unit_exists ublue-user-setup.service; then
     systemctl --global enable ublue-user-setup.service
 fi
+# The Secret Service starts with the session, as GNOME OS links oo7-daemon
+# into gnome-session.target.wants (#1227). Required: without it nothing
+# unlocks the login keyring.
+user_unit_exists oo7-daemon.service
+systemctl --global enable oo7-daemon.service
 
 # Common's user preset is not applied by bootc's system preset-all. Without
 # a global enablement, ChairLift's GUI Brewfile is present but never installed.
@@ -414,6 +419,23 @@ authselect enable-feature with-silent-lastlog
 authselect enable-feature with-fingerprint
 # Resolve .local names over mDNS through nss-mdns, as Dakota and Bluefin do.
 authselect enable-feature with-mdns4
+# Changing the password re-encrypts the oo7 login keyring too, as Dakota's
+# bluefin/oo7-passwd-pam.bst arranges (#1227). shadow-utils' passwd stack
+# already calls the keyring module after its system-auth substack; point it at
+# pam_oo7 instead of the removed pam_gnome_keyring. gdm 51's own stacks call
+# pam_oo7 already. Already switched is a no-op; any other shape fails.
+PASSWD_PAM=/etc/pam.d/passwd
+if [ -f "${PASSWD_PAM}" ]; then
+    if grep -qE '^-password[[:space:]]+optional[[:space:]]+pam_oo7\.so use_authtok$' "${PASSWD_PAM}"; then
+        : already switched
+    elif grep -qE '^-password[[:space:]]+optional[[:space:]]+pam_gnome_keyring\.so use_authtok$' "${PASSWD_PAM}" \
+        && grep -qE '^password[[:space:]]+substack[[:space:]]+system-auth$' "${PASSWD_PAM}"; then
+        sed -i -E 's/pam_gnome_keyring\.so use_authtok$/pam_oo7.so use_authtok/' "${PASSWD_PAM}"
+    else
+        echo "ERROR: ${PASSWD_PAM} changed upstream -- re-fit the pam_oo7 password hook (Dakota bluefin/oo7-passwd-pam.bst)" >&2
+        exit 1
+    fi
+fi
 
 # uupd is distributed as a release binary, not an RPM in the Hummingbird
 # repositories. Keep its version pinned by the Containerfile argument. Its
