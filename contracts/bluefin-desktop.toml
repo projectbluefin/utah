@@ -167,6 +167,9 @@ files = [
   "/usr/lib/systemd/system/uupd-manual.service",
   "/etc/polkit-1/rules.d/uupd.rules",
   "/etc/uupd/config.json",
+  # Dakota ships freedesktop-sdk's git-lfs with a system LFS filter; the
+  # git-lfs RPM's %post writes it (`git lfs install --system`).
+  "/etc/gitconfig",
 ]
 
 [configuration.file_contains]
@@ -298,6 +301,16 @@ files = [
 ]
 "/etc/uupd/config.json" = [
   '"bat-min-percent": 20',
+]
+# Dakota parity (#1259): freedesktop-sdk components/git-lfs.bst appends this
+# [filter "lfs"] stanza to /etc/gitconfig; Hummingbird's git-lfs writes the
+# same four keys from its %post, so Utah asserts it rather than overlaying it.
+"/etc/gitconfig" = [
+  '[filter "lfs"]',
+  "required = true",
+  "clean = git-lfs clean -- %f",
+  "smudge = git-lfs smudge -- %f",
+  "process = git-lfs filter-process",
 ]
 
 [flatpak]
