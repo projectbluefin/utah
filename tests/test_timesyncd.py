@@ -35,6 +35,16 @@ class TimesyncdTests(unittest.TestCase):
         containerfile = (ROOT / "Containerfile").read_text()
         self.assertNotIn("chrony.conf", containerfile)
 
+    def test_orphaned_chrony_account_is_dropped_with_the_package(self):
+        # Erasing chrony drops its sysusers.d file but not the account, and
+        # `bootc container lint --fatal-warn` fails on an /etc/passwd entry
+        # with no sysusers declaration (the image build failed on this).
+        script = (ROOT / "scripts/configure-services.sh").read_text()
+        self.assertIn("rpm -q --quiet chrony", script)
+        self.assertIn("sed -i '/^chrony:/d'", script)
+        for passwd_file in ("/etc/passwd", "/etc/group", "/etc/shadow", "/etc/gshadow"):
+            self.assertIn(passwd_file, script)
+
     def test_fallback_server_matches_gnome_os(self):
         self.assertEqual(ini(DROPIN)["Time"]["FallbackNTP"], "gnome.pool.ntp.org")
 

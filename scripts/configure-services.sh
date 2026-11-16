@@ -191,6 +191,19 @@ fi
 # symlinks into /etc, which would re-enable the timer if /usr/lib was unmasked.
 # rpm-ostree.service is off by 85-utah-desktop.preset.
 systemctl mask bootc-fetch-apply-updates.timer bootc-fetch-apply-updates.service
+
+# chrony is removed from the base ([excluded] in base.toml, #1228: time sync is
+# systemd-timesyncd, as on Dakota). Erasing the package drops its sysusers.d
+# file but leaves the account behind, and `bootc container lint --fatal-warn`
+# fails on an /etc/passwd entry with no sysusers.d declaration. Drop the
+# orphaned account with the package.
+if ! rpm -q --quiet chrony; then
+    for f in /etc/passwd /etc/group /etc/shadow /etc/gshadow; do
+        if [ -f "${f}" ]; then
+            sed -i '/^chrony:/d' "${f}"
+        fi
+    done
+fi
 ln -sf /dev/null /usr/lib/systemd/system/bootc-fetch-apply-updates.timer
 ln -sf /dev/null /usr/lib/systemd/system/bootc-fetch-apply-updates.service
 rm -f /usr/lib/systemd/system/*.wants/bootc-fetch-apply-updates.* \
