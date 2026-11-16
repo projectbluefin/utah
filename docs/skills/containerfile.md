@@ -77,6 +77,14 @@ In summary:
   the unit digests (`UUPD_SERVICE_SHA256`, `UUPD_TIMER_SHA256`) cover the
   raw files at that tag and may be unchanged across releases (v1.4.0 and
   v1.5.5 serve identical units).
+- `COMMON_IMAGE_SHA` follows Common's latest published image: Renovate bumps
+  the digest, and each bump passes the desktop contract before it lands.
+  Dakota instead builds Common at a release tag (`v2026.11`, `07d6b3e`). Utah
+  keeps tracking the digest on purpose (#1267): Common fixes Utah depends on,
+  such as the PipeWire drop-in that now parses, would otherwise wait for a
+  Common release. Compare against Dakota's tag only when a Common file differs
+  between the two images. Drop a Utah override of a Common file once the
+  pinned Common ships the fix itself.
 - Artwork reaches the image through the throwaway `artwork` stage, which keeps
   the fetch tooling and unprocessed sources out of every layer.
   `WALLPAPERS_IMAGE`/`WALLPAPERS_IMAGE_SHA` pin the multi-arch index digest of

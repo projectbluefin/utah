@@ -231,14 +231,9 @@ RUN --mount=type=bind,from=v4l2loopback,source=/out,target=/tmp/utah-v4l2loopbac
     cp -a /tmp/utah-inputs/tmp/utah-local/. / && \
     cp -a /tmp/utah-v4l2loopback/. / && \
     rm -rf /tmp/utah-scripts /tmp/utah-common /tmp/utah-bluefin /tmp/utah-brew /tmp/utah-artwork /tmp/utah-local && \
-    rm -f /etc/dconf/db/distro.d/05-bluefin-searchlight-extension && \
     curl -fsSL "${GENERIC_LOGOS_URL}" -o /tmp/generic-logos.rpm && \
     echo "${GENERIC_LOGOS_SHA256}  /tmp/generic-logos.rpm" | sha256sum --check --strict && \
     /usr/local/libexec/utah-pin-build-mtimes
-# The last line drops Common's settings for the Search Light extension. Utah no
-# longer ships that extension: its shader code calls set_shader_source, which
-# GNOME 51 removed, so it errored at load and failed the ISO end-to-end test.
-# Settings for an extension the image does not carry are noise in dconf.
 
 # This first check covers the flavor-independent contract only, which is why it
 # pins IMAGE_FLAVOR=main. verify-rpm-contract.py reads IMAGE_FLAVOR from the
