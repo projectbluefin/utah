@@ -231,8 +231,9 @@ packages = [
     # Virtualization, as on Dakota (#1232): QEMU/KVM, toolbox, and the guest
     # agents for QEMU (with SPICE), VMware and Hyper-V. The guest agents start
     # only on their hypervisor (udev or ConditionVirtualization); libvirt and
-    # virtiofsd are still in [unavailable].
-    "qemu-kvm",
+    # virtiofsd are still in [unavailable]. qemu-kvm is too: the published
+    # qemu-system-x86 Requires vhostuser-backend(fs), which virtiofsd provides,
+    # so qemu-kvm moves into this list once virtiofsd publishes (#1021).
     "qemu-guest-agent",
     "spice-vdagent",
     "open-vm-tools",
@@ -729,7 +730,7 @@ packages = [
 # pipewire-libs-extra is supplied by the pinned September 10 factory candidate
 # and returns to the install contract (#35).
 #
-# libvirt-daemon-kvm, libvirt-daemon-config-network, libvirt-client, virtiofsd
+# qemu-kvm, libvirt-daemon-kvm, libvirt-daemon-config-network, libvirt-client, virtiofsd
 #   Dakota installs libvirt (its own elements/bluefin/libvirt.bst) and
 #   virtiofsd, both off by preset until `ujust setup-virtualization` turns the
 #   modular virt*d sockets on (#1232). The kvm daemon set, the default NAT
@@ -742,6 +743,7 @@ packages = [
     "anaconda-live",
     "firefox",
     "libvirt-client",
+    "qemu-kvm",
     "libvirt-daemon-config-network",
     "libvirt-daemon-kvm",
     "slitherer",

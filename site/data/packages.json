@@ -278,7 +278,6 @@
         "python3-idna",
         "python3-pip",
         "qemu-guest-agent",
-        "qemu-kvm",
         "qt6-qtbase",
         "quota",
         "rpcbind",
@@ -384,8 +383,8 @@
     }
   ],
   "totals": {
-    "installed": 327,
-    "unavailable": 8
+    "installed": 326,
+    "unavailable": 9
   },
   "unavailable": [
     {
@@ -417,6 +416,10 @@
     {
       "issues": [],
       "name": "libvirt-daemon-kvm"
+    },
+    {
+      "issues": [],
+      "name": "qemu-kvm"
     },
     {
       "issues": [
