@@ -148,4 +148,16 @@ disable man-db-restart-cache-update.service
 # every boot.
 disable bluefin-stats-refresh.service
 
+# mdadm's scrub and reminder timers, which Dakota runs, stay off (#1271).
+# raid-check.timer already scrubs every array weekly (kept by #1268), so
+# mdcheck_start/mdcheck_continue would schedule a second scrub of the same
+# arrays. All three are WantedBy=mdmonitor.service, which Hummingbird's
+# 90-default.preset starts on every boot (Dakota starts it only when udev
+# assembles an array), so mdmonitor-oneshot.timer would run
+# `mdadm --monitor --oneshot --scan` daily on machines without an mdadm.conf
+# alert address, where it exits 1.
+disable mdcheck_start.timer
+disable mdcheck_continue.timer
+disable mdmonitor-oneshot.timer
+
 enable *

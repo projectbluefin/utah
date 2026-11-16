@@ -586,6 +586,13 @@ enabled = [
   "systemd-storage-fs.socket",
   "systemd-udev-load-credentials.service",
   "systemd-userdb-load-credentials.service",
+  # More upstream preset units a booted Dakota runs, on by enable-by-default
+  # (#1271, #1272). nvme-cli's two are each gated on NVMe-oF config or FC
+  # hardware by their own Condition.
+  "nvmf-autoconnect.service",
+  "nvmefc-boot-connections.service",
+  "systemd-imdsd.socket",
+  "speech-dispatcherd.service",
   "thermald.service",
   "projectbluefin-countme.timer",
   "switcheroo-control.service",
@@ -605,9 +612,12 @@ enabled = [
   "systemd-pcrlock-make-policy.service",
   "systemd-pcrlock-machine-id.service",
   "systemd-pcrlock-secureboot-authority.service",
-  # Container networking and API, as on Dakota.
+  # Container networking and API, as on Dakota (#1272).
   "podman.service",
   "netavark-dhcp-proxy.socket",
+  "netavark-dhcp-proxy.service",
+  "netavark-firewalld-reload.service",
+  "netavark-nftables-reload.service",
 ]
 # Per-user services, checked with `systemctl --global is-enabled`. Hummingbird's
 # user preset disables everything but dbus; without these an installed Utah had
@@ -695,4 +705,9 @@ disabled = [
   # chrony is not installed (#1228); absent counts as off, and this fails the
   # build if a dependency ever pulls it back in enabled beside timesyncd.
   "chronyd.service",
+  # mdadm's scrub and reminder timers, which Dakota runs: raid-check.timer
+  # scrubs instead (#1268, #1271); see 98-utah-enable-default.preset.
+  "mdcheck_start.timer",
+  "mdcheck_continue.timer",
+  "mdmonitor-oneshot.timer",
 ]

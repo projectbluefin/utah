@@ -47,6 +47,14 @@ are never enabled by a preset.
   need configuration or change the system unasked (brltty, fancontrol,
   powertop, xfs_healer, canberra sounds, lastlog2 import, man-db cache).
   `bluefin-stats-refresh.service` runs from its timer only.
+- mdadm's `mdcheck_start.timer`, `mdcheck_continue.timer` and
+  `mdmonitor-oneshot.timer`, although Dakota runs them (#1271). Utah keeps
+  Fedora's `raid-check.timer` (#1268), and the mdcheck pair would schedule a
+  second scrub of the same arrays. All three are `WantedBy=mdmonitor.service`,
+  which Hummingbird's `90-default.preset` starts on every boot (Dakota starts
+  it only when udev assembles an array), so the oneshot reminder would run
+  daily everywhere, and `mdadm --monitor --oneshot --scan` exits 1 when
+  `mdadm.conf` has no alert address.
 
 ### What enable-by-default turned on
 
@@ -56,7 +64,8 @@ them enabled on a booted Dakota: rtkit, upower, udisks2, accounts-daemon,
 cups, pcscd.socket, gnome-remote-desktop(+configuration), malcontent's four
 units, systemd-oomd, wpa_supplicant, podman (service, socket, auto-update,
 restart, clean-transient), netavark's dhcp proxy and firewall reload units,
-speech-dispatcherd, mdcheck/mdmonitor timers, NVMe-oF autoconnect, the
+speech-dispatcherd, NVMe-oF autoconnect and FC boot connections (each gated
+on NVMe-oF config or FC hardware by its own `Condition`), the
 `systemd-*` credential, storage, sysext, factory-reset, pcrextend and imds
 sockets, and Dakota's three pcrlock units. Utah-only extras left on because
 they are harmless: `ratbagd.service` (D-Bus alias), `selinux-check-proper-disable`,
@@ -89,12 +98,16 @@ they are harmless: `ratbagd.service` (D-Bus alias), `selinux-check-proper-disabl
 `systemd-timesyncd.service` (#1228; chrony is not installed),
 `systemd-pcrlock-make-policy.service`, `systemd-pcrlock-machine-id.service`,
 `systemd-pcrlock-secureboot-authority.service`, `podman.service`,
-`netavark-dhcp-proxy.socket`, `bluefin-migrate-var-home-passwd.service`
+`netavark-dhcp-proxy.socket`, `netavark-dhcp-proxy.service`,
+`netavark-firewalld-reload.service`, `netavark-nftables-reload.service`,
+`nvmf-autoconnect.service`, `nvmefc-boot-connections.service`,
+`systemd-imdsd.socket`, `speech-dispatcherd.service` (#1271, #1272),
+`bluefin-migrate-var-home-passwd.service`
 (Dakota's legacy `/var/home` passwd migration for the `/home` bind mount,
 #1234), `vmtoolsd.service` and `qemu-guest-agent.service` (#1232),
 `systemd-homed.service` and `systemd-homed-firstboot.service` (#1238).
 `[services].disabled` holds the network servers, sysstat, libvirt's sockets,
-and the units enable-by-default must not reach.
+mdadm's timers, and the units enable-by-default must not reach.
 
 ### systemd-homed (#1238)
 

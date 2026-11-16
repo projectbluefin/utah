@@ -588,6 +588,34 @@ class ServiceMaskParityTests(unittest.TestCase):
             with self.subTest(unit=unit):
                 self.assertEqual(preset_verdict(unit)[0], "disable")
 
+    def test_dakota_upstream_preset_units_enabled_in_contract_and_presets(self):
+        # Units upstream presets enable that a booted Dakota runs (#1271,
+        # #1272); enable-by-default turns them on and the contract asserts it.
+        enabled = self.contract_services()["enabled"]
+        for unit in (
+            "nvmf-autoconnect.service",
+            "nvmefc-boot-connections.service",
+            "systemd-imdsd.socket",
+            "speech-dispatcherd.service",
+            "podman.service",
+            "netavark-dhcp-proxy.socket",
+            "netavark-dhcp-proxy.service",
+            "netavark-firewalld-reload.service",
+            "netavark-nftables-reload.service",
+        ):
+            with self.subTest(unit=unit):
+                self.assertIn(unit, enabled)
+                self.assertEqual(preset_verdict(unit)[0], "enable")
+
+    def test_mdadm_timers_stay_off_beside_raid_check(self):
+        # raid-check.timer is the scrub scheduler (#1268); mdadm's own timers
+        # would scrub the same arrays again (#1271).
+        disabled = self.contract_services()["disabled"]
+        for unit in ("mdcheck_start.timer", "mdcheck_continue.timer", "mdmonitor-oneshot.timer"):
+            with self.subTest(unit=unit):
+                self.assertIn(unit, disabled)
+                self.assertEqual(preset_verdict(unit), ("disable", "98-utah-enable-default.preset"))
+
     def test_dakota_parity_patch_targets_are_required_files(self):
         contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
         files = contract["configuration"]["files"]
