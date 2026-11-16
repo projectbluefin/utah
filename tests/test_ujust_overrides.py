@@ -274,6 +274,29 @@ class UjustOverridesTests(unittest.TestCase):
         self.assertIsNotNone(line, f"install-debug-tools missing from --list; got {result.stdout!r}")
         self.assertIn("# Install gdb, elfutils and sysprof-cli until reboot", line)
 
+    def test_virtualization_recipes_run_dakota_devmode_when_libvirt_is_installed(self):
+        unit = self.root / "virtqemud.socket"
+        unit.write_text("")
+        self.env["LIBVIRT_SOCKET_UNIT"] = str(unit)
+        self.mock("devmode", 'echo "devmode $*" >> "$CALLS"')
+        self.env["DAKOTA_DEVMODE"] = str(self.bin / "devmode")
+        for recipe, action in (("setup-virtualization", "setup"),
+                               ("manage-virtualization", "virtualization")):
+            with self.subTest(recipe=recipe):
+                self.log.unlink(missing_ok=True)
+                result = self.run_recipe(recipe)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(self.calls(), f"devmode {action}\n")
+
+    def test_virtualization_recipes_explain_missing_libvirt(self):
+        self.env["LIBVIRT_SOCKET_UNIT"] = str(self.root / "absent.socket")
+        self.mock("devmode", 'echo "devmode $*" >> "$CALLS"')
+        self.env["DAKOTA_DEVMODE"] = str(self.bin / "devmode")
+        result = self.run_recipe("setup-virtualization")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("libvirt is not in this image yet", result.stderr)
+        self.assertEqual(self.calls(), "")
+
     def test_report_override_keeps_a_user_facing_list_description(self):
         # just uses only the comment line immediately preceding a recipe as
         # its description, so an implementation comment block ending right

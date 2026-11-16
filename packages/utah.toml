@@ -225,6 +225,16 @@ packages = [
     "crypto-policies-scripts",
     "python3-pip",
     "systemd-container",
+    # Virtualization, as on Dakota (#1232): QEMU/KVM, toolbox, and the guest
+    # agents for QEMU (with SPICE), VMware and Hyper-V. The guest agents start
+    # only on their hypervisor (udev or ConditionVirtualization); libvirt and
+    # virtiofsd are still in [unavailable].
+    "qemu-kvm",
+    "qemu-guest-agent",
+    "spice-vdagent",
+    "open-vm-tools",
+    "hyperv-daemons",
+    "toolbox",
     # pam_pwquality's dictionary. Fedora's Silverblue base pulls it in;
     # Hummingbird's cracklib does not require it. Without it libpwquality
     # fails every candidate with "error loading dictionary", so passwd (via
@@ -721,13 +731,26 @@ packages = [
 #   resolution, which is what this module provides; the two are separate
 #   (found while reviewing #411). Returns once the factory builds nss-mdns for
 #   Hummingbird and utah-packages publishes the build; tracked by #499.
+#
+# libvirt-daemon-kvm, libvirt-daemon-config-network, libvirt-client, virtiofsd
+#   Dakota installs libvirt (its own elements/bluefin/libvirt.bst) and
+#   virtiofsd, both off by preset until `ujust setup-virtualization` turns the
+#   modular virt*d sockets on (#1232). The kvm daemon set, the default NAT
+#   network that setup binds to the libvirt firewall zone, and virsh, which it
+#   uses to check the daemon. The factory imports are pending: Rawhide imports
+#   in utah-packages#1147, tracked by utah-packages#1021. Move them into
+#   [parity] once published.
 packages = [
     "grub2-efi-x64-cdboot",
     "anaconda-live",
     "evolution-ews-core",
     "firefox",
+    "libvirt-client",
+    "libvirt-daemon-config-network",
+    "libvirt-daemon-kvm",
     "nss-mdns",
     "slitherer",
+    "virtiofsd",
 ]
 
 # nvidia-container-toolkit was recorded here as a second gap. It is not one, and

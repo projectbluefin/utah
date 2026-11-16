@@ -126,8 +126,8 @@ disable nis-domainname.service
 disable zvbid.service
 # nftables.service loads its own ruleset beside firewalld's.
 disable nftables.service
-# Container runtimes and plugins Utah does not use: podman runs on netavark.
-disable containerd.service
+# Container plugins Utah does not use: podman runs on netavark. containerd
+# itself is not installed (#1232).
 disable cni-dhcp.service
 disable cni-dhcp.socket
 # Hardware and maintenance helpers that need configuration first, or change

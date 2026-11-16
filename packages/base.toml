@@ -45,7 +45,6 @@ packages = [
     "anaconda-live",
     "bootc",
     "bootupd",
-    "containerd",
     "ddcutil",
     "distrobox",
     "dracut-live",
@@ -128,6 +127,10 @@ packages = [
     # Hummingbird's base ships chrony; Utah syncs time with systemd-timesyncd
     # as GNOME OS and Dakota do (#1228).
     "chrony",
+    # Dakota ships neither containerd nor runc; containers run on podman and
+    # crun (#1232). runc only ever arrived as containerd's dependency.
+    "containerd",
+    "runc",
     "default-fonts-cjk-sans",
     "fedora-bookmarks",
     "fedora-chromium-config",
