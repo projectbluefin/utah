@@ -82,6 +82,7 @@ The TOML's sections are the contract's table of contents:
   `ublue-wallpaper-month.service`, `bluefin-wallpaper-month.service`, `ublue-firstboot-date.path`,
   `ublue-booted-image.service`, `bluefin-remove-installer.service`.
   [Dakota service presets](desktop-contract/references/dakota-services.md): GNOME units, user units, opt-in sysstat.
+  The Secret Service is oo7, not gnome-keyring ([oo7](desktop-contract/references/oo7.md), #1227).
   Update policy delegates background updates to `uupd.timer`; `bootc-fetch-apply-updates.timer` and
   `bootc-fetch-apply-updates.service` are masked in `/etc` and `/usr/lib` (and disabled in
   `85-utah-desktop.preset`) so cross-vendor `/etc` 3-way merges (e.g. switching from Bluefin) do not

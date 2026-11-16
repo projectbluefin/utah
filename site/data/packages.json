@@ -279,11 +279,15 @@
         "nfsv4-client-utils",
         "nvme-cli",
         "nvtop",
+        "oo7-cli",
+        "oo7-daemon",
+        "oo7-portal",
         "openal-soft",
         "openconnect",
         "openh264",
         "openvpn",
         "orca",
+        "pam_oo7",
         "papers",
         "papers-libs",
         "papers-nautilus",
@@ -416,7 +420,7 @@
     }
   ],
   "totals": {
-    "installed": 361,
+    "installed": 365,
     "unavailable": 7
   },
   "unavailable": [

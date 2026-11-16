@@ -24,7 +24,7 @@ genpeimg = { status = "planned", area = "boot", issue = "#1225", reason = "PE im
 efivar = { status = "planned", area = "boot", issue = "#1225", reason = "efisecdb manages Secure Boot signature databases" }
 apparmor = { status = "planned", area = "auth-security", issue = "#1226", reason = "Dakota confines with AppArmor; Utah inherits SELinux from Hummingbird" }
 oo7-cli = { status = "planned", area = "auth-security", issue = "#1227" }
-oo7-daemon = { status = "planned", area = "auth-security", issue = "#1227", reason = "Dakota's Secret Service; Utah runs gnome-keyring" }
+oo7-daemon = { status = "planned", area = "auth-security", issue = "#1227", reason = "Installed from the factory in place of gnome-keyring; gap closes on the next baseline" }
 oo7-portal = { status = "planned", area = "auth-security", issue = "#1227" }
 uutils-coreutils = { status = "planned", area = "cli-tools", issue = "#1229" }
 sudo = { status = "planned", area = "auth-security", issue = "#1229", reason = "sudo_logsrvd and sudo_sendlog; Dakota's sudo is sudo-rs" }

@@ -1052,6 +1052,30 @@ class DakotaCommonEditTests(unittest.TestCase):
         sync = ROOT / "system_files/shared/usr/libexec/bluefin-wallpaper-month-sync"
         self.assertTrue(os.access(sync, os.X_OK))
 
+    def test_passwd_stack_switches_keyring_hook_to_pam_oo7_once(self):
+        # Hummingbird's shadow-utils /etc/pam.d/passwd; Dakota's
+        # bluefin/oo7-passwd-pam.bst adds the same hook after the substack (#1227).
+        block = self.block("PASSWD_PAM=")
+        hummingbird = (
+            "#%PAM-1.0\n# This tool only uses the password stack.\n"
+            "password   substack\tsystem-auth\n"
+            "-password   optional\tpam_gnome_keyring.so use_authtok\n"
+            "password   substack\tpostlogin\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            passwd = Path(tmp) / "passwd"
+            block = block.replace("/etc/pam.d/passwd", str(passwd))
+            passwd.write_text(hummingbird)
+            for _ in range(2):
+                result = self.run_block(block, "")
+                self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(passwd.read_text(), hummingbird.replace("pam_gnome_keyring", "pam_oo7"))
+
+            passwd.write_text("password include system-auth\n")
+            result = self.run_block(block, "")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("re-fit the pam_oo7 password hook", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
