@@ -284,6 +284,18 @@ preserves the mechanism by renaming Common's `00-entry.just` to
 `00-common.just` before staging Utah's local files, so the shallower override
 is in place by the time the entry point runs.
 
+Utah's local files also replace Common's `default.just`, `system.just` and
+`flutter.just` with Dakota's (`files/just-overrides/` at `bf271777`, #1231),
+plus the two Brewfiles `system.just` reads from
+`/usr/share/ublue-os/homebrew/`. Common's entry still imports them by name;
+`changelog.just`, `update.just` and the other Common files stay Common's. The
+headers list Utah's edits: issue links and `rebase-helper` target Utah, and
+recipes that need Dakota's signed systemd-boot chain (#1225) or nethogs mount
+exit with an explanation. Overrides of those recipes go in `60-custom.just`;
+keep the vendored files close to Dakota so they can be re-synced.
+`tests/test_ujust_overrides.py` loads the shipped files, so a recipe that
+breaks parsing or loses an override fails there.
+
 The shipped image is already past the floor: `baselines/utah/rpms.tsv` records
 `just 1.57.0-1.hum1.bfin`. The `just` package comes from the base manifest and
 its version is not pinned here. Two checks keep it that way:

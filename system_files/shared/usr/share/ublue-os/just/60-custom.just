@@ -1,4 +1,5 @@
-# Utah's entry point imports these at a shallower depth than Common's recipes.
+# Utah's entry point imports these at a shallower depth than Common's recipes
+# and the Dakota default.just/system.just Utah ships in their place (#1231).
 
 # Show device diagnostics locally; optionally upload when fpaste is installed
 [group('System')]
@@ -63,14 +64,6 @@ changelogs:
     else
         printf '%s\n' "$CONTENT"
     fi
-
-# Explain Utah's pending module-signing support without changing MOK state
-[group('System')]
-enroll-secure-boot-key:
-    #!/usr/bin/bash
-    echo 'Utah does not yet ship a kernel-module signing key to enroll.' >&2
-    echo 'Secure Boot module signing and enrollment are tracked at https://github.com/projectbluefin/utah/issues/395' >&2
-    exit 1
 
 # Install gdb, elfutils and sysprof-cli until reboot to diagnose shell hangs
 [group('System')]
