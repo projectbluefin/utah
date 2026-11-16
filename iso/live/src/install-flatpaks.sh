@@ -149,19 +149,6 @@ if (( ${#apps[@]} == 0 )); then
 fi
 retry_flatpak install --system --noninteractive --no-related --or-update flathub "${apps[@]}"
 
-# Ghostty, from the TunaOS OCI remote.
-#
-# Bluefin's terminal is ptyxis, which the image now installs from the factory
-# (packages/utah.toml [parity]). Ghostty is Utah's own addition on top: a
-# Flatpak, so Flatpak-first does not apply to ptyxis, a different app.
-#
-# Kept out of the Brewfile-derived list on purpose: that list is the parity
-# contract with Bluefin and verify-desktop-contract compares it byte for byte.
-# This is Utah's own addition and does not belong in it.
-retry_flatpak remote-add --system --if-not-exists tuna-os \
-    https://tunaos.org/flatpak/tuna-os.flatpakrepo
-retry_flatpak install --system --noninteractive --no-related --or-update \
-    tuna-os com.mitchellh.ghostty
 # `uninstall --unused` removes every runtime that no installed app depends on,
 # and the Brewfile lists two of exactly that kind: the adw-gtk3 GTK3 themes.
 # Nothing requires them, so they were stripped from the ISO and the offline

@@ -90,10 +90,11 @@ unwritable Homebrew prefix remain transient. The prefix warning can recur for
 a non-admin account; that is intentional so a later permission or dependency
 change gets a retry.
 
-`30-ghostty.sh` is the case that shows why the legacy gate is not good enough
-for a body that moves files: it migrates the user's only real Ghostty config
-out of the flatpak's per-app directory, so a body that aborts part-way must get
-another attempt rather than burn the stamp on a half-done migration.
+A hook whose body moves files is the case that shows why the legacy gate is
+not good enough: a body that aborts part-way must get another attempt rather
+than burn the stamp on a half-done migration. (Utah's former `30-ghostty.sh`,
+which moved the Ghostty Flatpak's config, was that case; native Ghostty,
+#1223, retired it.)
 
 ## First-boot hook inventory
 
@@ -144,12 +145,7 @@ contract on `05-bootupctl-adopt.sh` and additionally drives the real hook
 against fake `libsetup.sh` and `bootupctl` stubs for the five state
 transitions (fresh install, re-run after commit, live session, missing
 `bootupctl`, systemd-boot layout without `/boot/grub2`).
-`tests/test_ghostty_hook.py` follows the same shape for
-`user-setup.hooks.d/30-ghostty.sh`, driving it against scratch homes for the
-fresh, migrate, already-symlinked and reverse-symlink (`~/.config/ghostty`
-pointing into the per-app dir) transitions, plus the two user-managed layouts
-the hook must not disturb: the per-app path symlinked at a dotfiles directory,
-and both paths symlinked at one. `tests/test_flatpaks_hook.py` executes real
+`tests/test_flatpaks_hook.py` executes real
 preference cleanup and copying in scratch roots; the migrated-hook suite also
 starts from a version-1 stamp and proves stale defaults are removed, user
 preferences survive, and version 2 commits. Run the suite with `just test`.

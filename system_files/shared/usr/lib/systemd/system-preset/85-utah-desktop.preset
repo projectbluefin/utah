@@ -38,7 +38,7 @@ enable dconf-update.service
 enable ublue-firstboot-date.path
 enable ublue-booted-image.service
 enable bluefin-remove-installer.service
-# First-boot Flatpaks (Bazaar, the Files previewer, and Ghostty from TunaOS).
+# First-boot Flatpaks (Bazaar and the rest of the preinstall set).
 # configure-services.sh enabled these at build time, but with no line here
 # bootc's first-boot preset application turned them back off, and an image
 # installed by anything but the ISO booted with no app store at all.

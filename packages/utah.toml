@@ -418,13 +418,14 @@ packages = [
     "htop",
     "pv",
     "fpaste",
-    # GPG/smartcard pin entry, braille display daemon, and Bluefin's default
-    # terminal. Ghostty stays as the TunaOS Flatpak terminal; ptyxis is a
-    # different app, so Flatpak-first does not apply.
+    # GPG/smartcard pin entry, braille display daemon, and the terminal:
+    # native Ghostty, as Dakota builds it (bluefin/ghostty.bst; factory recipe
+    # utah-packages#1154), replacing Ptyxis and the TunaOS Ghostty Flatpak
+    # (#1223). Ctrl+Alt+T goes through xdg-terminal-exec.
     "pinentry",
     "pinentry-gnome3",
     "brltty",
-    "ptyxis",
+    "ghostty",
     # Key remapping as Dakota ships it (bluefin/kanata.bst, bluefin/ydotool.bst),
     # in place of input-remapper (#1222). kanata.service stays off until the
     # user writes /etc/kanata/kanata.kbd and enables it (the package's
@@ -1019,7 +1020,7 @@ parity = [
     "pinentry",
     "pinentry-gnome3",
     "brltty",
-    "ptyxis",
+    "ghostty",
     "kanata",
     "ydotool",
     "oo7-daemon",

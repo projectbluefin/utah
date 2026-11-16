@@ -40,10 +40,10 @@ source "${ROOT}/iso/scripts/extension-state.sh"
 # The account the installer creates, and the one phase 6 logs in as.
 TEST_USER="${UTAH_E2E_USER:-utahtest}"
 TEST_PASSWORD="${UTAH_E2E_PASSWORD:-utahtest}"
-# The terminal the last screenshot opens. --system matters: flatpak otherwise
-# consults a user installation that does not exist and aborts instead of
-# falling back.
+# The terminal the last screenshot opens: native Ghostty, as on Dakota (#1223).
+# TERMINAL_APP names the autostart entry; TERMINAL_CMD is what it runs.
 TERMINAL_APP="${UTAH_E2E_TERMINAL:-com.mitchellh.ghostty}"
+TERMINAL_CMD="${UTAH_E2E_TERMINAL_CMD:-/usr/bin/ghostty}"
 
 # Display size and terminal geometry for the screenshots. These exist because
 # fastfetch with its logo needs about 90 columns -- roughly 33 for the logo
@@ -1049,9 +1049,9 @@ shot installed-greeter "${MONITOR_INSTALLED}"
 echo "Arranging for a terminal to open in the session..."
 ssh_target "
     grep -q 'utah-e2e fastfetch' ~/.bashrc 2>/dev/null || printf '%s\n' '[[ \$- == *i* ]] && { fastfetch && echo UTAH-E2E-FASTFETCH; } # utah-e2e fastfetch' >> ~/.bashrc
-    # Ghostty is a flatpak here, and which config path it reads depends on
-    # whether the sandbox exposes xdg-config or keeps its own per-app dir, so
-    # write both rather than guess. An unknown key would only be warned about,
+    # Native Ghostty reads ~/.config/ghostty; the per-app dir is written too so
+    # a UTAH_E2E_TERMINAL_CMD that runs a Flatpak build still picks the
+    # geometry up. An unknown key would only be warned about,
     # and a geometry that failed to apply shows up as the OCR gate failing
     # rather than as a quietly bad screenshot.
     for _cfgdir in ~/.config/ghostty ~/.var/app/${TERMINAL_APP}/config/ghostty; do
@@ -1090,7 +1090,7 @@ CFG
 [Desktop Entry]
 Type=Application
 Name=Terminal
-Exec=bash -c \"while [ ! -f /tmp/utah-e2e-open-terminal ]; do sleep 1; done; rm -f /tmp/utah-e2e-open-terminal; exec \\\$@ > /tmp/utah-e2e-terminal.log 2>&1\" bash env LIBGL_ALWAYS_SOFTWARE=1 MESA_LOADER_DRIVER_OVERRIDE=llvmpipe flatpak --system run ${TERMINAL_APP}
+Exec=bash -c \"while [ ! -f /tmp/utah-e2e-open-terminal ]; do sleep 1; done; rm -f /tmp/utah-e2e-open-terminal; exec \\\$@ > /tmp/utah-e2e-terminal.log 2>&1\" bash env LIBGL_ALWAYS_SOFTWARE=1 MESA_LOADER_DRIVER_OVERRIDE=llvmpipe ${TERMINAL_CMD}
 X-GNOME-Autostart-enabled=true
 EOF
 " || fail "could not write the terminal autostart entry"
@@ -1295,10 +1295,8 @@ fi
 #
 # Same Brewfile-to-list conversion iso/live/Containerfile uses to seed the
 # ISO's own Flatpak repo, run here against the installed contract's copy so
-# this checks the actual default set rather than one app (Ghostty) picked
-# only because the terminal-automation phase above happens to need it --
-# install-flatpaks.sh keeps Ghostty out of the Brewfile-derived list on
-# purpose, as Utah's own addition rather than the Bluefin parity contract.
+# this checks the actual default set rather than one app picked only because
+# the terminal-automation phase above happens to need it.
 # UTAH_E2E_FLATPAKS overrides the expected set directly; empty to skip.
 if [[ -n "${UTAH_E2E_FLATPAKS-x}" ]]; then
     if [[ -n "${UTAH_E2E_FLATPAKS-}" ]]; then

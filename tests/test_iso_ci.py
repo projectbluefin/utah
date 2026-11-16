@@ -154,7 +154,8 @@ class EvidenceTests(unittest.TestCase):
         self.assertNotIn("GDK_DISABLE", exec_line)
         self.assertIn("env LIBGL_ALWAYS_SOFTWARE=1 MESA_LOADER_DRIVER_OVERRIDE=llvmpipe ",
                        exec_line)
-        self.assertTrue(exec_line.endswith("flatpak --system run ${TERMINAL_APP}"))
+        # Native Ghostty (#1223): the autostart runs the binary, not a Flatpak.
+        self.assertTrue(exec_line.endswith(" ${TERMINAL_CMD}"))
         # The disproven `flatpak override --env=GDK_DISABLE=...` route (see
         # comment above) was added and reverted during review; assert it
         # never comes back in the installer script either.
