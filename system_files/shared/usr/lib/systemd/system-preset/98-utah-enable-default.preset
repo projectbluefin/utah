@@ -1,0 +1,157 @@
+# Utah's service default, as on GNOME OS and Dakota (#1233): every installed
+# unit with an [Install] section is enabled unless a preset turns it off.
+#
+# The Hummingbird base ships the opposite, a server policy: its
+# 99-default-disable.preset says "disable *". gnome-build-meta ships no
+# catch-all disable, so a booted Dakota runs what it installs. Preset files are
+# read in lexical order across /etc, /run and /usr/lib, and the first line that
+# matches a unit wins:
+#   - the 80-*/90-* files from Hummingbird and packages decide the units they
+#     name; 85-utah-desktop.preset sits before them for the few units where
+#     Utah disagrees with the base;
+#   - this file decides every other unit: the disables below, then "enable *";
+#   - Hummingbird's 99-default-disable.preset is never reached.
+# scripts/configure-services.sh runs `systemctl preset-all` at build time, so
+# the image already carries the state that first-boot preset application would
+# give it. The desktop contract's [services] lists assert the result.
+
+# GNOME OS: gnome-build-meta files/systemd-presets/system-preset/80-network.preset.
+# NetworkManager manages the network; systemd-networkd stays off.
+disable systemd-networkd.socket
+disable systemd-networkd.service
+disable systemd-networkd-wait-online.service
+
+# GNOME OS: openssh.preset. An SSH server is not a desktop default; enable it
+# by hand. sshd.service itself is in 85-utah-desktop.preset, because
+# Hummingbird's 90-default.preset enables it. The socket and key helpers are
+# Fedora's; Dakota has no sshd.socket.
+disable sshd.socket
+disable sshd-keygen@.service
+disable ssh-host-keys-migration.service
+
+# GNOME OS: wpa-supplicant.preset. NetworkManager drives wpa_supplicant over
+# D-Bus; the per-interface templates stay off.
+disable wpa_supplicant@.service
+disable wpa_supplicant-nl80211@.service
+disable wpa_supplicant-wired@.service
+
+# Dakota (projectbluefin/dakota, testing): the 50-* and 80-* presets its
+# elements install, in Dakota's own grouping. Lines for software Utah does not
+# install yet match nothing and cost nothing; they hold the policy for when it
+# lands. Dakota's 50-iscsi.preset is in 85-utah-desktop.preset, because
+# Hummingbird's 90-default.preset enables the iSCSI sockets.
+# 50-sysupdate.preset. Utah updates through bootc and uupd; systemd-sysupdate
+# has no transfer definitions here, so its timer is off too.
+disable systemd-sysupdate-reboot.*
+disable systemd-sysupdate-update.*
+disable systemd-sysupdate.*
+# 80-kanata.preset
+disable kanata.service
+# 80-kmscon.preset (kmscon.service; its getty@.service line ships with kmscon)
+disable kmscon.service
+# 80-libvirt.preset: libvirt is started on demand (ujust setup-virtualization).
+disable libvirt-guests.service
+disable libvirtd.service
+disable libvirtd.socket
+disable libvirtd-*.socket
+disable virt*d.service
+disable virt*d.socket
+disable virt*d-*.socket
+# 80-nethogs.preset
+disable usr-bin-nethogs.mount
+# 80-nfs-client.preset: a desktop is an NFS client, not a server.
+disable nfs-server.service
+disable fsidd.service
+# 80-pam-pkcs11.preset
+disable pkcs11-eventmgr.service
+# 80-pcrlock.preset, verbatim order: lock machine-id and the Secure Boot
+# authority, leave everything else unlocked. These are conditioned on a
+# measured UKI boot and do nothing under GRUB.
+enable systemd-pcrlock-make-policy.service
+enable systemd-pcrlock-machine-id.service
+disable systemd-pcrlock-file-system.service
+disable systemd-pcrlock-firmware-code.service
+disable systemd-pcrlock-firmware-config.service
+enable systemd-pcrlock-secureboot-authority.service
+disable systemd-pcrlock-secureboot-policy.service
+disable systemd-pcrlock-*.service
+# 80-rpcbind.preset
+disable rpcbind.service
+disable rpcbind.socket
+# 80-sysstat.preset (elements/bluefin/sysstat.bst): accounting is opt-in;
+# sar and iostat work on demand. `systemctl enable --now sysstat.service`.
+disable sysstat.service
+disable sysstat-collect.timer
+disable sysstat-summary.timer
+disable sysstat-rotate.timer
+
+# Utah-only units: Fedora packages that Dakota does not ship. Before this file
+# existed, 99-default-disable kept them off; they stay off.
+# authselect-first-boot would re-select @system-default on first boot and drop
+# the features configure-services.sh enables; apply-changes re-runs authselect
+# on every boot. Utah applies its profile at build time.
+disable authselect-first-boot.service
+disable authselect-apply-changes.service
+# A second D-Bus daemon would claim the dbus.service alias dbus-broker holds.
+disable dbus-daemon.service
+# Live-media session setup from livesys-scripts; never on an installed system.
+disable livesys.service
+disable livesys-late.service
+# chrony's companions; chronyd-restricted conflicts with chronyd.
+disable chrony-wait.service
+disable chronyd-restricted.service
+# Image updates go through bootc and uupd, not rpm-ostree or dnf. Flathub is
+# the only Flatpak remote, so Fedora's remote stays unregistered.
+disable rpm-ostree*
+disable dnf5-offline-transaction.service
+disable flatpak-add-fedora-repos.service
+# Network servers and helpers with no desktop role. The desktop contract's
+# [services].disabled list asserts these.
+disable autofs.service
+disable dnsmasq.service
+disable httpd.service
+disable httpd.socket
+disable httpd@.service
+disable htcacheclean.service
+disable openvpn-client@.service
+disable openvpn-server@.service
+disable saned.socket
+disable saned@.service
+disable ipp-usb.service
+disable nmb.service
+disable smb.service
+disable samba-bgqd.service
+disable winbind.service
+disable wsdd.service
+disable cups-browsed.service
+disable gssproxy.service
+disable nis-domainname.service
+disable zvbid.service
+# nftables.service loads its own ruleset beside firewalld's.
+disable nftables.service
+# Container runtimes and plugins Utah does not use: podman runs on netavark.
+disable containerd.service
+disable cni-dhcp.service
+disable cni-dhcp.socket
+# Hardware and maintenance helpers that need configuration first, or change
+# the system unasked (powertop --auto-tune, the XFS self-healer).
+disable brltty.service
+disable fancontrol.service
+disable powertop.service
+disable blk-availability.service
+disable xfs_healer_start.service
+disable system-xfs_healer.slice
+disable canberra-system-bootup.service
+disable canberra-system-shutdown.service
+disable canberra-system-shutdown-reboot.service
+disable foomaticrip-upgrade.service
+disable lastlog2-import.service
+disable man-db-restart-cache-update.service
+# The community-stats fetch runs from bluefin-stats-refresh.timer, not at
+# every boot.
+disable bluefin-stats-refresh.service
+# systemd-homed-firstboot asks on the console for a first user; enabling it
+# waits for the homed PAM integration (#1238).
+disable systemd-homed-firstboot.service
+
+enable *

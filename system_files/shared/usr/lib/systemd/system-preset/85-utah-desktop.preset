@@ -1,97 +1,20 @@
-# Utah is a graphical workstation, unlike the Hummingbird server base.
-# Keep these in /usr/lib so bootc's first-boot preset application sees them.
-enable gdm.service
-enable bluetooth.service
-# GNOME's system services, as Dakota inherits them from gnome-build-meta's
-# files/systemd-presets/system-preset/80-gnome.preset: colour management and
-# the AccountsService daemon Settings and GDM use to manage users.
-enable colord.service
-enable accounts-daemon.service
-# Match Bluefin discovery and hybrid-GPU defaults.
-enable avahi-daemon.service
-enable avahi-daemon.socket
-enable switcheroo-control.service
-enable firewalld.service
-enable fwupd.service
-enable fwupd-refresh.timer
-enable tailscaled.service
-enable uupd.timer
-enable projectbluefin-countme.timer
-enable bluefin-stats-refresh.timer
-enable ublue-system-setup.service
-enable systemd-resolved.service
+# Where Utah's desktop disagrees with the Hummingbird server base.
+# Presets are read in lexical order and the first matching line wins, so this
+# file outranks Hummingbird's 80-hummingbird.preset, 90-default.preset and
+# 90-systemd.preset. Everything else follows 98-utah-enable-default.preset
+# (#1233): enabled unless a preset turns it off, as on Dakota. Keep this file to
+# the units the base names; a desktop unit the base does not mention needs no
+# line here.
+
 # Keep the ESP boot manager current on systemd-boot systems (#363). A drop-in
 # gates the service on a boot through systemd-boot, so GRUB and BIOS systems
-# skip it and bootupd keeps managing their grub and shim.
+# skip it and bootupd keeps managing their grub and shim. Hummingbird's
+# 90-default.preset disables it.
 enable systemd-boot-update.service
-enable bootc-unified-storage.timer
-enable dconf-update.service
-# Dakota desktop parity (#675): first-boot install-date stamping and the
-# booted-image snapshot fastfetch reads. Wallpaper rotation stays with
-# Common's per-user timer (see configure-services.sh).
-# configure-services.sh enables these at build time; the preset lines keep
-# bootc's first-boot preset application from undoing that (see #98).
-enable ublue-firstboot-date.service
-enable ublue-booted-image.service
-# First-boot Flatpaks (Bazaar, the Files previewer, and Ghostty from TunaOS).
-# configure-services.sh enabled these at build time, but with no line here
-# bootc's first-boot preset application turned them back off, and an image
-# installed by anything but the ISO booted with no app store at all.
-enable flatpak-preinstall.service
-enable flatpak-nuke-fedora.service
-enable input-remapper.service
-enable ModemManager.service
-# Power profiles and thermal management as Dakota ships them (#388):
-# power-profiles-daemon backs GNOME's power-mode switch and thermald handles
-# thermal limits. Utah ships neither TuneD/tuned-ppd nor intel_lpmd.
-# Hummingbird's 99-default-disable would leave both off.
-enable power-profiles-daemon.service
-enable thermald.service
-# System activity accounting is opt-in, as in Dakota
-# (elements/bluefin/sysstat.bst writes 80-sysstat.preset disabling all four):
-# sar/iostat/mpstat/pidstat work on demand without the collectors. Enable with
-# `systemctl enable --now sysstat.service`. Listed explicitly, as Dakota does,
-# rather than left to Hummingbird's 99-default-disable.
-disable sysstat.service
-disable sysstat-collect.timer
-disable sysstat-summary.timer
-disable sysstat-rotate.timer
-# Dakota's effective service state (#1233). Dakota has no system `disable *`
-# preset, so every installed unit with [Install] is on unless a preset turns it
-# off; Hummingbird's 99-default-disable inverts that. These are the units
-# Utah ships that a booted Dakota (ghcr.io/projectbluefin/dakota:testing after
-# preset-all) has enabled: D-Bus daemons started at boot, parental controls,
-# remote desktop, pcscd, systemd-oomd, rootful podman's socket and timers, and
-# upstream systemd's own 90-systemd.preset sockets.
-enable rtkit-daemon.service
-enable uresourced.service
-enable upower.service
-enable udisks2.service
-enable polkit-agent-helper.socket
-enable cups.service
-enable pcscd.socket
-enable gnome-remote-desktop.service
-enable gnome-remote-desktop-configuration.service
-enable malcontent-timerd.service
-enable malcontent-timer-extension-agent.service
-enable malcontent-webd.service
-enable malcontent-webd-update.timer
-enable systemd-oomd.service
-enable systemd-oomd.socket
-enable wpa_supplicant.service
-enable podman.socket
-enable podman-auto-update.timer
-enable podman-restart.service
-enable podman-clean-transient.service
-enable systemd-sysext.socket
-enable systemd-factory-reset.socket
-enable systemd-pcrextend.socket
-enable systemd-storage-block.socket
-enable systemd-storage-fs.socket
-enable systemd-udev-load-credentials.service
-enable systemd-userdb-load-credentials.service
-# Utah-only units Dakota does not run: no multipath on a desktop, and
-# lm_sensors is disabled by Dakota's 80-lm-sensors.preset.
+
+# Hummingbird's 90-default.preset enables these server units; Dakota does not
+# run them. No multipath on a desktop; lm_sensors is Dakota's
+# 80-lm-sensors.preset.
 disable multipathd.service
 disable lm_sensors.service
 # nfs-client.target is enabled by both Fedora's and Hummingbird's 90-default
@@ -102,16 +25,26 @@ disable lm_sensors.service
 # (cause not diagnosed). mount.nfs starts rpc-statd on demand, so NFS mounts do
 # not need the target.
 disable nfs-client.target
-# Printing on demand, as Fedora's preset enables it for Bluefin.
-enable cups.socket
-enable cups.path
+# Dakota's 50-iscsi.preset. Hummingbird's 90-default.preset enables the
+# initiator sockets, so the disables have to come before it.
+disable iscsi-init.service
+disable iscsi.service
+disable iscsid.service
+disable iscsid.socket
+disable iscsiuio.service
+disable iscsiuio.socket
+disable isnsd.service
+disable isnsd.socket
+# GNOME OS's openssh.preset; Hummingbird's 90-default.preset enables sshd.
+# configure-services.sh flips this line for an ENABLE_SSHD=1 debug build.
 disable sshd.service
 # The Hummingbird base's 90-systemd.preset enables getty@.service, and its
 # kargs.d declares console=ttyS0, which is what makes systemd-getty-generator
-# instantiate the serial login on a desktop box. Presets are read in
-# lexicographic order and the first match wins, so this file outranks 90-*;
-# configure-services.sh masks the unit as well. See #103.
+# instantiate the serial login on a desktop box. configure-services.sh masks
+# the unit as well. See #103.
 disable serial-getty@ttyS0.service
+# Image updates go through uupd and bootc; configure-services.sh masks the
+# bootc timer too.
 disable rpm-ostree.service
 disable bootc-fetch-apply-updates.timer
 disable bootc-fetch-apply-updates.service

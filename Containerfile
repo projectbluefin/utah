@@ -340,7 +340,8 @@ ARG UUPD_SHA256=d8d420a153de11589abad3292eef2131a75ac3487414065a2661a558ef0d027c
 ARG UUPD_SERVICE_SHA256=65dd2b64dcb6a9f77227612aa624ef17fe43b32eb835b51d7d22a22755dc21a8
 ARG UUPD_TIMER_SHA256=bbb5f098ec33d047bdef571e0bc112364df157e0f92d73e0febab703c4a3c099
 
-# Hummingbird defaults to a server preset and disables unlisted services.
+# Hummingbird defaults to a server preset that disables unlisted services;
+# Utah's presets enable them instead, as Dakota does (#1233).
 # configure-services is the Utah equivalent of bluefin-lts's 40-services.sh:
 # it applies the desktop service policy, login defaults, update policy, and
 # removes the extension build toolchain before the final cleanup.

@@ -73,38 +73,32 @@ The TOML's sections are the contract's table of contents:
   hook, and the system-flatpaks Brewfile whose app list the contract enumerates.
 - **`[media]`** — GStreamer decoders that must load, not merely be installed: `openh264dec`.
   The factory libav is built on `ffmpeg-free` (no H.264), so `avdec_h264` is not asserted (#1116).
-- **`[services]`** — systemd units the preset must enable: `gdm.service`, `colord.service`,
-  `accounts-daemon.service`, `avahi-daemon.service`, `avahi-daemon.socket`, `bluetooth.service`,
-  `switcheroo-control.service`, `ublue-system-setup.service`, `flatpak-preinstall.service`,
-  `flatpak-nuke-fedora.service`, `brew-setup.service`, `dconf-update.service`, `bootc-unified-storage.timer`,
-  `input-remapper.service`, `ModemManager.service`, `power-profiles-daemon.service`, `thermald.service`,
-  `projectbluefin-countme.timer`, `cups.socket`, `systemd-boot-update.service`, `uupd.timer`,
-  `bluefin-stats-refresh.timer`, `ublue-firstboot-date.service`, `ublue-booted-image.service`.
-  [Dakota service presets](desktop-contract/references/dakota-services.md): GNOME units, user units, opt-in sysstat.
+- **`[services]`** — Utah enables every unit no preset turns off, as GNOME OS and Dakota do
+  (#1233): `98-utah-enable-default.preset` carries GNOME OS's and Dakota's disables, Utah's own
+  disables, then `enable *`, outranking Hummingbird's `99-default-disable`; `85-utah-desktop.preset`
+  overrides the base's `90-*` presets where Utah differs. `configure-services.sh` runs
+  `systemctl preset-all`, and the contract's `enabled`/`disabled` lists assert key units in the image.
+  [Dakota service presets](desktop-contract/references/dakota-services.md): the policy, user units, re-measuring.
   Update policy delegates background updates to `uupd.timer`; `bootc-fetch-apply-updates.timer` and
   `bootc-fetch-apply-updates.service` are masked in `/etc` and `/usr/lib` (and disabled in
   `85-utah-desktop.preset`) so cross-vendor `/etc` 3-way merges (e.g. switching from Bluefin) do not
   carry active `timers.target.wants` symlinks that bypass uupd staging or undo manual rollbacks.
   Switchers can mask them by hand if a local `/etc` symlink survived. uupd matches Dakota ([uupd](desktop-contract/references/uupd.md)).
 
-  The last two units are Dakota parity (#675): install-date stamping and the
+  `ublue-firstboot-date.service` and `ublue-booted-image.service` are Dakota parity (#675): install-date stamping and the
   booted-image snapshot Common's `/usr/libexec/ublue-booted-image` falls back to.
-  `configure-services.sh` enables them, patches Common's fastfetch ([stats](desktop-contract/references/stats-refresh.md))
+  `configure-services.sh` patches Common's fastfetch ([stats](desktop-contract/references/stats-refresh.md))
   and `uwelcome.sh` (non-interactive shells skip the greeting), checks image-info ([bootc compatibility](desktop-contract/references/image-info.md)), and applies [Dakota's desktop defaults](desktop-contract/references/dakota-desktop-defaults.md).
   Wallpaper rotation is deliberately NOT Dakota parity: Common's per-user `bluefin-dynamic-wallpaper`
   timer is hemisphere-aware and rotates live at month boundaries, while
   Dakota's boot-time month symlink is northern-only and stale until reboot, so
   repointing the default would stand the better rotator down (#675 decision).
 
-  A unit being enabled in the built image is not the same as it being enabled
-  on a booted one. bootc applies presets on first boot, and Hummingbird's
-  `99-default-disable.preset` turns off every unit no preset names, so a build
-  -time `systemctl enable` without a line in `85-utah-desktop.preset` (or a
-  vendor preset such as brew's `01-homebrew.preset`) is undone. That is how
-  `flatpak-preinstall.service` shipped "enabled" and booted disabled, leaving
-  non-ISO installs without Bazaar. `DesktopUnitEnablementTests` holds the
-  script and the preset in agreement. Check a booted VM with `systemctl
-  is-enabled <unit>` when in doubt.
+  bootc applies presets on first boot, so a unit's state comes from the
+  presets, never from a build-time `systemctl enable` (#98: `flatpak-preinstall`
+  shipped "enabled" and booted disabled). `ServiceMaskParityTests` resolves the
+  contract's units against the preset files. Check a booted VM with
+  `systemctl is-enabled <unit>` when in doubt.
 
   The Flathub remote is a `/etc/flatpak/remotes.d` descriptor, applied to the
   repo once, when `/var/lib/flatpak/repo` is created. Flathub's descriptor has
@@ -401,11 +395,9 @@ under `[services]` in `packages/utah.toml` and configured in
 
 ### Discovery and hybrid-GPU services (#387)
 
-Keep build-time enablement in `scripts/configure-services.sh` aligned with
-`85-utah-desktop.preset`: the script configures the image and the preset
-preserves the policy when first-boot presets are applied. Bluefin's
-`enable avahi-daemon.*` covers both the service and socket for mDNS discovery;
-list both explicitly in the script and preset. `switcheroo-control.service`
+Enable-by-default turns these on (#1233); the contract asserts them. Bluefin's
+and GNOME OS's `enable avahi-daemon.*` covers both the service and socket for
+mDNS discovery. `switcheroo-control.service`
 supports launching applications on a discrete GPU. `switcheroo-control` is
 already in the copied Bluefin package contract; Avahi's client libraries
 are not the daemon, so `[services]` in `packages/utah.toml` explicitly
@@ -448,16 +440,17 @@ deleted at build time, and a preset entry alone would not stop it.
 
 ### The newly added network daemons are held disabled (#869)
 
-The parity rollout (#868) added network daemons that Hummingbird's
-`99-default-disable.preset` must keep off. The `disabled` list in
+The parity rollout (#868) added network daemons that must stay off. Under
+enable-by-default (#1233) each needs a `disable` line in
+`98-utah-enable-default.preset`, and the `disabled` list in
 `contracts/bluefin-desktop.toml` (checked by `verify-desktop-contract.py`)
 fails the build if `dnsmasq.service`, `rpcbind.service`/`.socket`,
 `autofs.service`, `openvpn-{client,server}@.service`, `saned.socket`,
 `ipp-usb.service`, `httpd.service`, `httpd.socket`, `httpd@.service` or
 `htcacheclean.service` is enabled; masked, static or absent units count as
 off (Apache httpd, #948: WebDAV runs its own per-session httpd, so port 80
-stays closed). When Dakota parity work (`baselines/triage.toml`) adds another
-network daemon that must stay off, list it here too.
+stays closed). A newly installed daemon that must stay off needs both: the
+preset line and the contract entry.
 
 ### The fwupd-refresh unit pins a static user (#385)
 
