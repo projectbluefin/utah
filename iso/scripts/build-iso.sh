@@ -11,7 +11,10 @@ DEBUG="${4:-0}"
 # installer recipe use this stable, publishable reference.
 PUBLISHED_IMAGE="${5:-ghcr.io/projectbluefin/utah:testing}"
 # Live-ISO size budget (#684). The ISO embeds the full payload image for
-# offline install, so image growth shows up twice in the ISO. Post-fix E2E run
+# offline install as unpacked containers-storage files, which mksquashfs
+# stores once because they are byte-identical to the live root; an OCI layout
+# would be a second, undeduplicable copy (PR #1131 run 43870670314: 9.4-11.3
+# GiB squashfs per flavor at zstd 15). Post-fix E2E run
 # 35469913325 (2026-09-19) measured 3.9G (utah), 4.6G (gaming), 5.2G (nvidia),
 # and 5.3G (nvidia-gaming). Diagnostic run 38175242606 (2026-10-11), at the
 # default zstd level 3, measured 4.7G, 5.5G, 6.0G, and 6.1G respectively; the
@@ -97,15 +100,16 @@ for file in "${VMLINUZ}" "${INITRD}" "${SYSTEMD_BOOT}"; do
     [[ -f "${file}" ]] || { echo "Missing live boot file: ${file}" >&2; exit 1; }
 done
 
-# Start with the live image filesystem, then add the target OCI image as a
-# read-only OCI layout under usr/lib/utah/payload, plus the receipt
-# (/etc/bootc-installer/media-input.json) that binds fisherman to it. The live
-# media boots with that squashfs mounted read-only at /run/rootfsbase, which
-# is where the receipt points; see embed-oci-payload.sh.
+# Start with the live image filesystem, then add the target OCI image as an
+# unpacked containers-storage graphroot under usr/lib/containers/storage, plus
+# the receipt (/etc/bootc-installer/media-input.json) that binds fisherman to
+# it. The live system bind-mounts that store read-only at
+# /var/lib/containers/storage, the one path the receipt may name; see
+# embed-store-payload.sh and iso/live/src/configure-live.sh.
 SQUASHFS_ROOT="${WORK}/squashfs-root"
 mkdir -p "${SQUASHFS_ROOT}"
 cp -a "${MOUNT}/." "${SQUASHFS_ROOT}/"
-bash iso/scripts/embed-oci-payload.sh "${PAYLOAD_IMAGE}" "${PUBLISHED_IMAGE}" "${SQUASHFS_ROOT}" "${WORK}"
+bash iso/scripts/embed-store-payload.sh "${PAYLOAD_IMAGE}" "${PUBLISHED_IMAGE}" "${SQUASHFS_ROOT}" "${WORK}" "${LIVE_IMAGE}"
 
 SQUASHFS="${WORK}/squashfs.img"
 echo "Creating live rootfs (${KERNEL})"

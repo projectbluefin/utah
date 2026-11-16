@@ -40,28 +40,44 @@ desktop but cannot run its declared Flatpaks has failed ISO acceptance.
 Review VM run 43815907502 failed every flavor at install with
 `local_source_unavailable`: fisherman 58eaf29e (bootc-installer
 v2026.11.16-f6b9ba0d) requires `/etc/bootc-installer/media-input.json` on
-live media. `iso/scripts/embed-oci-payload.sh` (called by `build-iso.sh`)
-copies the payload into the squashfs as an OCI layout at
-`/usr/lib/utah/payload` and writes the receipt, in fisherman's v1 schema
-(`internal/mediainput`, checked by `PreflightBoundOCIMediaInput`):
+live media. `iso/scripts/embed-store-payload.sh` (called by `build-iso.sh`)
+copies the payload into the squashfs as an unpacked containers-storage
+graphroot at `/usr/lib/containers/storage` and writes the receipt, in
+fisherman's v1 schema (`internal/mediainput`, checked by
+`PreflightBoundStoreMediaInput`):
 
 | Field | Value |
 |-------|-------|
 | `schemaVersion` | `1` |
 | `kind` | `utah-live` (opaque to fisherman) |
-| `image` | the published ref (`build-iso.sh`'s fifth argument); an install request must name it or leave `image` empty |
+| `image` | the published ref (`build-iso.sh`'s fifth argument); an install request must name it, its `containers-storage:` spelling, or leave `image` empty |
 | `targetImgref` | the same ref: the installed system's day-2 update ref |
-| `platformManifestDigest` | the layout's only manifest; the same digest the review VM compares with the installed bootc digest |
+| `platformManifestDigest` | the payload's manifest; the store must report it, and it is the digest the review VM compares with the installed bootc digest |
 | `configDigest` | the manifest's config blob |
-| `ociLayoutPath` | `/run/rootfsbase/usr/lib/utah/payload`, the squashfs mounted read-only below the live overlay |
+| `containersStoragePath` | `/var/lib/containers/storage`, the only store path v1 binds |
 | `platform` | `os/architecture` from the image config, e.g. `linux/amd64` |
 
-Before it touches a disk, fisherman opens the layout without following
-symlinks and checks that every file is on a read-only filesystem. It then
-hashes every blob against its descriptor and matches the config platform to
-the host. The builder fails if the live recipe or `images.json` names
-another ref than the receipt. `luks-e2e.sh` checks that the receipt names the
-payload and that its layout is mounted read-only before it runs fisherman.
+The live system bind-mounts the squashfs store
+(`/run/rootfsbase/usr/lib/containers/storage`) read-only at
+`/var/lib/containers/storage` (`var-lib-containers-storage.mount`). Because
+containers/storage cannot open a read-only graphroot, the live
+`/etc/containers/storage.conf` moves the graphroot to
+`/var/lib/containers/live-storage` and lists the payload store under
+`additionalimagestores`. Both are written by `configure-live.sh`.
+
+Before it touches a disk, fisherman opens the store path without following
+symlinks, checks that it is on a read-only filesystem, and requires
+`skopeo inspect containers-storage:<image>` to report the receipt's manifest
+digest. The builder fails if the store reports another digest than the
+exported manifest, or if the live recipe or `images.json` names another ref
+than the receipt. `luks-e2e.sh` checks that the receipt names the payload,
+that the store is mounted read-only, and that the live system resolves the
+image with the receipt's digest before it runs fisherman.
+
+The receipt's other form, an OCI layout (`ociLayoutPath`), does not fit the
+ISO budget. Run 43870670314 embedded one: layout blobs are tar files, which
+squashfs cannot deduplicate against the live root, so the main squashfs grew
+from 5.2 GiB to 9.8 GiB at zstd 15 and the ISOs were 9.6-11.8 GiB.
 Tacklebox ISOs get their offline payload from tacklebox (`offline_payloads`),
 not from this script.
 

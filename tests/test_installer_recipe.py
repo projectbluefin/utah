@@ -110,8 +110,9 @@ class InstallerBackendTests(unittest.TestCase):
 
     def test_no_containers_storage_source_override(self):
         # With the live-iso-mode marker, fisherman installs only the image the
-        # receipt names, from its OCI layout: bootc-installer's local_imgref
-        # would send containers-storage:<ref>, which fisherman refuses.
+        # receipt names, from its read-only store. The recipe names the
+        # published ref (the receipt's image), never bootc-installer's
+        # local_imgref.
         self.assertNotIn("local_imgref", json.loads(RECIPE.read_text()))
         self.assertNotIn("local_imgref", CONFIGURE_LIVE.read_text())
 
@@ -119,7 +120,7 @@ class InstallerBackendTests(unittest.TestCase):
         script = LUKS_E2E.read_text()
         self.assertIn('if [[ "${UTAH_E2E_COMPOSEFS_BACKEND:-0}" == 1 ]]; then', script)
         self.assertIn('RECIPE_IMAGE="${PAYLOAD_IMAGE}"', script)
-        self.assertNotIn("containers-storage:${PAYLOAD_IMAGE}", script)
+        self.assertNotIn('RECIPE_IMAGE="containers-storage:', script)
         self.assertIn('"composeFsBackend": ${RECIPE_COMPOSEFS_BACKEND}', script)
         self.assertIn('"image": "${RECIPE_IMAGE}"', script)
 
@@ -129,6 +130,9 @@ class InstallerBackendTests(unittest.TestCase):
         self.assertIn(receipt, script)
         self.assertIn('for key in ("image", "targetImgref"):', script)
         self.assertIn("findmnt -no OPTIONS -T", script)
+        # The store lookup fisherman's gate makes, against the receipt digest.
+        self.assertIn("sudo skopeo inspect --format '{{.Digest}}' 'containers-storage:${PAYLOAD_IMAGE}'",
+                      script)
         self.assertLess(script.index(receipt),
                         script.index("sudo /usr/local/bin/fisherman"))
 

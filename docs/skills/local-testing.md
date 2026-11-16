@@ -241,15 +241,26 @@ The live ISO installer configuration (`iso/live/src/etc/bootc-installer/recipe.j
 
 Fisherman (bootc-installer v2026.11.16 and later) refuses to install on live
 media (`/etc/bootc-installer/live-iso-mode`) unless
-`/etc/bootc-installer/media-input.json` binds a verified OCI layout on a
+`/etc/bootc-installer/media-input.json` binds a verified payload on a
 read-only filesystem; otherwise it fails with `local_source_unavailable`.
-`iso/scripts/embed-oci-payload.sh` writes the payload as an OCI layout at
-`/usr/lib/utah/payload` in the squashfs and writes the receipt, whose
-`ociLayoutPath` is `/run/rootfsbase/usr/lib/utah/payload` (the read-only
-squashfs mount below the live overlay). Fisherman then installs only the image
+`iso/scripts/embed-store-payload.sh` writes the payload as an unpacked
+containers-storage graphroot at `/usr/lib/containers/storage` in the squashfs
+and writes the receipt, whose `containersStoragePath` is
+`/var/lib/containers/storage`: the live system bind-mounts the store there
+read-only from the squashfs at `/run/rootfsbase`, and moves its own graphroot
+to `/var/lib/containers/live-storage` with the payload as an additional image
+store (`configure-live.sh`). Fisherman then installs only the image
 the receipt names, so recipes name that published ref or leave `image` empty,
-never a `containers-storage:` source or bootc-installer's `local_imgref`. The
+never bootc-installer's `local_imgref`. The
 receipt schema: [iso-review](local-testing/references/iso-review.md#offline-payload-receipt).
+
+Do not switch the payload to an OCI layout (`ociLayoutPath`). Layout blobs are
+tar files, so squashfs keeps them as a second copy of the image that shares no
+blocks with the live root. Review VM run 43870670314 did that: its 40
+uncompressed layers (9.95 GiB) grew the main squashfs from 5.2 GiB to 9.8 GiB
+at zstd 15, and every flavor's ISO (9.6-11.8 GiB) failed the 8 GiB budget.
+Unpacked store files are byte-identical to the live root's, and mksquashfs
+stores them once.
 
 The composefs default (#882, #938) shipped without the LUKS e2e ever running
 on it, because the provenance gate had blocked post-testing-e2e since 10-31.
@@ -387,15 +398,15 @@ The harness blocks outbound guest networking while retaining loopback-only
 SSH forwards, so installation cannot silently fall back to an online pull.
 For digest-pinned builds, the builder exports the original registry blobs
 through Skopeo's `dir` transport with `--preserve-digests`, and copies that
-export into the payload's OCI layout with `--preserve-digests` too.
+export into the payload store with `--preserve-digests` too.
 Do not export from containers-storage or substitute an OCI archive: the
 former exports uncompressed layers, while the latter can convert manifest
 formats. Either changes the digest and breaks the embedded `image@sha256:...`
 reference. Local tag-based builds may export their local containers-storage;
-the layout still keeps that export's manifest digest, which the review VM
-compares with the installed bootc digest. A digest-preserving copy failure
-(including a Docker-schema manifest that an OCI layout cannot hold unchanged)
-must fail ISO composition, not fall back to a mutable tag.
+the store still keeps that export's manifest digest, which the review VM
+compares with the installed bootc digest. The builder fails if the store
+reports another digest than the exported manifest. A digest-preserving copy
+failure must fail ISO composition, not fall back to a mutable tag.
 The live assembler selects a release from `/usr/lib/modules` and uses its
 matching initramfs. Kernel-core provides that release's `vmlinuz` in the module
 directory, while the OGC installer writes `/boot/vmlinuz-<release>`.

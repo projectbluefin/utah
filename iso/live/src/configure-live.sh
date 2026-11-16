@@ -84,13 +84,49 @@ systemctl enable var-tmp.mount || true
 # flavor (#1129); it stays off until the review VM passes for every flavor
 # with review_composefs_backend (docs/skills/local-testing.md).
 #
-# The install source is the payload the ISO builder embeds as a read-only OCI
-# layout, bound by /etc/bootc-installer/media-input.json
-# (iso/scripts/embed-oci-payload.sh). The live-iso-mode marker below makes
+# The install source is the payload the ISO builder embeds as an unpacked
+# containers-storage graphroot at /usr/lib/containers/storage in the squashfs,
+# bound by /etc/bootc-installer/media-input.json
+# (iso/scripts/embed-store-payload.sh). The live-iso-mode marker below makes
 # fisherman require that receipt and install only the image it names, so the
-# recipe names the published ref (the receipt's image) and never a
-# containers-storage: source: fisherman refuses any other source on live media.
+# recipe names the published ref (the receipt's image).
+#
+# Fisherman v1 binds a store only at /var/lib/containers/storage, and only on
+# a read-only filesystem. The squashfs is mounted read-only at
+# /run/rootfsbase below the live overlay, so bind its store there read-only.
+cat >/usr/lib/systemd/system/var-lib-containers-storage.mount <<'EOF'
+[Unit]
+Description=Utah live install payload (read-only containers-storage)
+
+[Mount]
+What=/run/rootfsbase/usr/lib/containers/storage
+Where=/var/lib/containers/storage
+Type=none
+Options=bind,ro
+
+[Install]
+WantedBy=local-fs.target
+EOF
+systemctl enable var-lib-containers-storage.mount
+# containers/storage cannot open a read-only graphroot (it takes write locks
+# in it), so the live system's own graphroot moves to the writable overlay and
+# reads the payload as an additional image store: fisherman's
+# `skopeo inspect containers-storage:<image>` and the composefs export both
+# resolve it there. Hummingbird's storage.conf.d/00-vendor.conf only sets the
+# driver (overlay, the payload's driver), so this file's paths stand.
 mkdir -p /etc/containers
+cat >/etc/containers/storage.conf <<'EOF'
+[storage]
+driver = "overlay"
+runroot = "/run/containers/storage"
+graphroot = "/var/lib/containers/live-storage"
+
+[storage.options]
+additionalimagestores = ["/var/lib/containers/storage"]
+
+[storage.options.overlay]
+mountopt = "nodev"
+EOF
 mkdir -p /var/fisherman-tmp
 
 # Installer branding/configuration. The custom recipe must reference the

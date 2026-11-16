@@ -112,16 +112,17 @@ class EvidenceTests(unittest.TestCase):
 
     def test_offline_payload_preserves_manifest_digest(self):
         build = (ROOT / "iso/scripts/build-iso.sh").read_text()
-        self.assertIn('bash iso/scripts/embed-oci-payload.sh "${PAYLOAD_IMAGE}" '
-                      '"${PUBLISHED_IMAGE}" "${SQUASHFS_ROOT}" "${WORK}"', build)
-        self.assertNotIn("/usr/lib/containers/storage", build)
-        script = (ROOT / "iso/scripts/embed-oci-payload.sh").read_text()
+        self.assertIn('bash iso/scripts/embed-store-payload.sh "${PAYLOAD_IMAGE}" '
+                      '"${PUBLISHED_IMAGE}" "${SQUASHFS_ROOT}" "${WORK}" "${LIVE_IMAGE}"', build)
+        script = (ROOT / "iso/scripts/embed-store-payload.sh").read_text()
         self.assertNotIn("oci-archive:", script)
         self.assertNotIn("--dest-compress", script)
+        # An OCI layout's tar blobs cannot share squashfs blocks with the live
+        # root: run 43870670314's ISOs were 9.6-11.8 GiB with one.
+        self.assertNotIn('"oci:', script)
         self.assertEqual(script.count("--preserve-digests"), 2)
         self.assertIn('"dir:${PAYLOAD_EXPORT}"', script)
-        self.assertIn('skopeo copy --preserve-digests "dir:${PAYLOAD_EXPORT}" '
-                      '"oci:${LAYOUT}:payload"', script)
+        self.assertIn('skopeo copy --preserve-digests dir:/payload "containers-storage:$1"', script)
 
     def test_iso_compression_level_reaches_unshare_assembly(self):
         script = (ROOT / "iso/scripts/build-iso.sh").read_text()
@@ -1485,19 +1486,22 @@ class IsoBakeParserTests(unittest.TestCase):
                          "bare parser name is not on the guest PATH")
 
 
-class EmbedOciPayloadTests(unittest.TestCase):
+class EmbedStorePayloadTests(unittest.TestCase):
     """Live media must carry the receipt fisherman requires (PR #1131).
 
     Fisherman 58eaf29e refuses to install on live media (the live-iso-mode
-    marker) unless /etc/bootc-installer/media-input.json binds a verified OCI
-    layout on a read-only filesystem: review VM run 43815907502 failed every
-    flavor with local_source_unavailable. The builder is run here with skopeo
-    stubbed to write a real OCI layout, and the receipt is checked against
-    fisherman's v1 schema (internal/mediainput, PreflightBoundOCIMediaInput).
+    marker) unless /etc/bootc-installer/media-input.json binds a verified
+    read-only payload: review VM run 43815907502 failed every flavor with
+    local_source_unavailable. The OCI-layout form of that receipt broke the
+    ISO budget (run 43870670314: 9.6-11.8 GiB), so the payload is an unpacked
+    containers-storage graphroot, bound with containersStoragePath. The
+    builder runs here with skopeo and podman stubbed, and the receipt is
+    checked against fisherman's v1 schema (internal/mediainput,
+    PreflightBoundStoreMediaInput).
     """
 
-    SCRIPT = ROOT / "iso/scripts/embed-oci-payload.sh"
-    LIVE_LAYOUT = "/run/rootfsbase/usr/lib/utah/payload"
+    SCRIPT = ROOT / "iso/scripts/embed-store-payload.sh"
+    LIVE_IMAGE = "localhost/utah-live:testing"
 
     FAKE_SKOPEO = r"""#!/usr/bin/env python3
 import hashlib, json, os, sys
@@ -1505,23 +1509,44 @@ from pathlib import Path
 with open(os.environ["SKOPEO_LOG"], "a") as log:
     log.write(" ".join(sys.argv[1:]) + "\n")
 src, dest = sys.argv[-2:]
-if dest.startswith("dir:"):
-    Path(dest[4:]).mkdir(parents=True)
-    Path(dest[4:], "manifest.json").write_text("{}")
-    sys.exit(0)
-assert src.startswith("dir:") and dest.startswith("oci:") and dest.endswith(":payload"), dest
-layout = Path(dest[4:-len(":payload")])
-blobs = layout / "blobs" / "sha256"
-blobs.mkdir(parents=True)
-def put(data):
-    digest = hashlib.sha256(data).hexdigest()
-    (blobs / digest).write_bytes(data)
-    return {"digest": "sha256:" + digest, "size": len(data)}
-config = put(json.dumps({"os": "linux", "architecture": "amd64"}).encode())
-layer = put(b"layer")
-manifest = put(json.dumps({"schemaVersion": 2, "config": config, "layers": [layer]}).encode())
-(layout / "oci-layout").write_text('{"imageLayoutVersion": "1.0.0"}')
-(layout / "index.json").write_text(json.dumps({"schemaVersion": 2, "manifests": [manifest]}))
+assert dest.startswith("dir:"), dest
+export = Path(dest[4:])
+export.mkdir(parents=True)
+config = json.dumps({"os": "linux", "architecture": "amd64"}).encode()
+config_digest = hashlib.sha256(config).hexdigest()
+(export / config_digest).write_bytes(config)
+layer = b"layer"
+layer_digest = hashlib.sha256(layer).hexdigest()
+(export / layer_digest).write_bytes(layer)
+(export / "manifest.json").write_text(json.dumps({
+    "schemaVersion": 2,
+    "mediaType": "application/vnd.oci.image.manifest.v1+json",
+    "config": {"digest": "sha256:" + config_digest, "size": len(config)},
+    "layers": [{"digest": "sha256:" + layer_digest, "size": len(layer)}],
+}))
+"""
+
+    # Stands in for `podman run <live image> sh -c 'skopeo copy ...; skopeo
+    # inspect ...'`: fills the mounted store and reports the store's digest,
+    # which is the exported manifest's unless STORE_DIGEST overrides it.
+    FAKE_PODMAN = r"""#!/usr/bin/env python3
+import hashlib, json, os, sys
+from pathlib import Path
+with open(os.environ["PODMAN_LOG"], "a") as log:
+    log.write(json.dumps(sys.argv[1:]) + "\n")
+args = sys.argv[1:]
+mounts = {}
+for flag, value in zip(args, args[1:]):
+    if flag == "-v":
+        host, guest = value.split(":")[:2]
+        mounts[guest] = Path(host)
+store = mounts["/payload-store"] / "overlay" / "abc" / "diff"
+store.mkdir(parents=True)
+(store / "file").write_text("payload")
+manifest = (mounts["/payload"] / "manifest.json").read_bytes()
+digest = os.environ.get("STORE_DIGEST") or "sha256:" + hashlib.sha256(manifest).hexdigest()
+(mounts["/payload-meta"] / "inspect.json").write_text(json.dumps({"Digest": digest}))
+Path(os.environ["PODMAN_LOG"] + ".manifest").write_bytes(manifest)
 """
 
     def setUp(self):
@@ -1529,15 +1554,17 @@ manifest = put(json.dumps({"schemaVersion": 2, "config": config, "layers": [laye
         self.addCleanup(subprocess.run, ["rm", "-rf", str(self.tmp)])
         bin_dir = self.tmp / "bin"
         bin_dir.mkdir()
-        skopeo = bin_dir / "skopeo"
-        skopeo.write_text(self.FAKE_SKOPEO)
-        skopeo.chmod(0o755)
+        for name, body in (("skopeo", self.FAKE_SKOPEO), ("podman", self.FAKE_PODMAN)):
+            tool = bin_dir / name
+            tool.write_text(body)
+            tool.chmod(0o755)
         self.root = self.tmp / "root"
         self.work = self.tmp / "work"
         self.work.mkdir()
         self.log = self.tmp / "skopeo.log"
+        self.podman_log = self.tmp / "podman.log"
         self.env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}",
-                    "SKOPEO_LOG": str(self.log)}
+                    "SKOPEO_LOG": str(self.log), "PODMAN_LOG": str(self.podman_log)}
 
     def _live_root(self, ref):
         etc = self.root / "etc/bootc-installer"
@@ -1547,40 +1574,55 @@ manifest = put(json.dumps({"schemaVersion": 2, "config": config, "layers": [laye
         (etc / "images.json").write_text(json.dumps(
             {"default_image": ref, "images": [{"imgref": ref}]}))
 
-    def _run(self, payload, published):
+    def _run(self, payload, published, **env):
         return subprocess.run(
-            ["bash", str(self.SCRIPT), payload, published, str(self.root), str(self.work)],
-            capture_output=True, text=True, env=self.env)
+            ["bash", str(self.SCRIPT), payload, published, str(self.root), str(self.work),
+             self.LIVE_IMAGE],
+            capture_output=True, text=True, env={**self.env, **env})
 
-    def test_receipt_binds_the_read_only_layout(self):
+    def test_receipt_binds_the_read_only_store(self):
         ref = "ghcr.io/projectbluefin/utah:review-vm-abc"
         self._live_root(ref)
         result = self._run("localhost/utah:testing", ref)
         self.assertEqual(result.returncode, 0, result.stderr)
         receipt = json.loads((self.root / "etc/bootc-installer/media-input.json").read_text())
-        layout = self.root / "usr/lib/utah/payload"
-        index = json.loads((layout / "index.json").read_text())
-        manifest_digest = index["manifests"][0]["digest"]
-        manifest = json.loads((layout / "blobs/sha256" / manifest_digest[7:]).read_text())
+        podman = json.loads(self.podman_log.read_text().splitlines()[0])
+        self.assertIn(self.LIVE_IMAGE, podman)
+        self.assertEqual(podman[-1], ref)
+        manifest_bytes = Path(f"{self.podman_log}.manifest").read_bytes()
+        manifest = json.loads(manifest_bytes)
         self.assertEqual(receipt, {
             "schemaVersion": 1,
             "kind": "utah-live",
             "image": ref,
-            "platformManifestDigest": manifest_digest,
+            "platformManifestDigest": "sha256:" + hashlib.sha256(manifest_bytes).hexdigest(),
             "configDigest": manifest["config"]["digest"],
-            "ociLayoutPath": self.LIVE_LAYOUT,
+            "containersStoragePath": "/var/lib/containers/storage",
             "targetImgref": ref,
             "platform": "linux/amd64",
         })
         for digest in (receipt["platformManifestDigest"], receipt["configDigest"]):
             self.assertRegex(digest, r"^sha256:[0-9a-f]{64}$")
-        # Local candidates export their own containers-storage and keep the
-        # manifest bytes through dir into the layout.
+        # The unpacked store lands where the live system bind-mounts it from.
+        self.assertEqual(
+            (self.root / "usr/lib/containers/storage/overlay/abc/diff/file").read_text(), "payload")
+        # Local candidates export their own containers-storage; the store
+        # keeps those manifest bytes.
         calls = self.log.read_text().splitlines()
         self.assertEqual(calls[0].split()[-2], "containers-storage:localhost/utah:testing")
         self.assertNotIn("--preserve-digests", calls[0])
-        self.assertTrue(calls[1].startswith("copy --preserve-digests dir:"), calls[1])
-        self.assertFalse((self.work / "utah-payload").exists())
+        for scratch in ("utah-payload", "payload-store", "payload-meta", "payload-storage.conf"):
+            self.assertFalse((self.work / scratch).exists(), scratch)
+
+    def test_store_digest_must_match_the_exported_manifest(self):
+        # Fisherman compares `skopeo inspect containers-storage:<image>` with
+        # the receipt; a store that rewrote the manifest would fail there.
+        ref = "ghcr.io/projectbluefin/utah:review-vm-abc"
+        self._live_root(ref)
+        result = self._run("localhost/utah:testing", ref, STORE_DIGEST="sha256:" + "b" * 64)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("the embedded store reports digest", result.stderr)
+        self.assertFalse((self.root / "etc/bootc-installer/media-input.json").exists())
 
     def test_pinned_payload_copies_registry_blobs(self):
         ref = "ghcr.io/projectbluefin/utah@sha256:" + "a" * 64
@@ -1605,3 +1647,13 @@ manifest = put(json.dumps({"schemaVersion": 2, "config": config, "layers": [laye
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("recipe.json imgref", result.stderr)
         self.assertFalse((self.root / "etc/bootc-installer/media-input.json").exists())
+
+    def test_live_system_binds_the_store_read_only(self):
+        script = (ROOT / "iso/live/src/configure-live.sh").read_text()
+        for line in ("What=/run/rootfsbase/usr/lib/containers/storage",
+                     "Where=/var/lib/containers/storage",
+                     "Options=bind,ro",
+                     "systemctl enable var-lib-containers-storage.mount",
+                     'graphroot = "/var/lib/containers/live-storage"',
+                     'additionalimagestores = ["/var/lib/containers/storage"]'):
+            self.assertIn(line, script)
