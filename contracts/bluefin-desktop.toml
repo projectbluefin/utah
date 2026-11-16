@@ -84,6 +84,9 @@ fedora-version = '^\d+$'
 
 [configuration]
 files = [
+  # wget2-wget supplies the traditional command as a link to wget2.
+  "/usr/bin/wget",
+  "/usr/bin/wget2",
   # Common owns ChairLift's GUI preinstall and system integration (as on Dakota).
   "/usr/share/applications/io.projectbluefin.chairlift.desktop",
   "/usr/share/icons/hicolor/scalable/apps/io.projectbluefin.chairlift.svg",
