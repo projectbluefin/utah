@@ -1,4 +1,5 @@
-# Utah's entry point imports these at a shallower depth than Common's recipes.
+# Utah's entry point imports these at a shallower depth than Common's recipes
+# and the Dakota default.just/system.just Utah ships in their place (#1231).
 
 # Show device diagnostics locally; optionally upload when fpaste is installed
 [group('System')]
@@ -64,13 +65,6 @@ changelogs:
         printf '%s\n' "$CONTENT"
     fi
 
-# Explain Utah's pending module-signing support without changing MOK state
-[group('System')]
-enroll-secure-boot-key:
-    #!/usr/bin/bash
-    echo 'Utah does not yet ship a kernel-module signing key to enroll.' >&2
-    echo 'Secure Boot module signing and enrollment are tracked at https://github.com/projectbluefin/utah/issues/395' >&2
-    exit 1
 # Override Common's `ujust report` so bug reports land in projectbluefin/utah
 # instead of falling through to common (projectbluefin/utah#446). Common's
 # ublue-image-repo does not list utah* in its routing grammar, so its
