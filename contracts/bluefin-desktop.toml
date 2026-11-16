@@ -147,6 +147,10 @@ files = [
 ]
 
 [configuration.file_contains]
+# .local names resolve over mDNS (nss-mdns + authselect with-mdns4, #499).
+"/etc/nsswitch.conf" = [
+  "mdns4_minimal [NOTFOUND=return]",
+]
 "/usr/lib/bootc/kargs.d/10-utah-plymouth.toml" = [
   'kargs = ["plymouth.ignore-serial-consoles"]',
 ]

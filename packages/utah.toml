@@ -644,6 +644,11 @@ packages = [
 # #384's OOM question rather than assuming the omission was an oversight.
 packages = [
     "avahi",
+    # .local hostname resolution over mDNS (#499), as Dakota (freedesktop-sdk
+    # nss-mdns) and Bluefin ship it. avahi-daemon alone browses services but
+    # does not resolve names; configure-services.sh adds the authselect
+    # with-mdns4 feature that puts mdns4_minimal in nsswitch.conf.
+    "nss-mdns",
     "cryptsetup",
     "flatpak",
     "fwupd",
@@ -713,27 +718,12 @@ packages = [
 # pipewire-libs-extra is supplied by the pinned September 10 factory candidate
 # and returns to the install contract (#35).
 #
-# nss-mdns
-#   nss-mdns is the Name Service Switch module that resolves .local hostnames
-#   over mDNS, so `ping foo.local` resolves. Bluefin ships it
-#   (baselines/bluefin/rpms.tsv, nss-mdns 0.15.1-28.fc44); Utah does not, and
-#   Hummingbird's repository does not carry it either -- verified in
-#   repodata/primary.xml, where nss-mdns appears only as a Recommends of cups
-#   (a virtual provide) and never as an installable <name>. It is an
-#   image-level parity gap, not inherited from the copied base.toml contract
-#   (nss-mdns is not in packages/bluefin.toml) and not built by the
-#   utah-packages factory, so no repository Utah enables at runtime supplies it.
-#   Enabling avahi-daemon restores mDNS service browsing but not .local name
-#   resolution, which is what this module provides; the two are separate
-#   (found while reviewing #411). Returns once the factory builds nss-mdns for
-#   Hummingbird and utah-packages publishes the build; tracked by #499.
 packages = [
     "grub2-efi-x64-cdboot",
     "anaconda-live",
     "evolution-ews-core",
     "firefox",
     "fish",
-    "nss-mdns",
     "slitherer",
 ]
 
