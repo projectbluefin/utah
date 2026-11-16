@@ -281,6 +281,12 @@ disable_unit sysstat-rotate.timer
 # kanata replaces input-remapper and is opt-in, as on Dakota (#1222); see
 # 85-utah-desktop.preset.
 disable_unit kanata.service
+# kmscon draws the VT consoles, as on GNOME OS and Dakota (#1237); see
+# 85-utah-desktop.preset. getty@ goes first so its autovt@ alias is free for
+# kmsconvt@ (DefaultInstance=tty1); gdm.service.d/kmscon.conf hands tty1 over.
+disable_unit kmscon.service
+disable_unit getty@.service
+enable_unit kmsconvt@.service
 # Printing on demand, as Fedora's preset enables it for Bluefin; Hummingbird's
 # 99-default-disable would leave it off.
 enable_unit cups.socket

@@ -29,6 +29,19 @@ user), `scripts/configure-services.sh`, and `contracts/bluefin-desktop.toml`
   by writing that file and running `systemctl enable --now kanata`. `ydotool`
   brings Dakota's `80-ydotool.rules` (uinput to `input`, uaccess) and the
   `uinput` modules-load drop-in (utah-packages#1134).
+- The VT consoles are kmscon, as on GNOME OS and Dakota (#1237). The setup
+  follows gnome-build-meta `gnomeos-deps/kmscon.bst`:
+  - `80-kmscon.preset` disables `kmscon.service` and `getty@.service`, and
+    Utah's preset, `configure-services.sh` and the contract's `disabled`
+    list do the same.
+  - `kmsconvt@.service` is enabled. It has `DefaultInstance=tty1` and
+    `Alias=autovt@.service`, so logind spawns it on every VT, and its
+    `OnFailure=getty@%i.service` keeps a login if kmscon fails.
+  - `/etc/kmscon/kmscon.conf` sets `font-name=Adwaita Mono` (drawn by
+    `kmscon-pango`), and `gdm.service.d/kmscon.conf` sets
+    `Conflicts=`/`After=kmsconvt@tty1.service` so GDM takes tty1 over.
+
+  The serial `serial-getty@ttyS0` mask is unchanged.
 
 - Dakota's effective service state (#1233). Dakota has no system `disable *`
   preset, so a booted Dakota runs every installed unit with `[Install]` that

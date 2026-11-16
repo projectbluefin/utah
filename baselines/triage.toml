@@ -81,7 +81,7 @@ snapd = { status = "waived", reason = "Flatpak-first: Utah's app channels are Fl
 dbus = { status = "waived", reason = "Utah runs dbus-broker; dbus-launch is an X11 session helper" }
 wpa-supplicant = { status = "waived", reason = "Templated wpa_supplicant units; GNOME OS disables them by preset, and NetworkManager drives wpa_supplicant over D-Bus" }
 systemd = { status = "waived", reason = "GNOME OS systemd build: networkd (Utah manages networking with NetworkManager), sysupdate (Utah updates with bootc), and units from a newer systemd than Hummingbird ships" }
-kmscon = { status = "waived", reason = "GNOME OS userspace console; Utah keeps the kernel VT console" }
+kmscon = { status = "planned", area = "system-daemons", issue = "#1237", reason = "kmsconvt@ on the VTs with getty@ disabled, as GNOME OS and Dakota; needs the factory's kmscon (and a libtsm recipe)" }
 buildbox = { status = "waived", reason = "BuildStream remote execution; Dakota's build tooling, not a desktop feature" }
 buildstream2 = { status = "waived", reason = "BuildStream; Dakota's build tooling, not a desktop feature" }
 recc-wrapper = { status = "waived", reason = "BuildStream remote compilation wrapper" }

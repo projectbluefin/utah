@@ -246,6 +246,8 @@
         "iw",
         "kanata",
         "keyutils",
+        "kmscon",
+        "kmscon-pango",
         "krb5-workstation",
         "langpacks-en",
         "langpacks-fonts-en",
@@ -422,7 +424,7 @@
     }
   ],
   "totals": {
-    "installed": 367,
+    "installed": 369,
     "unavailable": 7
   },
   "unavailable": [

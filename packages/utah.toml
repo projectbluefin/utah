@@ -448,6 +448,12 @@ packages = [
     # docs/skills/desktop-contract/references/sudo-rs-uutils.md.
     "sudo-rs",
     "uutils-coreutils",
+    # kmscon on the VTs, as gnome-build-meta gnomeos-deps/kmscon.bst builds
+    # it (#1237): the pango renderer draws kmscon.conf's Adwaita Mono, which
+    # base.toml's adwaita-fonts-all supplies. Units and gdm drop-in: preset,
+    # configure-services.sh, system_files.
+    "kmscon",
+    "kmscon-pango",
     # Network file systems and Windows domain clients (the NFS family follows
     # in the second-wave block below).
     "cifs-utils",
@@ -1018,6 +1024,8 @@ parity = [
     "oo7-cli",
     "sudo-rs",
     "uutils-coreutils",
+    "kmscon",
+    "kmscon-pango",
     "cifs-utils",
     "rpcbind",
     "autofs",
