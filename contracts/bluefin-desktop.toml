@@ -207,6 +207,8 @@ files = [
   "/etc/gitconfig",
   # GNOME OS's opensc.module (#1257): keeps opensc out of GNOME's own daemons.
   "/etc/pkcs11/modules/opensc.module",
+  # Common's PipeWire drop-in; Utah no longer overrides it (#1267).
+  "/usr/share/pipewire/pipewire-pulse.conf.d/50-bluefin-bt-switch.conf",
 ]
 
 [configuration.file_contains]
@@ -396,6 +398,13 @@ files = [
 "/etc/pkcs11/modules/opensc.module" = [
   "module: opensc-pkcs11.so",
   "disable-in: goa-daemon gsd-smartcard evolution-source-registry evolution-calendar-factory gnome-shell",
+]
+# PipeWire 1.6 rejects a conf.d file with no assignments ("error loading
+# config ... Invalid argument" on every login). Common's copy carries an empty
+# pulse.cmd array since sha256:9faad517, so Utah dropped its override (#1267);
+# this keeps a Common regression from bringing the login error back.
+"/usr/share/pipewire/pipewire-pulse.conf.d/50-bluefin-bt-switch.conf" = [
+  "pulse.cmd = [ ]",
 ]
 
 [flatpak]

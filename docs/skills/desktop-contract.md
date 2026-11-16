@@ -189,8 +189,8 @@ one is pending a composefs boot check (see below):
 - `Creating mailbox file: No such file or directory` on every `useradd`:
   clean-stage drops `/var/spool/mail`. `tmpfiles.d/utah-mail.conf` recreates it.
 - `error loading config '.../50-bluefin-bt-switch.conf': Invalid argument`:
-  common's file is comments only, which PipeWire 1.6 rejects. Utah's copy
-  adds a no-op `pulse.cmd = [ ]`; drop it once common's copy parses.
+  PipeWire 1.6 rejects a conf.d file with no assignment. Common's copy now
+  carries `pulse.cmd = [ ]`, so Utah ships no override; the contract pins it (#1267).
 - `systemd-remount-fs.service: mount: /: fsconfig() failed: overlay: No
   changes allowed in reconfigure` (#585): systemd-remount-fs unconditionally
   remounts `/` read-write, but the composefs root is `ro` (`findmnt /` shows
