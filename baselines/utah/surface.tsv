@@ -461,6 +461,7 @@ bolt	/usr/bin/boltctl
 bolt	/usr/lib/systemd/system/bolt.service
 bolt	/usr/sbin/boltctl
 bootc	/usr/bin/bootc
+bootc	/usr/lib/systemd/system/bootc-aboot-reconcile.service
 bootc	/usr/lib/systemd/system/bootc-destructive-cleanup.service
 bootc	/usr/lib/systemd/system/bootc-fetch-apply-updates.service
 bootc	/usr/lib/systemd/system/bootc-fetch-apply-updates.timer
