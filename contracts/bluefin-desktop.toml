@@ -167,6 +167,10 @@ files = [
   "/usr/lib/systemd/system/uupd-manual.service",
   "/etc/polkit-1/rules.d/uupd.rules",
   "/etc/uupd/config.json",
+  # Dakota's Symbols Nerd Font fallback rule (bluefin/nerd-fonts-symbols.bst),
+  # shipped and enabled by the nerd-fonts-symbols package (#1240).
+  "/usr/share/fontconfig/conf.avail/10-nerd-font-symbols.conf",
+  "/etc/fonts/conf.d/10-nerd-font-symbols.conf",
 ]
 
 [configuration.file_contains]
@@ -298,6 +302,9 @@ files = [
 ]
 "/etc/uupd/config.json" = [
   '"bat-min-percent": 20',
+]
+"/etc/fonts/conf.d/10-nerd-font-symbols.conf" = [
+  "<family>Symbols Nerd Font</family>",
 ]
 
 [flatpak]
