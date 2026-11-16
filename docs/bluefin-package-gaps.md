@@ -62,10 +62,10 @@ exclusion stays test-enforced; CUDA stays out (7.68 GB baked in vs toolkit +
 2. Q2: Flatpak-first / container-CUDA posture — ~~permanent or temporary?~~ DECIDED: permanent (D2).
 
 ### D3 (DECIDED, still Draft): shells and fonts
-- fish stays OUT permanently — not a factory watch item, an exclusion.
-- zsh is wanted on the image (unblocks when the ruby4.0/texi2html buildroot
-  conflict resolves), but NOT as default shell — bash stays default; a
-  default-shell change is too controversial to bundle here.
+- Shells: superseded by #1230 (Dakota parity, 2026-11-16). fish ships, as on
+  GNOME OS and Dakota; zsh does not. bash stays the default shell. Common's
+  `/etc/zsh/*` files stay in the image unused, exactly as Dakota ships them
+  without zsh. (Was: fish out permanently, zsh wanted, #419.)
 - Core emoji (google-noto-emoji-color-fonts) is wanted, but NOT Bluefin's font
   sprawl — no nerd-fonts bulk, no math-fonts excess.
 3. Q3: factory-blocked list — ~~watch or fork?~~ DECIDED per D3; remainder

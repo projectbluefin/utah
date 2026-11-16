@@ -74,7 +74,7 @@ Bluefin's `base.toml` and is now edited by hand as Dakota parity work lands.
 | --- | --- |
 | Base manifest installed | **61** |
 | Utah additions (GNOME 51, base-image parity, device firmware, desktop services) | 257 |
-| Genuinely unavailable | **7** |
+| Genuinely unavailable | **6** |
 
 ## Known gaps
 
