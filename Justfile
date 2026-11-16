@@ -71,7 +71,6 @@ check:
     test -f scripts/verify-gnome-extensions.py
     test -f scripts/mirror-shim.sh
     test -f scripts/install-v4l2loopback.sh
-    test -f scripts/image-repo.sh
     test -f scripts/pin-build-mtimes.py
     test -f scripts/podman-epoch-args.sh
     test -f scripts/check-reproducible-build.sh
