@@ -219,6 +219,7 @@
         "gssproxy",
         "gst-editing-services",
         "gst-thumbnailers",
+        "gstreamer-plugins-rs",
         "gstreamer1-plugin-dav1d",
         "gstreamer1-plugin-libav",
         "gstreamer1-plugin-openh264",
@@ -458,7 +459,7 @@
     }
   ],
   "totals": {
-    "installed": 401,
+    "installed": 402,
     "unavailable": 9
   },
   "unavailable": [
