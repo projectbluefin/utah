@@ -132,6 +132,9 @@ packages = [
     "gnome-software-rpm-ostree",
     "gnome-terminal-nautilus",
     "google-noto-sans-cjk-fonts",
+    # oo7 is the Secret Service, as on Dakota (#1227; packages/utah.toml).
+    "gnome-keyring",
+    "gnome-keyring-pam",
     "podman-docker",
     "totem-video-thumbnailer",
     "yelp",

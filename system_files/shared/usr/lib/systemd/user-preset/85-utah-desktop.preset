@@ -28,6 +28,9 @@ enable mpris-proxy.service
 # autostart entries when an app is renamed.
 enable speech-dispatcher.socket
 enable xdg-desktop-portal-rewrite-launchers.service
+# The Secret Service starts with the session, as GNOME OS links oo7-daemon
+# into gnome-session.target.wants (core-deps/oo7-daemon.bst, #1227).
+enable oo7-daemon.service
 
 # Common installs the ChairLift GUI on login; enable globally at build time too.
 enable brew-preinstall.service

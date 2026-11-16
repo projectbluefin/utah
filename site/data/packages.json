@@ -292,6 +292,9 @@
         "numactl",
         "nvme-cli",
         "nvtop",
+        "oo7-cli",
+        "oo7-daemon",
+        "oo7-portal",
         "open-vm-tools",
         "openal-soft",
         "openconnect",
@@ -301,6 +304,7 @@
         "openvpn",
         "orca",
         "pam-u2f",
+        "pam_oo7",
         "pamu2fcfg",
         "papers-libs",
         "papers-nautilus",
@@ -447,7 +451,7 @@
     }
   ],
   "totals": {
-    "installed": 390,
+    "installed": 394,
     "unavailable": 9
   },
   "unavailable": [
