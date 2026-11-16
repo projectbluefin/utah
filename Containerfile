@@ -352,6 +352,12 @@ ARG UUPD_TIMER_SHA256=bbb5f098ec33d047bdef571e0bc112364df157e0f92d73e0febab703c4
 # own and cost forty seconds to commit a few megabytes. It lives in
 # scripts/mirror-shim.sh rather than inline, because as a bare && chain a
 # failure printed nothing at all -- see the comment at the top of that script.
+#
+# Utah's SELinux policy modules load here, before the desktop contract that
+# lists them under [selinux]: the module store is under read-only /usr once
+# booted (#551), so the build is the only place to change it. -n: no reload,
+# the build has no selinuxfs. utah_bootc_probe dontaudits bootc's expected
+# mac_admin probe from plain services (#1198; the .cil says why not allow).
 RUN --mount=type=bind,from=artwork,source=/out/branding,target=/tmp/utah-artwork-branding,ro \
     --mount=type=bind,from=common,source=/system_files/bluefin/usr/share/plymouth,target=/tmp/utah-common-plymouth,ro \
     mkdir -p /tmp/uupd && \
@@ -370,6 +376,7 @@ RUN --mount=type=bind,from=artwork,source=/out/branding,target=/tmp/utah-artwork
     glib-compile-schemas /usr/share/glib-2.0/schemas && \
     ENABLE_SSHD="${ENABLE_SSHD}" /usr/local/libexec/utah-configure-services && \
     /usr/local/libexec/utah-configure-branding && \
+    semodule -n -i /usr/share/selinux/packages/utah/utah_bootc_probe.cil && \
     /usr/local/libexec/utah-verify-desktop-contract /usr/share/utah/bluefin-desktop.toml && \
     /usr/local/libexec/utah-mirror-shim && \
     /usr/local/libexec/utah-verify-efi-chain && \
