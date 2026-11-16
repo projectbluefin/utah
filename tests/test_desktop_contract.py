@@ -345,7 +345,7 @@ class GnomeExtensionTests(unittest.TestCase):
     def shipped_tree(self, tmp, versions="51", uuids=None):
         # Modes as the build leaves them, independent of the caller's umask.
         base = Path(tmp) / "usr/share/gnome-shell/extensions"
-        for uuid in uuids if uuids is not None else extensions.SOURCE_EXTENSIONS:
+        for uuid in uuids if uuids is not None else extensions.EXTENSIONS:
             path = base / uuid / "metadata.json"
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps({"shell-version": [versions]}))
@@ -367,14 +367,14 @@ class GnomeExtensionTests(unittest.TestCase):
         # could not load those extensions ("Permission denied").
         with tempfile.TemporaryDirectory() as tmp:
             root = self.shipped_tree(tmp)
-            uuid = next(iter(extensions.SOURCE_EXTENSIONS))
+            uuid = extensions.EXTENSIONS[0]
             (root / "usr/share/gnome-shell/extensions" / uuid / "metadata.json").chmod(0o600)
             self.assertEqual(self.run_main(root), 1)
 
     def test_untraversable_extension_directory_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = self.shipped_tree(tmp)
-            uuid = next(iter(extensions.SOURCE_EXTENSIONS))
+            uuid = extensions.EXTENSIONS[0]
             directory = root / "usr/share/gnome-shell/extensions" / uuid
             directory.chmod(0o744)
             try:
@@ -385,13 +385,13 @@ class GnomeExtensionTests(unittest.TestCase):
     def test_world_writable_extension_file_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = self.shipped_tree(tmp)
-            uuid = next(iter(extensions.SOURCE_EXTENSIONS))
+            uuid = extensions.EXTENSIONS[0]
             (root / "usr/share/gnome-shell/extensions" / uuid / "metadata.json").chmod(0o666)
             self.assertEqual(self.run_main(root), 1)
 
     def test_missing_extension_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
-            uuids = list(extensions.SOURCE_EXTENSIONS)[1:]
+            uuids = extensions.EXTENSIONS[1:]
             self.assertEqual(self.run_main(self.shipped_tree(tmp, uuids=uuids)), 1)
 
     def test_extension_without_gnome_51_fails(self):
@@ -401,7 +401,7 @@ class GnomeExtensionTests(unittest.TestCase):
     def test_invalid_metadata_fails_instead_of_raising(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = self.shipped_tree(tmp)
-            uuid = next(iter(extensions.SOURCE_EXTENSIONS))
+            uuid = extensions.EXTENSIONS[0]
             (root / f"usr/share/gnome-shell/extensions/{uuid}/metadata.json").write_text("{")
             self.assertEqual(self.run_main(root), 1)
 
@@ -438,7 +438,7 @@ class GnomeExtensionTests(unittest.TestCase):
         self.assertEqual(line.removeprefix("enabled-extensions="), expected)
         for uuid in json.loads(expected.replace("'", '"')):
             with self.subTest(uuid=uuid):
-                self.assertIn(uuid, extensions.SOURCE_EXTENSIONS)
+                self.assertIn(uuid, extensions.EXTENSIONS)
 
 
 class ServiceMaskParityTests(unittest.TestCase):

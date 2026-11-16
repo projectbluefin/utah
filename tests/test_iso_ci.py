@@ -1384,12 +1384,9 @@ class BuildToolingRemovalTests(unittest.TestCase):
                          "expected exactly one build-tooling removal command")
         return lines[0]
 
-    def test_every_build_package_but_unzip_is_removed(self):
-        # unzip is in [parity] as well as [build]: Bluefin ships it to users.
+    def test_every_build_package_is_removed(self):
         line = self.remove_line()
         for pkg in self.build:
-            if pkg == "unzip":
-                continue
             self.assertIn(pkg, line, f"{pkg} from [build] is not removed")
 
     def test_removal_cleans_the_dependency_closure(self):

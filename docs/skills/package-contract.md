@@ -42,8 +42,9 @@ policy for changing them.
   the header comment of that file (cite it; do not move or copy it):
 
   - `[gnome]` — GNOME 51 desktop contract Hummingbird does not ship.
-  - `[build]` — toolchain needed to build the pinned GNOME extensions
-    (`scripts/build-gnome-extensions.sh`).
+  - `[build]` — toolchain for GSConnect's meson build
+    (`scripts/build-gnome-extensions.sh`); every other extension is a factory
+    RPM in `[parity]`.
   - `[parity]` — what Bluefin inherits from Fedora's base image and Hummingbird
     has in its repository but not in its bootable base; CI's package
     availability step resolves the real transaction and is the gate on every
@@ -358,7 +359,7 @@ describe the same image as its `surface.tsv`; after a refresh,
 [remove resolved triage entries](package-contract/references/factory-consumption.md#closing-baseline-gaps).
 
 Current counts, per the README "Parity with Dakota" section: 61 base manifest
-packages installed, 263 Utah additions (GNOME 51, base-image parity, device
+packages installed, 278 Utah additions (GNOME 51, base-image parity, device
 firmware, desktop services), 7 genuinely unavailable. `scripts/check-doc-counts.py` (part of
 `just check`) recomputes these from the manifests and fails if either
 document drifts from `site/data/packages.json`.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify Utah's bundled GNOME extensions are present and declare GNOME 51."""
+"""Verify Utah's GNOME extensions are present and declare GNOME 51."""
 
 from __future__ import annotations
 
@@ -8,82 +8,53 @@ import configparser
 import os
 import re
 import subprocess
+import tomllib
 from datetime import datetime, timezone
 import json
 import stat
 import sys
 from pathlib import Path
 
+# Extensions still built from a pinned submodule, by scripts/build-gnome-extensions.sh.
 SOURCE_EXTENSIONS = {
-    "appindicatorsupport@rgcjonas.gmail.com": "appindicatorsupport@rgcjonas.gmail.com/metadata.json",
-    "bazaar-integration@kolunmi.github.io": "tmp/bazaar-integration@kolunmi.github.io/src/metadata.json",
-    "blur-my-shell@aunetx": "blur-my-shell@aunetx/metadata.json",
-    "caffeine@patapon.info": "tmp/caffeine/caffeine@patapon.info/metadata.json",
-    "custom-command-list@storageb.github.com": "custom-command-list@storageb.github.com/metadata.json",
-    "dash-to-dock@micxgx.gmail.com": "dash-to-dock@micxgx.gmail.com/metadata.json",
-    "gradia-integration@alexandervanhee.github.io": "gradia-integration@alexandervanhee.github.io/src/metadata.json",
     "gsconnect@andyholmes.github.io": "gsconnect@andyholmes.github.io/data/metadata.json.in",
-    "tilingshell@ferrarodomenico.com": "tmp/tilingshell@ferrarodomenico.com/resources/metadata.json",
-    "BudsLink-Companion@maniacx.github.com": "BudsLink-Companion@maniacx.github.com/metadata.json",
-    "fuzzy-application-search@mkhl.codeberg.page": "fuzzy-application-search@mkhl.codeberg.page/metadata.json",
-    "quick-settings-audio-panel@rayzeq.github.io": "tmp/quick-settings-audio-panel/resources/metadata.json",
-    "quicksettings-audio-devices-hider@marcinjahn.com": "tmp/quicksettings-audio-devices-hider/resources/metadata.json",
-    "quicksettings-audio-devices-renamer@marcinjahn.com": "tmp/quicksettings-audio-devices-renamer/resources/metadata.json",
-    "tailscale-gnome-qs@tailscale-qs.github.io": "tmp/tailscale-gnome-qs/tailscale-gnome-qs@tailscale-qs.github.io/metadata.json",
-    "copyous@boerdereinar.dev": "tmp/copyous/resources/metadata.json",
-    "syncthing-toggle@rehhouari.github.com": "tmp/syncthing-toggle-rehhouari/metadata.json",
 }
 
+# Dakota's other extensions (elements/bluefin/gnome-shell-extensions.bst), each
+# installed from the factory RPM named here (#1235). packages/utah.toml
+# [parity] requests the packages; provenance is the installed NEVRA.
+PACKAGED_EXTENSIONS = {
+    "appindicatorsupport@rgcjonas.gmail.com": "gnome-shell-extension-appindicator",
+    "bazaar-integration@kolunmi.github.io": "gnome-shell-extension-bazaar-companion",
+    "blur-my-shell@aunetx": "gnome-shell-extension-blur-my-shell",
+    "BudsLink-Companion@maniacx.github.com": "gnome-shell-extension-budslink-companion",
+    "caffeine@patapon.info": "gnome-shell-extension-caffeine",
+    "custom-command-list@storageb.github.com": "gnome-shell-extension-custom-command-menu",
+    "dash-to-dock@micxgx.gmail.com": "gnome-shell-extension-dash-to-dock",
+    "fuzzy-application-search@mkhl.codeberg.page": "gnome-shell-extension-fuzzy-application-search",
+    "gradia-integration@alexandervanhee.github.io": "gnome-shell-extension-gradia-capture",
+    "power-status-color@projectbluefin.io": "gnome-shell-extension-power-status-color",
+    "quicksettings-audio-devices-hider@marcinjahn.com": "gnome-shell-extension-quicksettings-audio-devices-hider",
+    "quicksettings-audio-devices-renamer@marcinjahn.com": "gnome-shell-extension-quicksettings-audio-devices-renamer",
+    "syncthing-toggle@projectbluefin.io": "gnome-shell-extension-syncthing-toggle",
+    "tailscale-gnome-qs@tailscale-qs.github.io": "gnome-shell-extension-tailscale-qs",
+    "tilingshell@ferrarodomenico.com": "gnome-shell-extension-tilingshell",
+}
+
+EXTENSIONS = sorted({*SOURCE_EXTENSIONS, *PACKAGED_EXTENSIONS})
 
 EXTENSION_BASE = "system_files/shared/usr/share/gnome-shell/extensions/"
-BLING_BASE = Path("tmp/bluefin-bling/extensions")
-
-
-def bling_extensions(base: Path) -> dict[str, str]:
-    """Discover every bling folder; UUIDs must be safe directory/table names."""
-    folders = sorted(path for path in (base / BLING_BASE).glob("*/") if path.is_dir())
-    if not folders:
-        raise ValueError(f"no bluefin-bling extensions found under {base / BLING_BASE}")
-    extensions = {}
-    for folder in folders:
-        metadata = folder / "metadata.json"
-        try:
-            data = json.loads(metadata.read_text())
-        except (OSError, UnicodeError, json.JSONDecodeError) as error:
-            raise ValueError(f"invalid metadata {metadata}: {error}") from error
-        uuid = data.get("uuid") if isinstance(data, dict) else None
-        if not isinstance(uuid, str) or not re.fullmatch(r"[A-Za-z0-9_.+-]+@[A-Za-z0-9_.-]+", uuid):
-            raise ValueError(f"invalid uuid in {metadata}: {uuid!r}")
-        relative = str(metadata.relative_to(base))
-        if uuid in extensions or (uuid in SOURCE_EXTENSIONS and SOURCE_EXTENSIONS[uuid] != relative):
-            raise ValueError(f"duplicate uuid in {metadata}: {uuid}")
-        extensions[uuid] = relative
-    return extensions
-
-
-# The installed verifier has no submodule tree: tmp/ is removed by the build.
-# There, the source-generated provenance supplies the complete expected set.
-_SOURCE_BASE = Path(__file__).resolve().parents[1] / EXTENSION_BASE
-if _SOURCE_BASE.is_dir():
-    SOURCE_EXTENSIONS.update(bling_extensions(_SOURCE_BASE))
-
-ARCHIVES = {
-    "tilingshell@ferrarodomenico.com": "tilingshell",
-    "quick-settings-audio-panel@rayzeq.github.io": "qsap",
-    "quicksettings-audio-devices-hider@marcinjahn.com": "hider",
-    "quicksettings-audio-devices-renamer@marcinjahn.com": "renamer",
-    "copyous@boerdereinar.dev": "copyous",
-}
+MANIFEST = Path("packages/utah.toml")
+SCHEMA_PATH = re.compile(r'path="([^"]+)"')
 
 
 def source_provenance() -> list[dict]:
-    """Resolve every installed UUID to its checked-out, indexed gitlink."""
+    """Resolve every submodule extension to its checked-out, indexed gitlink."""
     modules = configparser.ConfigParser()
     modules.read(".gitmodules")
     paths = {modules[s]["path"]: modules[s]["url"] for s in modules.sections()}
     used = set()
     records = []
-    build = Path("scripts/build-gnome-extensions.sh").read_text()
     for uuid, relative in sorted(SOURCE_EXTENSIONS.items()):
         metadata = EXTENSION_BASE + relative
         matches = [path for path in paths if metadata.startswith(path + "/")]
@@ -98,19 +69,35 @@ def source_provenance() -> list[dict]:
         if commit != entry[1]:
             raise ValueError(f"{path}: checkout does not match gitlink")
         subprocess.run(["git", "-C", path, "diff", "--exit-code", "HEAD", "--"], check=True, stdout=subprocess.DEVNULL)
-        record = {"uuid": uuid, "repo": paths[path], "commit": commit}
-        if uuid in ARCHIVES:
-            prefix = ARCHIVES[uuid]
-            digest = re.search(rf'^{prefix}_sha256="([0-9a-f]{{64}})"$', build, re.M)
-            url = re.search(rf'^curl -fsSL "([^"\n]+)" -o "\$\{{{prefix}_zip\}}"$', build, re.M)
-            if not digest or not url:
-                raise ValueError(f"{uuid}: cannot resolve verified archive")
-            # The gitlink is reference source; the verified archive is what ships.
-            record["source_commit"] = record.pop("commit")
-            record["archive"] = {"url": url[1], "digest": "sha256:" + digest[1]}
-        records.append(record)
+        records.append({"uuid": uuid, "repo": paths[path], "commit": commit})
     if used != set(paths):
         raise ValueError(f"unrecorded submodules: {set(paths) - used}")
+    return records
+
+
+def manifest_errors(manifest: Path = MANIFEST) -> list[str]:
+    """Every packaged extension must be requested by the install manifest."""
+    requested = set(tomllib.loads(manifest.read_text()).get("parity", {}).get("packages", []))
+    return [
+        f"{uuid}: {package} is not in {manifest} [parity]"
+        for uuid, package in sorted(PACKAGED_EXTENSIONS.items())
+        if package not in requested
+    ]
+
+
+def packaged_provenance(root: Path) -> list[dict]:
+    """Record the installed package that owns each packaged extension."""
+    records = []
+    for uuid, package in sorted(PACKAGED_EXTENSIONS.items()):
+        path = Path("/usr/share/gnome-shell/extensions") / uuid
+        result = subprocess.run(
+            ["rpm", "--root", str(root), "-qf", "--qf", "%{NAME} %{EPOCHNUM}:%{VERSION}-%{RELEASE}.%{ARCH}\n", str(path)],
+            capture_output=True, text=True, check=False,
+        )
+        owners = result.stdout.split("\n")[0].split() if result.returncode == 0 else []
+        if len(owners) != 2 or owners[0] != package:
+            raise ValueError(f"{uuid}: expected {package} to own {path}, rpm reports {result.stdout.strip() or result.stderr.strip()!r}")
+        records.append({"uuid": uuid, "package": package, "nevra": f"{package}-{owners[1]}"})
     return records
 
 
@@ -120,6 +107,7 @@ def record_provenance(root: Path) -> None:
     records = json.loads(os.environ["GNOME_EXTENSION_PROVENANCE"])
     if sorted(r["uuid"] for r in records) != sorted(SOURCE_EXTENSIONS):
         raise ValueError("provenance UUID list differs from extension contract")
+    records += packaged_provenance(root)
     for record in records:
         metadata = json.loads((root / "usr/share/gnome-shell/extensions" / record["uuid"] / "metadata.json").read_text())
         record["declared_version"] = metadata.get("version")
@@ -134,7 +122,7 @@ def record_provenance(root: Path) -> None:
         "common": image(os.environ["COMMON_IMAGE"] + "@" + os.environ["COMMON_IMAGE_SHA"]),
         "brew": image(os.environ["BREW_IMAGE"] + "@" + os.environ["BREW_IMAGE_SHA"]),
         "wallpapers": image(os.environ["WALLPAPERS_IMAGE"] + "@" + os.environ["WALLPAPERS_IMAGE_SHA"]),
-        "gnome_extensions": records,
+        "gnome_extensions": sorted(records, key=lambda r: r["uuid"]),
     }
     destination = root / "usr/share/utah/provenance.json"
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -163,9 +151,36 @@ def version_validation_disabled(source: bool, root: Path) -> bool:
         return False
 
 
+def dconf_section_errors(root: Path) -> list[str]:
+    """Extension defaults in the distro dconf database must name a schema path.
+
+    GSettings resolves a key by the schema's declared path=, not by the
+    extension's UUID folder. A keyfile section no installed schema declares is
+    ignored without a word, and the extension keeps its compiled default.
+    """
+    declared = set()
+    for schema in (root / "usr/share/glib-2.0/schemas").glob("*.gschema.xml"):
+        declared.update(path.strip("/") for path in SCHEMA_PATH.findall(schema.read_text(errors="replace")))
+    errors = []
+    for keyfile in sorted((root / "etc/dconf/db/distro.d").glob("*")):
+        if not keyfile.is_file():
+            continue
+        parser = configparser.ConfigParser(interpolation=None, strict=False)
+        parser.optionxform = str
+        try:
+            parser.read_string(keyfile.read_text())
+        except (configparser.Error, UnicodeError) as error:
+            errors.append(f"{keyfile}: unreadable keyfile: {error}")
+            continue
+        for section in parser.sections():
+            if section.startswith("org/gnome/shell/extensions/") and section not in declared:
+                errors.append(f"{keyfile}: [{section}] matches no installed schema path; its keys are ignored")
+    return errors
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--source", action="store_true", help="check submodule sources")
+    parser.add_argument("--source", action="store_true", help="check submodule sources and the install manifest")
     parser.add_argument("--root", type=Path, default=Path("/"), help="image filesystem root")
     parser.add_argument("--print-provenance", action="store_true", help="emit checked source pins for build arguments")
     parser.add_argument("--record-provenance", action="store_true", help="write image provenance from build arguments")
@@ -174,27 +189,16 @@ def main() -> int:
         print(json.dumps(source_provenance(), separators=(",", ":")))
         return 0
 
-    base = (
-        Path("system_files/shared/usr/share/gnome-shell/extensions")
-        if args.source
-        else args.root / "usr/share/gnome-shell/extensions"
-    )
-    if not args.source and not _SOURCE_BASE.is_dir():
-        provenance = args.root / "usr/share/utah/provenance.json"
-        if "GNOME_EXTENSION_PROVENANCE" in os.environ:
-            records = json.loads(os.environ["GNOME_EXTENSION_PROVENANCE"])
-        else:
-            records = json.loads(provenance.read_text())["gnome_extensions"]
-        for record in records:
-            uuid = record["uuid"]
-            if not isinstance(uuid, str) or not re.fullmatch(r"[A-Za-z0-9_.+-]+@[A-Za-z0-9_.-]+", uuid):
-                raise ValueError(f"invalid provenance uuid: {uuid!r}")
-            SOURCE_EXTENSIONS.setdefault(uuid, f"{uuid}/metadata.json")
-
     validation_disabled = version_validation_disabled(args.source, args.root)
     failures: list[str] = []
-    for uuid, relative in SOURCE_EXTENSIONS.items():
-        path = base / (relative if args.source else f"{uuid}/metadata.json")
+    if args.source:
+        base = Path(EXTENSION_BASE)
+        checked = {uuid: base / relative for uuid, relative in SOURCE_EXTENSIONS.items()}
+        failures += manifest_errors()
+    else:
+        base = args.root / "usr/share/gnome-shell/extensions"
+        checked = {uuid: base / uuid / "metadata.json" for uuid in EXTENSIONS}
+    for uuid, path in checked.items():
         if not path.is_file():
             failures.append(f"{uuid}: missing {path}")
             continue
@@ -213,10 +217,11 @@ def main() -> int:
     if not args.source:
         # Extension.getSettings() prefers an extension's own schemas/ over the
         # system directory, where common's overrides are compiled in, and the
-        # image-wide compile cannot see a schema left there. The build installs
-        # every extension schema globally; none may stay behind.
+        # image-wide compile cannot see a schema left there. Every extension
+        # schema is installed globally; none may stay behind.
         for schemas in sorted(base.glob("*/schemas")):
             failures.append(f"{schemas}: extension-local schemas mask the global ones; install them in /usr/share/glib-2.0/schemas")
+        failures += dconf_section_errors(args.root)
         # gnome-shell runs as the user: an unreadable file stops the extension
         # loading ("Permission denied"), and a writable one lets any user
         # change code every session runs. Symlinks carry no meaningful mode.
@@ -234,7 +239,7 @@ def main() -> int:
     if failures:
         print("GNOME extension contract failed:", *failures, sep="\n  ", file=sys.stderr)
         return 1
-    print(f"GNOME extension contract passed: {len(SOURCE_EXTENSIONS)} extensions declare GNOME 51")
+    print(f"GNOME extension contract passed: {len(checked)} extensions declare GNOME 51")
     return 0
 
 

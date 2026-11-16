@@ -47,6 +47,14 @@ enable an extension to satisfy the test if that diverges from Dakota
 behavior — file the inconsistency upstream (`projectbluefin/testsuite`)
 instead, and keep the Utah decision recorded on the tracking issue.
 
+**Sync Folder toggle.** Since #1235 Utah ships Dakota's toggle,
+bling's `syncthing-toggle@projectbluefin.io` (RPM
+`gnome-shell-extension-syncthing-toggle`), not rehhouari's
+`syncthing-toggle@rehhouari.github.com`. Bling's toggle labels itself "Sync
+Folder" upstream, so the smoke check for the pill and menu header label needs
+no Utah rename any more; a scenario that names rehhouari's UUID is a testsuite
+expectation to retarget, not a Utah gap. The toggle stays opt-in, as on Dakota.
+
 **Failed systemd units at boot.** Read the unit names in the assertion, then
 the serial log. Utah-specific causes seen so far: `bootupctl
 adopt-and-update` failing on systemd-boot layouts (no `/boot/grub2` — guard

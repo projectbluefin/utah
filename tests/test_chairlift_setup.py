@@ -261,7 +261,7 @@ class HomebrewToolchainRetentionTests(unittest.TestCase):
 
     def test_configure_services_only_removes_extension_toolchain(self):
         # The build-time extension toolchain (`dbus-devel`, `glib2-devel`,
-        # `meson`, `sassc`) is removed before the image is shipped so the
+        # `meson`) is removed before the image is shipped so the
         # closure's auto-installed dependencies (ninja-build, *-devel chains)
         # do not pad the layer cache. The runtime toolchain (`make`, `gcc`,
         # `gcc-c++`) must NOT be removed; doing so would break Homebrew
@@ -279,7 +279,7 @@ class HomebrewToolchainRetentionTests(unittest.TestCase):
         # The script must still remove the build-only toolchain so the
         # post-removal dnf cleanup leaves the image with the expected
         # payload.
-        for required in ("dbus-devel", "glib2-devel", "meson", "sassc"):
+        for required in ("dbus-devel", "glib2-devel", "meson"):
             self.assertIn(
                 required, removed,
                 f"configure-services.sh must still remove {required}",

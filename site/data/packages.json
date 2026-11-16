@@ -179,6 +179,21 @@
         "gnome-epub-thumbnailer",
         "gnome-os-config-firewalld",
         "gnome-os-config-resolved-fallback-dns",
+        "gnome-shell-extension-appindicator",
+        "gnome-shell-extension-bazaar-companion",
+        "gnome-shell-extension-blur-my-shell",
+        "gnome-shell-extension-budslink-companion",
+        "gnome-shell-extension-caffeine",
+        "gnome-shell-extension-custom-command-menu",
+        "gnome-shell-extension-dash-to-dock",
+        "gnome-shell-extension-fuzzy-application-search",
+        "gnome-shell-extension-gradia-capture",
+        "gnome-shell-extension-power-status-color",
+        "gnome-shell-extension-quicksettings-audio-devices-hider",
+        "gnome-shell-extension-quicksettings-audio-devices-renamer",
+        "gnome-shell-extension-syncthing-toggle",
+        "gnome-shell-extension-tailscale-qs",
+        "gnome-shell-extension-tilingshell",
         "gnupg2-scdaemon",
         "google-noto-sans-math-fonts",
         "google-noto-sans-mono-vf-fonts",
@@ -372,16 +387,14 @@
       "packages": [
         "dbus-devel",
         "glib2-devel",
-        "meson",
-        "sassc",
-        "unzip"
+        "meson"
       ],
       "title": "Extension toolchain",
       "transient": true
     }
   ],
   "totals": {
-    "installed": 324,
+    "installed": 339,
     "unavailable": 7
   },
   "unavailable": [

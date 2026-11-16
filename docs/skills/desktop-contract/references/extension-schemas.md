@@ -11,9 +11,9 @@ override names a missing schema, so the build stayed green and GNOME opened
 the Activities overview at login. `Extension.getSettings()` also prefers an
 extension's own `schemas/` over the system directory when it exists, so a
 global copy beside the local one would still be masked. Fedora's extension
-RPMs install the schema globally and ship no local directory. Bluefin builds
-dash-to-dock from source and has the same gap (its image has no global
-dash-to-dock schema); its blur-my-shell comes from an RPM.
+RPMs install the schema globally and ship no local directory, and so do the
+factory's recipes for Bluefin's extensions; Utah installs every extension but
+GSConnect from those RPMs (#1235).
 
 The rule: every extension schema is installed in `/usr/share/glib-2.0/schemas`
 and no extension keeps a `schemas/` directory; every override section must
@@ -21,14 +21,10 @@ name a schema installed there.
 
 ## Enforcement
 
-- `scripts/build-gnome-extensions.sh` ends by validating each
-  `<uuid>/schemas/` with `glib-compile-schemas --strict --dry-run`, installing
-  each `*.gschema.xml` into the system directory (it never overwrites an
-  existing file), and removing the local directory with its compiled cache.
-  The per-extension compiles are gone. GSConnect's meson install already uses
-  the system directory. Quick Settings Audio Panel's bundled libpanel keeps a
-  compiled schema in `libs/libpanel/` and loads it itself; that is not an
-  extension `schemas/` directory and is left alone.
+- The extension RPMs install each `*.gschema.xml` into the system directory
+  and ship no `<uuid>/schemas/` (the factory recipes' `%check` asserts it).
+  GSConnect's meson install, the one extension still built in the image, also
+  uses the system directory.
 - Installed-mode `scripts/verify-gnome-extensions.py` fails if any
   `<uuid>/schemas` remains.
 - `[gsettings]` in `contracts/bluefin-desktop.toml`, checked by
@@ -51,7 +47,7 @@ name a schema installed there.
   `org.gnome.shell enabled-extensions` is exactly Dakota's default set.
 
 Tests: `GSettingsTests` in `tests/test_desktop_contract_verify.py` (fixtures in
-`tests/fixtures/gsettings/`) and `ExtensionSchemaTests` in
+`tests/fixtures/gsettings/`) and `InstalledExtensionTests` in
 `tests/test_gnome_extensions.py`.
 
 ## Checking an image or a machine
