@@ -162,6 +162,21 @@ docker://ghcr.io/projectbluefin/<image>:testing-<date>-<sha>
 docker://ghcr.io/projectbluefin/<image>:testing`); the ratchet resumes from
 there.
 
+**Upgrade and rollback gate.** The `lifecycle` job proves a booted machine
+can move from the last promoted build to this one and back. `resolve` reads the
+digest `:testing` serves before the run (the baseline) and compares it with the
+run's `utah` digest (the candidate). The job builds a debug ISO of the baseline,
+then runs `iso/scripts/lifecycle-e2e.sh`: install the baseline, `bootc switch`
+to the candidate, reboot into it with a graphical check, roll back, and reboot
+into the baseline. It runs for `utah` on the default install backend only; a
+composefs entry can join the matrix after #1131. The job summary names both
+digests and the `lifecycle-utah-ostree` artifact holds the phase JSON,
+`lifecycle-summary.json` and screendumps. `promote-to-testing` and
+`documentation` need it. When `:testing` already serves the candidate, or does
+not exist yet, `resolve` sets `lifecycle=skip`, the job is skipped (not passed)
+with a notice, and only that deliberate skip lets promotion go ahead; a failed,
+cancelled or upstream-skipped lifecycle job blocks it.
+
 **What the release checks.** See `release-cadence.md`: `execute-release.yml`
 requires the `e2e/post-testing/<image>` status for the digest `:testing` points
 at, on the commit that digest was built from.

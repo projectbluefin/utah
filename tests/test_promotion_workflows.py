@@ -71,8 +71,18 @@ class PromoteToTestingTests(unittest.TestCase):
 
     def test_the_job_can_write_statuses_and_stays_behind_the_full_matrix(self):
         self.assertEqual(self.job["permissions"]["statuses"], "write")
-        self.assertEqual(set(self.job["needs"]), {"resolve", "luks", "production-iso"})
-        self.assertNotIn("if", self.job)
+        self.assertEqual(set(self.job["needs"]), {"resolve", "luks", "production-iso", "lifecycle"})
+        # The only job condition is the lifecycle gate: every other need must
+        # succeed, and lifecycle may be absent only when resolve skipped it.
+        condition = self.job["if"]
+        for need in ["resolve", "luks", "production-iso"]:
+            self.assertIn(f"needs.{need}.result == 'success'", condition)
+        self.assertIn("needs.lifecycle.result == 'success'", condition)
+        self.assertIn("needs.lifecycle.result == 'skipped' && needs.resolve.outputs.lifecycle == 'skip'",
+                      condition)
+        self.assertIn("!cancelled()", condition)
+        self.assertNotIn("always()", condition)
+        self.assertNotIn("failure", condition)
 
     def test_promotions_are_serialised_by_the_workflow_concurrency_group(self):
         self.assertEqual(E2E["concurrency"]["group"], "utah-iso-e2e")
@@ -84,6 +94,52 @@ class PromoteToTestingTests(unittest.TestCase):
             if re.search(r"skopeo copy[^\n]*:testing", path.read_text()):
                 writers.append(path.name)
         self.assertEqual(writers, ["post-testing-e2e.yml"])
+
+
+class LifecycleGateTests(unittest.TestCase):
+    """The upgrade/rollback harness runs on the promoted digest and gates it."""
+
+    job = E2E["jobs"]["lifecycle"]
+    resolve = E2E["jobs"]["resolve"]
+
+    def test_it_runs_after_provenance_and_only_when_there_is_an_upgrade(self):
+        self.assertEqual(set(self.job["needs"]), {"resolve", "verify-provenance"})
+        self.assertEqual(self.job["if"], "needs.resolve.outputs.lifecycle == 'run'")
+        self.assertEqual(self.job["strategy"]["matrix"]["include"],
+                         [{"image": "utah", "backend": "ostree"}])
+        self.assertIn("${{ matrix.image }}", self.job["name"])
+
+    def test_baseline_is_testing_before_this_run_and_a_noop_is_skipped(self):
+        step = next(s for s in self.resolve["steps"] if s.get("id") == "baseline")
+        self.assertIn('docker://$repo:testing', step["run"])
+        self.assertIn('[ "$baseline" = "$candidate" ]', step["run"])
+        self.assertIn("manifest unknown|name unknown", step["run"])
+        self.assertEqual(self.resolve["outputs"]["lifecycle"], "${{ steps.baseline.outputs.lifecycle }}")
+
+    def test_the_iso_installs_the_baseline_and_the_harness_stages_the_candidate(self):
+        compose = step_named(self.job, "Compose disposable debug ISO of the baseline")
+        self.assertIn('"Utah CI Live" 1 "$BASELINE_REF"', compose["run"])
+        self.assertEqual(compose["env"]["BASELINE_REF"], "${{ needs.resolve.outputs.lifecycle_baseline }}")
+        run = step_named(self.job, "Run the upgrade and rollback lifecycle")
+        self.assertIn('lifecycle-e2e.sh "$PWD/output/utah-live.iso"', run["run"])
+        self.assertIn('"$BASELINE_REF" "$CANDIDATE_REF"', run["run"])
+        self.assertEqual(run["env"]["CANDIDATE_REF"],
+                         "${{ fromJSON(needs.resolve.outputs.digests)[matrix.image] }}")
+        self.assertNotIn("UTAH_E2E_COMPOSEFS_BACKEND", run["env"])
+
+    def test_evidence_is_kept_on_failure_but_debug_media_never_is(self):
+        upload = step_named(self.job, "Preserve lifecycle evidence even on failure")
+        self.assertEqual(upload["if"], "always()")
+        self.assertIn("utah-lifecycle-e2e/evidence/", upload["with"]["path"])
+        self.assertIn("utah-lifecycle-e2e/screenshots/", upload["with"]["path"])
+        self.assertNotIn("output/", upload["with"]["path"])
+        self.assertNotIn(".qcow2", upload["with"]["path"])
+
+    def test_promotion_and_documentation_wait_for_it(self):
+        for name in ["promote-to-testing", "documentation"]:
+            job = E2E["jobs"][name]
+            self.assertIn("lifecycle", job["needs"])
+            self.assertIn("needs.lifecycle.result == 'success'", job["if"])
 
 
 class ReleaseGateWiringTests(unittest.TestCase):
