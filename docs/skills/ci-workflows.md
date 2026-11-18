@@ -104,8 +104,8 @@ post-build verification workflows, not the complete workflow inventory:
   Its `promote-to-testing` job records per-digest evidence for the LUKS and
   production ISO jobs and moves `:testing` through a monotonic ratchet. The
   separate testsuite matrix is advisory: its failure makes the workflow red
-  but does not block the ratchet. The promotion to `main` also sets
-  `run_e2e: false`; neither fact establishes that this policy was approved.
+  but does not block the ratchet. The promotion to `main` sets
+  `run_e2e: false`; the release gate separately re-runs `smoke,common`.
   See [testsuite triage](ci-workflows/references/testsuite-triage.md) for
   known failures and [iso-e2e](ci-workflows/references/iso-e2e.md) for the
   ratchet.
