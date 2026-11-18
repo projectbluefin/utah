@@ -10,8 +10,8 @@ The testsuite matrix is advisory for promotion: `promote-to-testing` needs
 `resolve`, `luks`, and `production-iso`, not `testsuite`. A failed suite can
 therefore leave the workflow red while `:testing` advances. The separate
 testing-to-main promotion sets `run_e2e: false`. The release gate separately
-re-runs the `smoke,common` suites against the exact candidate digests; the
-advisory matrix also includes `nvidia`.
+re-runs the `smoke,common` suites against the exact candidate digests, the
+same suites the advisory matrix runs.
 
 Issue #1329 tracked a recurring red run with two causes. The common suite's
 layered-RPM scenario invoked `rpm-ostree`, which Utah does not ship; the
