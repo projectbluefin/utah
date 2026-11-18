@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Assert that Utah actually contains its Bluefin and GNOME 51 RPM contracts.
+"""Assert that Utah actually contains its base-manifest and GNOME 51 RPM contracts.
 
 Beyond package presence, this is the supply-chain attestation for issue #21:
 GNOME packages carry the promised major version and an approved factory
@@ -1078,7 +1078,7 @@ def _parse_sections(overlay: Path, resolved: list[str] | None, manifest: Path) -
     When `resolved` is given (an image build), the install set is the source of
     truth -- asserting it avoids the drift where install added something this
     check never recomputed. Otherwise the manifests are the source: the
-    bluefin parity packages live in the manifest's [fedora] section, and the
+    base manifest packages live in its [fedora] section, and the
     desktop/parity/service packages are read straight from the overlay sections.
     """
     if resolved is not None:
@@ -1274,7 +1274,7 @@ def main() -> int:
         package_sections[p] = "nvidia"
 
     print(
-        f"Verifying {len(bluefin)} Bluefin packages, {len(gnome)} GNOME desktop packages,"
+        f"Verifying {len(bluefin)} base manifest packages, {len(gnome)} GNOME desktop packages,"
         f" {len(parity)} parity packages, {len(hardware)} firmware packages,"
         f" {len(services)} desktop service packages, and {len(nvidia)} NVIDIA packages",
         flush=True,

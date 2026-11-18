@@ -97,7 +97,7 @@
   <section class="band alt" id="packages">
     <div class="head reveal">
       <h2>What the image ships</h2>
-      <p>Generated from <code>packages/bluefin.toml</code> and <code>packages/utah.toml</code>
+      <p>Generated from <code>packages/base.toml</code> and <code>packages/utah.toml</code>
          by <code>scripts/generate-site-data.py</code>, so this list is the one the
          image build actually resolves. It cannot drift: <code>just check</code> fails
          when it does.</p>
@@ -114,9 +114,10 @@
 
     <div class="gaps reveal" id="gaps">
       <h3>Known gaps</h3>
-      <p>Packages Bluefin ships that no repository Utah enables can provide. Each one
-         carries a tracking issue, by rule &mdash; this is the documented debt, not a
-         silent omission.</p>
+      <p>Packages the base manifest asks for that no repository Utah enables can
+         provide. Each one carries a tracking issue, by rule &mdash; this is the
+         documented debt, not a silent omission. What Dakota, Utah's parity target,
+         ships beyond that is listed in <a href="https://github.com/projectbluefin/utah/blob/main/baselines/GAP.md" rel="noopener">baselines/GAP.md</a>.</p>
       <ul class="gap-list" id="gap-list"></ul>
     </div>
   </section>

@@ -40,13 +40,15 @@ name a schema installed there.
 - `[gsettings.unresolved_overrides]` is the commented allowlist, one reason
   per schema. An entry that becomes installed, or that no override names any
   more, fails too, so the list cannot go stale:
-  - `org.gnome.software`: Bluefin excludes GNOME Software
-    (`packages/bluefin.toml` `[excluded]`); Utah ships Bazaar.
+  - `org.gnome.software`: the base manifest excludes GNOME Software
+    (`packages/base.toml` `[excluded]`), Dakota does not ship it, and Utah
+    ships Bazaar.
   - `com.github.stunkymonkey.nautilus-open-any-terminal`: neither
-    `packages/bluefin.toml` nor Bluefin's image ships the package, so there is
+    `packages/base.toml` nor Dakota ships the package, so there is
     no parity gap and no `[unavailable]` entry to track.
 - `[gsettings.values]` asserts what `gsettings get SCHEMA KEY` prints in the
-  composed image: dash-to-dock's `disable-overview-on-startup` is `true`.
+  composed image: dash-to-dock's `disable-overview-on-startup` is `true`, and
+  `org.gnome.shell enabled-extensions` is exactly Dakota's default set.
 
 Tests: `GSettingsTests` in `tests/test_desktop_contract_verify.py` (fixtures in
 `tests/fixtures/gsettings/`) and `ExtensionSchemaTests` in

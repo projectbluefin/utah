@@ -1,7 +1,7 @@
 ---
 name: desktop-contract
 version: "1.0"
-last_updated: "2026-11-07"
+last_updated: "2026-11-16"
 id: desktop-contract
 one_line_purpose: Maintain Bluefin Utah identity, Bluefin desktop defaults, and first-boot Flatpak policy.
 entry_point: docs/skills/desktop-contract.md
@@ -23,7 +23,7 @@ metadata:
 # Desktop Contract
 `contracts/bluefin-desktop.toml` is the runtime contract for Utah's
 Bluefin-derived desktop experience on top of Hummingbird. It is intentionally
-separate from `packages/bluefin.toml`: package parity proves RPMs; this file
+separate from `packages/base.toml`: package parity proves RPMs; this file
 proves Utah identity, Bluefin desktop defaults, and first-boot Flatpak policy
 (header comment, `contracts/bluefin-desktop.toml`). The contract is data; two
 verifiers enforce it — `scripts/verify-desktop-contract.py` for the TOML
@@ -69,28 +69,28 @@ The TOML's sections are the contract's table of contents:
   the pinned Hummingbird base supplies that key (fingerprint `567E…1D51`) alongside Utah's
   `RPM-GPG-KEY-redhat-release-2`, so no policy weakening or alias is needed.
 - **`[flatpak]`** — first-boot policy: the Flathub and TunaOS remotes, the Bazaar,
-  NautilusPreviewer (spacebar previews in Files) and Ghostty preinstalls, the `99-flatpaks.sh`
+  NautilusPreviewer (spacebar previews in Files), Ghostty and BudsLink preinstalls, the `99-flatpaks.sh`
   hook, and the system-flatpaks Brewfile whose app list the contract enumerates.
 - **`[media]`** — GStreamer decoders that must load, not merely be installed: `openh264dec`.
   The factory libav is built on `ffmpeg-free` (no H.264), so `avdec_h264` is not asserted (#1116).
-- **`[services]`** — systemd units the preset must enable: `gdm.service`, `avahi-daemon.service`,
-  `avahi-daemon.socket`, `switcheroo-control.service`, `bluetooth.service`,
+- **`[selinux]`** — policy modules `semodule -l` must list, loaded by the build: `utah_bootc_probe` ([SELinux modules](desktop-contract/references/selinux-modules.md), #1198).
+- **`[services]`** — systemd units the preset must enable: `gdm.service`, `accounts-daemon.service`,
+  `avahi-daemon.service`, `avahi-daemon.socket`, `bluetooth.service`, `switcheroo-control.service`,
   `ublue-system-setup.service`, `flatpak-preinstall.service`, `flatpak-nuke-fedora.service`,
-  `brew-setup.service`, `dconf-update.service`, `bootc-unified-storage.timer`,
-  `input-remapper.service`, `ModemManager.service`, `thermald.service`, `intel_lpmd.service`,
-  `sysstat.service`, `sysstat-collect.timer`, `sysstat-summary.timer`,
-  `projectbluefin-countme.timer`, `cups.socket`, `systemd-boot-update.service`, `uupd.timer`,
-  `bluefin-stats-refresh.timer`, `ublue-firstboot-date.service`, `ublue-booted-image.service`.
+  `brew-setup.service`, `dconf-update.service`, `bootc-unified-storage.timer`, `input-remapper.service`,
+  `ModemManager.service`, `power-profiles-daemon.service`, `thermald.service`, `projectbluefin-countme.timer`,
+  `cups.socket`, `systemd-boot-update.service`, `uupd.timer`, `bluefin-stats-refresh.timer`, `ublue-firstboot-date.service`,
+  `ublue-booted-image.service`. [Dakota service presets](desktop-contract/references/dakota-services.md): GNOME units, user units, opt-in sysstat.
   Update policy delegates background updates to `uupd.timer`; `bootc-fetch-apply-updates.timer` and
   `bootc-fetch-apply-updates.service` are masked in `/etc` and `/usr/lib` (and disabled in
   `85-utah-desktop.preset`) so cross-vendor `/etc` 3-way merges (e.g. switching from Bluefin) do not
   carry active `timers.target.wants` symlinks that bypass uupd staging or undo manual rollbacks.
-  Switchers can also manually verify or mask them if a local `/etc` symlink was preserved.
+  Switchers can mask them by hand if a local `/etc` symlink survived. uupd matches Dakota ([uupd](desktop-contract/references/uupd.md)).
 
   The last two units are Dakota parity (#675): install-date stamping and the
   booted-image snapshot Common's `/usr/libexec/ublue-booted-image` falls back to.
   `configure-services.sh` enables them, patches Common's fastfetch ([stats](desktop-contract/references/stats-refresh.md))
-  and `uwelcome.sh` (non-interactive shells skip the greeting), and checks image-info ([bootc compatibility](desktop-contract/references/image-info.md)).
+  and `uwelcome.sh` (non-interactive shells skip the greeting), checks image-info ([bootc compatibility](desktop-contract/references/image-info.md)), and applies [Dakota's desktop defaults](desktop-contract/references/dakota-desktop-defaults.md).
   Wallpaper rotation is deliberately NOT Dakota parity: Common's per-user `bluefin-dynamic-wallpaper`
   timer is hemisphere-aware and rotates live at month boundaries, while
   Dakota's boot-time month symlink is northern-only and stale until reboot, so
@@ -123,8 +123,8 @@ The TOML's sections are the contract's table of contents:
 
 The common image pinned in `Containerfile` (`COMMON_IMAGE_SHA`) includes
 `projectbluefin/common#1284`, which removed Warehouse and smile from Bluefin's
-default Brewfile. Utah follows that upstream default set; the ordered app
-contract changes with the pinned artifact rather than overriding its Brewfile.
+default Brewfile. Utah follows that set plus Dakota's BudsLink append ([Dakota desktop defaults](desktop-contract/references/dakota-desktop-defaults.md));
+the ordered app contract otherwise changes with the pinned artifact.
 Read the live pin from `Containerfile` — Renovate rewrites it there, so no
 digest is repeated in this document. The verifier still compares the actual
 inherited Brewfile.
@@ -149,7 +149,7 @@ On a fresh installed VM, check `systemctl --user status brew-preinstall`,
 settings persist and authenticated system update staging works; static gates
 prove image wiring, not a completed first-login download or GUI behavior.
 Homebrew native compilation invariants, the `/var/home` symlink for the brew prefix, and the polkit update-staging path are in the
-[ChairLift reference](desktop-contract/references/chairlift-runtime-invariants.md); `packages/bluefin.toml` `[fedora]` retains `make`, `gcc`, `gcc-c++`.
+[ChairLift reference](desktop-contract/references/chairlift-runtime-invariants.md); `packages/base.toml` `[fedora]` retains `make`, `gcc`, `gcc-c++`.
 
 ## NoNewPrivileges and SELinux domain transitions
 
@@ -161,7 +161,7 @@ known case (#443): it exited 255 every start, so mDNS never worked.
 `avahi-daemon.service.d/10-utah-selinux.conf` sets `NoNewPrivileges=no`; the
 daemon still runs confined as `avahi_t`. Spot others on a booted VM with
 `journalctl -b | grep nnp_transition` and `ps -eZ` (a daemon showing
-`init_t` is the symptom).
+`init_t` is the symptom). Policy modules: [SELinux modules](desktop-contract/references/selinux-modules.md).
 
 ## First-boot work must not gate graphical.target
 
@@ -261,7 +261,7 @@ contract and image-build CI run on its exact head instead of a contract-only
 dispatch. Hive review, required checks and the normal merge policy still
 govern landing, and no automated merge is enabled. Source metadata alone does
 not prove GNOME 51 runtime compatibility. Edit `.gitmodules` for source URL or branch changes; automation advances existing pins.
-Search Light was dropped: GNOME 51 removed `set_shader_source`, which its shader code calls, so it failed ISO tests.
+Search Light was dropped: GNOME 51 removed `set_shader_source`, which its shader code calls, so it failed ISO tests. Only Dakota's extension set is enabled by default ([Dakota desktop defaults](desktop-contract/references/dakota-desktop-defaults.md)).
 
 `scripts/verify-gnome-extensions.py` checks GNOME 51 support and provenance:
 
@@ -391,8 +391,8 @@ the desktop policy is applied explicitly. `scripts/configure-services.sh`
 mirrors bluefin-lts's `40-services.sh`: it applies the desktop presets,
 enables GDM, input-remapper, firmware updates, Tailscale, uupd, user setup and resolved,
 configures authselect, and removes the extension build toolchain before
-cleanup (Containerfile RUN comment; originated in `docs/building.md`'s former
-design section and now lives in this skill).
+cleanup. Lid/sleep stay at logind defaults; Dakota-copied sysctl, WirePlumber
+and polkit defaults: [Dakota system defaults](desktop-contract/references/dakota-system-defaults.md).
 
 Hummingbird's base does not include `systemd-resolved` by default; it is listed
 under `[services]` in `packages/utah.toml` and configured in
@@ -456,7 +456,8 @@ fails the build if `dnsmasq.service`, `rpcbind.service`/`.socket`,
 `ipp-usb.service`, `httpd.service`, `httpd.socket`, `httpd@.service` or
 `htcacheclean.service` is enabled; masked, static or absent units count as
 off (Apache httpd, #948: WebDAV runs its own per-session httpd, so port 80
-stays closed). Keep it in sync with `baselines/triage.toml`.
+stays closed). When Dakota parity work (`baselines/triage.toml`) adds another
+network daemon that must stay off, list it here too.
 
 ### The fwupd-refresh unit pins a static user (#385)
 

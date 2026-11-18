@@ -193,11 +193,11 @@ def main() -> int:
             args.engine, "run", "--rm", "--platform", "linux/amd64",
             "-v", f"{tmp}:/etc/utah-packages:ro,Z",
             "-v", f"{root / 'packages'}:/etc/yum.repos.d:ro,Z",
-            "-v", f"{args.manifest.resolve()}:/tmp/bluefin.toml:ro,Z",
+            "-v", f"{args.manifest.resolve()}:/tmp/base.toml:ro,Z",
             "-v", f"{overlay.resolve()}:/tmp/utah.toml:ro,Z",
             "-v", f"{root / 'scripts/install-packages.py'}:/tmp/install-packages.py:ro,Z",
             base, "python3", "/tmp/install-packages.py", "--resolve",
-            "/tmp/bluefin.toml", "/tmp/utah.toml",
+            "/tmp/base.toml", "/tmp/utah.toml",
         ], check=False).returncode
 
 

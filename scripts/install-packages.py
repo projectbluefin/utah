@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Install Utah's package contract: Bluefin's manifest plus the Utah overlay.
+"""Install Utah's package contract: the base manifest plus the Utah overlay.
 
-Mirrors projectbluefin/bluefin's build_files/base/03-packages.sh and
+packages/base.toml keeps the layout of projectbluefin/bluefin's base.toml it
+was frozen from, so this still mirrors build_files/base/03-packages.sh and
 build_files/shared/package-lib.sh, adapted to Utah's repositories: the pinned
 utah-packages factory repository plus Hummingbird's own.
 """
@@ -318,7 +319,7 @@ def main() -> int:
                         help="required unless --resolve-one is given")
     parser.add_argument(
         "overlay", type=Path, nargs="?", default=None,
-        help="defaults to utah.toml alongside the Bluefin manifest",
+        help="defaults to utah.toml alongside the base manifest",
     )
     args = parser.parse_args()
     if args.resolve_one is not None:
@@ -343,7 +344,7 @@ def main() -> int:
         # No rpmdb to consult off-image, so validate the manifests only.
         packages = contract(args.manifest, overlay, major=None)
         if not packages:
-            raise ValueError("Bluefin package manifest is empty")
+            raise ValueError("base package manifest is empty")
         unavailable = section(overlay, "unavailable")
         overlap = sorted(set(unavailable) & set(packages))
         if overlap:
@@ -352,7 +353,7 @@ def main() -> int:
             raise ValueError("utah-packages repository not found in install repositories")
         if "public-hummingbird-x86_64-rpms" not in repos:
             raise ValueError("public-hummingbird-x86_64-rpms repository not found in install repositories")
-        print(f"validated {len(packages)} Bluefin parity packages")
+        print(f"validated {len(packages)} contract packages")
         print(f"documented as unavailable: {len(unavailable)}")
         print(f"install repositories: {', '.join(repos)}")
         return 0

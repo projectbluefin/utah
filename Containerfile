@@ -3,14 +3,14 @@ ARG BASE_IMAGE=quay.io/hummingbird-community/os-minimal:latest@sha256:a98c8cf505
 # Keep this pin in Utah so an image build is reproducible and can be reviewed
 # against the exact package set it consumes.
 ARG PACKAGE_IMAGE=ghcr.io/projectbluefin/utah-packages
-ARG PACKAGE_IMAGE_SHA=sha256:523507b8bba899bac9b37fd50250bb2ee87e60cbdec9184c069a0eabbc00cd93
+ARG PACKAGE_IMAGE_SHA=sha256:744c4632cca27c059905779911b4db3269ff069825372c1ba6c8fbf6668ed3d0
 # CI keeps PACKAGE_IMAGE_SHA pinned. PACKAGE_IMAGE_REF supports a local image
 # in containers-storage, where no registry digest is available.
 ARG PACKAGE_IMAGE_REF=${PACKAGE_IMAGE}@${PACKAGE_IMAGE_SHA}
 ARG COMMON_IMAGE=ghcr.io/projectbluefin/common
-ARG COMMON_IMAGE_SHA=sha256:166f9353e80f7e29010517c9fdbdaa6c7c11a95edf6019a82abfbdb601f4fc04
+ARG COMMON_IMAGE_SHA=sha256:70babbf2cb86cbdc35a8431ba5146f4a4ec809e4ec1ffd63cdf7a6397b1ca488
 ARG BREW_IMAGE=ghcr.io/ublue-os/brew
-ARG BREW_IMAGE_SHA=sha256:2993b28cf9a54efebdc418ef42228618f5c68e8b931430f2d60eddc190e30016
+ARG BREW_IMAGE_SHA=sha256:9e0492dbc471258657564c94dae18b58dd96ddb998a06f2b15e8209efb48042b
 # Bluefin wallpapers, taken straight from the artwork repository's own image
 # rather than only through Common's pin of it, so wallpaper freshness does not
 # wait on a Common release. It is the multi-arch index digest: the contents are
@@ -76,7 +76,7 @@ COPY Containerfile /usr/share/utah/agent/build-source.Containerfile
 COPY .gitmodules /usr/share/utah/agent/gitmodules
 COPY config/flavors.json /usr/share/utah/agent/flavors.json
 COPY scripts/build-gnome-extensions.sh /usr/share/utah/agent/build-gnome-extensions.sh.txt
-COPY packages/bluefin.toml packages/utah.toml contracts/bluefin-desktop.toml /usr/share/utah/
+COPY packages/base.toml packages/utah.toml contracts/bluefin-desktop.toml /usr/share/utah/
 COPY packages/hummingbird.repo packages/nvidia-container.repo packages/utah-packages.repo /etc/yum.repos.d/
 COPY packages/RPM-GPG-KEY-redhat-release-2 /etc/pki/rpm-gpg/
 COPY scripts/install-packages.py \
@@ -97,7 +97,6 @@ COPY scripts/install-packages.py \
      scripts/regenerate-initramfs.sh \
      iso/scripts/live-kernel.py \
      scripts/install-v4l2loopback.sh \
-     scripts/image-repo.sh \
      /tmp/utah-scripts/
 COPY --from=common /system_files/shared /tmp/utah-common
 COPY --from=common /system_files/bluefin /tmp/utah-bluefin
@@ -218,8 +217,7 @@ RUN --mount=type=bind,from=v4l2loopback,source=/out,target=/tmp/utah-v4l2loopbac
                 fix-home-labels.sh:utah-fix-home-labels \
                 regenerate-initramfs.sh:utah-regenerate-initramfs \
                 live-kernel.py:utah-live-kernel \
-                install-v4l2loopback.sh:utah-install-v4l2loopback \
-                image-repo.sh:utah-image-repo; do \
+                install-v4l2loopback.sh:utah-install-v4l2loopback; do \
       install -Dm 0755 "/tmp/utah-inputs/tmp/utah-scripts/${pair%%:*}" "/usr/local/libexec/${pair##*:}" || exit 1; \
     done && \
     /usr/local/libexec/utah-install-fedora-kernel check && \
@@ -283,9 +281,9 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
     # above it (tests/test_hummingbird_repo_day.py).
     : > /etc/crypttab && \
     /usr/local/libexec/utah-install-packages \
-      /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
+      /usr/share/utah/base.toml /usr/share/utah/utah.toml && \
     IMAGE_FLAVOR=main /usr/local/libexec/utah-verify-rpm-contract \
-      /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
+      /usr/share/utah/base.toml /usr/share/utah/utah.toml && \
     /usr/local/libexec/utah-fix-home-labels && \
     DNF="$(command -v dnf5 || command -v dnf)" && \
     "$DNF" clean all && rm -rf /var/cache/libdnf5 /var/cache/dnf && \
@@ -327,11 +325,12 @@ ARG GNOME_EXTENSION_PROVENANCE
 # ENABLE_SSHD=1, following tunaOS's debug-image convention.
 ARG ENABLE_SSHD=0
 # Renovate can update this pinned release independently of the base image.
+# The version follows Dakota's elements/bluefin/uupd.bst (its x86_64 source).
 # UUPD_SHA256 is the x86_64 tarball digest from the release's published
 # uupd_<version>_checksums.txt; a mutable download that executed in the image
 # is otherwise unverified. Both move together, so Renovate updates both.
-ARG UUPD_VERSION=v1.4.0
-ARG UUPD_SHA256=c7463f193cd35b92cde2ee05496501d6ac13808899bd26e17e027b7ee9ee1acc
+ARG UUPD_VERSION=v1.5.5
+ARG UUPD_SHA256=d8d420a153de11589abad3292eef2131a75ac3487414065a2661a558ef0d027c
 # The two systemd units come from raw.githubusercontent at the same tag, and a
 # git tag move changes what raw.* serves for them without touching the release
 # asset the checksum above covers. uupd.service runs as root on a timer, so
@@ -353,6 +352,12 @@ ARG UUPD_TIMER_SHA256=bbb5f098ec33d047bdef571e0bc112364df157e0f92d73e0febab703c4
 # own and cost forty seconds to commit a few megabytes. It lives in
 # scripts/mirror-shim.sh rather than inline, because as a bare && chain a
 # failure printed nothing at all -- see the comment at the top of that script.
+#
+# Utah's SELinux policy modules load here, before the desktop contract that
+# lists them under [selinux]: the module store is under read-only /usr once
+# booted (#551), so the build is the only place to change it. -n: no reload,
+# the build has no selinuxfs. utah_bootc_probe dontaudits bootc's expected
+# mac_admin probe from plain services (#1198; the .cil says why not allow).
 RUN --mount=type=bind,from=artwork,source=/out/branding,target=/tmp/utah-artwork-branding,ro \
     --mount=type=bind,from=common,source=/system_files/bluefin/usr/share/plymouth,target=/tmp/utah-common-plymouth,ro \
     mkdir -p /tmp/uupd && \
@@ -371,6 +376,7 @@ RUN --mount=type=bind,from=artwork,source=/out/branding,target=/tmp/utah-artwork
     glib-compile-schemas /usr/share/glib-2.0/schemas && \
     ENABLE_SSHD="${ENABLE_SSHD}" /usr/local/libexec/utah-configure-services && \
     /usr/local/libexec/utah-configure-branding && \
+    semodule -n -i /usr/share/selinux/packages/utah/utah_bootc_probe.cil && \
     /usr/local/libexec/utah-verify-desktop-contract /usr/share/utah/bluefin-desktop.toml && \
     /usr/local/libexec/utah-mirror-shim && \
     /usr/local/libexec/utah-verify-efi-chain && \
@@ -410,7 +416,7 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
       main|nvidia) ;; \
     esac && \
     IMAGE_FLAVOR="${IMAGE_FLAVOR}" /usr/local/libexec/utah-verify-rpm-contract \
-      /usr/share/utah/bluefin.toml /usr/share/utah/utah.toml && \
+      /usr/share/utah/base.toml /usr/share/utah/utah.toml && \
     /usr/local/libexec/utah-regenerate-initramfs && \
     # The package repository is now only ever bind mounted, so it is absent from
     # the committed image. Flip it disabled here -- the last step that installs

@@ -2,7 +2,7 @@
 """Generate the status page's package data from the shipped manifests.
 
 The page must not carry a hand-maintained package list: it would drift from
-packages/bluefin.toml and packages/utah.toml the first time either changed,
+packages/base.toml and packages/utah.toml the first time either changed,
 and a status page that lies is worse than no status page. The grid is built
 from the same functions install-packages.py uses to resolve the real install
 set, so the counts on the page are the counts the image build asks for.
@@ -124,7 +124,7 @@ def _date(value: str) -> str:
 
 def build(root: Path, generated_at: str | None = None) -> dict:
     installer = load_installer()
-    base = root / "packages" / "bluefin.toml"
+    base = root / "packages" / "base.toml"
     overlay = root / "packages" / "utah.toml"
     section = installer.section
 
@@ -140,16 +140,16 @@ def build(root: Path, generated_at: str | None = None) -> dict:
             groups.append({"id": key, "title": title, "blurb": blurb,
                            "transient": key in TRANSIENT, "packages": names})
 
-    # Everything the Bluefin contract asks for that Utah does not override.
+    # Everything the base manifest asks for that Utah's overlay does not override.
     contract = installer.contract(base, overlay, None)
-    bluefin = sorted(name for name in contract if name not in overlay_names)
+    base_names = sorted(name for name in contract if name not in overlay_names)
     groups.insert(0, {
-        "id": "bluefin",
-        "title": "Bluefin contract",
-        "blurb": "Packages Utah installs because Bluefin's own manifest asks "
-                 "for them. This file is a byte-for-byte copy of upstream's.",
+        "id": "base",
+        "title": "Base manifest",
+        "blurb": "Packages Utah installs because its base manifest asks for "
+                 "them. Frozen from Bluefin's base.toml, edited by hand since.",
         "transient": False,
-        "packages": bluefin,
+        "packages": base_names,
     })
 
     return {
