@@ -147,8 +147,9 @@ making every open pull request rebase and rebuild after each merge.
 
 Since 2026-11-18 `main` requires the merge queue (ruleset 22705160: squash,
 groups of up to 5, 120-minute check timeout, merge only when every check
-passes). Strict freshness stays on until a queue group enqueued by an App is
-observed green.
+passes). Strict freshness is off since 2026-11-18, after the first queue group
+the hive enqueued (#1335) passed: the queue tests each entry on top of `main`
+and the entries ahead of it instead.
 
 Automations that merge into `main`, and what each needs under a required
 queue:
@@ -164,16 +165,14 @@ Prow's App token asks for contents, issues, pull requests, commit statuses and
 Actions write: `statuses:write` for exact-head LGTM binding and `actions:write`
 for `/test`, `/retest` and `/ok-to-test`. The org's mergeraptor installation
 grants all five (`statuses:write` accepted 2026-11-14,
-projectbluefin/.project#36); chairlift and common run the same caller. Keep
-strict freshness until a `merge_group` run that an App enqueued has been
-observed here.
+projectbluefin/.project#36); chairlift and common run the same caller.
 
 ## Unattended landing with strict freshness
 
 Arm GitHub's **native auto-merge** on a PR to land it unattended: Hive, a
 Renovate rule with platform automerge enabled, or a maintainer can do this.
-Merely opening a PR does not arm it. Required checks, reviews and the strict
-up-to-date rule still apply; this automation does not bypass or relax them.
+Merely opening a PR does not arm it. Required checks, reviews and the merge
+queue still apply; this automation does not bypass or relax them.
 
 `.github/workflows/update-armed-prs.yml` runs on every push to `main`, manual
 dispatch on `main`, and at minutes 17 and 47 each hour. It paginates open PRs
