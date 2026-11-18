@@ -6,6 +6,20 @@
 not harness bugs. Triage in this order; each step names where its evidence
 lives.
 
+The testsuite matrix is advisory for promotion: `promote-to-testing` needs
+`resolve`, `luks`, and `production-iso`, not `testsuite`. A failed suite can
+therefore leave the workflow red while `:testing` advances. The separate
+testing-to-main promotion sets `run_e2e: false`. The release gate separately
+re-runs the `smoke,common` suites against the exact candidate digests; the
+advisory matrix also includes `nvidia`.
+
+Issue #1329 tracks a recurring red run: the common suite's layered-RPM
+scenario invokes `rpm-ostree`, which Utah does not ship, and the NVIDIA suite
+is blocked when every scenario needs hardware absent from the CI VM. Check
+the pinned testsuite revision and each run's results before attributing a
+failure to either cause; investigate other failures independently. Do not
+install `rpm-ostree` or suppress the hardware suite merely to turn CI green.
+
 ## Where the evidence is
 
 - Per-leg `e2e-results-<image>-<suite>/results.json` artifacts: feature and
