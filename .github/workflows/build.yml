@@ -69,7 +69,7 @@ jobs:
   pinned_fetches:
     permissions:
       contents: read
-    uses: projectbluefin/actions/.github/workflows/reusable-pinned-fetches.yml@75348afb3a34c6006a3d3da51e51c9a3818b2616 # v1
+    uses: projectbluefin/actions/.github/workflows/reusable-pinned-fetches.yml@3eada4b49c6a992bb5e57ff6eaf8fe2ec1daea62 # actions#731 validation, do not merge
     with:
       mode: fail
 
