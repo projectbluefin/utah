@@ -286,7 +286,7 @@ class EvidenceTests(unittest.TestCase):
         self.assertIn("output/utah-live.iso.sha256", artifact["with"]["path"])
         for name in ["promote-to-testing", "documentation"]:
             self.assertIn("production-iso", jobs[name]["needs"])
-            self.assertNotIn("if", jobs[name])
+            self.assertIn("needs.production-iso.result == 'success'", jobs[name]["if"])
 
     def test_debug_images_and_test_disks_are_not_uploaded(self):
         import yaml
