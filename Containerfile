@@ -455,10 +455,12 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
 # `useradd --create-home` fails on a dangling symlink -- the installer chroot
 # on a fresh install, the tacklebox customize container, and the live ISO
 # build all broke with "cannot create directory /home", exit 12 (#602).
+# GRUB can report the ESP to systemd, which chooses /efi when /boot is busy.
+# The immutable root cannot create that mountpoint at boot (#1326).
 RUN --mount=type=bind,from=inputs,source=/tmp/utah-scripts,target=/utah-build-tools,ro \
     /usr/local/libexec/utah-fix-home-labels --check && \
     /usr/local/libexec/utah-clean-stage && \
-    mkdir -p /var/home && \
+    mkdir -p /var/home /efi && \
     bootc container lint --fatal-warnings --skip nonempty-boot && \
     python3 /utah-build-tools/pin-build-mtimes.py
 
