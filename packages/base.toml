@@ -77,7 +77,7 @@ packages = [
     "libblockdev-mpath",
     "libcamera-gstreamer",
     "libcamera-tools",
-    # Runtime dependencies for the maintained Copyous extension (#1210).
+    # Bluefin base packages (libgda #106); Copyous, their former consumer, is no longer shipped (#1235).
     "libgda",
     "libgda-sqlite",
     "libratbag-ratbagd",
