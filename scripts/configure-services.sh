@@ -87,7 +87,11 @@ enable_unit dconf-update.service
 enable_unit tailscaled.service
 enable_unit uupd.timer
 enable_unit projectbluefin-countme.timer
-enable_unit bluefin-stats-refresh.timer
+# Dakota's two monthly-wallpaper units (#1266): ublue-wallpaper-month from
+# bluefin/wallpaper-month.bst and bluefin-wallpaper-month from common.bst. See
+# the zz0 check below for why nothing reads the links they keep.
+enable_unit ublue-wallpaper-month.service
+enable_unit bluefin-wallpaper-month.service
 enable_unit ublue-system-setup.service
 enable_unit systemd-resolved.service
 # See the preset: gated on systemd-boot by drop-in, skipped elsewhere (#363).
@@ -106,10 +110,25 @@ enable_unit bluefin-remove-installer.service
 # Apply Dakota's runtime desktop integrations onto common's files. Each patch
 # is guarded: already-patched is a no-op, an unrecognized upstream file fails
 # the build loudly instead of silently shipping unpatched behavior.
-# Wallpaper rotation stays with Common's per-user bluefin-dynamic-wallpaper
-# timer (hemisphere-aware, live month-boundary rotation) rather than Dakota's
-# boot-time month symlink: repointing the default would stand the Common
-# rotator down with no replacement until reboot (#675 decision, #732 review).
+# Monthly wallpaper, as Dakota's effective image has it (#1266): both month
+# units keep their links current, but the default stays common's zz0 value.
+# Dakota's common.bst repoints zz0 from 12-bluefin.xml to
+# /var/lib/ublue-os/current-bluefin.xml, and common names another month, so
+# that sed matches nothing (projectbluefin/dakota#1902) and common's per-user,
+# hemisphere-aware bluefin-dynamic-wallpaper rotator stays in charge. Fail if
+# common ever names 12-bluefin.xml: Dakota's repoint would then take effect
+# there, and Utah has to follow it. The contract fails the build if common
+# drops the file.
+ZZ0_OVERRIDE=/usr/share/glib-2.0/schemas/zz0-bluefin-modifications.gschema.override
+if [ -f "${ZZ0_OVERRIDE}" ]; then
+    if grep -qF 'file:///usr/share/backgrounds/bluefin/12-bluefin.xml' "${ZZ0_OVERRIDE}"; then
+        echo "ERROR: ${ZZ0_OVERRIDE} names 12-bluefin.xml, so Dakota's current-bluefin.xml repoint now applies -- re-fit it (projectbluefin/dakota#1902)" >&2
+        exit 1
+    elif ! grep -qE "^picture-uri='file:///usr/share/backgrounds/bluefin/[0-9]{2}-bluefin\.xml'$" "${ZZ0_OVERRIDE}"; then
+        echo "ERROR: ${ZZ0_OVERRIDE} changed upstream -- re-check Dakota's wallpaper repoint (projectbluefin/dakota#1902)" >&2
+        exit 1
+    fi
+fi
 # Installation date for fastfetch: read the first-boot timestamp instead of
 # inferring the image age from /var/log timestamps.
 FASTFETCH_JSONC=/usr/share/ublue-os/fastfetch.jsonc
@@ -123,21 +142,44 @@ if [ -f "${FASTFETCH_JSONC}" ]; then
         exit 1
     fi
 fi
-# Community stats for fastfetch: read what bluefin-stats-refresh.service last
-# fetched, and fall back to the build-time placeholder until it has run once.
-# Common reads only the /usr/share/ublue-os copy, which is read-only at runtime,
-# so without this the banner shows the placeholder forever (#860).
-STATS_CACHE=/var/cache/bluefin-stats
+# Weekly community stats: Dakota drops common's two fastfetch lines and the
+# break after them (patches/common/0006-fastfetch-drop-weekly-stats.patch)
+# and fetches nothing at runtime, so Utah does the same (#1266). Already
+# dropped is a no-op; any other shape fails the build.
 if [ -f "${FASTFETCH_JSONC}" ]; then
-    if grep -qF "${STATS_CACHE}/" "${FASTFETCH_JSONC}"; then
+    python3 - "${FASTFETCH_JSONC}" <<'PY'
+import re
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8") as f:
+    text = f.read()
+stats = ("/usr/share/ublue-os/fastfetch-user-count", "/usr/share/ublue-os/bazaar-install-count")
+if not any(stat in text for stat in stats):
+    sys.exit(0)
+# One object per stat: its lines up to the closing brace, which no inner line
+# matches (the format strings carry {1}, so a brace-free match cannot work).
+body = r'(?:(?![ \t]*\},?\n)[^\n]*\n)*?'
+entry = r'\{\n' + body + r'[ \t]*"text": "cat %s",\n' + body + r'[ \t]*\},\s*'
+pattern = "".join(entry % re.escape(stat) for stat in stats) + r'"break",\s*'
+text, count = re.subn(pattern, "", text)
+if count != 1:
+    sys.exit(f"ERROR: {path} changed upstream -- re-fit Dakota's weekly-stats drop (patches/common/0006)")
+with open(path, "w", encoding="utf-8") as f:
+    f.write(text)
+PY
+fi
+# Ghostty's skeleton config follows GNOME's light/dark style, as Dakota
+# patches it (patches/common/0002-ghostty-dual-theme.patch, #1266).
+GHOSTTY_SKEL=/etc/skel/.config/ghostty/config.ghostty
+GHOSTTY_DUAL_THEME='theme = light:Catppuccin Latte,dark:Catppuccin Mocha'
+if [ -f "${GHOSTTY_SKEL}" ]; then
+    if grep -qxF "${GHOSTTY_DUAL_THEME}" "${GHOSTTY_SKEL}"; then
         : already patched
-    elif grep -qF '"cat /usr/share/ublue-os/fastfetch-user-count"' "${FASTFETCH_JSONC}" \
-        && grep -qF '"cat /usr/share/ublue-os/bazaar-install-count"' "${FASTFETCH_JSONC}"; then
-        for stat in fastfetch-user-count bazaar-install-count; do
-            sed -i "s#\"cat /usr/share/ublue-os/${stat}\"#\"cat ${STATS_CACHE}/${stat} 2>/dev/null || cat /usr/share/ublue-os/${stat}\"#" "${FASTFETCH_JSONC}"
-        done
+    elif grep -qxF 'theme = Catppuccin Mocha' "${GHOSTTY_SKEL}"; then
+        sed -i "s/^theme = Catppuccin Mocha\$/${GHOSTTY_DUAL_THEME}/" "${GHOSTTY_SKEL}"
     else
-        echo "ERROR: ${FASTFETCH_JSONC} changed upstream -- re-fit the community-stats patch (see bluefin-stats-refresh.service)" >&2
+        echo "ERROR: ${GHOSTTY_SKEL} changed upstream -- re-fit Dakota's dual-theme patch (patches/common/0002)" >&2
         exit 1
     fi
 fi
@@ -193,10 +235,6 @@ fi
 rm -f /usr/share/applications/system-update.desktop \
     /usr/share/applications/discourse.desktop \
     /usr/share/applications/documentation.desktop
-# input-remapper is installed by Bluefin's package set, but without its root
-# daemon running, udev autoload fails on input devices and the GUI prompts for
-# root credentials on launch. Enable it next to the desktop units; see #99.
-enable_unit input-remapper.service
 enable_unit ModemManager.service
 # Power profiles and thermal management as Dakota ships them (#388):
 # power-profiles-daemon, not TuneD, and no intel_lpmd.
@@ -240,6 +278,9 @@ disable_unit sysstat.service
 disable_unit sysstat-collect.timer
 disable_unit sysstat-summary.timer
 disable_unit sysstat-rotate.timer
+# kanata replaces input-remapper and is opt-in, as on Dakota (#1222); see
+# 85-utah-desktop.preset.
+disable_unit kanata.service
 # Printing on demand, as Fedora's preset enables it for Bluefin; Hummingbird's
 # 99-default-disable would leave it off.
 enable_unit cups.socket
@@ -380,6 +421,11 @@ authselect enable-feature with-mdns4
 # dakota-config-uupd (Dakota's elements/bluefin/uupd.bst), which replaces
 # Common's four-a-day uupd.timer with the daily 04:00 one, as on Dakota.
 install -Dm0755 /tmp/uupd/uupd /usr/bin/uupd
+# Common ships its own /etc/uupd/config.json, so rpm installs the package's
+# copy as .rpmnew; Dakota's hardware-check config must win.
+if [ -f /etc/uupd/config.json.rpmnew ]; then
+    mv -f /etc/uupd/config.json.rpmnew /etc/uupd/config.json
+fi
 
 # Hummingbird's resolved unit defaults to a disconnected private /tmp. The
 # Bluefin LTS workaround is needed for bootc's early-boot DNS path.

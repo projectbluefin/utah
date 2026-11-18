@@ -16,7 +16,7 @@
 
 # --- Structural differences, one epic child each ---------------------------
 
-kanata = { status = "planned", area = "accessibility-input", issue = "#1222", reason = "Dakota remaps keys with kanata; Utah ships input-remapper" }
+kanata = { status = "planned", area = "accessibility-input", issue = "#1222", reason = "Installed from the factory in place of input-remapper; gap closes on the next baseline" }
 ghostty = { status = "planned", area = "desktop-apps", issue = "#1223", reason = "Dakota builds Ghostty natively; Utah installs the tuna-os Flatpak" }
 "/usr/lib/systemd/system/dakota-secure-boot-update.service" = { status = "planned", area = "boot", issue = "#1225" }
 "/usr/lib/systemd/system/ublue-boot-timeout.service" = { status = "planned", area = "boot", issue = "#1225", reason = "Runs bootctl set-timeout; only meaningful on systemd-boot" }
@@ -56,7 +56,7 @@ sysprof = { status = "planned", area = "desktop-apps", issue = "#1236" }
 syncthing = { status = "planned", area = "desktop-apps", issue = "#1236", reason = "Utah enables the Syncthing toggle extension but ships no daemon" }
 git-lfs = { status = "planned", area = "cli-tools", issue = "#1236" }
 tealdeer = { status = "planned", area = "cli-tools", issue = "#1236" }
-ydotool = { status = "planned", area = "accessibility-input", issue = "#1236" }
+ydotool = { status = "planned", area = "accessibility-input", issue = "#1222", reason = "Installed from the factory with kanata" }
 wget2 = { status = "planned", area = "cli-tools", issue = "#1236", reason = "Dakota's wget; Utah has no wget at all" }
 nethogs = { status = "planned", area = "cli-tools", issue = "#1236" }
 nicstat = { status = "planned", area = "cli-tools", issue = "#1236" }
@@ -132,7 +132,7 @@ bindfs = { status = "untriaged", area = "files-devices" }
 "/usr/bin/substrings.pl" = { status = "untriaged", area = "dev-toolchain" }
 "/usr/bin/sutf" = { status = "untriaged", area = "cli-tools" }
 "/usr/bin/ublue-firstboot-date" = { status = "planned", area = "system-daemons", issue = "#1265", reason = "Ships with dakota-config-firstboot-date; records only once timesyncd replaces chrony (#1228)" }
-"/usr/lib/systemd/system/ublue-wallpaper-month.service" = { status = "untriaged", area = "desktop-defaults" }
+"/usr/lib/systemd/system/ublue-wallpaper-month.service" = { status = "planned", area = "desktop-defaults", issue = "#1266", reason = "Ships in system_files with bluefin-wallpaper-month, as Dakota; the default wallpaper stays common's" }
 "/usr/lib/systemd/user/compass.service" = { status = "untriaged", area = "desktop-defaults" }
 "/usr/bin/ucs2any" = { status = "untriaged", area = "fonts" }
 "/usr/bin/vfat-resize" = { status = "untriaged", area = "files-devices" }

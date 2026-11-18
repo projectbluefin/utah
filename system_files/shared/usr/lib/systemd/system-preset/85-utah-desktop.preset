@@ -17,7 +17,10 @@ enable fwupd-refresh.timer
 enable tailscaled.service
 enable uupd.timer
 enable projectbluefin-countme.timer
-enable bluefin-stats-refresh.timer
+# Dakota's monthly-wallpaper links (#1266); configure-services.sh explains
+# why the default wallpaper does not read them.
+enable ublue-wallpaper-month.service
+enable bluefin-wallpaper-month.service
 enable ublue-system-setup.service
 enable systemd-resolved.service
 # Keep the ESP boot manager current on systemd-boot systems (#363). A drop-in
@@ -41,7 +44,6 @@ enable bluefin-remove-installer.service
 # installed by anything but the ISO booted with no app store at all.
 enable flatpak-preinstall.service
 enable flatpak-nuke-fedora.service
-enable input-remapper.service
 enable ModemManager.service
 # Power profiles and thermal management as Dakota ships them (#388):
 # power-profiles-daemon backs GNOME's power-mode switch and thermald handles
@@ -58,6 +60,10 @@ disable sysstat.service
 disable sysstat-collect.timer
 disable sysstat-summary.timer
 disable sysstat-rotate.timer
+# Key remapping is opt-in, as on Dakota (#1222): kanata ships its own
+# 80-kanata.preset disabling the unit, and the unit does nothing until
+# /etc/kanata/kanata.kbd exists. Enable with `systemctl enable --now kanata`.
+disable kanata.service
 # Dakota's effective service state (#1233). Dakota has no system `disable *`
 # preset, so every installed unit with [Install] is on unless a preset turns it
 # off; Hummingbird's 99-default-disable inverts that. These are the units

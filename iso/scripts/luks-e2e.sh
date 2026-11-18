@@ -430,9 +430,12 @@ verify_setup_state() {
     check_system_unit_state flatpak-preinstall.service true true "${boot_pass}"
     check_system_unit_state ublue-system-setup.service true true "${boot_pass}"
     check_system_unit_state brew-setup.service true false "${boot_pass}"
-    for unit in input-remapper.service bluefin-stats-refresh.timer uupd.timer; do
+    for unit in ublue-wallpaper-month.service bluefin-wallpaper-month.service uupd.timer; do
         check_system_unit_state "${unit}" true false "${boot_pass}"
     done
+    # kanata replaced input-remapper (#1222): installed and loaded, opt-in, so
+    # neither enablement nor a run is required.
+    check_system_unit_state kanata.service false false "${boot_pass}"
     check_user_setup_unit "${boot_pass}"
 }
 

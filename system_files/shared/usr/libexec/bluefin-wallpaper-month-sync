@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source_dir="/usr/share/backgrounds/bluefin"
+state_dir="/var/lib/bluefin/backgrounds"
+link_path="${state_dir}/current-bluefin.xml"
+month_file="$(date +%m)-bluefin.xml"
+
+if [[ ! -d "${source_dir}" ]]; then
+    exit 0
+fi
+
+mkdir -p "${state_dir}"
+
+if [[ -f "${source_dir}/${month_file}" ]]; then
+    ln -sfn "${source_dir}/${month_file}" "${link_path}"
+else
+    ln -sfn "${source_dir}/12-bluefin.xml" "${link_path}"
+fi
