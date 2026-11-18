@@ -421,6 +421,11 @@ authselect enable-feature with-mdns4
 # dakota-config-uupd (Dakota's elements/bluefin/uupd.bst), which replaces
 # Common's four-a-day uupd.timer with the daily 04:00 one, as on Dakota.
 install -Dm0755 /tmp/uupd/uupd /usr/bin/uupd
+# Common ships its own /etc/uupd/config.json, so rpm installs the package's
+# copy as .rpmnew; Dakota's hardware-check config must win.
+if [ -f /etc/uupd/config.json.rpmnew ]; then
+    mv -f /etc/uupd/config.json.rpmnew /etc/uupd/config.json
+fi
 
 # Hummingbird's resolved unit defaults to a disconnected private /tmp. The
 # Bluefin LTS workaround is needed for bootc's early-boot DNS path.
