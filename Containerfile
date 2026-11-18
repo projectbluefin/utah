@@ -16,7 +16,7 @@ ARG BREW_IMAGE_SHA=sha256:9e0492dbc471258657564c94dae18b58dd96ddb998a06f2b15e820
 # wait on a Common release. It is the multi-arch index digest: the contents are
 # architecture-independent. Renovate keeps it current like the pins above.
 ARG WALLPAPERS_IMAGE=ghcr.io/projectbluefin/bluefin-wallpapers-gnome
-ARG WALLPAPERS_IMAGE_SHA=sha256:379227aa1d8c1832ba6ff9c50d4fdc9e36fc2eff5a6c10771d71e49850ce4c07
+ARG WALLPAPERS_IMAGE_SHA=sha256:460fcdf3e73e99fe63bce326a0cf694fb54fdcb8fe2d3c83dc0b1948b3dd3c0b
 
 FROM ${COMMON_IMAGE}@${COMMON_IMAGE_SHA} AS common
 FROM ${BREW_IMAGE}@${BREW_IMAGE_SHA} AS brew
