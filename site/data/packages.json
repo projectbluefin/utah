@@ -322,7 +322,6 @@
         "splix",
         "stix-fonts",
         "stoken-libs",
-        "sudo-rs",
         "sysstat",
         "system-config-printer-libs",
         "system-config-printer-udev",
@@ -408,7 +407,7 @@
     }
   ],
   "totals": {
-    "installed": 351,
+    "installed": 350,
     "unavailable": 6
   },
   "unavailable": [

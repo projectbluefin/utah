@@ -46,11 +46,9 @@ class FlathubDescriptorIntegrityTests(unittest.TestCase):
         uupd = self.root / "tmp/uupd"
         uupd.mkdir(parents=True)
         (uupd / "uupd").write_text("#!/bin/sh\nexit 0\n")
-        # sudo-rs (setuid) and the uutils multicall binary (#1229).
+        # The uutils multicall binary (#1229).
         bindir = self.root / "usr/bin"
         bindir.mkdir(parents=True)
-        (bindir / "sudo-rs").write_text("#!/bin/sh\nexit 0\n")
-        (bindir / "sudo-rs").chmod(0o4755)
         (bindir / "uutils-coreutils").write_text("#!/bin/sh\nprintf 'ls\\ncat\\n'\n")
         (bindir / "uutils-coreutils").chmod(0o755)
 
@@ -97,21 +95,17 @@ curl() {
         self.assertEqual(self.destination.stat().st_mode & 0o777, 0o644)
         self.assertFalse((self.root / "tmp/flathub.flatpakrepo").exists())
 
-    def test_sudo_is_sudo_rs_and_uutils_sits_beside_gnu(self):
-        # #1229: sudo and sudoedit link to the setuid sudo-rs, as Dakota's
-        # compose puts sudo-rs there; uutils gets Dakota's uutils-<prog> names.
+    def test_uutils_sits_beside_gnu_and_sudo_is_untouched(self):
+        # #1229: uutils gets Dakota's uutils-<prog> names beside GNU, and the
+        # build leaves C sudo as /usr/bin/sudo (sudo-rs is deferred).
         result = self.run_script()
         self.assertEqual(result.returncode, 0, result.stderr)
         bindir = self.root / "usr/bin"
-        for name in ("sudo", "sudoedit"):
-            self.assertEqual(os.readlink(bindir / name), "sudo-rs")
         for prog in ("ls", "cat"):
             self.assertEqual(os.readlink(bindir / f"uutils-{prog}"), "uutils-coreutils")
         self.assertFalse((bindir / "ls").exists())
-
-        (bindir / "sudo-rs").chmod(0o755)
-        result = self.run_script()
-        self.assertNotEqual(result.returncode, 0)
+        for name in ("sudo", "sudoedit"):
+            self.assertFalse((bindir / name).is_symlink())
 
     def test_firewall_defaults_to_gnome_os_lax_zone_through_the_symlink(self):
         result = self.run_script()

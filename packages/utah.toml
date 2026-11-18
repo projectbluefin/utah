@@ -446,12 +446,9 @@ packages = [
     "pam_oo7",
     "oo7-portal",
     "oo7-cli",
-    # Memory-safe sudo and coreutils, as Dakota ships them (bluefin/sudo-rs.bst,
-    # bluefin/uutils-coreutils.bst; #1229). configure-services.sh makes sudo-rs
-    # the sudo and sudoedit on PATH over C sudo's PAM stack and sudoers, as
-    # Dakota does. uutils runs beside GNU coreutils: see
+    # Memory-safe coreutils, as Dakota ships them (bluefin/uutils-coreutils.bst;
+    # #1229). uutils runs beside GNU coreutils. sudo-rs is deferred: see
     # docs/skills/desktop-contract/references/sudo-rs-uutils.md.
-    "sudo-rs",
     "uutils-coreutils",
     # Network file systems and Windows domain clients (the NFS family follows
     # in the second-wave block below).
@@ -991,7 +988,6 @@ parity = [
     "pam_oo7",
     "oo7-portal",
     "oo7-cli",
-    "sudo-rs",
     "uutils-coreutils",
     "cifs-utils",
     "rpcbind",

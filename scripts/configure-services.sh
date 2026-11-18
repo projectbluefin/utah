@@ -437,16 +437,6 @@ if [ -f "${PASSWD_PAM}" ]; then
     fi
 fi
 
-# sudo-rs is the sudo on PATH, as on Dakota (bluefin/sudo-rs.bst, #1229). The
-# factory's sudo-rs installs only sudo-rs/su-rs/visudo-rs and requires C sudo,
-# whose /etc/pam.d/sudo, sudo-i and /etc/sudoers it reads -- Dakota keeps those
-# files the same way. Dakota's compose overwrites /usr/bin/sudo and sudoedit;
-# here they become links to the setuid sudo-rs, which dispatches on the name
-# it was run as. su and visudo stay util-linux's and C sudo's, as on Dakota.
-test -u /usr/bin/sudo-rs
-ln -sfn sudo-rs /usr/bin/sudo
-ln -sfn sudo-rs /usr/bin/sudoedit
-[ "$(readlink /usr/bin/sudo)" = sudo-rs ]
 # uutils-coreutils sits beside GNU coreutils rather than over it (#1229).
 # Dakota overwrites the GNU names, but here GNU's files belong to the
 # coreutils-single RPM that every later package scriptlet, dracut's initramfs
