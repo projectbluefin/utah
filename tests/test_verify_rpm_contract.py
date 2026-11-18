@@ -50,7 +50,7 @@ def toml_section(name: str, packages: list[str]) -> str:
 
 
 def write_manifest(directory: Path, fedora: list[str]) -> Path:
-    path = directory / "bluefin.toml"
+    path = directory / "base.toml"
     path.write_text(toml_section("fedora", fedora))
     return path
 
@@ -288,7 +288,7 @@ class CheckModeTests(unittest.TestCase):
     def test_shipped_contract_passes(self) -> None:
         """The contract this repository actually ships must satisfy its own gate."""
         result = self.run_check(
-            ROOT / "packages" / "bluefin.toml", ROOT / "packages" / "utah.toml"
+            ROOT / "packages" / "base.toml", ROOT / "packages" / "utah.toml"
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
@@ -312,7 +312,7 @@ class CheckModeTests(unittest.TestCase):
             overlay = write_overlay(directory, unavailable=["ptyxis"])
             result = self.run_check(manifest, overlay)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("Verifying 2 Bluefin packages", result.stdout)
+        self.assertIn("Verifying 2 base manifest packages", result.stdout)
 
     def test_every_overlay_section_is_counted(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -327,7 +327,7 @@ class CheckModeTests(unittest.TestCase):
             )
             result = self.run_check(manifest, overlay)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("Verifying 1 Bluefin packages", result.stdout)
+        self.assertIn("Verifying 1 base manifest packages", result.stdout)
         self.assertIn("2 GNOME desktop packages", result.stdout)
         self.assertIn("3 parity packages", result.stdout)
         self.assertIn("2 firmware packages", result.stdout)
@@ -764,7 +764,7 @@ class ResolvedContractTests(unittest.TestCase):
                 manifest, overlay, installed,
             )
         self.assertEqual(code, 0, out)
-        self.assertIn("Verifying 2 Bluefin packages", out)
+        self.assertIn("Verifying 2 base manifest packages", out)
         self.assertIn("1 GNOME desktop packages", out)
         self.assertIn("2 parity packages", out)
         self.assertIn("1 firmware packages", out)
@@ -800,7 +800,7 @@ class ParitySectionReachesTheExpectedSetTests(unittest.TestCase):
         target = parity[0]
         argv = [
             "verify-rpm-contract.py",
-            str(ROOT / "packages" / "bluefin.toml"),
+            str(ROOT / "packages" / "base.toml"),
             str(ROOT / "packages" / "utah.toml"),
         ]
         stderr = io.StringIO()

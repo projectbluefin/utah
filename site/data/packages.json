@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-10-28",
+  "generated_at": "2026-11-16",
   "generator": "scripts/generate-site-data.py",
   "groups": [
     {
-      "blurb": "Packages Utah installs because Bluefin's own manifest asks for them. This file is a byte-for-byte copy of upstream's.",
-      "id": "bluefin",
+      "blurb": "Packages Utah installs because its base manifest asks for them. Frozen from Bluefin's base.toml, edited by hand since.",
+      "id": "base",
       "packages": [
         "adw-gtk3-theme",
         "adwaita-fonts-all",
@@ -68,7 +68,7 @@
         "zenity",
         "zsh"
       ],
-      "title": "Bluefin contract",
+      "title": "Base manifest",
       "transient": false
     },
     {
@@ -176,6 +176,8 @@
         "glycin-thumbnailer",
         "gnome-disk-utility",
         "gnome-epub-thumbnailer",
+        "gnome-os-config-firewalld",
+        "gnome-os-config-resolved-fallback-dns",
         "gnupg2-scdaemon",
         "google-noto-sans-math-fonts",
         "google-noto-sans-mono-vf-fonts",
@@ -200,7 +202,6 @@
         "htop",
         "ibus-gtk4",
         "intel-gmmlib",
-        "intel-lpmd",
         "intel-mediasdk",
         "intel-vpl-gpu-rt",
         "ipp-usb",
@@ -260,6 +261,7 @@
         "plymouth-system-theme",
         "plymouth-theme-spinner",
         "poppler-utils",
+        "power-profiles-daemon",
         "powerstat",
         "powertop",
         "printer-driver-brlaser",
@@ -306,11 +308,14 @@
         "tree",
         "unbound-anchor",
         "unzip",
+        "uresourced",
         "uriparser",
         "usermode",
         "vim-enhanced",
         "vpnc",
         "vpnc-script",
+        "wget2",
+        "wget2-wget",
         "which",
         "wireless-regdb",
         "words",
@@ -348,6 +353,7 @@
         "cryptsetup",
         "flatpak",
         "fwupd",
+        "nss-mdns",
         "systemd-boot-unsigned",
         "systemd-resolved",
         "tailscale",
@@ -372,8 +378,8 @@
     }
   ],
   "totals": {
-    "installed": 315,
-    "unavailable": 7
+    "installed": 321,
+    "unavailable": 6
   },
   "unavailable": [
     {
@@ -403,12 +409,6 @@
         253
       ],
       "name": "grub2-efi-x64-cdboot"
-    },
-    {
-      "issues": [
-        499
-      ],
-      "name": "nss-mdns"
     },
     {
       "issues": [

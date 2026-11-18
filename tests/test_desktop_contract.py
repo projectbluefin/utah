@@ -426,6 +426,20 @@ class GnomeExtensionTests(unittest.TestCase):
                 f"{uuid} source path does not point at extension metadata: {relative}",
             )
 
+    def test_enabled_extensions_override_matches_contract_and_ships(self):
+        # The in-image gsettings check pins the effective value; this keeps
+        # the source override in step with it and every enabled UUID shipped.
+        override = (
+            ROOT / "system_files/shared/usr/share/glib-2.0/schemas/zz3-bluefin-unsupported-stuff.gschema.override"
+        ).read_text()
+        line = next(line for line in override.splitlines() if line.startswith("enabled-extensions="))
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        expected = contract["gsettings"]["values"]["org.gnome.shell enabled-extensions"]
+        self.assertEqual(line.removeprefix("enabled-extensions="), expected)
+        for uuid in json.loads(expected.replace("'", '"')):
+            with self.subTest(uuid=uuid):
+                self.assertIn(uuid, extensions.SOURCE_EXTENSIONS)
+
 
 class ServiceMaskParityTests(unittest.TestCase):
     def test_stats_refresh_timer_enabled_in_contract_preset_and_script(self):
@@ -450,6 +464,51 @@ class ServiceMaskParityTests(unittest.TestCase):
                 self.assertIn(f"enable_unit {unit}", services)
                 self.assertTrue((ROOT / "system_files/shared/usr/lib/systemd/system" / unit).is_file())
 
+    def test_dakota_gnome_system_units_enabled_in_contract_preset_and_script(self):
+        # Dakota inherits these from gnome-build-meta's 80-gnome.preset.
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset").read_text()
+        services = (ROOT / "scripts/configure-services.sh").read_text()
+        for unit in ("colord.service", "accounts-daemon.service"):
+            with self.subTest(unit=unit):
+                self.assertIn(f"enable {unit}\n", preset)
+                self.assertIn(f"enable_unit {unit}\n", services)
+        # colord has no [Install] section in the factory build, so the image
+        # contract cannot require it to be enabled.
+        self.assertNotIn("colord.service", contract["services"]["enabled"])
+        self.assertIn("accounts-daemon.service", contract["services"]["enabled"])
+
+    def test_dakota_gnome_user_units_enabled_in_contract_preset_and_script(self):
+        # Dakota inherits these from gnome-build-meta's user presets.
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        preset = (ROOT / "system_files/shared/usr/lib/systemd/user-preset/85-utah-desktop.preset").read_text()
+        services = (ROOT / "scripts/configure-services.sh").read_text()
+        user_loop = services.split("for unit in pipewire.socket", 1)[1].split("; do", 1)[0]
+        for unit in ("speech-dispatcher.socket", "xdg-desktop-portal-rewrite-launchers.service"):
+            with self.subTest(unit=unit):
+                self.assertIn(unit, contract["services"]["user_enabled"])
+                self.assertIn(f"enable {unit}\n", preset)
+                self.assertIn(unit, user_loop)
+
+    def test_sysstat_collection_is_opt_in_like_dakota(self):
+        # Dakota's elements/bluefin/sysstat.bst presets all four units off.
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset").read_text()
+        services = (ROOT / "scripts/configure-services.sh").read_text()
+        for unit in (
+            "sysstat.service",
+            "sysstat-collect.timer",
+            "sysstat-summary.timer",
+            "sysstat-rotate.timer",
+        ):
+            with self.subTest(unit=unit):
+                self.assertIn(unit, contract["services"]["disabled"])
+                self.assertNotIn(unit, contract["services"]["enabled"])
+                self.assertIn(f"disable {unit}\n", preset)
+                self.assertNotIn(f"enable {unit}\n", preset)
+                self.assertIn(f"disable_unit {unit}\n", services)
+                self.assertNotIn(f"enable_unit {unit}\n", services)
+
     def test_dakota_parity_patch_targets_are_required_files(self):
         contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
         files = contract["configuration"]["files"]
@@ -463,6 +522,27 @@ class ServiceMaskParityTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertIn(path, files)
                 self.assertIn(path, file_contains)
+
+    def test_dakota_uupd_files_shipped_and_required(self):
+        # Dakota's elements/bluefin/uupd.bst ships these beside the binary.
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        files = contract["configuration"]["files"]
+        file_contains = contract["configuration"]["file_contains"]
+        for path in (
+            "/usr/lib/systemd/system/uupd-manual.service",
+            "/etc/polkit-1/rules.d/uupd.rules",
+            "/etc/uupd/config.json",
+        ):
+            with self.subTest(path=path):
+                self.assertIn(path, files)
+                self.assertTrue((ROOT / "system_files/shared" / path.lstrip("/")).is_file())
+        # The downloaded units land after Common's copy; pin which one ships.
+        for path in ("/usr/lib/systemd/system/uupd.timer", "/usr/lib/systemd/system/uupd.service"):
+            with self.subTest(path=path):
+                self.assertIn(path, files)
+                self.assertIn(path, file_contains)
+        config = json.loads((ROOT / "system_files/shared/etc/uupd/config.json").read_text())
+        self.assertTrue(config["checks"]["hardware"]["enable"])
 
     def test_bootc_fetch_apply_updates_masked_and_disabled(self):
         preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset").read_text()
@@ -560,6 +640,11 @@ class ServiceMaskParityTests(unittest.TestCase):
 
         skill_doc = (ROOT / "docs/skills/desktop-contract.md").read_text()
         services_heading = skill_doc.split("`[services]`", 1)[1].split("\n\n", 1)[0]
+        # The bullet links the Dakota service-state reference, which carries
+        # the long list of units Dakota's enable-by-default policy turns on.
+        services_heading += (
+            ROOT / "docs/skills/desktop-contract/references/dakota-services.md"
+        ).read_text()
         missing = [unit for unit in enabled if unit not in services_heading]
         self.assertEqual(
             missing, [],

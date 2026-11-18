@@ -60,7 +60,7 @@ def write_manifest(
     release_version: str = "44",
     excluded: list[str] | None = None,
 ) -> Path:
-    path = directory / "bluefin.toml"
+    path = directory / "base.toml"
     content = toml_section("fedora", fedora or [])
     if fedora_release is not None:
         content += toml_section(f"fedora_v{release_version}", fedora_release)

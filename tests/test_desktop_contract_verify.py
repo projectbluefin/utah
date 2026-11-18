@@ -247,6 +247,82 @@ class MediaDecoderTests(VerifyModeTests):
         self.assertNotIn("media decoders", out)
 
 
+class SelinuxModuleTests(VerifyModeTests):
+    """[selinux].modules must be loaded in the image's policy store, as
+    `semodule -l` lists it. The build is the only place to load one (#551),
+    so the check fails closed when semodule is missing or cannot list."""
+
+    def contract_with_modules(self, *modules):
+        contract = base_contract()
+        contract["selinux"] = {"modules": list(modules)}
+        return contract
+
+    def probe(self, *, stdout="", returncode=0, stderr="", missing=False):
+        calls = []
+
+        def run(argv, **kwargs):
+            calls.append(argv)
+            if missing:
+                raise FileNotFoundError(argv[0])
+            return subprocess.CompletedProcess(argv, returncode, stdout=stdout, stderr=stderr)
+
+        return calls, patch.object(desktop.subprocess, "run", run)
+
+    def test_a_loaded_module_passes_and_is_counted(self):
+        calls, patched = self.probe(stdout="abrt\nutah_bootc_probe\nzosremote\n")
+        with patched:
+            code, out, errors = self.verify(self.contract_with_modules("utah_bootc_probe"))
+        self.assertEqual(code, 0, errors)
+        self.assertEqual(calls, [["semodule", "-l"]])
+        self.assertIn("1 SELinux modules", out)
+
+    def test_a_module_missing_from_the_store_is_rejected_by_name(self):
+        _, patched = self.probe(stdout="abrt\nutah_bootc_probe_old\n")
+        with patched:
+            self.assert_rejected(
+                self.contract_with_modules("utah_bootc_probe"),
+                naming="SELinux policy module is not loaded: utah_bootc_probe",
+            )
+
+    def test_a_failing_semodule_fails_closed(self):
+        _, patched = self.probe(returncode=1, stderr="Could not open direct read lock")
+        with patched:
+            errors = self.assert_rejected(
+                self.contract_with_modules("utah_bootc_probe"),
+                naming="SELinux modules cannot be listed",
+            )
+        self.assertIn("Could not open direct read lock", errors)
+
+    def test_a_missing_semodule_fails_closed(self):
+        _, patched = self.probe(missing=True)
+        with patched:
+            self.assert_rejected(
+                self.contract_with_modules("utah_bootc_probe"),
+                naming="SELinux modules cannot be listed: semodule is missing",
+            )
+
+    def test_no_probe_runs_when_no_modules_are_declared(self):
+        calls, patched = self.probe()
+        with patched:
+            code, out, errors = self.verify()
+        self.assertEqual(code, 0, errors)
+        self.assertEqual(calls, [])
+        self.assertNotIn("SELinux modules", out)
+
+    def test_check_mode_rejects_malformed_module_lists(self):
+        for modules, message in (
+            ([], "SELinux modules must be a non-empty list of module names"),
+            (["utah_bootc_probe", ""], "SELinux modules must be a non-empty list of module names"),
+            (["utah_bootc_probe", "utah_bootc_probe"], "SELinux module contract contains duplicate names"),
+        ):
+            with self.subTest(modules=modules):
+                self.assertIn(message, desktop.validate_contract(self.contract_with_modules(*modules)))
+
+    def test_shipped_contract_requires_the_bootc_probe_module(self):
+        selinux = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())["selinux"]
+        self.assertEqual(selinux["modules"], ["utah_bootc_probe"])
+
+
 class CompliantImageTests(VerifyModeTests):
     def test_a_compliant_image_passes_and_reports_its_counts(self):
         code, out, errors = self.verify()
@@ -584,7 +660,19 @@ class GSettingsTests(VerifyModeTests):
             {"org.gnome.software", "com.github.stunkymonkey.nautilus-open-any-terminal"},
         )
         self.assertEqual(
-            gsettings["values"], {"org.gnome.shell.extensions.dash-to-dock disable-overview-on-startup": "true"}
+            gsettings["values"],
+            {
+                "org.gnome.shell.extensions.dash-to-dock disable-overview-on-startup": "true",
+                # Dakota's default-enabled set, in Dakota's order
+                # (projectbluefin/dakota elements/bluefin/shell-extensions/disable-ext-validator.bst).
+                "org.gnome.shell enabled-extensions": "['caffeine@patapon.info', "
+                "'appindicatorsupport@rgcjonas.gmail.com', 'bazaar-integration@kolunmi.github.io', "
+                "'blur-my-shell@aunetx', 'dash-to-dock@micxgx.gmail.com', "
+                "'fuzzy-application-search@mkhl.codeberg.page', "
+                "'gradia-integration@alexandervanhee.github.io', 'gsconnect@andyholmes.github.io', "
+                "'custom-command-list@storageb.github.com', 'BudsLink-Companion@maniacx.github.com', "
+                "'tilingshell@ferrarodomenico.com']",
+            },
         )
 
 

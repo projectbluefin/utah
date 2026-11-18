@@ -1,5 +1,13 @@
-# Package manifest for the bluefin base image.
-# Read by build_files/base/03-packages.sh via build_files/shared/read-packages.
+# Utah's base package manifest. Utah owns it and edits it by hand.
+#
+# It began as a byte-for-byte copy of projectbluefin/bluefin
+# build_files/packages/base.toml at bb63fd1667eb84209e0af2cc3772ca96e8f6bda9
+# (2026-09-17) and was frozen there: Bluefin classic is no longer a parity
+# target and nothing syncs this file. Dakota (projectbluefin/dakota) is the
+# parity target; baselines/GAP.md lists what Dakota ships that Utah lacks,
+# and package adds and removes follow from that. Utah-only additions and
+# blocked packages still belong in packages/utah.toml.
+# Read by scripts/install-packages.py and scripts/verify-rpm-contract.py.
 #
 # Sections:
 #   [multimedia_overrides]   packages synced from fedora-multimedia repo

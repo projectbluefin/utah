@@ -126,7 +126,7 @@ def prove(output: Path) -> None:
         major = execute(reference, "rpm", "-E", "%fedora", capture=True)
         if not major.isdigit():
             raise ValueError(f"Base image reports invalid Fedora release: {major!r}")
-        wanted = installer.contract(ROOT / "packages/bluefin.toml", overlay, major)
+        wanted = installer.contract(ROOT / "packages/base.toml", overlay, major)
         requested = sorted(set(wanted + installer.section(overlay, "build")))
         versions = tomllib.loads(overlay.read_text())["gnome"]["versions"]
         online_mounts = ((ROOT / "packages", "/etc/yum.repos.d"),

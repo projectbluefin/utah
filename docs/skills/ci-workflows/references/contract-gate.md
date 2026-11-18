@@ -3,16 +3,14 @@
 `build.yml` opens with a container-based gate so a contract package that none of
 Utah's repositories provide fails in seconds instead of surfacing as an
 opaque `exit status 71` from the image build (comment,
-`.github/workflows/build.yml`). It runs three checks:
+`.github/workflows/build.yml`). It runs two checks:
 
 - `just check` -- manifest validation, including the workflow output check
   (`scripts/check_workflow_outputs.py`), the download integrity guard
   (`scripts/check-download-integrity.py`), the syntax gate
   (`scripts/check-script-syntax.py`), host-side unit tests (`just test`),
-  and the ban on flavor literals in workflows.
-- `just check-parity` -- `packages/bluefin.toml` against Bluefin's upstream
-  pinned at `packages/.bluefin-parity-ref`; the nightly parity workflow opens
-  a dedicated review when Bluefin `main` changes it.
+  and the ban on flavor literals in workflows. It also fails on any Dakota
+  parity gap missing from `baselines/triage.toml` (`image-baseline.py check`).
 - `just check-repos` -- the complete installation transaction against the
   digest-pinned base and package repository, including extension build tools.
 

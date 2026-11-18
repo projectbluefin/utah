@@ -22,6 +22,12 @@ enable wireplumber.service
 enable xdg-user-dirs.service
 enable obex.service
 enable mpris-proxy.service
+# Dakota inherits these from gnome-build-meta's user presets
+# (files/systemd-presets/user-preset/80-speechd.preset and 80-xdg.preset):
+# socket-activated speech for screen readers, and renaming dynamic-launcher
+# autostart entries when an app is renamed.
+enable speech-dispatcher.socket
+enable xdg-desktop-portal-rewrite-launchers.service
 
 # Common installs the ChairLift GUI on login; enable globally at build time too.
 enable brew-preinstall.service

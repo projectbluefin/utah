@@ -11,13 +11,13 @@ relevant artifacts fails `just check` rather than the post-install E2E.
 Homebrew's internal Bundler runs with a strict PATH filter
 (`/usr/bin:/bin:/usr/sbin:/sbin`); a gem compile without host GNU `make`
 bricks the persistent `/home/linuxbrew/.linuxbrew` prefix. The runtime
-toolchain retention in the Bluefin contract and the script that prunes
+toolchain retention in the base manifest and the script that prunes
 the build closure must therefore hold:
 
-- `packages/bluefin.toml` `[fedora]` retains `make`, `gcc`, `gcc-c++`.
-  bluefin.toml is a byte-for-byte copy of projectbluefin/bluefin's
-  `build_files/packages/base.toml` (the parity contract enforced by
-  `just check-parity`); any drift here is a parity bug. `packages/utah.toml`
+- `packages/base.toml` `[fedora]` retains `make`, `gcc`, `gcc-c++`.
+  base.toml is Utah's base manifest (frozen from projectbluefin/bluefin's
+  `build_files/packages/base.toml`); dropping any of the three breaks
+  Homebrew. `packages/utah.toml`
   `[parity]` / `[unavailable]` / `[build]` / `[excluded]` must not
   redefine any of these three names -- if a Utah-only install needs an
   explicit override, it belongs in `[parity]` with a comment, never by
@@ -79,7 +79,7 @@ invariants above:
 - `BootcUpdateStagePolkitTests` pins the helper binary path and the
   polkit action's `<annotate>` line.
 - `HomebrewToolchainRetentionTests` pins `make`/`gcc`/`gcc-c++` in
-  `packages/bluefin.toml` `[fedora]` and rejects their removal in
+  `packages/base.toml` `[fedora]` and rejects their removal in
   `configure-services.sh`, while keeping the build-time toolchain
   (`dbus-devel`, `glib2-devel`, `meson`, `sassc`) intact.
 - `HomebrewSymlinkPathTests` pins both spellings of the brewed prefix

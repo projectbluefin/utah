@@ -35,10 +35,10 @@ class CheckDocCountsTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_expected_counts_match_generate_site_data(self):
-        bluefin, additions, unavailable = self.module.expected_counts()
+        base, additions, unavailable = self.module.expected_counts()
         data = self.module.load_generator().build(ROOT)
         self.assertEqual(unavailable, data["totals"]["unavailable"])
-        self.assertEqual(bluefin + additions, data["totals"]["installed"])
+        self.assertEqual(base + additions, data["totals"]["installed"])
         # Every real gap the manifest documents is exactly the count checked --
         # this is the number that drifted (4 vs. 9) before this check existed.
         self.assertEqual(
@@ -65,8 +65,8 @@ class CheckDocCountsTests(unittest.TestCase):
         self.assertEqual(module.main(), 0)
 
     def test_write_repairs_stale_counts_in_both_documents(self):
-        # The nightly Bluefin parity job runs --write after a bump, so it must
-        # fix the README table and the line-wrapped package-contract sentence.
+        # Anyone editing a manifest runs --write, so it must fix the README
+        # table and the line-wrapped package-contract sentence.
         with tempfile.TemporaryDirectory() as tmp:
             readme = Path(tmp) / "README.md"
             skill = Path(tmp) / "package-contract.md"
@@ -74,7 +74,7 @@ class CheckDocCountsTests(unittest.TestCase):
                 r"Genuinely unavailable \| \*\*\d+\*\*",
                 "Genuinely unavailable | **4**", (ROOT / "README.md").read_text()))
             skill_text, count = re.subn(
-                r"\d+(\s+Bluefin\s+contract\s+packages\s+installed)", r"1\1",
+                r"\d+(\s+base\s+manifest\s+packages\s+installed)", r"1\1",
                 (ROOT / "docs/skills/package-contract.md").read_text())
             self.assertEqual(count, 1)
             skill.write_text(skill_text)

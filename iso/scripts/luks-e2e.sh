@@ -1028,6 +1028,18 @@ ssh_target "
 " || fail "logrotate state directory or service failed on the installed system"
 echo "  logrotate.service: succeeded with a nonempty state file"
 
+# bootc's mac_admin probe (a chcon to an undefined label) is denied whenever a
+# plain service runs bootc, such as common's projectbluefin-countme. The
+# utah_bootc_probe policy module dontaudits it; any such AVC on the installed
+# system means the module is not loaded (#1198; check from #1220).
+echo "Verifying bootc's SELinux probe logs no AVC denials..."
+ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' sh -c 'grep -hF avc: /var/log/audit/audit.log 2>/dev/null; journalctl -b --no-pager -o cat 2>/dev/null | grep -F avc:; true'" \
+    > "${WORK}/avc.log" || fail "could not read the installed system's AVC records"
+if grep -E 'denied .*comm="(chcon|bootc)"' "${WORK}/avc.log" >&2; then
+    fail "chcon was denied mac_admin during boot (#1198): utah_bootc_probe is not in effect"
+fi
+echo "  bootc chcon AVC denials: none"
+
 echo "=== Phase 7/7: log in and prove the desktop starts ==="
 ssh_target 'systemctl is-active gdm.service' 2>/dev/null | grep -qx active \
     || fail "gdm is not running on the installed system"

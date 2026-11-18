@@ -24,7 +24,7 @@
     {
       "id": "package-contract",
       "entry_point": "skills/package-contract.md",
-      "description": "Maintain Bluefin package parity and Utah's overlay manifest."
+      "description": "Maintain Utah's base manifest, overlay and Dakota parity triage."
     },
     {
       "id": "setup-hooks",

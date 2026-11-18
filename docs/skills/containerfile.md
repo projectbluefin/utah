@@ -73,7 +73,10 @@ In summary:
   pass the package transaction and cache-stamp equality checks.
 - External executable release assets (such as `uupd`) are pinned by version
   and verified with explicit sha256 checksums (`UUPD_SHA256`) before
-  extraction.
+  extraction. `UUPD_VERSION` follows Dakota's `elements/bluefin/uupd.bst`;
+  the unit digests (`UUPD_SERVICE_SHA256`, `UUPD_TIMER_SHA256`) cover the
+  raw files at that tag and may be unchanged across releases (v1.4.0 and
+  v1.5.5 serve identical units).
 - Artwork reaches the image through the throwaway `artwork` stage, which keeps
   the fetch tooling and unprocessed sources out of every layer.
   `WALLPAPERS_IMAGE`/`WALLPAPERS_IMAGE_SHA` pin the multi-arch index digest of
@@ -315,16 +318,14 @@ preserves the mechanism by renaming Common's `00-entry.just` to
 is in place by the time the entry point runs.
 
 The shipped image is already past the floor: `baselines/utah/rpms.tsv` records
-`just 1.57.0-1.hum1.bfin` (Bluefin's parity manifest, `baselines/bluefin/rpms.tsv`,
-records `1.57.0-1.fc44`). The `just` package is inherited from Bluefin and its
-version is not pinned here. Two checks keep it that way:
+`just 1.57.0-1.hum1.bfin`. The `just` package comes from the base manifest and
+its version is not pinned here. Two checks keep it that way:
 `tests/test_ujust_overrides.py` asserts the baseline NEVR stays >= 1.56 so an
 image regression below the floor fails the suite, and the same module's
 host-side override tests skip with a message naming issue #449 when the
-developer's own `just` is below the floor. `just` is already listed in
-`packages/bluefin.toml` as part of the mirrored parity manifest -- do not pin
-or override its version there or in `packages/utah.toml`; that contract
-belongs to Bluefin.
+developer's own `just` is below the floor. `just` is listed in
+`packages/base.toml` -- do not pin or override its version there or in
+`packages/utah.toml`.
 
 ## Verification
 
