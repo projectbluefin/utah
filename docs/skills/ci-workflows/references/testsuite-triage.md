@@ -1,7 +1,7 @@
 # Testsuite triage runbook
 
 `post-testing-e2e.yml` runs the upstream `projectbluefin/testsuite` suites
-(`smoke`, `common`, `nvidia`) against each exact built digest, pinned via the
+(`smoke`, `common`) against each exact built digest, pinned via the
 `test_ref` input. When legs go red, the failures are usually Utah image gaps,
 not harness bugs. Triage in this order; each step names where its evidence
 lives.
@@ -13,12 +13,13 @@ testing-to-main promotion sets `run_e2e: false`. The release gate separately
 re-runs the `smoke,common` suites against the exact candidate digests; the
 advisory matrix also includes `nvidia`.
 
-Issue #1329 tracks a recurring red run: the common suite's layered-RPM
-scenario invokes `rpm-ostree`, which Utah does not ship, and the NVIDIA suite
-is blocked when every scenario needs hardware absent from the CI VM. Check
-the pinned testsuite revision and each run's results before attributing a
-failure to either cause; investigate other failures independently. Do not
-install `rpm-ostree` or suppress the hardware suite merely to turn CI green.
+Issue #1329 tracked a recurring red run with two causes. The common suite's
+layered-RPM scenario invoked `rpm-ostree`, which Utah does not ship; the
+testsuite now skips it on Utah as on Dakota (projectbluefin/testsuite#1268).
+The `nvidia` suite is hardware-only: every scenario is `@hardware_blocked` in
+the GPU-less CI VM, so the testsuite fails the leg as blocked. It is left out
+of the `suites` map in `config/flavors.json` until the lab has GPU runners
+(projectbluefin/lab#1182). Do not install `rpm-ostree` to turn CI green.
 
 ## Where the evidence is
 
