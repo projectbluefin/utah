@@ -650,8 +650,8 @@ packages = [
     "nfs-python-utils",
     # DLNA/UPnP media sharing (GNOME Settings > Sharing > Media Sharing), as
     # Dakota ships it (#1258). The rygel package carries /etc/rygel.conf and
-    # the rygel.service user unit Settings starts; gupnp-av is published by
-    # utah-packages#1022.
+    # the rygel.service user unit Settings starts; gupnp-av's factory recipe
+    # was added in utah-packages#1147.
     "rygel",
     "gupnp-av",
     "gupnp-dlna",
