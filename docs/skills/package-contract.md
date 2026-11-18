@@ -344,10 +344,11 @@ is its own item. Details and the refresh flow: `baselines/README.md`.
 
 Every item needs an entry in `baselines/triage.toml` (`just check` runs
 `image-baseline.py check`): `planned` with an issue (#1236 is the epic; its
-children #1222-#1235 track the structural moves such as kanata, native
-Ghostty, systemd-boot, AppArmor, oo7, sudo-rs, virtualization and service
-policy), `waived` with a reason (GNOME OS or BuildStream internals,
-Flatpak-first apps), `unavailable` for names in `[unavailable]`, or
+children #1222-#1235 track the structural moves such as kanata,
+systemd-boot, AppArmor, oo7, sudo-rs, virtualization and service policy),
+`waived` with a reason (GNOME OS or BuildStream internals, Flatpak-first apps
+such as Ghostty, baobab, Papers and sushi: #1270 keeps user apps as Flatpaks
+even where Dakota builds them natively), `unavailable` for names in `[unavailable]`, or
 `untriaged` with an `area`. Closing a gap means shipping the files Utah lacks,
 usually by adding the Fedora package to `base.toml` or `utah.toml`, then
 re-measuring and dropping the entry `check` reports as no longer a gap.
