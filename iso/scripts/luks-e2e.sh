@@ -964,9 +964,9 @@ for i in $(seq 1 60); do
 done
 echo "  ssh: logged in as ${TEST_USER}"
 
-echo "Verifying the installed EFI automount..."
-ssh_target 'test -d /efi && state=$(systemctl show efi.automount -p ActiveState --value) && test "$state" != failed' \
-    || fail "EFI mountpoint is missing or its automount failed on the installed system"
+echo "Verifying the installed EFI mountpoint and units..."
+ssh_target 'test -d /efi && for unit in efi.automount efi.mount; do load=$(systemctl show "$unit" -p LoadState --value) && state=$(systemctl show "$unit" -p ActiveState --value) && echo "  $unit: load=$load active=$state" && test "$state" != failed || exit 1; done' \
+    || fail "EFI mountpoint is missing or an EFI mount unit failed on the installed system"
 
 echo "Verifying the installed system booted the offline embedded payload..."
 # bootc's own view of what is booted is the ground truth for "the offline
