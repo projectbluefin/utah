@@ -14,7 +14,8 @@ The cadence is RFC'd in #336. What runs today:
   job returns, which is the path that actually produces the images.
 - `:testing` is the latest E2E-green commit, not the branch tip, and it only
   moves forward. The tags move in `post-testing-e2e.yml`, after the LUKS ISO
-  matrix and the production-ISO composition both pass, and only if the tested
+  matrix, the production-ISO composition and the testsuite matrix all pass
+  (#1329), and only if the tested
   commit is the promoted commit or a descendant of it
   (`scripts/promotion-ratchet.py`; see `iso-e2e.md`). Merges to `main` while an
   E2E runs are safe and never block it: contribution is never paused to
@@ -29,9 +30,10 @@ The cadence is RFC'd in #336. What runs today:
   itself; a run is serialized by the `utah-stable-release` concurrency group.
   First the `e2e-evidence` job runs `promotion-ratchet.py release-gate`: for
   each flavor it takes the digest `:testing` points at, recovers the commit it
-  was built from, and requires the `e2e/post-testing/<image>` success status
-  that `post-testing-e2e.yml` recorded for exactly that digest on exactly that
-  commit. No such evidence, no release; the testing branch tip is never
+  was built from, and requires the `e2e/post-testing/<image>` and
+  `e2e/testsuite/<image>` success statuses that `post-testing-e2e.yml`
+  recorded for exactly that digest on exactly that commit. No such evidence,
+  no release; the testing branch tip is never
   consulted, so landing commits during a release can neither block nor bless
   it. The release then retags from the commit-addressed
   `testing-<yyyymmdd>-<sha7>` tag that gate verified (not `:testing` again) and
