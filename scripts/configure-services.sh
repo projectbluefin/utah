@@ -235,10 +235,6 @@ fi
 rm -f /usr/share/applications/system-update.desktop \
     /usr/share/applications/discourse.desktop \
     /usr/share/applications/documentation.desktop
-# input-remapper is installed by Bluefin's package set, but without its root
-# daemon running, udev autoload fails on input devices and the GUI prompts for
-# root credentials on launch. Enable it next to the desktop units; see #99.
-enable_unit input-remapper.service
 enable_unit ModemManager.service
 # Power profiles and thermal management as Dakota ships them (#388):
 # power-profiles-daemon, not TuneD, and no intel_lpmd.
@@ -282,6 +278,9 @@ disable_unit sysstat.service
 disable_unit sysstat-collect.timer
 disable_unit sysstat-summary.timer
 disable_unit sysstat-rotate.timer
+# kanata replaces input-remapper and is opt-in, as on Dakota (#1222); see
+# 85-utah-desktop.preset.
+disable_unit kanata.service
 # Printing on demand, as Fedora's preset enables it for Bluefin; Hummingbird's
 # 99-default-disable would leave it off.
 enable_unit cups.socket
@@ -422,6 +421,11 @@ authselect enable-feature with-mdns4
 # dakota-config-uupd (Dakota's elements/bluefin/uupd.bst), which replaces
 # Common's four-a-day uupd.timer with the daily 04:00 one, as on Dakota.
 install -Dm0755 /tmp/uupd/uupd /usr/bin/uupd
+# Common ships its own /etc/uupd/config.json, so rpm installs the package's
+# copy as .rpmnew; Dakota's hardware-check config must win.
+if [ -f /etc/uupd/config.json.rpmnew ]; then
+    mv -f /etc/uupd/config.json.rpmnew /etc/uupd/config.json
+fi
 
 # Hummingbird's resolved unit defaults to a disconnected private /tmp. The
 # Bluefin LTS workaround is needed for bootc's early-boot DNS path.

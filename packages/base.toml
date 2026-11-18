@@ -67,7 +67,6 @@ packages = [
     "ibus-mozc",
     "ibus-unikey",
     "igt-gpu-tools",
-    "input-remapper",
     "isomd5sum",
     "just",
     "libappindicator-gtk3",
