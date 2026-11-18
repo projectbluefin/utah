@@ -1,9 +1,9 @@
 # Utahraptor
 
 <!-- BEGIN E2E VERIFICATION -->
-[![Verified ISO desktop](https://github.com/projectbluefin/utah/raw/107d6b8035d2a3437f9af3a7eebf6ee6d36150a9/screenshots/installed-fastfetch.png)](https://github.com/projectbluefin/utah/blob/107d6b8035d2a3437f9af3a7eebf6ee6d36150a9/README.md)
+[![Verified ISO desktop](https://github.com/projectbluefin/utah/raw/3fad07a5d3309676f3e6263af045cf4a0bdffdcc/screenshots/installed-fastfetch.png)](https://github.com/projectbluefin/utah/blob/3fad07a5d3309676f3e6263af045cf4a0bdffdcc/README.md)
 
-*LUKS ISO test passed for commit `d9ff787d873b`. [CI run](https://github.com/projectbluefin/utah/actions/runs/43616240548) also runs independent desktop tests that do not gate this record; the LUKS and production ISO jobs passed; [screenshots and provenance](https://github.com/projectbluefin/utah/tree/107d6b8035d2a3437f9af3a7eebf6ee6d36150a9).*
+*LUKS ISO test passed for commit `6d87d76d053e`. [CI run](https://github.com/projectbluefin/utah/actions/runs/44214581637) also runs independent desktop tests that do not gate this record; the LUKS and production ISO jobs passed; [screenshots and provenance](https://github.com/projectbluefin/utah/tree/3fad07a5d3309676f3e6263af045cf4a0bdffdcc).*
 <!-- END E2E VERIFICATION -->
 
 †Utahraptor ostrommaysi
@@ -73,7 +73,7 @@ Bluefin's `base.toml` and is now edited by hand as Dakota parity work lands.
 | | count |
 | --- | --- |
 | Base manifest installed | **61** |
-| Utah additions (GNOME 51, base-image parity, device firmware, desktop services) | 258 |
+| Utah additions (GNOME 51, base-image parity, device firmware, desktop services) | 260 |
 | Genuinely unavailable | **6** |
 
 ## Known gaps

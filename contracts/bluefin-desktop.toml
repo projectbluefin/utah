@@ -84,6 +84,9 @@ fedora-version = '^\d+$'
 
 [configuration]
 files = [
+  # wget2-wget supplies the traditional command as a link to wget2.
+  "/usr/bin/wget",
+  "/usr/bin/wget2",
   # Common owns ChairLift's GUI preinstall and system integration (as on Dakota).
   "/usr/share/applications/io.projectbluefin.chairlift.desktop",
   "/usr/share/icons/hicolor/scalable/apps/io.projectbluefin.chairlift.svg",
@@ -412,6 +415,14 @@ schema_dir = "/usr/share/glib-2.0/schemas"
 # (projectbluefin/dakota elements/bluefin/shell-extensions/disable-ext-validator.bst).
 # Utah's other bundled extensions stay installed but opt-in.
 "org.gnome.shell enabled-extensions" = "['caffeine@patapon.info', 'appindicatorsupport@rgcjonas.gmail.com', 'bazaar-integration@kolunmi.github.io', 'blur-my-shell@aunetx', 'dash-to-dock@micxgx.gmail.com', 'fuzzy-application-search@mkhl.codeberg.page', 'gradia-integration@alexandervanhee.github.io', 'gsconnect@andyholmes.github.io', 'custom-command-list@storageb.github.com', 'BudsLink-Companion@maniacx.github.com', 'tilingshell@ferrarodomenico.com']"
+
+# Policy modules the image build loads (Containerfile, semodule -n -i), checked
+# with `semodule -l`. The store is on read-only /usr once booted (#551), so a
+# module missing from the build cannot be added later.
+# utah_bootc_probe: dontaudit bootc's expected mac_admin probe from plain
+# services, two AVC denials every boot otherwise (#1198).
+[selinux]
+modules = ["utah_bootc_probe"]
 
 [services]
 enabled = [

@@ -314,6 +314,8 @@
         "vim-enhanced",
         "vpnc",
         "vpnc-script",
+        "wget2",
+        "wget2-wget",
         "which",
         "wireless-regdb",
         "words",
@@ -376,7 +378,7 @@
     }
   ],
   "totals": {
-    "installed": 319,
+    "installed": 321,
     "unavailable": 6
   },
   "unavailable": [

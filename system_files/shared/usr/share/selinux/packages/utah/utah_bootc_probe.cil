@@ -1,0 +1,19 @@
+; Silence bootc's expected mac_admin probe in ordinary services (#1198).
+;
+; `bootc status` probes for mac_admin by running chcon with a label the policy
+; does not define (bootc lsm.rs, selinux_ensure_install). Outside install_t
+; the probe is denied, bootc re-executes itself once and probes again, then
+; carries on: the denial is the answer it expects. Run from a plain service
+; (common's projectbluefin-countme, any script that calls bootc) it logs two
+;
+;   avc: denied { mac_admin } capability=33
+;        scontext=system_u:system_r:unconfined_service_t:s0 tclass=capability2
+;
+; on every boot. dontaudit, not allow: granting mac_admin would let every
+; unconfined service write labels the policy does not know, and would change
+; what bootc's probe decides. A capability check has no target but the
+; process itself, so this domain plus one permission is the narrowest rule
+; the policy language can express. Installed at build time (the store is on
+; read-only /usr once booted, #551); the desktop contract's [selinux] modules
+; list asserts it is loaded.
+(dontaudit unconfined_service_t self (capability2 (mac_admin)))

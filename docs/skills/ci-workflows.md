@@ -101,12 +101,14 @@ post-build verification workflows, not the complete workflow inventory:
   the proposed head. The measurement step keeps the read-only job token.
 - `.github/workflows/post-testing-e2e.yml` -- successful non-PR testing builds
   explicitly dispatch this, or manually supply a successful testing build run ID.
-  Its `promote-to-testing` job records per-digest E2E evidence as commit
-  statuses and moves `:testing` through a monotonic ratchet: `:testing` is the
-  latest E2E-green commit, not the branch tip, so merges to `main` during a
-  run never block promotion and an older run never moves it backwards
-  (`scripts/promotion-ratchet.py`; details in
-  [iso-e2e](ci-workflows/references/iso-e2e.md)).
+  Its `promote-to-testing` job records per-digest evidence for the LUKS and
+  production ISO jobs and moves `:testing` through a monotonic ratchet. The
+  separate testsuite matrix is advisory: its failure makes the workflow red
+  but does not block the ratchet. The promotion to `main` sets
+  `run_e2e: false`; the release gate separately re-runs `smoke,common`.
+  See [testsuite triage](ci-workflows/references/testsuite-triage.md) for
+  known failures and [iso-e2e](ci-workflows/references/iso-e2e.md) for the
+  ratchet.
 - `.github/workflows/execute-release.yml` -- promotion pushes to `main`,
   manual dispatch and a daily 06:00 UTC check retag `:stable`. The daily run
   releases only when `:stable` last moved over seven days ago (or is missing)

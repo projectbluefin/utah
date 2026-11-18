@@ -95,7 +95,7 @@ RELEASE_WORKFLOW = "execute-release.yml"
 # projectbluefin/actions reusable-execute-release.yml at the pinned commit.
 # tests/test_release_trigger.py fails when execute-release.yml moves off this
 # pin: re-check both names against the new commit, then update it here.
-RETAG_NAMES_VERIFIED_AT = "3adf1194c894fe7b1ae54e583c56306c6a2382ee"
+RETAG_NAMES_VERIFIED_AT = "75348afb3a34c6006a3d3da51e51c9a3818b2616"
 RETAG_JOB = "execute / Promote release"
 RETAG_STEP = "Promote digests to target tags"
 # Runs are scanned back to (STALE_AFTER + RUN_SLACK): a release created before
