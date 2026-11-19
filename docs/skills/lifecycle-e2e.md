@@ -95,6 +95,16 @@ This file gate complements deployment-to-entry matching (issue #361 / PR #571);
 it does not itself prove which deployment an entry represents. Fixture tests
 run the same guest checker via `python3 -m unittest discover -s tests -p test_boot_files.py`.
 
+Image-content gates belong to the candidate, never the baseline. The baseline
+is the previous `:testing`, so a rule that lands with the candidate (the
+`/efi` mountpoint from #1330, for one) is one the baseline cannot meet; failing
+it there failed every run, and because promotion needs the lifecycle,
+`:testing` could never advance (#1343). The ISO install of the baseline runs
+`luks-e2e.sh` with `UTAH_E2E_EFI_CHECK=""`, and `verify_efi_mount upgraded`
+checks `/efi`, `efi.automount` and `efi.mount` on the booted candidate
+(`evidence/efi-upgraded.txt`). Give any new content gate in `luks-e2e.sh` the
+same treatment.
+
 The baseline image (default `ghcr.io/projectbluefin/utah:testing`, the target
 ref `just iso testing` builds with) is the ref a live ISO installs its offline
 payload under, and phase 1 fails unless the booted deployment tracks it. The
