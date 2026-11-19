@@ -730,7 +730,9 @@ class EvidenceTests(unittest.TestCase):
             env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "ROOT": str(ROOT),
                    "TEST_USER": "u", "TEST_PASSWORD": "pw", "FAILED_UNIT": failed_unit}
             return subprocess.run(["bash", "-eu", "-c", harness],
-                                  capture_output=True, text=True, env=env)
+                                  capture_output=True, text=True, env=env,
+                                  # The stub drains stdin; never wait on a terminal.
+                                  stdin=subprocess.DEVNULL)
 
         ok = run("none")
         self.assertEqual(ok.returncode, 0, ok.stderr)
