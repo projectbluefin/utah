@@ -6,12 +6,11 @@
 not harness bugs. Triage in this order; each step names where its evidence
 lives.
 
-The testsuite matrix is advisory for promotion: `promote-to-testing` needs
-`resolve`, `luks`, and `production-iso`, not `testsuite`. A failed suite can
-therefore leave the workflow red while `:testing` advances. The separate
-testing-to-main promotion sets `run_e2e: false`. The release gate separately
-re-runs the `smoke,common` suites against the exact candidate digests, the
-same suites the advisory matrix runs.
+The testsuite matrix gates promotion (#1329): `promote-to-testing` needs
+`resolve`, `luks`, `production-iso`, `lifecycle` and `testsuite`, so one red
+leg leaves `:testing` where it is and records no E2E evidence for the run's
+digests. `:stable` only releases digests that carry that evidence. There is
+no override: fix the image, or fix or scope the scenario upstream.
 
 Issue #1329 tracked a recurring red run with two causes. The common suite's
 layered-RPM scenario invoked `rpm-ostree`, which Utah does not ship; the

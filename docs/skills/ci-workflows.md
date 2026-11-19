@@ -101,11 +101,12 @@ post-build verification workflows, not the complete workflow inventory:
   the proposed head. The measurement step keeps the read-only job token.
 - `.github/workflows/post-testing-e2e.yml` -- successful non-PR testing builds
   explicitly dispatch this, or manually supply a successful testing build run ID.
-  Its `promote-to-testing` job records per-digest evidence for the LUKS and
-  production ISO jobs and moves `:testing` through a monotonic ratchet. The
-  separate testsuite matrix is advisory: its failure makes the workflow red
-  but does not block the ratchet. The promotion to `main` sets
-  `run_e2e: false`; the release gate separately re-runs `smoke,common`.
+  Its `promote-to-testing` job needs the LUKS, production ISO and testsuite
+  jobs. Only when all pass does it record per-digest evidence and move
+  `:testing` through a monotonic ratchet; a red testsuite leg blocks
+  promotion, with no override (#1329). The promotion to `main` sets
+  `run_e2e: false`; the release gate requires that evidence for the exact
+  `:testing` digests and re-runs `smoke,common`.
   See [testsuite triage](ci-workflows/references/testsuite-triage.md) for
   known failures and [iso-e2e](ci-workflows/references/iso-e2e.md) for the
   ratchet.

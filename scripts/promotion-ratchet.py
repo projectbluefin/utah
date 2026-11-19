@@ -24,7 +24,8 @@ been re-pushed by a same-day rebuild; the dated tag is checked as corroboration.
 Subcommands (each writes `key=value` lines to $GITHUB_OUTPUT when it is set):
 
     decide        may the tested digests become :testing?   action=promote|noop|refuse
-    record        publish per-digest E2E success as commit statuses
+    record        publish per-digest E2E success (LUKS, production ISO and
+                  testsuite) as commit statuses
     release-gate  require that evidence for what :testing points at; emit the
                   `variants` JSON that retags the commit-addressed tags to :stable
 
@@ -50,6 +51,11 @@ SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 # per image carries the digest it tested in its description; the bare context
 # is an aggregate for humans and for the reusable release gate.
 EVIDENCE_CONTEXT = "e2e/post-testing"
+# Recorded next to EVIDENCE_CONTEXT once the testsuite matrix also passed for the
+# digest (#1329). Statuses recorded before the testsuite gated promotion carry
+# only EVIDENCE_CONTEXT, so the release gate requires both and those older
+# digests fail closed.
+TESTSUITE_CONTEXT = "e2e/testsuite"
 ACTIONS_BOT = "github-actions[bot]"
 COMPARE_STATUSES = {"identical", "ahead", "behind", "diverged"}
 
@@ -347,13 +353,14 @@ def record(
     lines = []
     for entry in entries:
         image = _image_base(entry["ref"]).rsplit("/", 1)[-1]
-        context = f"{EVIDENCE_CONTEXT}/{image}"
-        if _has_evidence(existing, context, entry["digest"]):
-            lines.append(f"{image}: evidence for {entry['digest']} already recorded")
-            continue
-        github.post_status(tested_sha, context, entry["digest"], run_url)
-        lines.append(f"{image}: recorded E2E success for {entry['digest']} on {tested_sha[:7]}")
-    aggregate = f"LUKS + production ISO passed for {len(entries)} digest(s)"
+        for base_context in (EVIDENCE_CONTEXT, TESTSUITE_CONTEXT):
+            context = f"{base_context}/{image}"
+            if _has_evidence(existing, context, entry["digest"]):
+                lines.append(f"{image}: {context} for {entry['digest']} already recorded")
+                continue
+            github.post_status(tested_sha, context, entry["digest"], run_url)
+            lines.append(f"{image}: recorded {context} success for {entry['digest']} on {tested_sha[:7]}")
+    aggregate = f"LUKS + production ISO + testsuite passed for {len(entries)} digest(s)"
     if not _has_evidence(existing, EVIDENCE_CONTEXT, aggregate):
         github.post_status(tested_sha, EVIDENCE_CONTEXT, aggregate, run_url)
     return lines
@@ -391,12 +398,14 @@ def release_gate(
         if digest is None:
             raise PromotionError(f"{base}:{source_tag} does not exist; nothing to release")
         commit = commit_behind(f"{base}@{digest}", registry, github)
-        context = f"{EVIDENCE_CONTEXT}/{image}"
-        if not _has_evidence(github.statuses(commit.sha), context, digest):
-            raise PromotionError(
-                f"no green E2E evidence for {image}@{digest}: commit {commit.sha[:7]} has no "
-                f"successful {context} status recorded by {ACTIONS_BOT} for that digest"
-            )
+        statuses = github.statuses(commit.sha)
+        for base_context in (EVIDENCE_CONTEXT, TESTSUITE_CONTEXT):
+            context = f"{base_context}/{image}"
+            if not _has_evidence(statuses, context, digest):
+                raise PromotionError(
+                    f"no green E2E evidence for {image}@{digest}: commit {commit.sha[:7]} has no "
+                    f"successful {context} status recorded by {ACTIONS_BOT} for that digest"
+                )
         named = registry.digest(f"{base}:{commit.version}")
         if named != digest:
             raise PromotionError(
