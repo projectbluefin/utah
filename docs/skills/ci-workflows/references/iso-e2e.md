@@ -70,8 +70,9 @@ failure still blocks that acceptance and tag promotion.
 Every matrix job preserves build/test logs, serial logs, and screenshots,
 including on failure. Only passing jobs upload `docs/verification` with the
 source commit, original build run, E2E run, image digest and ISO checksum.
-The promotion job depends on the LUKS and production-ISO matrices, then runs
-the ratchet described next.
+The promotion job depends on the LUKS, production-ISO and testsuite matrices
+(#1329): a red or skipped leg skips it, so nothing is recorded and no tag
+moves. Then it runs the ratchet described next.
 
 **`:testing` is the latest E2E-green commit, not the branch tip.** Main takes
 a merge about every hour (people, Renovate, the hive bot), and a
@@ -80,8 +81,9 @@ the time a run finishes. Promotion therefore never compares against the branch
 tip. `promote-to-testing` runs `scripts/promotion-ratchet.py`, in order:
 
 1. **`record`** posts one commit status per tested digest on the tested commit:
-   context `e2e/post-testing/<image>`, state `success`, description = the exact
-   `sha256:` digest, plus the aggregate `e2e/post-testing`. A status is
+   contexts `e2e/post-testing/<image>` and `e2e/testsuite/<image>`, state
+   `success`, description = the exact `sha256:` digest, plus the aggregate
+   `e2e/post-testing`. A status is
    per commit and per digest, so a later run, a rebuild, or a newer commit never
    hides it ("last status wins" cannot happen). It is posted before the
    decision because it is true whatever the ratchet decides.
@@ -178,8 +180,10 @@ with a notice, and only that deliberate skip lets promotion go ahead; a failed,
 cancelled or upstream-skipped lifecycle job blocks it.
 
 **What the release checks.** See `release-cadence.md`: `execute-release.yml`
-requires the `e2e/post-testing/<image>` status for the digest `:testing` points
-at, on the commit that digest was built from.
+requires both the `e2e/post-testing/<image>` and `e2e/testsuite/<image>`
+statuses for the digest `:testing` points at, on the commit that digest was
+built from. Digests promoted before the testsuite gated promotion have only the
+first, so they fail closed until a green run moves `:testing`.
 
 A separate least-privilege job publishes the main desktop's record to a
 `verification` branch and proposes a documentation PR that relinks the README
@@ -314,8 +318,8 @@ come from `needs.resolve.outputs.digests` and the suite mappings from
 `scripts/flavors.py suites`.
 
 This job surfaces scenario results, fastfetch OCR logs, and screenshots directly
-in GitHub Actions without gating `:testing` tag promotion, keeping deployments
-unblocked while maintaining visible QA signal across flavors.
+in GitHub Actions, and gates `:testing` promotion: `promote-to-testing` needs it
+(#1329).
 
 ## Extension startup states
 

@@ -421,6 +421,9 @@ class RecordAndGateTests(unittest.TestCase):
             self.assertEqual(posted["description"], entry["digest"])
             self.assertEqual(posted["state"], "success")
             self.assertEqual(posted["sha"], sha("tested"))
+            suite = by_context[f"e2e/testsuite/{entry['image']}"]
+            self.assertEqual(suite["description"], entry["digest"])
+            self.assertEqual(suite["state"], "success")
         self.assertIn("e2e/post-testing", by_context)
 
     def test_rerunning_the_record_step_does_not_pile_up_statuses(self):
@@ -448,6 +451,15 @@ class RecordAndGateTests(unittest.TestCase):
     def test_release_is_blocked_without_evidence_for_the_promoted_digests(self):
         self.promote_all()  # promoted by hand or by an old run; no E2E record exists
         with self.assertRaisesRegex(ratchet.PromotionError, "no green E2E evidence"):
+            self.gate()
+
+    def test_release_is_blocked_by_evidence_recorded_before_the_testsuite_gated(self):
+        """#1329: LUKS + ISO evidence alone, as older runs recorded it, is not enough."""
+        self.record()
+        self.promote_all()
+        for rows in self.w.statuses.values():
+            rows[:] = [r for r in rows if not r["context"].startswith("e2e/testsuite/")]
+        with self.assertRaisesRegex(ratchet.PromotionError, "e2e/testsuite/"):
             self.gate()
 
     def test_release_is_keyed_to_the_promoted_commit_not_the_branch_tip(self):

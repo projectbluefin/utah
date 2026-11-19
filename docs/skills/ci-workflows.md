@@ -1,7 +1,7 @@
 ---
 name: ci-workflows
-version: "1.3"
-last_updated: "2026-10-31"
+version: "1.4"
+last_updated: "2026-11-07"
 id: ci-workflows
 one_line_purpose: Navigate Utah's build, promote, and sync workflow topology.
 entry_point: docs/skills/ci-workflows.md
@@ -76,7 +76,10 @@ post-build verification workflows, not the complete workflow inventory:
 - `.github/workflows/update-gnome-extensions.yml` -- weekly and manual
   submodule updates. `prepare-gnome-extension-bumps.py` validates each
   tracked-branch head; missing or invalid metadata keeps that source pinned,
-  warns in the run summary, and does not block other candidates. It uses the
+  warns in the run summary, and does not block other candidates. Extensions
+  in `ARCHIVES` ship from a pinned, sha256-checked zip, so their gitlink is
+  never bumped alone (#1290): move it by hand with the archive URL and digest.
+  It uses the
   metadata paths in `scripts/verify-gnome-extensions.py`
   (`SOURCE_EXTENSIONS`); update that map when adding an extension. Paths are
   passed as argv and `shell-version` values are allow-listed in the report.
@@ -101,20 +104,26 @@ post-build verification workflows, not the complete workflow inventory:
   the proposed head. The measurement step keeps the read-only job token.
 - `.github/workflows/post-testing-e2e.yml` -- successful non-PR testing builds
   explicitly dispatch this, or manually supply a successful testing build run ID.
-  Its `promote-to-testing` job records per-digest evidence for the LUKS and
-  production ISO jobs and moves `:testing` through a monotonic ratchet. The
-  separate testsuite matrix is advisory: its failure makes the workflow red
-  but does not block the ratchet. The promotion to `main` sets
-  `run_e2e: false`; the release gate separately re-runs `smoke,common`.
+  Its `promote-to-testing` job needs the LUKS, production ISO and testsuite
+  jobs. Only when all pass does it record per-digest evidence and move
+  `:testing` through a monotonic ratchet; a red testsuite leg blocks
+  promotion, with no override (#1329). The promotion to `main` sets
+  `run_e2e: false`; the release gate requires that evidence for the exact
+  `:testing` digests and re-runs `smoke,common`.
   See [testsuite triage](ci-workflows/references/testsuite-triage.md) for
   known failures and [iso-e2e](ci-workflows/references/iso-e2e.md) for the
   ratchet.
-- `.github/workflows/execute-release.yml` -- promotion pushes to `main` and
-  manual dispatch retag `:stable`. Its `e2e-evidence` job gates the release on
+- `.github/workflows/execute-release.yml` -- promotion pushes to `main`,
+  manual dispatch and a daily 06:00 UTC check retag `:stable`. The daily run
+  releases only when `:stable` last moved over seven days ago (or is missing)
+  and `:testing` points at a different digest, and otherwise posts a
+  `::notice` saying why not. `scripts/release-trigger.py` dates `:stable` by
+  the retag step of past runs, never by image metadata
+  ([release-cadence](ci-workflows/references/release-cadence.md)). Its
+  `e2e-evidence` job gates every release on
   the E2E evidence recorded for the exact digests `:testing` points at, not on
   the `testing` branch tip, then hands the reusable release the
-  commit-addressed source tags it verified
-  ([release-cadence](ci-workflows/references/release-cadence.md)).
+  commit-addressed source tags it verified.
 - `.github/workflows/prow.yml` -- slash commands on issues and pull requests,
   roster authorization via `projectbluefin/.project/.github/workflows/prow-authorize.yml`,
   issue transfers via `prow-transfer.yml`, and label syncing via

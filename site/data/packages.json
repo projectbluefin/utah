@@ -124,6 +124,7 @@
         "acl",
         "alsa-ucm",
         "alsa-utils",
+        "anthy-unicode",
         "argyllcms",
         "attr",
         "autofs",
@@ -161,6 +162,7 @@
         "ethtool",
         "exfatprogs",
         "f2fs-tools",
+        "fcitx5-gtk",
         "file",
         "foo2zjs",
         "foomatic-db-filesystem",
@@ -389,7 +391,7 @@
     }
   ],
   "totals": {
-    "installed": 332,
+    "installed": 334,
     "unavailable": 9
   },
   "unavailable": [

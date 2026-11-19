@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import os
 import subprocess
 import sys
@@ -97,9 +98,41 @@ def update_submodule(root: Path, name: str, path: str) -> tuple[str, str]:
     return pinned, run_git(root, "-C", path, "rev-parse", "HEAD").stdout.strip()
 
 
+def archive_paths(root: Path) -> set[str]:
+    """Submodules whose extension ships from a pinned, sha256-checked archive.
+
+    Their gitlink is only reference source: scripts/build-gnome-extensions.sh
+    installs the archive, and provenance.json records both. Moving the gitlink
+    alone would name source that does not ship, so they are bumped only
+    together with their archive URL and digest, by hand.
+    """
+    verifier = root / "scripts/verify-gnome-extensions.py"
+    if not verifier.is_file():
+        return set()
+    names: dict[str, object] = {}
+    for node in ast.parse(verifier.read_text()).body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target = node.targets[0]
+            if isinstance(target, ast.Name) and target.id in (
+                "ARCHIVES", "SOURCE_EXTENSIONS", "EXTENSION_BASE"
+            ):
+                names[target.id] = ast.literal_eval(node.value)
+    archives, sources, base = (
+        names.get("ARCHIVES"), names.get("SOURCE_EXTENSIONS"), names.get("EXTENSION_BASE")
+    )
+    if not (isinstance(archives, dict) and isinstance(sources, dict) and isinstance(base, str)):
+        raise RuntimeError(f"cannot read ARCHIVES/SOURCE_EXTENSIONS/EXTENSION_BASE from {verifier}")
+    return {base + sources[uuid] for uuid in archives}
+
+
 def prepare(root: Path, report_path: Path) -> list[Bump]:
     bumps = []
+    archived = archive_paths(root)
     for name, path in submodules(root):
+        if any(metadata.startswith(path + "/") for metadata in archived):
+            pinned = run_git(root, "rev-parse", f"HEAD:{path}").stdout.strip()
+            bumps.append(Bump(path, pinned, pinned, "—", "skipped (ships from a pinned archive)"))
+            continue
         pinned, upstream = update_submodule(root, name, path)
         if pinned == upstream:
             bumps.append(Bump(path, pinned, upstream, "—", "unchanged"))
@@ -131,6 +164,7 @@ def prepare(root: Path, report_path: Path) -> list[Bump]:
             "# GNOME extension bumps",
             "",
             "Valid tracked-branch heads are proposed; missing or invalid metadata keeps the existing pin and does not block other extensions.",
+            "Extensions that ship from a pinned archive are never bumped here: their gitlink moves only with the archive URL and sha256.",
             "The proposal uses the repository-scoped App so normal pull-request contract and image-build CI run on its exact head.",
             "Hive review, required checks and the normal merge policy still apply. Source metadata alone does not prove GNOME 51 runtime compatibility.",
             "",
