@@ -50,7 +50,15 @@ class ExtensionBumpPreparationTests(unittest.TestCase):
             self.git(root, "config", "user.email", "extension-test@example.invalid", env=env)
 
             remotes = {}
-            for name in ("valid", "retired"):
+            # "archived" ships from a pinned zip (ARCHIVES in the verifier),
+            # so its gitlink must not move on its own (#1290, Copyous).
+            (root / "scripts").mkdir()
+            (root / "scripts/verify-gnome-extensions.py").write_text(
+                'SOURCE_EXTENSIONS = {"archived@example": "archived/resources/metadata.json"}\n'
+                'EXTENSION_BASE = "extensions/"\n'
+                'ARCHIVES = {"archived@example": "archived"}\n'
+            )
+            for name in ("valid", "retired", "archived"):
                 remote = base / f"{name}-upstream"
                 self.create_upstream(remote, name, env)
                 self.git(
@@ -72,7 +80,7 @@ class ExtensionBumpPreparationTests(unittest.TestCase):
                 )
                 remotes[name] = remote
 
-            self.git(root, "add", ".gitmodules", "extensions", env=env)
+            self.git(root, "add", ".gitmodules", "extensions", "scripts", env=env)
             self.git(root, "commit", "-m", "pin extensions", env=env)
             old = {
                 name: self.git(root, "rev-parse", f"HEAD:extensions/{name}", env=env)
@@ -82,6 +90,9 @@ class ExtensionBumpPreparationTests(unittest.TestCase):
             (remotes["valid"] / "fix.js").write_text("// compatible upstream fix\n")
             self.git(remotes["valid"], "add", "fix.js", env=env)
             self.git(remotes["valid"], "commit", "-m", "valid update", env=env)
+            (remotes["archived"] / "fix.js").write_text("// newer than the pinned zip\n")
+            self.git(remotes["archived"], "add", "fix.js", env=env)
+            self.git(remotes["archived"], "commit", "-m", "archived update", env=env)
             (remotes["retired"] / "metadata.json").unlink()
             (remotes["retired"] / "README.md").write_text("Source was removed upstream.\n")
             self.git(remotes["retired"], "add", "-A", env=env)
@@ -127,6 +138,14 @@ class ExtensionBumpPreparationTests(unittest.TestCase):
                 contents,
             )
             self.assertIn("keeping", result.stderr)
+            self.assertEqual(
+                self.git(root, "rev-parse", "HEAD:extensions/archived", env=env),
+                old["archived"],
+            )
+            self.assertIn(
+                f"| `extensions/archived` | `{old['archived'][:12]}` | `{old['archived'][:12]}` | — | skipped (ships from a pinned archive) |",
+                contents,
+            )
 
 
 if __name__ == "__main__":
