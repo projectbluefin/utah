@@ -198,8 +198,9 @@ packages = [
     "langpacks-fonts-en",
     # Input methods also shipped by Dakota (#1256). Keep the base manifest's
     # Mozc and Unikey engines: removing them would drop existing language support.
-    # ibus-anthy and ibus-typing-booster await kasumi-unicode and
-    # cldr-emoji-annotation respectively in the pinned repositories (#1256).
+    # Anthy, Typing Booster and Rime still need runtime dependencies (#1256).
+    "anthy-unicode",
+    "fcitx5-gtk",
     "ibus-hangul",
     "ibus-libpinyin",
     "libhangul",

@@ -66,9 +66,13 @@ payloads need an inline drop condition in `packages/utah.toml`; the factory
 follows the same rule when importing recipes. Dakota parity installs `wget2`
 and `wget2-wget` (the `wget` link); the desktop file contract checks both commands.
 
-Utah requests available Dakota input engines and language libraries in `[parity]` (#1256).
-Keep the base manifest's Mozc and Unikey; ibus-anthy and ibus-typing-booster await
-`kasumi-unicode` and `cldr-emoji-annotation`, which neither the factory nor Hummingbird publishes.
+Utah requests available Dakota input packages in `[parity]` (#1256).
+Dakota's Anthy library is packaged as `anthy-unicode`; it can ship independently
+of the `ibus-anthy` engine. `fcitx5-gtk` supplies GTK integration without
+installing the Fcitx daemon. Keep the base manifest's Mozc and Unikey.
+Do not treat a published engine RPM as installable on its own: `ibus-anthy`
+needs Kasumi, `ibus-typing-booster` needs `cldr-emoji-annotation`, and
+`ibus-rime` needs `brise` and the OpenCC library through `librime`.
 
 ## Wi-Fi documentation currency
 

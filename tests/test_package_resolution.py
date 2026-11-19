@@ -443,6 +443,7 @@ class ParityContractTests(unittest.TestCase):
     def test_input_methods_remain_in_the_install_contract(self):
         contract = set(installer.contract(self.MANIFEST, self.OVERLAY, "44"))
         expected = {
+            "anthy-unicode", "fcitx5-gtk",
             "ibus-hangul", "ibus-libpinyin",
             "libhangul", "libpinyin", "m17n-db", "m17n-lib",
             "ibus-mozc", "ibus-unikey",
