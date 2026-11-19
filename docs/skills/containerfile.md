@@ -1,7 +1,7 @@
 ---
 name: containerfile
 version: "1.0"
-last_updated: "2026-10-13"
+last_updated: "2026-11-19"
 id: containerfile
 one_line_purpose: Edit the Containerfile without regressing layer count or cache hits.
 entry_point: docs/skills/containerfile.md
@@ -239,12 +239,29 @@ modules before the image can commit.
 ## Clean and lint share a layer
 
 Everything above writes build-time residue that bootc lint rejects: dnf logs
-under `/var/log`, cockpit and dnf state under `/run`, and ~45 `/var`
-directories with no tmpfiles.d entry. `utah-clean-stage` must run after the
-last package install, which is the NVIDIA and OGC step, not after the main
-transaction. The lint that checks the result runs in the same layer
-(`bootc container lint --fatal-warnings --skip nonempty-boot`): nothing can
-change between the two (comment, `Containerfile`).
+under `/var/log`, cockpit and dnf state under `/run`, ~45 `/var`
+directories with no tmpfiles.d entry, and kernel files under `/boot`.
+`utah-clean-stage` must run after the last package install, which is the
+NVIDIA and OGC step, not after the main transaction. The lint that checks the
+result runs in the same layer (`bootc container lint --fatal-warnings`, every
+check enabled): nothing can change between the two (comment, `Containerfile`).
+
+`/boot` ships empty. bootc deploys the kernel and initramfs from
+`/usr/lib/modules/<kver>/`; the image's `/boot` is masked by the ostree
+backend but not by the composefs backend, whose composefs-boot reads
+`/boot/loader/entries/*.conf` as Type #1 boot entries. bootc then refuses a
+BLS install with `Setting up BLS boot: Found Type1 entries in /boot` (#1129).
+The entry came from the kernel cache: `install-fedora-kernel.sh install`
+runs `rpm -U`, kernel-core's `%posttrans` runs `kernel-install add`, and
+grub2-common's `20-grub.install` ignores `layout=ostree` and writes
+`/boot/loader/entries/<machine-id>-<kver>.conf` (options taken from the build
+runner's `/proc/cmdline`) plus copies of vmlinuz, initramfs, System.map,
+config and symvers. The OGC installer adds `/boot/vmlinuz-<release>`, which
+`regenerate-initramfs.sh` has already hardlinked into `/usr/lib/modules`.
+`utah-clean-stage` empties `/boot`, and the lint's `nonempty-boot` check (it
+was skipped from the first commit until #1129) fails the build on anything
+left. To check a published image: `podman run --rm --network=none <image>
+find /boot` must print only `/boot`.
 
 The one deliberate exception is `/var/home`, created after clean-stage but
 before lint in that same RUN. `/home` is a symlink to `var/home` and
