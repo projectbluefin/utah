@@ -95,6 +95,10 @@ disable sysstat-rotate.timer
 # on every boot. Utah applies its profile at build time.
 disable authselect-first-boot.service
 disable authselect-apply-changes.service
+# Utah keeps Fedora's account model (owner decision on #1238; GNOME OS has not
+# moved to homed either). With no user on a fresh install, homectl firstboot
+# would prompt on the console before GDM, ahead of gnome-initial-setup.
+disable systemd-homed-firstboot.service
 # A second D-Bus daemon would claim the dbus.service alias dbus-broker holds.
 disable dbus-daemon.service
 # Live-media session setup from livesys-scripts; never on an installed system.

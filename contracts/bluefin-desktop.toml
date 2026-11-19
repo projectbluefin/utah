@@ -196,12 +196,6 @@ files = [
   "/usr/lib/systemd/system/uupd-manual.service",
   "/etc/polkit-1/rules.d/uupd.rules",
   "/etc/uupd/config.json",
-  # homed users log in through authselect's with-systemd-homed (#1238);
-  # gnome-initial-setup, not homectl's console prompt, creates the first user.
-  "/etc/pam.d/system-auth",
-  "/etc/pam.d/password-auth",
-  "/etc/nsswitch.conf",
-  "/usr/lib/systemd/system/systemd-homed-firstboot.service.d/10-utah-initial-setup.conf",
   # Dakota ships freedesktop-sdk's git-lfs with a system LFS filter; the
   # git-lfs RPM's %post writes it (`git lfs install --system`).
   "/etc/gitconfig",
@@ -215,17 +209,9 @@ files = [
 # .local names resolve over mDNS (nss-mdns + authselect with-mdns4, #499).
 "/etc/nsswitch.conf" = [
   "mdns4_minimal [NOTFOUND=return]",
-  "passwd:     files systemd",
-  "group:      files systemd",
 ]
 "/usr/lib/bootc/kargs.d/10-utah-plymouth.toml" = [
   'kargs = ["plymouth.ignore-serial-consoles"]',
-]
-"/etc/authselect/authselect.conf" = ["with-systemd-homed"]
-"/etc/pam.d/system-auth" = ["pam_systemd_home.so"]
-"/etc/pam.d/password-auth" = ["pam_systemd_home.so"]
-"/usr/lib/systemd/system/systemd-homed-firstboot.service.d/10-utah-initial-setup.conf" = [
-  "Environment=SYSTEMD_HOME_FIRSTBOOT_OVERRIDE=0",
 ]
 "/usr/share/applications/io.projectbluefin.chairlift.desktop" = [
   "Name=Control Center",
@@ -527,9 +513,6 @@ enabled = [
   "avahi-daemon.service",
   "avahi-daemon.socket",
   "bluetooth.service",
-  # homed and its first-boot credential import, as on Dakota (#1238).
-  "systemd-homed.service",
-  "systemd-homed-firstboot.service",
   # Rewrites legacy /var/home passwd fields before any login (#1234).
   "bluefin-migrate-var-home-passwd.service",
   # VM guest agents, enabled as on Dakota (80-open-vm-tools.preset and its
@@ -653,6 +636,9 @@ masked = [
 # also socket-activated, and saned is socket-activated from sane-backends-daemon
 # (not installed today, so saned.socket reports not-found until it is).
 disabled = [
+  # Owner decision on #1238: no homed. homectl's console prompt would run
+  # before GDM on an install with no user, ahead of gnome-initial-setup.
+  "systemd-homed-firstboot.service",
   # Dakota's 80-libvirt.preset (carried in 98-utah-enable-default.preset):
   # libvirt stays off until `ujust setup-virtualization` (#1232). Absent units
   # count as off, so these hold once the factory publishes libvirt.

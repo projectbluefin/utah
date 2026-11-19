@@ -105,27 +105,20 @@ they are harmless: `ratbagd.service` (D-Bus alias), `selinux-check-proper-disabl
 `bluefin-migrate-var-home-passwd.service`
 (Dakota's legacy `/var/home` passwd migration for the `/home` bind mount,
 #1234), `vmtoolsd.service` and `qemu-guest-agent.service` (#1232),
-`systemd-homed.service` and `systemd-homed-firstboot.service` (#1238), and
-`nfs-client.target` (#1269).
+and `nfs-client.target` (#1269).
 `[services].disabled` holds the network servers, sysstat, libvirt's sockets,
-mdadm's timers, and the units enable-by-default must not reach.
+mdadm's timers, `systemd-homed-firstboot.service`, and the units
+enable-by-default must not reach.
 
-### systemd-homed (#1238)
+### systemd-homed (#1238): not adopted
 
-As on Dakota, whose freedesktop-sdk PAM stack carries `-pam_systemd_home`,
-homed users can log in: `configure-services.sh` enables authselect's
-`with-systemd-homed`, which adds `pam_systemd_home.so` to `system-auth` and
-`password-auth`. The `local` profile's nsswitch already resolves
-`passwd`/`group`/`shadow` through `systemd`. `systemd-homed-firstboot.service`
-is enabled by `enable *`. Its only condition is `ConditionFirstBoot=yes`;
-`homectl firstboot` (systemd 261) applies `home.create.*`/`home.register.*`
-credentials, then prompts on the console for a first user unless a regular
-user exists. The installer recipe has no user step, so on a fresh install no
-user exists and that prompt would run before GDM, ahead of
-gnome-initial-setup. The drop-in `10-utah-initial-setup.conf` sets
-`SYSTEMD_HOME_FIRSTBOOT_OVERRIDE=0`, which keeps the credential import and
-drops the prompt; gnome-initial-setup creates the first account. The contract
-asserts the feature, the PAM lines, nsswitch, the drop-in and both units.
+Dakota's freedesktop-sdk PAM stack carries `-pam_systemd_home`; Utah does not
+follow it (owner decision on #1238). Utah needs a clean migration path for
+Fedora users, and GNOME OS has not moved to homed either. authselect's
+`with-systemd-homed` stays off, and `98-utah-enable-default.preset` disables
+`systemd-homed-firstboot.service`: with no user on a fresh install, `homectl
+firstboot` would prompt on the console before GDM, ahead of
+gnome-initial-setup.
 
 ### NFS client (#1269)
 
