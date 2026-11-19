@@ -1614,6 +1614,35 @@ Path(os.environ["PODMAN_LOG"] + ".manifest").write_bytes(manifest)
         for scratch in ("utah-payload", "payload-store", "payload-meta", "payload-storage.conf"):
             self.assertFalse((self.work / scratch).exists(), scratch)
 
+    def _containers_common_skeleton(self):
+        # containers-common's empty additional image store; the review run
+        # failed with "already exists" on it.
+        store = self.root / "usr/lib/containers/storage"
+        for sub, lock in (("overlay-images", "images.lock"), ("overlay-layers", "layers.lock")):
+            (store / sub).mkdir(parents=True)
+            (store / sub / lock).touch()
+        return store
+
+    def test_containers_common_empty_store_is_replaced(self):
+        ref = "ghcr.io/projectbluefin/utah:review-vm-abc"
+        self._live_root(ref)
+        self._containers_common_skeleton()
+        result = self._run("localhost/utah:testing", ref)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            (self.root / "usr/lib/containers/storage/overlay/abc/diff/file").read_text(), "payload")
+        self.assertTrue((self.root / "etc/bootc-installer/media-input.json").exists())
+
+    def test_a_populated_store_directory_fails_the_build(self):
+        ref = "ghcr.io/projectbluefin/utah:review-vm-abc"
+        self._live_root(ref)
+        store = self._containers_common_skeleton()
+        (store / "overlay-images/images.json").write_text("[]")
+        result = self._run("localhost/utah:testing", ref)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("holds more than containers-common's empty store", result.stderr)
+        self.assertFalse((self.root / "etc/bootc-installer/media-input.json").exists())
+
     def test_store_digest_must_match_the_exported_manifest(self):
         # Fisherman compares `skopeo inspect containers-storage:<image>` with
         # the receipt; a store that rewrote the manifest would fail there.

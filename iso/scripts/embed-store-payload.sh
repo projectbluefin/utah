@@ -60,7 +60,18 @@ STORAGE_CONF="${WORK}/payload-storage.conf"
     echo "ERROR: the live root has no installer recipe or catalog under ${ROOT}/etc/bootc-installer" >&2
     exit 1
 }
-[[ ! -e "${STORE_DIR}" ]] || { echo "ERROR: ${STORE_DIR} already exists" >&2; exit 1; }
+# containers-common ships /usr/lib/containers/storage as an empty additional
+# image store: overlay-images/ and overlay-layers/ with empty lock files. That
+# skeleton is replaced by the payload store below; anything else there would be
+# merged into it, so it fails the build.
+if [[ -e "${STORE_DIR}" ]]; then
+    if [[ ! -d "${STORE_DIR}" ]] || [[ -n "$(find "${STORE_DIR}" -mindepth 1 \
+            \( \( ! -type d ! -name '*.lock' \) -o \( -name '*.lock' ! -empty \) \) -print -quit)" ]]; then
+        echo "ERROR: ${STORE_DIR} already exists and holds more than containers-common's empty store" >&2
+        exit 1
+    fi
+    rm -rf "${STORE_DIR}"
+fi
 
 echo "Embedding ${PUBLISHED_IMAGE} for offline installation"
 # Containers-storage exports uncompressed layers; recompression or OCI archive
