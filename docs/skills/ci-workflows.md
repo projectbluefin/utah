@@ -1,7 +1,7 @@
 ---
 name: ci-workflows
-version: "1.3"
-last_updated: "2026-10-31"
+version: "1.4"
+last_updated: "2026-11-07"
 id: ci-workflows
 one_line_purpose: Navigate Utah's build, promote, and sync workflow topology.
 entry_point: docs/skills/ci-workflows.md
@@ -101,18 +101,25 @@ post-build verification workflows, not the complete workflow inventory:
   the proposed head. The measurement step keeps the read-only job token.
 - `.github/workflows/post-testing-e2e.yml` -- successful non-PR testing builds
   explicitly dispatch this, or manually supply a successful testing build run ID.
-  Its `promote-to-testing` job records per-digest E2E evidence as commit
-  statuses and moves `:testing` through a monotonic ratchet: `:testing` is the
-  latest E2E-green commit, not the branch tip, so merges to `main` during a
-  run never block promotion and an older run never moves it backwards
-  (`scripts/promotion-ratchet.py`; details in
-  [iso-e2e](ci-workflows/references/iso-e2e.md)).
-- `.github/workflows/execute-release.yml` -- promotion pushes to `main` and
-  manual dispatch retag `:stable`. Its `e2e-evidence` job gates the release on
+  Its `promote-to-testing` job records per-digest evidence for the LUKS and
+  production ISO jobs and moves `:testing` through a monotonic ratchet. The
+  separate testsuite matrix is advisory: its failure makes the workflow red
+  but does not block the ratchet. The promotion to `main` sets
+  `run_e2e: false`; the release gate separately re-runs `smoke,common`.
+  See [testsuite triage](ci-workflows/references/testsuite-triage.md) for
+  known failures and [iso-e2e](ci-workflows/references/iso-e2e.md) for the
+  ratchet.
+- `.github/workflows/execute-release.yml` -- promotion pushes to `main`,
+  manual dispatch and a daily 06:00 UTC check retag `:stable`. The daily run
+  releases only when `:stable` last moved over seven days ago (or is missing)
+  and `:testing` points at a different digest, and otherwise posts a
+  `::notice` saying why not. `scripts/release-trigger.py` dates `:stable` by
+  the retag step of past runs, never by image metadata
+  ([release-cadence](ci-workflows/references/release-cadence.md)). Its
+  `e2e-evidence` job gates every release on
   the E2E evidence recorded for the exact digests `:testing` points at, not on
   the `testing` branch tip, then hands the reusable release the
-  commit-addressed source tags it verified
-  ([release-cadence](ci-workflows/references/release-cadence.md)).
+  commit-addressed source tags it verified.
 - `.github/workflows/prow.yml` -- slash commands on issues and pull requests,
   roster authorization via `projectbluefin/.project/.github/workflows/prow-authorize.yml`,
   issue transfers via `prow-transfer.yml`, and label syncing via
@@ -143,32 +150,34 @@ must be up to date" policy can be replaced by a merge queue: the queue tests
 each pull request on top of `main` and the entries ahead of it instead of
 making every open pull request rebase and rebuild after each merge.
 
+Since 2026-11-18 `main` requires the merge queue (ruleset 22705160: squash,
+groups of up to 5, 120-minute check timeout, merge only when every check
+passes). Strict freshness is off since 2026-11-18, after the first queue group
+the hive enqueued (#1335) passed: the queue tests each entry on top of `main`
+and the entries ahead of it instead.
+
 Automations that merge into `main`, and what each needs under a required
 queue:
 
 | Automation | How it merges | Under a required merge queue |
 | --- | --- | --- |
-| `prow.yml` (tide, `cncf/prow-github-actions` v3.5.0; `tide.merge_queue: auto`, `merge_method: squash` in `projectbluefin/.project/prow.yaml`) | On `lgtm` + `approved`, enqueues with `enqueuePullRequest` on the job's `GITHUB_TOKEN` (no `token` secret is passed) | At risk: GitHub starts no workflow for an event `GITHUB_TOKEN` caused, so a group prow enqueues may get no `merge_group` runs and time out (prow's own docs say this is "being verified live"). Pass prow a GitHub App `token` that may enqueue, or have a maintainer click "Merge when ready" |
+| `prow.yml` (tide, `cncf/prow-github-actions` v3.5.0 run through `projectbluefin/.project`'s `prow-run.yml`; `tide.merge_queue: auto`, `merge_method: squash` in `projectbluefin/.project/prow.yaml`) | On `lgtm` + `approved`, enqueues with `enqueuePullRequest` on a mergeraptor App installation token, as `mergeraptor[bot]` | Works: App events start `merge_group` runs (chairlift#792 was queued this way on 2026-11-15, and its group checks started 18 s later). If the App token can't be created, `prow-run.yml` falls back to the job's `GITHUB_TOKEN`; a group enqueued that way gets no `merge_group` runs and times out, so a maintainer clicks "Merge when ready" |
 | Renovate (`renovate.json`, `local>projectbluefin/renovate-config` = `config:recommended`) | No automerge; the `utah-packages` digest group sets `automerge: false` | A maintainer (or prow) enqueues |
 | `update-gnome-extensions.yml`, `image-baselines.yml`, `promote-testing-to-main.yml` | Open or maintain pull requests only | A maintainer (or prow) enqueues |
 | `sync-main-to-testing.yml` | Pushes `testing`, not `main` | Unaffected |
 
-Queue activation also requires the App's permissions, not just its secrets.
-`mergeraptor` currently grants contents, issues, pull requests and workflows
-write access, but neither commit statuses nor Actions access. Replacing Prow's
-single token requires `statuses:write` for exact-head LGTM binding and
-`actions:write` for `/test`, `/retest` and `/ok-to-test`. Only the App owner can
-add these permissions and approve the installation update. Do not request
-ungranted permissions or activate a required queue while this is unresolved.
-Keep the existing command path and strict freshness until the App-enqueued
-`merge_group` run has been observed.
+Prow's App token asks for contents, issues, pull requests, commit statuses and
+Actions write: `statuses:write` for exact-head LGTM binding and `actions:write`
+for `/test`, `/retest` and `/ok-to-test`. The org's mergeraptor installation
+grants all five (`statuses:write` accepted 2026-11-14,
+projectbluefin/.project#36); chairlift and common run the same caller.
 
 ## Unattended landing with strict freshness
 
 Arm GitHub's **native auto-merge** on a PR to land it unattended: Hive, a
 Renovate rule with platform automerge enabled, or a maintainer can do this.
-Merely opening a PR does not arm it. Required checks, reviews and the strict
-up-to-date rule still apply; this automation does not bypass or relax them.
+Merely opening a PR does not arm it. Required checks, reviews and the merge
+queue still apply; this automation does not bypass or relax them.
 
 `.github/workflows/update-armed-prs.yml` runs on every push to `main`, manual
 dispatch on `main`, and at minutes 17 and 47 each hour. It paginates open PRs

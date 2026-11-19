@@ -3,12 +3,12 @@ ARG BASE_IMAGE=quay.io/hummingbird-community/os-minimal:latest@sha256:a98c8cf505
 # Keep this pin in Utah so an image build is reproducible and can be reviewed
 # against the exact package set it consumes.
 ARG PACKAGE_IMAGE=ghcr.io/projectbluefin/utah-packages
-ARG PACKAGE_IMAGE_SHA=sha256:0b0664cb8591ccf8f2b42e7bcb1cb0f27d5da91eaf450dfa64c7982730be38c1
+ARG PACKAGE_IMAGE_SHA=sha256:744c4632cca27c059905779911b4db3269ff069825372c1ba6c8fbf6668ed3d0
 # CI keeps PACKAGE_IMAGE_SHA pinned. PACKAGE_IMAGE_REF supports a local image
 # in containers-storage, where no registry digest is available.
 ARG PACKAGE_IMAGE_REF=${PACKAGE_IMAGE}@${PACKAGE_IMAGE_SHA}
 ARG COMMON_IMAGE=ghcr.io/projectbluefin/common
-ARG COMMON_IMAGE_SHA=sha256:9faad517b30be4c0de2c07e1bcb9236fe095226694443a200ccf38072ef76267
+ARG COMMON_IMAGE_SHA=sha256:0391d804e58ab11a90df41846967fcaa9841f662a07a4b05c584e1a7c796e074
 ARG BREW_IMAGE=ghcr.io/ublue-os/brew
 ARG BREW_IMAGE_SHA=sha256:9e0492dbc471258657564c94dae18b58dd96ddb998a06f2b15e8209efb48042b
 # Bluefin wallpapers, taken straight from the artwork repository's own image
@@ -16,7 +16,7 @@ ARG BREW_IMAGE_SHA=sha256:9e0492dbc471258657564c94dae18b58dd96ddb998a06f2b15e820
 # wait on a Common release. It is the multi-arch index digest: the contents are
 # architecture-independent. Renovate keeps it current like the pins above.
 ARG WALLPAPERS_IMAGE=ghcr.io/projectbluefin/bluefin-wallpapers-gnome
-ARG WALLPAPERS_IMAGE_SHA=sha256:379227aa1d8c1832ba6ff9c50d4fdc9e36fc2eff5a6c10771d71e49850ce4c07
+ARG WALLPAPERS_IMAGE_SHA=sha256:460fcdf3e73e99fe63bce326a0cf694fb54fdcb8fe2d3c83dc0b1948b3dd3c0b
 
 FROM ${COMMON_IMAGE}@${COMMON_IMAGE_SHA} AS common
 FROM ${BREW_IMAGE}@${BREW_IMAGE_SHA} AS brew
@@ -352,6 +352,12 @@ ARG UUPD_TIMER_SHA256=bbb5f098ec33d047bdef571e0bc112364df157e0f92d73e0febab703c4
 # own and cost forty seconds to commit a few megabytes. It lives in
 # scripts/mirror-shim.sh rather than inline, because as a bare && chain a
 # failure printed nothing at all -- see the comment at the top of that script.
+#
+# Utah's SELinux policy modules load here, before the desktop contract that
+# lists them under [selinux]: the module store is under read-only /usr once
+# booted (#551), so the build is the only place to change it. -n: no reload,
+# the build has no selinuxfs. utah_bootc_probe dontaudits bootc's expected
+# mac_admin probe from plain services (#1198; the .cil says why not allow).
 RUN --mount=type=bind,from=artwork,source=/out/branding,target=/tmp/utah-artwork-branding,ro \
     --mount=type=bind,from=common,source=/system_files/bluefin/usr/share/plymouth,target=/tmp/utah-common-plymouth,ro \
     mkdir -p /tmp/uupd && \
@@ -370,6 +376,7 @@ RUN --mount=type=bind,from=artwork,source=/out/branding,target=/tmp/utah-artwork
     glib-compile-schemas /usr/share/glib-2.0/schemas && \
     ENABLE_SSHD="${ENABLE_SSHD}" /usr/local/libexec/utah-configure-services && \
     /usr/local/libexec/utah-configure-branding && \
+    semodule -n -i /usr/share/selinux/packages/utah/utah_bootc_probe.cil && \
     /usr/local/libexec/utah-verify-desktop-contract /usr/share/utah/bluefin-desktop.toml && \
     /usr/local/libexec/utah-mirror-shim && \
     /usr/local/libexec/utah-verify-efi-chain && \
@@ -448,10 +455,12 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
 # `useradd --create-home` fails on a dangling symlink -- the installer chroot
 # on a fresh install, the tacklebox customize container, and the live ISO
 # build all broke with "cannot create directory /home", exit 12 (#602).
+# GRUB can report the ESP to systemd, which chooses /efi when /boot is busy.
+# The immutable root cannot create that mountpoint at boot (#1326).
 RUN --mount=type=bind,from=inputs,source=/tmp/utah-scripts,target=/utah-build-tools,ro \
     /usr/local/libexec/utah-fix-home-labels --check && \
     /usr/local/libexec/utah-clean-stage && \
-    mkdir -p /var/home && \
+    mkdir -p /var/home /efi && \
     bootc container lint --fatal-warnings --skip nonempty-boot && \
     python3 /utah-build-tools/pin-build-mtimes.py
 

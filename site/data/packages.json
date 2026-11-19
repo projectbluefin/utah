@@ -201,6 +201,8 @@
         "hplip-libs",
         "htop",
         "ibus-gtk4",
+        "ibus-hangul",
+        "ibus-libpinyin",
         "intel-gmmlib",
         "intel-mediasdk",
         "intel-vpl-gpu-rt",
@@ -213,10 +215,12 @@
         "langpacks-fonts-en",
         "lcms",
         "less",
+        "libhangul",
         "libieee1284",
         "libimobiledevice-utils",
         "libnma",
         "libpcap",
+        "libpinyin",
         "libsane-airscan",
         "libsane-hpaio",
         "libuser",
@@ -226,6 +230,8 @@
         "lm_sensors",
         "lshw",
         "lsof",
+        "m17n-db",
+        "m17n-lib",
         "m4",
         "man-db",
         "man-pages",
@@ -314,6 +320,8 @@
         "vim-enhanced",
         "vpnc",
         "vpnc-script",
+        "wget2",
+        "wget2-wget",
         "which",
         "wireless-regdb",
         "words",
@@ -376,7 +384,7 @@
     }
   ],
   "totals": {
-    "installed": 319,
+    "installed": 327,
     "unavailable": 6
   },
   "unavailable": [

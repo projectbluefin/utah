@@ -20,6 +20,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      packages: read
     outputs:
       matrix: ${{ steps.inputs.outputs.matrix }}
       main_ref: ${{ steps.inputs.outputs.main_ref }}
@@ -27,6 +28,8 @@ jobs:
       run: ${{ steps.inputs.outputs.run }}
       digests: ${{ steps.inputs.outputs.digests }}
       suites: ${{ steps.inputs.outputs.suites }}
+      lifecycle: ${{ steps.baseline.outputs.lifecycle }}
+      lifecycle_baseline: ${{ steps.baseline.outputs.baseline }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -67,14 +70,47 @@ jobs:
             echo "digests=$digests"
             echo "suites=$suites_json"
           } >> "$GITHUB_OUTPUT"
+      # The lifecycle job upgrades from what :testing serves now (the last
+      # promoted build) to this run's candidate. Resolve it here, before any
+      # job can move the tag, so the job never tests a build against itself.
+      # The workflow concurrency group keeps :testing still until we finish.
+      - id: baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAIN_REF: ${{ steps.inputs.outputs.main_ref }}
+        run: |
+          set -euo pipefail
+          command -v skopeo >/dev/null || { sudo apt-get update && sudo apt-get install -y skopeo; }
+          echo "$GH_TOKEN" | skopeo login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          repo="${MAIN_REF%@*}"
+          candidate="${MAIN_REF##*@}"
+          # Only a missing tag means "nothing promoted yet"; any other registry
+          # error fails the run rather than silently skipping the lifecycle gate.
+          if ! baseline=$(skopeo inspect --format '{{.Digest}}' "docker://$repo:testing" 2>err.txt); then
+            grep -qiE 'manifest unknown|name unknown' err.txt || { cat err.txt >&2; exit 1; }
+            baseline=""
+          fi
+          skopeo logout ghcr.io
+          if [ -z "$baseline" ]; then
+            echo "::notice title=lifecycle skipped::$repo:testing does not exist yet; there is no promoted build to upgrade from."
+            echo "lifecycle=skip" >> "$GITHUB_OUTPUT"
+          elif [ "$baseline" = "$candidate" ]; then
+            echo "::notice title=lifecycle skipped::$repo:testing already serves $candidate; there is no upgrade to test."
+            echo "lifecycle=skip" >> "$GITHUB_OUTPUT"
+          else
+            [[ "$baseline" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "unusable :testing digest: $baseline" >&2; exit 1; }
+            echo "lifecycle=run" >> "$GITHUB_OUTPUT"
+            echo "baseline=$repo@$baseline" >> "$GITHUB_OUTPUT"
+          fi
 
-  # Before the privileged luks and tacklebox-iso jobs pull the new image, prove
+  # Before the privileged luks, lifecycle and tacklebox-iso jobs pull the new image, prove
   # its SLSA provenance was produced by the reusable build workflow in
   # projectbluefin/actions on utah/testing (utah#1018). The promotion release
   # gate checks the cosign signature's identity; this checks the provenance
   # attestation itself, so an image attested by any other workflow or repo -- or
   # forged under this identity -- is rejected before those privileged jobs
-  # touch it. Gate luks and tacklebox-iso on it so the check must pass first.
+  # touch it. Gate luks, lifecycle and tacklebox-iso on it so the check must
+  # pass first.
   # (testsuite pulls the same digests without waiting on this job by design; it
   # only surfaces results and never gates :testing promotion.)
   verify-provenance:
@@ -190,6 +226,113 @@ jobs:
           if-no-files-found: error
           retention-days: 30
           path: docs/verification/
+      # Never upload debug ISOs or test disks: they contain test passwords.
+
+  # Prove a booted machine can move from the last promoted build to this one
+  # and back again: install the baseline (:testing before this run) from a
+  # debug live ISO, stage the candidate with bootc, reboot into it, roll back,
+  # and reboot into the baseline (iso/scripts/lifecycle-e2e.sh,
+  # docs/skills/lifecycle-e2e.md). Main flavor only for now; composefs can be
+  # a second matrix entry (UTAH_E2E_COMPOSEFS_BACKEND=1) once #1131 lands.
+  # promote-to-testing needs this job, so a failure blocks promotion. When
+  # :testing already serves the candidate there is nothing to upgrade, and the
+  # job is skipped rather than reported as passed.
+  lifecycle:
+    name: lifecycle (${{ matrix.image }}, ${{ matrix.backend }})
+    needs: [resolve, verify-provenance]
+    if: needs.resolve.outputs.lifecycle == 'run'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 240
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: utah
+            backend: ostree
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          persist-credentials: false
+      - name: Prepare ISO and QEMU host
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          sudo apt-get update
+          sudo apt-get install -y podman skopeo uidmap slirp4netns fuse-overlayfs \
+            squashfs-tools xorriso dosfstools mtools qemu-system-x86 qemu-utils \
+            ovmf sshpass ffmpeg tesseract-ocr
+          test -c /dev/kvm
+          sudo chmod a+rw /dev/kvm
+          test -r /dev/kvm && test -w /dev/kvm
+          mkdir -p output evidence
+          df -h .
+      - name: Name the baseline and candidate digests
+        env:
+          BASELINE_REF: ${{ needs.resolve.outputs.lifecycle_baseline }}
+          CANDIDATE_REF: ${{ fromJSON(needs.resolve.outputs.digests)[matrix.image] }}
+          FLAVOR: ${{ matrix.image }}
+          BACKEND: ${{ matrix.backend }}
+        run: |
+          set -euo pipefail
+          [[ "$BASELINE_REF" == *@sha256:* && "$CANDIDATE_REF" == *@sha256:* ]]
+          [ "$BASELINE_REF" != "$CANDIDATE_REF" ]
+          {
+            echo "### bootc lifecycle ($FLAVOR, $BACKEND)"
+            echo
+            echo "- Baseline (\`:testing\` before this run): \`$BASELINE_REF\`"
+            echo "- Candidate (this build): \`$CANDIDATE_REF\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Pull the baseline payload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASELINE_REF: ${{ needs.resolve.outputs.lifecycle_baseline }}
+        run: |
+          set -euo pipefail
+          echo "$GH_TOKEN" | podman login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          podman pull "$BASELINE_REF"
+          podman logout ghcr.io
+      # The ISO installs its payload under the baseline ref, which phase 1 of
+      # the harness checks the booted deployment tracks. DEBUG=1 provisions
+      # the utahtest account the harness logs in with.
+      - name: Compose disposable debug ISO of the baseline
+        env:
+          BASELINE_REF: ${{ needs.resolve.outputs.lifecycle_baseline }}
+          UTAH_ISO_WORKDIR: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          bash iso/scripts/build-iso.sh "$BASELINE_REF" "$PWD/output/utah-live.iso" \
+            "Utah CI Live" 1 "$BASELINE_REF" 2>&1 | tee evidence/iso-build.log
+      - name: Run the upgrade and rollback lifecycle
+        env:
+          BASELINE_REF: ${{ needs.resolve.outputs.lifecycle_baseline }}
+          CANDIDATE_REF: ${{ fromJSON(needs.resolve.outputs.digests)[matrix.image] }}
+          UTAH_LIFECYCLE_WORK: ${{ runner.temp }}/utah-lifecycle-e2e
+          UTAH_LIFECYCLE_POLICY: bootc
+          UTAH_LIFECYCLE_RAM: "6144"
+          UTAH_LIFECYCLE_CPUS: "2"
+        run: |
+          set -euo pipefail
+          bash iso/scripts/lifecycle-e2e.sh "$PWD/output/utah-live.iso" \
+            "$BASELINE_REF" "$CANDIDATE_REF" 2>&1 | tee evidence/lifecycle-test.log
+      - name: Preserve lifecycle evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: lifecycle-${{ matrix.image }}-${{ matrix.backend }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            evidence/
+            ${{ runner.temp }}/utah-lifecycle-e2e/evidence/
+            ${{ runner.temp }}/utah-lifecycle-e2e/screenshots/
+            ${{ runner.temp }}/utah-lifecycle-e2e/*.json
+            ${{ runner.temp }}/utah-lifecycle-e2e/*.log
+            ${{ runner.temp }}/utah-lifecycle-e2e/install/*.log
+            ${{ runner.temp }}/utah-lifecycle-e2e/install/screenshots/
       # Never upload debug ISOs or test disks: they contain test passwords.
 
   # Build the main image with tuna-os/tacklebox and prove the live-boot path:
@@ -346,7 +489,7 @@ jobs:
       fail-fast: false
       matrix:
         include: ${{ fromJSON(needs.resolve.outputs.suites) }}
-    uses: projectbluefin/testsuite/.github/workflows/e2e.yml@ecd519d17ca58ef4b77e03105d5ca4125ce52122 # v1
+    uses: projectbluefin/testsuite/.github/workflows/e2e.yml@5d942c2b156730ee9a3764a4c5b4270521c3887d # v1
     with:
       image: ${{ fromJSON(needs.resolve.outputs.digests)[matrix.image] }}
       compose_image: false
@@ -354,7 +497,7 @@ jobs:
       test_repository: projectbluefin/testsuite
       # The tests checked out must be the commit the e2e.yml above comes from,
       # or workflow and tests drift apart (#946). Renovate bumps both together.
-      test_ref: ecd519d17ca58ef4b77e03105d5ca4125ce52122 # v1
+      test_ref: 5d942c2b156730ee9a3764a4c5b4270521c3887d # v1
 
   # :testing is a ratchet over commits, not a mirror of the branch tip. The
   # tested digests become :testing when their commit is the promoted commit or
@@ -371,7 +514,17 @@ jobs:
   # branch's copy of this file. Such a run still tests; it just cannot publish
   # evidence or move a tag.
   promote-to-testing:
-    needs: [resolve, luks, production-iso]
+    needs: [resolve, luks, production-iso, lifecycle]
+    # The lifecycle job may only be absent when resolve skipped it on purpose
+    # (:testing already serves the candidate, or does not exist yet); a
+    # failed, cancelled or upstream-skipped lifecycle blocks this job.
+    if: >-
+      ${{ !cancelled()
+      && needs.resolve.result == 'success'
+      && needs.luks.result == 'success'
+      && needs.production-iso.result == 'success'
+      && (needs.lifecycle.result == 'success'
+      || (needs.lifecycle.result == 'skipped' && needs.resolve.outputs.lifecycle == 'skip')) }}
     runs-on: ubuntu-26.04
     permissions:
       contents: read
@@ -430,7 +583,17 @@ jobs:
           done < <(jq -r '.include[].ref' <<< "$MATRIX")
 
   documentation:
-    needs: [resolve, luks, production-iso]
+    needs: [resolve, luks, production-iso, lifecycle]
+    # The lifecycle job may only be absent when resolve skipped it on purpose
+    # (:testing already serves the candidate, or does not exist yet); a
+    # failed, cancelled or upstream-skipped lifecycle blocks this job.
+    if: >-
+      ${{ !cancelled()
+      && needs.resolve.result == 'success'
+      && needs.luks.result == 'success'
+      && needs.production-iso.result == 'success'
+      && (needs.lifecycle.result == 'success'
+      || (needs.lifecycle.result == 'skipped' && needs.resolve.outputs.lifecycle == 'skip')) }}
     runs-on: ubuntu-26.04
     permissions:
       contents: write

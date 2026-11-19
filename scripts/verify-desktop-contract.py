@@ -133,6 +133,21 @@ def decoder_load_error(element: str) -> str | None:
     return None
 
 
+def missing_selinux_modules(modules: list[str]) -> list[str]:
+    """Return an error for each declared policy module `semodule -l` lacks.
+
+    Fails closed: a missing or failing semodule is an error, not a pass.
+    """
+    try:
+        probe = subprocess.run(["semodule", "-l"], capture_output=True, text=True, check=False)
+    except FileNotFoundError:
+        return ["SELinux modules cannot be listed: semodule is missing"]
+    if probe.returncode != 0:
+        return [f"SELinux modules cannot be listed: {probe.stderr.strip()}"]
+    loaded = {line.split()[0] for line in probe.stdout.splitlines() if line.strip()}
+    return [f"SELinux policy module is not loaded: {module}" for module in modules if module not in loaded]
+
+
 OVERRIDE_SECTION = re.compile(r"^\s*\[([^\]]+)\]\s*$")
 GSETTINGS_VALUE_KEY = re.compile(r"^[A-Za-z0-9_.-]+ [A-Za-z0-9-]+$")
 
@@ -235,6 +250,15 @@ def validate_contract(contract: dict[str, Any]) -> list[str]:
         for name, value in gsettings.get("values", {}).items():
             if not GSETTINGS_VALUE_KEY.match(name) or not isinstance(value, str):
                 errors.append(f"GSettings value must be 'schema key' = \"value\": {name!r}")
+    selinux = contract.get("selinux")
+    if selinux is not None:
+        modules = selinux.get("modules")
+        if not isinstance(modules, list) or not modules or not all(
+            isinstance(module, str) and module for module in modules
+        ):
+            errors.append("SELinux modules must be a non-empty list of module names")
+        elif len(modules) != len(set(modules)):
+            errors.append("SELinux module contract contains duplicate names")
     return errors
 
 
@@ -366,6 +390,11 @@ def main() -> int:
         if error:
             errors.append(error)
 
+    # Malformed [selinux] entries are already in errors from validate_contract.
+    selinux_modules = contract.get("selinux", {}).get("modules", [])
+    if isinstance(selinux_modules, list) and selinux_modules:
+        errors.extend(missing_selinux_modules(selinux_modules))
+
     # Malformed [gsettings] entries are already in errors from validate_contract.
     gsettings = contract.get("gsettings")
     resolved_overrides = 0
@@ -397,6 +426,7 @@ def main() -> int:
     disabled_count = len(services.get("disabled", []))
     disabled_msg = f", {disabled_count} disabled services" if disabled_count else ""
     decoder_msg = f", {len(decoders)} media decoders" if decoders else ""
+    selinux_msg = f", {len(selinux_modules)} SELinux modules" if selinux_modules else ""
     gsettings_msg = (
         f", {resolved_overrides} GSettings override sections, {len(gsettings_values)} GSettings values"
         if gsettings is not None
@@ -406,7 +436,7 @@ def main() -> int:
         f"Utah desktop contract passed: {len(flatpak['apps'])} Flatpaks, "
         f"{len(services.get('enabled', []))} enabled services, "
         f"{len(services.get('user_enabled', []))} user services{masked_msg}{disabled_msg}{decoder_msg}"
-        f"{gsettings_msg}"
+        f"{selinux_msg}{gsettings_msg}"
     )
     return 0
 

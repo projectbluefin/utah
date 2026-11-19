@@ -63,7 +63,12 @@ policy for changing them.
 Flatpak-first (standing policy): no RPM for an end-user app Utah ships as a
 Flatpak (`contracts/bluefin-desktop.toml` `[flatpak]`). Transitional native
 payloads need an inline drop condition in `packages/utah.toml`; the factory
-follows the same rule when importing recipes.
+follows the same rule when importing recipes. Dakota parity installs `wget2`
+and `wget2-wget` (the `wget` link); the desktop file contract checks both commands.
+
+Utah requests available Dakota input engines and language libraries in `[parity]` (#1256).
+Keep the base manifest's Mozc and Unikey; ibus-anthy and ibus-typing-booster await
+`kasumi-unicode` and `cldr-emoji-annotation`, which neither the factory nor Hummingbird publishes.
 
 ## Wi-Fi documentation currency
 
@@ -343,10 +348,11 @@ is its own item. Details and the refresh flow: `baselines/README.md`.
 
 Every item needs an entry in `baselines/triage.toml` (`just check` runs
 `image-baseline.py check`): `planned` with an issue (#1236 is the epic; its
-children #1222-#1235 track the structural moves such as kanata, native
-Ghostty, systemd-boot, AppArmor, oo7, sudo-rs, virtualization and service
-policy), `waived` with a reason (GNOME OS or BuildStream internals,
-Flatpak-first apps), `unavailable` for names in `[unavailable]`, or
+children #1222-#1235 track the structural moves such as kanata,
+systemd-boot, AppArmor, oo7, sudo-rs, virtualization and service policy),
+`waived` with a reason (GNOME OS or BuildStream internals, Flatpak-first apps
+such as Ghostty, baobab, Papers and sushi: #1270 keeps user apps as Flatpaks
+even where Dakota builds them natively), `unavailable` for names in `[unavailable]`, or
 `untriaged` with an `area`. Closing a gap means shipping the files Utah lacks,
 usually by adding the Fedora package to `base.toml` or `utah.toml`, then
 re-measuring and dropping the entry `check` reports as no longer a gap.
@@ -356,7 +362,7 @@ describe the same image as its `surface.tsv`; after a refresh,
 [remove resolved triage entries](package-contract/references/factory-consumption.md#closing-baseline-gaps).
 
 Current counts, per the README "Parity with Dakota" section: 61 base manifest
-packages installed, 258 Utah additions (GNOME 51, base-image parity, device
+packages installed, 266 Utah additions (GNOME 51, base-image parity, device
 firmware, desktop services), 6 genuinely unavailable. `scripts/check-doc-counts.py` (part of
 `just check`) recomputes these from the manifests and fails if either
 document drifts from `site/data/packages.json`.

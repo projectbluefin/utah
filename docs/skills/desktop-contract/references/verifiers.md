@@ -12,6 +12,9 @@ or a CI artifact can be checked after the fact (recipe comment, `Justfile`,
   missing element or a missing `gst-inspect-1.0` fails the build. `[gsettings]`
   checks that every schema override section resolves and reads the
   `[gsettings.values]` with `gsettings get` ([extension schemas](extension-schemas.md)).
+  `[selinux]` lists the policy modules `semodule -l` must report; the build
+  loads them just before the verifier, and a missing module or a missing or
+  failing `semodule` fails the build ([SELinux modules](selinux-modules.md)).
 - **On demand** — `just check-desktop-contract <ref>` (default
   `localhost/utah:testing`) podman-runs both verifiers inside an
   already-composed image: both verifiers and the desktop contract are
