@@ -73,10 +73,10 @@ Swap follows Dakota (#1224), not zram: `zram-generator(-defaults)` are gone.
   `semodule -n -i` into the store under `/usr/lib/selinux` (so ostree's
   per-deployment rebuild keeps it) and checks `matchpathcon`. The init
   script runs `restorecon` on the file before writing it.
-- The gaming flavors' OGC kernel is built from `x86_64_defconfig` plus
-  `scripts/install-ogc-kernel.sh`'s options; if it lacks `CONFIG_ZSWAP` the
-  kargs are ignored and the swapfile is plain swap. Enabling zswap there is
-  a kernel-cache change (`docs/skills/kernel-cache.md`).
+- The gaming flavors' OGC kernel is built from `x86_64_defconfig`, which has
+  no zswap; `scripts/install-ogc-kernel.sh` builds in `ZSWAP` and
+  `CRYPTO_ZSTD` and gates on both, so the kargs take effect there too
+  (`docs/skills/kernel-cache.md`).
 
 ## Lid and sleep
 
