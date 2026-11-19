@@ -1,5 +1,5 @@
 [Unit]
-Description=Record Dakota installation date once the clock is synchronized
+Description=Record Utah installation date once the clock is synchronized
 Documentation=man:systemd-timesyncd.service(8)
 
 # systemd-timesyncd touches this file on each successful NTP synchronization.

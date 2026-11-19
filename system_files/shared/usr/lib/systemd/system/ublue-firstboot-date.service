@@ -1,5 +1,5 @@
 [Unit]
-Description=Record Dakota first-boot installation date
+Description=Record Utah first-boot installation date
 After=local-fs.target
 
 # Started by ublue-firstboot-date.path, never directly at boot: the date is
