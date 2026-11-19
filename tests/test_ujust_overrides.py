@@ -249,6 +249,23 @@ class UjustOverridesTests(unittest.TestCase):
         self.assertIn("does not ship nethogs", result.stderr)
         self.assertEqual(self.calls(), "")
 
+    def test_toggle_user_motd_drives_uwelcome(self):
+        # Common's uwelcome.sh keeps the banner state in
+        # ~/.config/uwelcome/disabled; Dakota's recipe toggled a flag nothing
+        # reads, so it could hide the banner but never bring it back.
+        self.mock("uwelcome", f'echo "uwelcome $*" >>"{self.log}"')
+        result = self.run_recipe("toggle-user-motd")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.calls(), "uwelcome toggle\n")
+
+    def test_check_local_overrides_ships(self):
+        # The testsuite runs `ujust check-local-overrides` on Utah.
+        result = subprocess.run([self.just, "--justfile", str(self.entry), "--show",
+                                 "check-local-overrides"],
+                                env=self.env, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("/usr/etc /etc", result.stdout)
+
     def test_dakota_recipes_send_issues_to_utah(self):
         self.mock("gum", 'echo "gum $*" >> "$CALLS"; echo "Bug report"')
         self.mock("xdg-open", 'echo "xdg-open $*" >> "$CALLS"')

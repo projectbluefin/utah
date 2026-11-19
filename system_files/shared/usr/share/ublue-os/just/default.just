@@ -1,8 +1,9 @@
 # vim: set ft=make :
 # Vendored from projectbluefin/dakota bf271777 files/just-overrides/default.just
 # (#1231). Utah edits: file-issue, confirm and verify point at
-# projectbluefin/utah, which has no issue forms. Utah-specific behaviour
-# lives in 60-custom.just, which overrides recipes here.
+# projectbluefin/utah, which has no issue forms; toggle-user-motd and
+# check-local-overrides are Common's (projectbluefin/common 0033d4530aee).
+# Utah-specific behaviour lives in 60-custom.just, which overrides recipes here.
 # These are convenience shortcuts, they should not be specific to a desktop, aimed to be rather generic things for both Aurora and Bluefin
 
 uid := `id -u`
@@ -58,22 +59,68 @@ logs-this-boot:
 logs-last-boot:
     sudo journalctl --no-hostname -b -1
 
-# Toggle display of the user-motd in terminal
+# Common's recipe, not Dakota's: Common's /etc/profile.d/uwelcome.sh keeps the
+# banner state in ~/.config/uwelcome/disabled, so Dakota's no-show-user-motd
+# flag could never turn it back on. uwelcome owns its state.
+
+# Toggle display of the welcome banner in terminal
 toggle-user-motd:
+    uwelcome toggle
+
+# Common's recipe; the testsuite runs it on Utah.
+
+# Check for local overrides
+check-local-overrides:
     #!/usr/bin/bash
-    if [ -e "${HOME}/.config/no-show-user-motd" ] ; then
-      if gum confirm "Would you like to enable the MOTD?" ; then
-        rm -f "${HOME}/.config/no-show-user-motd"
-        gum style --foreground 82 "✓ MOTD will now be shown on login."
-        exit 0
-      fi
+    RESET="\x1b[0m"
+    if [ "${NO_COLOR}" == 1 ]; then
+        BLUE_COLOR=""
+        GREEN_COLOR=""
+        YELLOW_COLOR=""
+        RESET=""
+        DIFF_COLOR="never"
+    else
+        DIFF_COLOR="always"
+        BLUE_COLOR="${BLUE_COLOR:-\x1b[38;5;117m}"
+        GREEN_COLOR="${GREEN_COLOR:-\x1b[38;5;85m}"
+        YELLOW_COLOR="${YELLOW_COLOR:-\x1b[93m}"
     fi
-    if gum confirm "Would you like to disable the MOTD?" ; then
-      mkdir -p "${HOME}/.config"
-      touch "${HOME}/.config/no-show-user-motd"
-      gum style --foreground 245 "MOTD hidden. Run 'ujust toggle-user-motd' to bring it back."
-      exit 0
-    fi
+
+    diff -qr \
+      --suppress-common-lines \
+      --color="${DIFF_COLOR}" \
+      --exclude "passwd*" \
+      --exclude "group*" \
+      --exclude="subgid*" \
+      --exclude="subuid*" \
+      --exclude="machine-id" \
+      --exclude="adjtime" \
+      --exclude="fstab" \
+      --exclude="system-connections" \
+      --exclude="shadow*" \
+      --exclude="gshadow*" \
+      --exclude="ssh_host*" \
+      --exclude="cmdline" \
+      --exclude="crypttab" \
+      --exclude="hostname" \
+      --exclude="localtime" \
+      --exclude="locale*" \
+      --exclude="*lock" \
+      --exclude=".updated" \
+      --exclude="*LOCK" \
+      --exclude="vconsole*" \
+      --exclude="00-keyboard.conf" \
+      --exclude="grub" \
+      --exclude="system.control*" \
+      --exclude="cdi" \
+      --exclude="default.target" \
+      /usr/etc /etc 2>/dev/null | sed \
+          -e '/Binary\ files\ /d ; /Common subdirectories/d' \
+          -e "/Files/ s/^/${BLUE_COLOR}&/g" \
+          -e "/Files/ s/\$/&${RESET}/g" \
+          -e "/Only in/ s/^/${GREEN_COLOR}&/g" \
+          -e "/Only in/ s/\$/&${RESET}/g" \
+          -e "s/\:.*/${RESET}${YELLOW_COLOR}&${RESET}/g"
 
 # Deprecated alias for ujust report.
 device-info:
