@@ -442,7 +442,8 @@ contract_units() {
 }
 
 verify_setup_state() {
-    local boot_pass="${1:-first}" units unit
+    local boot_pass="${1:-first}" listed unit
+    local -a units
     echo "Checking ${boot_pass}-boot setup units and desktop enablement..."
     # These two do their work on every boot, so they must have run, not only
     # be enabled.
@@ -454,13 +455,19 @@ verify_setup_state() {
     # conditions skip them in a VM (thermald, intel_lpmd) end inactive with
     # Result=success and pass. Timers are checked, not the network jobs they
     # trigger, because this VM has no network.
-    units="$(contract_units enabled)"
-    while IFS= read -r unit; do
+    # The lists are read into arrays first: ssh_target reads stdin, so a
+    # `while read ... <<< "${units}"` loop lost every unit after the first.
+    # Command substitution, not process substitution, so a contract_units
+    # failure still stops the script.
+    listed="$(contract_units enabled)"
+    mapfile -t units <<< "${listed}"
+    for unit in "${units[@]}"; do
         [[ -n "${unit}" ]] || continue
         check_system_unit_state "${unit}" true false "${boot_pass}"
-    done <<< "${units}"
-    units="$(contract_units user_enabled)"
-    while IFS= read -r unit; do
+    done
+    listed="$(contract_units user_enabled)"
+    mapfile -t units <<< "${listed}"
+    for unit in "${units[@]}"; do
         [[ -n "${unit}" ]] || continue
         case "${unit}" in
             # Installs Homebrew packages from the network, so it fails in this
@@ -468,7 +475,7 @@ verify_setup_state() {
             brew-preinstall.service) check_user_unit_state "${unit}" false "${boot_pass}" true ;;
             *) check_user_unit_state "${unit}" false "${boot_pass}" ;;
         esac
-    done <<< "${units}"
+    done
 }
 
 verify_flathub_remote() {

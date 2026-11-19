@@ -710,7 +710,10 @@ class EvidenceTests(unittest.TestCase):
             harness = (
                 "fail() { echo \"FAIL: $*\" >&2; exit 1; }\n"
                 "scp_target() { :; }\n"
+                # Real ssh reads stdin; so does the stub, so a loop feeding
+                # units on stdin would stop after the first one.
                 "ssh_target() {\n"
+                "  cat >/dev/null\n"
                 "  case \"$1\" in\n"
                 "    *\"--services 'enabled'\"*) printf 'gdm.service\\nuupd.timer\\n' ;;\n"
                 "    *\"--services 'user_enabled'\"*) "
@@ -731,6 +734,7 @@ class EvidenceTests(unittest.TestCase):
 
         ok = run("none")
         self.assertEqual(ok.returncode, 0, ok.stderr)
+        # Every unit is reported, not only the first of each list.
         for unit in ("gdm.service", "uupd.timer", "pipewire.socket",
                      "brew-preinstall.service"):
             self.assertIn(f"  {unit}: ", ok.stdout)
