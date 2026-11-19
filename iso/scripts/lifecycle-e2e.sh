@@ -155,6 +155,17 @@ ssh_target_sudo() {
     printf '%s\n' "${TEST_PASSWORD}" | ssh_target "sudo -S -p '' -- ${command}"
 }
 
+# The candidate's /efi mountpoint and mount units (#1326). luks-e2e.sh runs
+# this on the images it installs; for the lifecycle it skips the baseline,
+# which is the previous :testing and may predate /efi, so the gate never
+# judges an old image by a newer rule and stalls promotion (#1343).
+verify_efi_mount() {
+    local phase="$1"
+    ssh_target 'test -d /efi && for unit in efi.automount efi.mount; do load=$(systemctl show "$unit" -p LoadState --value) && state=$(systemctl show "$unit" -p ActiveState --value) && echo "  $unit: load=$load active=$state" && test "$state" != failed || exit 1; done' \
+        > "${EVIDENCE}/efi-${phase}.txt" 2>&1 \
+        || diagnose_failure "EFI mountpoint is missing or an EFI mount unit failed (${phase}); see efi-${phase}.txt"
+}
+
 verify_boot_files() {
     local phase="$1" checker
     checker="$(< "${ROOT}/iso/scripts/verify-boot-files.sh")"
@@ -514,7 +525,9 @@ if [[ "${DISK_OR_ISO}" == *.iso ]]; then
     # both BLS shapes.
     INSTALL_WORK="${UTAH_E2E_WORK:-${WORK}/install}"
     mkdir -p "${INSTALL_WORK}"
-    UTAH_E2E_WORK="${INSTALL_WORK}" bash "${ROOT}/iso/scripts/luks-e2e.sh" \
+    # UTAH_E2E_EFI_CHECK="": see verify_efi_mount; the candidate is checked
+    # after the upgrade.
+    UTAH_E2E_WORK="${INSTALL_WORK}" UTAH_E2E_EFI_CHECK="" bash "${ROOT}/iso/scripts/luks-e2e.sh" \
         "${DISK_OR_ISO}" "${BASELINE_REF}" "${PASSPHRASE}"
     DISK_SOURCE="${INSTALL_WORK}/install.qcow2"
 else
@@ -686,6 +699,7 @@ python3 "${ROOT}/scripts/bootc_lifecycle.py" validate-phase upgraded \
     --candidate-digest "${EXPECTED_DIGEST}" \
     || diagnose_failure "Upgraded deployment validation failed"
 verify_boot_files upgraded
+verify_efi_mount upgraded
 
 # Phase 3 (post-upgrade reboot) must check both `booted` and `rollback`:
 # the upgraded deployment is the booted slot, and the previous baseline
