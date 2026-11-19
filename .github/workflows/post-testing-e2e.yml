@@ -491,7 +491,7 @@ jobs:
       fail-fast: false
       matrix:
         include: ${{ fromJSON(needs.resolve.outputs.suites) }}
-    uses: projectbluefin/testsuite/.github/workflows/e2e.yml@5d942c2b156730ee9a3764a4c5b4270521c3887d # v1
+    uses: projectbluefin/testsuite/.github/workflows/e2e.yml@570922fe9181e3fa7b97cfcf2545dc681ddddb9e # v1
     with:
       image: ${{ fromJSON(needs.resolve.outputs.digests)[matrix.image] }}
       compose_image: false
@@ -499,7 +499,7 @@ jobs:
       test_repository: projectbluefin/testsuite
       # The tests checked out must be the commit the e2e.yml above comes from,
       # or workflow and tests drift apart (#946). Renovate bumps both together.
-      test_ref: 5d942c2b156730ee9a3764a4c5b4270521c3887d # v1
+      test_ref: 570922fe9181e3fa7b97cfcf2545dc681ddddb9e # v1
 
   # :testing is a ratchet over commits, not a mirror of the branch tip. The
   # tested digests become :testing when their commit is the promoted commit or
