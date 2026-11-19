@@ -8,7 +8,7 @@ ARG PACKAGE_IMAGE_SHA=sha256:744c4632cca27c059905779911b4db3269ff069825372c1ba6c
 # in containers-storage, where no registry digest is available.
 ARG PACKAGE_IMAGE_REF=${PACKAGE_IMAGE}@${PACKAGE_IMAGE_SHA}
 ARG COMMON_IMAGE=ghcr.io/projectbluefin/common
-ARG COMMON_IMAGE_SHA=sha256:70babbf2cb86cbdc35a8431ba5146f4a4ec809e4ec1ffd63cdf7a6397b1ca488
+ARG COMMON_IMAGE_SHA=sha256:0391d804e58ab11a90df41846967fcaa9841f662a07a4b05c584e1a7c796e074
 ARG BREW_IMAGE=ghcr.io/ublue-os/brew
 ARG BREW_IMAGE_SHA=sha256:9e0492dbc471258657564c94dae18b58dd96ddb998a06f2b15e8209efb48042b
 # Bluefin wallpapers, taken straight from the artwork repository's own image
@@ -16,7 +16,7 @@ ARG BREW_IMAGE_SHA=sha256:9e0492dbc471258657564c94dae18b58dd96ddb998a06f2b15e820
 # wait on a Common release. It is the multi-arch index digest: the contents are
 # architecture-independent. Renovate keeps it current like the pins above.
 ARG WALLPAPERS_IMAGE=ghcr.io/projectbluefin/bluefin-wallpapers-gnome
-ARG WALLPAPERS_IMAGE_SHA=sha256:379227aa1d8c1832ba6ff9c50d4fdc9e36fc2eff5a6c10771d71e49850ce4c07
+ARG WALLPAPERS_IMAGE_SHA=sha256:460fcdf3e73e99fe63bce326a0cf694fb54fdcb8fe2d3c83dc0b1948b3dd3c0b
 
 FROM ${COMMON_IMAGE}@${COMMON_IMAGE_SHA} AS common
 FROM ${BREW_IMAGE}@${BREW_IMAGE_SHA} AS brew
@@ -448,13 +448,16 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
 # and the tacklebox customize container and live ISO build create liveuser's
 # home in it (#602).
 #
+# GRUB can report the ESP to systemd, which chooses /efi when /boot is busy.
+# The immutable root cannot create that mountpoint at boot (#1326).
+#
 # /home itself becomes an empty directory, Dakota's bind-mount point (#1234),
 # in place of Hummingbird's /home -> var/home symlink. It must stay empty:
 # home.mount hides whatever the image carries there.
 RUN --mount=type=bind,from=inputs,source=/tmp/utah-scripts,target=/utah-build-tools,ro \
     /usr/local/libexec/utah-fix-home-labels --check && \
     /usr/local/libexec/utah-clean-stage && \
-    mkdir -p /var/home && \
+    mkdir -p /var/home /efi && \
     if [ -L /home ]; then rm /home; fi && \
     mkdir -p -m 0755 /home && \
     if [ -n "$(ls -A /home)" ]; then \

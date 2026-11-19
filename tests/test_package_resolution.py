@@ -442,6 +442,15 @@ class ParityContractTests(unittest.TestCase):
     MANIFEST = ROOT / "packages/base.toml"
     OVERLAY = ROOT / "packages/utah.toml"
 
+    def test_input_methods_remain_in_the_install_contract(self):
+        contract = set(installer.contract(self.MANIFEST, self.OVERLAY, "44"))
+        expected = {
+            "ibus-hangul", "ibus-libpinyin",
+            "libhangul", "libpinyin", "m17n-db", "m17n-lib",
+            "ibus-mozc", "ibus-unikey",
+        }
+        self.assertFalse(expected - contract, f"missing input methods: {expected - contract}")
+
     def test_parity_section_reaches_the_install_set(self):
         contract = installer.contract(ROOT / "packages/base.toml", self.OVERLAY, "44")
         for pkg in installer.section(self.OVERLAY, "parity"):

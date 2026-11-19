@@ -79,6 +79,11 @@ class HomeRootTests(unittest.TestCase):
         self.assertIn('if [ -n "$(ls -A /home)" ]', run_block)
         self.assertLess(run_block.index("mkdir -p -m 0755 /home"),
                         run_block.index("bootc container lint"))
+        self.assertIn(
+            "mkdir -p /var/home /efi",
+            run_block,
+            "/efi must exist in the image for systemd's EFI automount (#1326)",
+        )
 
     def test_home_mount_binds_var_home_from_local_fs(self):
         mount = (UNITS / "home.mount").read_text()
