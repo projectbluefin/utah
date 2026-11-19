@@ -76,7 +76,10 @@ post-build verification workflows, not the complete workflow inventory:
 - `.github/workflows/update-gnome-extensions.yml` -- weekly and manual
   submodule updates. `prepare-gnome-extension-bumps.py` validates each
   tracked-branch head; missing or invalid metadata keeps that source pinned,
-  warns in the run summary, and does not block other candidates. It uses the
+  warns in the run summary, and does not block other candidates. Extensions
+  in `ARCHIVES` ship from a pinned, sha256-checked zip, so their gitlink is
+  never bumped alone (#1290): move it by hand with the archive URL and digest.
+  It uses the
   metadata paths in `scripts/verify-gnome-extensions.py`
   (`SOURCE_EXTENSIONS`); update that map when adding an extension. Paths are
   passed as argv and `shell-version` values are allow-listed in the report.
