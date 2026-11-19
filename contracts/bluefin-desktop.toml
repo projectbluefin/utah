@@ -1,5 +1,5 @@
 # Runtime contract for Utah's Bluefin-derived desktop experience on top of
-# Hummingbird. This is intentionally separate from packages/bluefin.toml:
+# Hummingbird. This is intentionally separate from packages/base.toml:
 # package parity proves RPMs; this file proves Utah identity, Bluefin desktop
 # defaults, and first-boot Flatpak policy.
 
@@ -52,6 +52,8 @@ HOME_URL = "https://projectbluefin.io"
 DOCUMENTATION_URL = "https://docs.projectbluefin.io"
 SUPPORT_URL = "https://github.com/projectbluefin/utah/issues/"
 BUG_REPORT_URL = "https://github.com/projectbluefin/utah/issues/"
+VENDOR_NAME = "Project Bluefin"
+VENDOR_URL = "https://projectbluefin.io"
 DEFAULT_HOSTNAME = "bluefin"
 VERSION_CODENAME = "Utahraptor"
 IMAGE_ID = "utah"
@@ -82,6 +84,9 @@ fedora-version = '^\d+$'
 
 [configuration]
 files = [
+  # wget2-wget supplies the traditional command as a link to wget2.
+  "/usr/bin/wget",
+  "/usr/bin/wget2",
   # Common owns ChairLift's GUI preinstall and system integration (as on Dakota).
   "/usr/share/applications/io.projectbluefin.chairlift.desktop",
   "/usr/share/icons/hicolor/scalable/apps/io.projectbluefin.chairlift.svg",
@@ -137,6 +142,8 @@ files = [
   "/usr/bin/ublue-image-info.sh",
   "/usr/libexec/ublue-booted-image",
   "/etc/profile.d/uwelcome.sh",
+  # Dakota's shell defaults (projectbluefin/dakota elements/bluefin/common.bst).
+  "/etc/profile.d/bluefin-shell-defaults.sh",
   # Common's Red Hat signature policy uses the unsuffixed key path. The pinned
   # Hummingbird base carries that key; Utah also stages its repository copy.
   "/etc/containers/policy.json",
@@ -144,9 +151,32 @@ files = [
   "/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2",
   # Plymouth stays graphical with Hummingbird's console=ttyS0 karg (#461).
   "/usr/lib/bootc/kargs.d/10-utah-plymouth.toml",
+  # Dakota system defaults (projectbluefin/dakota elements/bluefin/
+  # wireplumber-pcsp.bst, kexec-disable.bst, networkmanager-polkit.bst).
+  # Hummingbird's NetworkManager RPM already ships Dakota's wheel rule at the
+  # same path, so Utah asserts it but must not overlay its own copy.
+  "/usr/share/wireplumber/wireplumber.conf.d/51-disable-pcsp.conf",
+  "/usr/lib/sysctl.d/60-kexec-disable.conf",
+  # GNOME OS firewall zone and fallback DNS (gnome-os-config subpackages).
+  "/usr/lib/firewalld/zones/lax.xml",
+  "/usr/lib/systemd/resolved.conf.d/50-gnome-os-fallback-dns.conf",
+  "/usr/share/polkit-1/rules.d/org.freedesktop.NetworkManager.rules",
+  # Dakota's elements/bluefin/uupd.bst: the update units, user-startable
+  # manual updates, and the hardware-check config that replaces Common's
+  # distrobox-only one. file_contains below pins the units' contents.
+  "/usr/bin/uupd",
+  "/usr/lib/systemd/system/uupd.service",
+  "/usr/lib/systemd/system/uupd.timer",
+  "/usr/lib/systemd/system/uupd-manual.service",
+  "/etc/polkit-1/rules.d/uupd.rules",
+  "/etc/uupd/config.json",
 ]
 
 [configuration.file_contains]
+# .local names resolve over mDNS (nss-mdns + authselect with-mdns4, #499).
+"/etc/nsswitch.conf" = [
+  "mdns4_minimal [NOTFOUND=return]",
+]
 "/usr/lib/bootc/kargs.d/10-utah-plymouth.toml" = [
   'kargs = ["plymouth.ignore-serial-consoles"]',
 ]
@@ -189,6 +219,10 @@ files = [
 "/etc/profile.d/uwelcome.sh" = [
   "case $- in",
 ]
+"/etc/profile.d/bluefin-shell-defaults.sh" = [
+  ": \"${BLUEFIN_SHELL_ENABLE_MOTD:=0}\"",
+  "export BLUEFIN_SHELL_ENABLE_MOTD",
+]
 "/etc/dconf/profile/user" = [
   "user-db:user",
   "system-db:distro",
@@ -207,20 +241,16 @@ files = [
   "docs.projectbluefin.io",
   "menuicon-setting='ublue-logo-symbolic'",
 ]
+# Tiling Shell's Quarters layout is Dakota's four distinct quadrants
+# (projectbluefin/dakota files/dconf/08-dakota-extension-defaults); the
+# second and third tiles were once copies of the fourth.
 "/etc/dconf/db/distro.d/08-dakota-extension-defaults" = [
   "show-indicator=false",
-  "layouts-json=",
+  "{\"id\": \"Quarters\",\"tiles\": [{\"x\": 0,\"y\": 0,\"width\": 0.5,\"height\": 0.5,\"groups\": [1]},{\"x\": 0,\"y\": 0.5,\"width\": 0.5,\"height\": 0.5,\"groups\": [1]},{\"x\": 0.5,\"y\": 0,\"width\": 0.5,\"height\": 0.5,\"groups\": [1]},{\"x\": 0.5,\"y\": 0.5,\"width\": 0.5,\"height\": 0.5,\"groups\": [1]}]}",
 ]
+# The exact enabled set is pinned in [gsettings.values].
 "/usr/share/glib-2.0/schemas/zz3-bluefin-unsupported-stuff.gschema.override" = [
   "disable-extension-version-validation=true",
-  "tilingshell@ferrarodomenico.com",
-  # Bluefin smoke checks these Quick Settings extensions are enabled.
-  "quicksettings-audio-devices-hider@marcinjahn.com",
-  "quicksettings-audio-devices-renamer@marcinjahn.com",
-  "tailscale-gnome-qs@tailscale-qs.github.io",
-  # Bluefin smoke checks Copyous and the upstream Syncthing toggle are enabled.
-  "copyous@boerdereinar.dev",
-  "syncthing-toggle@rehhouari.github.com",
 ]
 "/etc/dconf/db/distro.d/02-bluefin-keybindings" = [
   "xdg-terminal-exec",
@@ -240,6 +270,42 @@ files = [
 "/usr/lib/systemd/system/systemd-remount-fs.service.d/10-utah-composefs-skip.conf" = [
   "ConditionPathIsReadWrite=/",
 ]
+# Dakota parity: the PC-speaker ALSA card must stay hidden so it never
+# becomes the default sink after resume (projectbluefin/dakota#1248).
+"/usr/share/wireplumber/wireplumber.conf.d/51-disable-pcsp.conf" = [
+  'device.name = "alsa_card.platform-pcspkr"',
+  "device.disabled = true",
+]
+# Dakota parity: kexec is disabled for Easy Anti-Cheat's measured boot chain.
+"/usr/lib/sysctl.d/60-kexec-disable.conf" = [
+  "kernel.kexec_load_disabled = 1",
+]
+# Dakota parity: GNOME OS's lax zone is the default, with loose IPv6 rpfilter.
+"/etc/firewalld/firewalld.conf" = [
+  "DefaultZone=lax",
+  "IPv6_rpfilter=loose",
+]
+# Dakota parity: GNOME OS's compiled-in fallback DNS (Cloudflare).
+"/usr/lib/systemd/resolved.conf.d/50-gnome-os-fallback-dns.conf" = [
+  "FallbackDNS=1.1.1.1#one.one.one.one 1.0.0.1#one.one.one.one 2606:4700:4700::1111#one.one.one.one 2606:4700:4700::1001#one.one.one.one",
+]
+# Dakota parity: local wheel users add system connections without a password.
+"/usr/share/polkit-1/rules.d/org.freedesktop.NetworkManager.rules" = [
+  'action.id == "org.freedesktop.NetworkManager.settings.modify.system"',
+  'subject.isInGroup("wheel")',
+  "subject.local",
+]
+# Dakota's elements/bluefin/uupd.bst units: configure-services.sh installs
+# upstream's daily timer over Common's four-a-day one, and adds the flag.
+"/usr/lib/systemd/system/uupd.timer" = [
+  "OnCalendar=*-*-* 04:00:00",
+]
+"/usr/lib/systemd/system/uupd.service" = [
+  "ExecStart=/usr/bin/uupd --disable-module-distrobox --log-level=debug --json",
+]
+"/etc/uupd/config.json" = [
+  '"bat-min-percent": 20',
+]
 
 [flatpak]
 files = [
@@ -248,6 +314,9 @@ files = [
   "/usr/share/flatpak/preinstall.d/ghostty.preinstall",
   # Spacebar file previews in Files (Sushi), from Flathub (#1015).
   "/usr/share/flatpak/preinstall.d/nautilus-previewer.preinstall",
+  # BudsLink backs the default-enabled BudsLink-Companion extension
+  # (projectbluefin/dakota files/oci/bluefin-flatpak/preinstall.d/).
+  "/usr/share/flatpak/preinstall.d/io.github.maniacx.BudsLink.preinstall",
   "/etc/flatpak/remotes.d/tuna-os.flatpakrepo",
   "/usr/share/ublue-os/privileged-setup.hooks.d/99-flatpaks.sh",
   "/usr/share/ublue-os/homebrew/system-flatpaks.Brewfile",
@@ -305,6 +374,9 @@ apps = [
   "org.mozilla.thunderbird",
   "org.mozilla.firefox",
   "page.tesk.Refine",
+  # Not in common's Brewfile: configure-services.sh appends it, as Dakota does
+  # (projectbluefin/dakota elements/bluefin/common.bst).
+  "io.github.maniacx.BudsLink",
 ]
 
 # Software decoders that must load, not merely be installed (#1116). Utah's
@@ -327,17 +399,30 @@ schema_dir = "/usr/share/glib-2.0/schemas"
 # Override sections that may stay unresolved, with the reason. A listed schema
 # that becomes installed, or that no override names any more, fails the check.
 [gsettings.unresolved_overrides]
-# common turns off GNOME Software's automatic updates; Bluefin excludes
-# gnome-software too (packages/bluefin.toml [excluded]) and Utah ships Bazaar.
+# common turns off GNOME Software's automatic updates; the base manifest
+# excludes gnome-software (packages/base.toml [excluded]), Dakota does not ship
+# it either, and Utah ships Bazaar.
 "org.gnome.software" = "GNOME Software is not shipped; Bazaar is the store"
 # common configures the Files "Open in terminal" extension, but neither
-# Bluefin's package list (packages/bluefin.toml) nor ghcr.io/ublue-os/bluefin
-# ships nautilus-open-any-terminal, so there is no parity gap to track.
-"com.github.stunkymonkey.nautilus-open-any-terminal" = "nautilus-open-any-terminal is not in Bluefin's package set"
+# packages/base.toml nor Dakota (baselines/dakota/elements.tsv) ships
+# nautilus-open-any-terminal, so there is no parity gap to track.
+"com.github.stunkymonkey.nautilus-open-any-terminal" = "nautilus-open-any-terminal is not in Utah's or Dakota's package set"
 
 # Effective values `gsettings get SCHEMA KEY` must print in the composed image.
 [gsettings.values]
 "org.gnome.shell.extensions.dash-to-dock disable-overview-on-startup" = "true"
+# Default-enabled extensions are exactly Dakota's set, in Dakota's order
+# (projectbluefin/dakota elements/bluefin/shell-extensions/disable-ext-validator.bst).
+# Utah's other bundled extensions stay installed but opt-in.
+"org.gnome.shell enabled-extensions" = "['caffeine@patapon.info', 'appindicatorsupport@rgcjonas.gmail.com', 'bazaar-integration@kolunmi.github.io', 'blur-my-shell@aunetx', 'dash-to-dock@micxgx.gmail.com', 'fuzzy-application-search@mkhl.codeberg.page', 'gradia-integration@alexandervanhee.github.io', 'gsconnect@andyholmes.github.io', 'custom-command-list@storageb.github.com', 'BudsLink-Companion@maniacx.github.com', 'tilingshell@ferrarodomenico.com']"
+
+# Policy modules the image build loads (Containerfile, semodule -n -i), checked
+# with `semodule -l`. The store is on read-only /usr once booted (#551), so a
+# module missing from the build cannot be added later.
+# utah_bootc_probe: dontaudit bootc's expected mac_admin probe from plain
+# services, two AVC denials every boot otherwise (#1198).
+[selinux]
+modules = ["utah_bootc_probe"]
 
 [services]
 enabled = [
@@ -355,13 +440,43 @@ enabled = [
   "flatpak-nuke-fedora.service",
   "flatpak-preinstall.service",
   "gdm.service",
+  # GNOME's system services: gnome-build-meta's 80-gnome.preset, as Dakota
+  # ships it. colord.service is not listed: the factory's colord ships it
+  # without an [Install] section, so it is D-Bus activated and `systemctl
+  # enable` is a no-op (the nvidia/gaming image builds failed on it).
+  "accounts-daemon.service",
   "input-remapper.service",
   "ModemManager.service",
+  "power-profiles-daemon.service",
+  # Dakota's effective service state (#1233); see 85-utah-desktop.preset.
+  "rtkit-daemon.service",
+  "uresourced.service",
+  "upower.service",
+  "udisks2.service",
+  "polkit-agent-helper.socket",
+  "cups.service",
+  "pcscd.socket",
+  "gnome-remote-desktop.service",
+  "gnome-remote-desktop-configuration.service",
+  "malcontent-timerd.service",
+  "malcontent-timer-extension-agent.service",
+  "malcontent-webd.service",
+  "malcontent-webd-update.timer",
+  "systemd-oomd.service",
+  "systemd-oomd.socket",
+  "wpa_supplicant.service",
+  "podman.socket",
+  "podman-auto-update.timer",
+  "podman-restart.service",
+  "podman-clean-transient.service",
+  "systemd-sysext.socket",
+  "systemd-factory-reset.socket",
+  "systemd-pcrextend.socket",
+  "systemd-storage-block.socket",
+  "systemd-storage-fs.socket",
+  "systemd-udev-load-credentials.service",
+  "systemd-userdb-load-credentials.service",
   "thermald.service",
-  "intel_lpmd.service",
-  "sysstat.service",
-  "sysstat-collect.timer",
-  "sysstat-summary.timer",
   "projectbluefin-countme.timer",
   "switcheroo-control.service",
   "ublue-system-setup.service",
@@ -378,6 +493,9 @@ user_enabled = [
   "pipewire-pulse.socket",
   "wireplumber.service",
   "xdg-user-dirs.service",
+  # Dakota parity: gnome-build-meta's user presets (80-speechd, 80-xdg).
+  "speech-dispatcher.socket",
+  "xdg-desktop-portal-rewrite-launchers.service",
 ]
 masked = [
   "bootc-fetch-apply-updates.service",
@@ -413,4 +531,13 @@ disabled = [
   "httpd.socket",
   "httpd@.service",
   "htcacheclean.service",
+  # sysstat collection is opt-in, as in Dakota (elements/bluefin/sysstat.bst
+  # writes 80-sysstat.preset disabling all four); sar/iostat work on demand.
+  "sysstat.service",
+  "sysstat-collect.timer",
+  "sysstat-summary.timer",
+  "sysstat-rotate.timer",
+  # Utah-only units Dakota does not run (#1233).
+  "multipathd.service",
+  "lm_sensors.service",
 ]

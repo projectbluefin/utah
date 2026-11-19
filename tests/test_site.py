@@ -50,7 +50,7 @@ class GeneratedDataTests(unittest.TestCase):
         installer = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(installer)
         contract = installer.contract(
-            ROOT / "packages/bluefin.toml", ROOT / "packages/utah.toml", None)
+            ROOT / "packages/base.toml", ROOT / "packages/utah.toml", None)
         self.assertEqual(self.data["totals"]["installed"], len(contract))
         # Every name the page counts as shipped is one the image asks for.
         # The build toolchain is excluded: configure-services.sh removes it

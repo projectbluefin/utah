@@ -1,11 +1,16 @@
 # Utah — Agent Operating Contract
 
 Utah composes [Bluefin](https://projectbluefin.io) on the Fedora Hummingbird
-`os-minimal` base. Experimental pre-alpha: it has a build, not users, and
-nothing is ready for real machines. It publishes `:testing` container images,
-a live ISO built monthly from `:stable` by `projectbluefin/dakota-iso`, and a
-rolling `:stable` tag that `execute-release.yml` releases weekly (Mondays
-06:00 UTC) once the release gate passes (#336; see
+`os-minimal` base. Its parity target is
+[Dakota](https://github.com/projectbluefin/dakota) (`ghcr.io/projectbluefin/dakota:testing`,
+Bluefin on GNOME OS): `baselines/GAP.md` measures what Dakota ships that Utah
+lacks, and structural differences are tracked under #1236. Experimental
+pre-alpha: it has a build, not users, and nothing is ready for real machines.
+It publishes `:testing` container images, a live ISO built monthly from
+`:stable` by `projectbluefin/dakota-iso`, and a rolling `:stable` tag that
+`execute-release.yml` releases once the release gate passes: on a promotion
+merge, a manual run, or the daily 06:00 UTC check when `:stable` is over a
+week old and `:testing` has moved on (#336; see
 `docs/skills/ci-workflows/references/release-cadence.md`).
 
 ## Read order
@@ -23,7 +28,7 @@ rolling `:stable` tag that `execute-release.yml` releases weekly (Mondays
 
 ```bash
 just check                            # full static validation (run before every commit)
-just check-parity                     # bluefin.toml must equal upstream base.toml (network)
+just baselines                        # re-measure Dakota vs Utah, rewrite baselines/GAP.md (podman, gh)
 just check-repos                      # contract packages resolvable in enabled repos (network)
 just build-ghcr utah testing main     # local image build -> localhost/utah:testing
 just check-desktop-contract           # in-image verifiers against a built image
@@ -42,11 +47,12 @@ checks (`scripts/check-skill-frontmatter.sh`, `scripts/check-skill-index.sh`,
 
 ## Invariants — do not break
 
-- **`packages/bluefin.toml` is a byte-for-byte copy** of
-  `projectbluefin/bluefin` `build_files/packages/base.toml`. Never hand-edit
-  it; sync it verbatim from upstream. CI diffs it on every run
-  (`just check-parity`).
-- **Utah's own package changes live in `packages/utah.toml`** (`[gnome]`,
+- **`packages/base.toml` is Utah's own base manifest.** It was frozen from
+  `projectbluefin/bluefin` `build_files/packages/base.toml` and is edited by
+  hand; nothing syncs it from Bluefin classic. Dakota is the only parity
+  target: every item in `baselines/GAP.md` needs an entry in
+  `baselines/triage.toml` (`just check`), and adds or removes follow from it.
+- **Utah's overlay lives in `packages/utah.toml`** (`[gnome]`, `[parity]`,
   `[build]`, `[unavailable]`). Every `[unavailable]` entry MUST carry a
   tracking issue. A missing contract package is a build failure, never a
   silent skip.

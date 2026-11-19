@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths:
       - site/**
-      - packages/bluefin.toml
+      - packages/base.toml
       - packages/utah.toml
       - scripts/generate-site-data.py
       - .github/workflows/pages.yml

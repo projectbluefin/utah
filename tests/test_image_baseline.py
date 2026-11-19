@@ -1,18 +1,17 @@
-"""The image-baseline gap: what Bluefin ships that Utah does not.
+"""The image-baseline gap: what Dakota ships that Utah does not.
 
-`gaps()`, `check()` and the report body were already pinned here. The three
-functions that talk to the outside world -- `extract()`, `dakota()` and the
-`main()` subcommand dispatch -- were not executed by any suite, so the parts
-of this script that decide what a baseline *contains* were unverified while
-the parts that compare baselines were fully covered.
+`gaps()`, `check()` and the report body decide what counts as parity debt.
+The three functions that talk to the outside world -- `extract()`, `dakota()`
+and the `main()` subcommand dispatch -- decide what a baseline *contains*.
 
-That is the wrong way round for a snapshot tool. `just baselines` regenerates
-the files under baselines/ and `just check-parity` fails the build on a gap
-that is not in triage.toml; if `extract()` pins the wrong digest, or
-`dakota()` lets the SBOM's source entries through as elements, the comparison
-is exact and the inputs are wrong, which reads as a parity change rather than
-a tooling bug. The suites below drive both through an injected runner, so the
-container and the artifact download are not needed to prove their contracts.
+Both halves matter for a snapshot tool. `just baselines` regenerates the
+files under baselines/ and `just check` fails the build on a gap that is not
+in triage.toml; if `extract()` pins the wrong digest, guesses the wrong
+element, or `dakota()` lets the SBOM's source entries through as elements,
+the comparison is exact and the inputs are wrong, which reads as a parity
+change rather than a tooling bug. The suites below drive both through an
+injected runner, so the container and the artifact download are not needed
+to prove their contracts.
 """
 import contextlib
 import importlib.util
@@ -35,21 +34,18 @@ class GapTests(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.base = Path(tmp.name)
-        for d in ("bluefin", "utah", "dakota"):
+        for d in ("utah", "dakota"):
             (self.base / d).mkdir()
-        self.write("bluefin/rpms.tsv", "gnome-initial-setup\t50.0\ncoreutils\t9.7\ntailscale\t1.9\n")
-        self.write("bluefin/surface.tsv", "\n".join([
-            "gnome-initial-setup\t/usr/lib/systemd/user/gnome-initial-setup.service",
+        self.write("dakota/surface.tsv", "\n".join([
+            "kanata\t/usr/bin/kanata",
+            "kanata\t/usr/lib/systemd/system/kanata.service",
             "coreutils\t/usr/bin/ls",
-            "tailscale\t/usr/bin/tailscale",
-            "(unowned)\t/usr/bin/weird",
+            "tailscale\t/usr/sbin/tailscale",
+            "(dakota)\t/usr/bin/weird",
         ]) + "\n")
-        # Utah renames coreutils and moves tailscale, but has both.
-        self.write("utah/rpms.tsv", "coreutils-single\t9.7\ntailscale\t1.9\n")
-        self.write("utah/surface.tsv", "coreutils-single\t/usr/bin/ls\ntailscale\t/usr/sbin/tailscale\n")
-        self.write("dakota/elements.tsv",
-                   "# element\tname\tversion\ngnome-build-meta.bst-core-gnome-initial-setup.bst\tgis\t51\n")
-        for name, text in (("bluefin/image.txt", "b@sha256:1"), ("utah/image.txt", "u@sha256:2"),
+        # Utah has ls from another owner and tailscale under the merged bin.
+        self.write("utah/surface.tsv", "coreutils-single\t/usr/bin/ls\ntailscale\t/usr/bin/tailscale\n")
+        for name, text in (("dakota/image.txt", "d@sha256:1"), ("utah/image.txt", "u@sha256:2"),
                            ("dakota/source.txt", "run 1")):
             self.write(name, text + "\n")
         self.saved = (ib.BASE, ib.TRIAGE)
@@ -65,88 +61,114 @@ class GapTests(unittest.TestCase):
             code = ib.check()
         return code, err.getvalue()
 
-    def test_a_package_missing_by_name_and_by_file_is_a_gap(self):
-        self.assertEqual(list(ib.gaps()), ["gnome-initial-setup"])
+    def test_missing_paths_group_by_element_or_path(self):
+        self.assertEqual(ib.gaps(), {
+            "/usr/bin/weird": ["/usr/bin/weird"],
+            "kanata": ["/usr/bin/kanata", "/usr/lib/systemd/system/kanata.service"],
+        })
 
-    def test_renamed_or_moved_packages_are_not_gaps(self):
+    def test_paths_utah_has_are_not_gaps_whoever_owns_them(self):
         gaps = ib.gaps()
-        self.assertNotIn("coreutils", gaps)   # renamed, file present
-        self.assertNotIn("tailscale", gaps)   # same name, file moved
-        self.assertNotIn("(unowned)", gaps)
+        self.assertNotIn("coreutils", gaps)   # different owner, same file
+        self.assertNotIn("tailscale", gaps)   # /usr/sbin is /usr/bin on both
 
     def test_an_untriaged_gap_fails_the_check(self):
         code, err = self.check()
         self.assertEqual(code, 1)
-        self.assertIn("gnome-initial-setup", err)
+        self.assertIn("kanata", err)
+        self.assertIn("/usr/bin/weird", err)
 
     def test_a_triaged_gap_passes(self):
-        self.write("triage.toml", '[package.gnome-initial-setup]\nstatus = "planned"\nissue = "#261"\n')
+        self.write("triage.toml", '[item]\nkanata = { status = "planned", issue = "#1222" }\n'
+                                  '"/usr/bin/weird" = { status = "untriaged", area = "cli-tools" }\n')
         self.assertEqual(self.check()[0], 0)
 
     def test_an_unknown_status_fails(self):
-        self.write("triage.toml", '[package.gnome-initial-setup]\nstatus = "later"\n')
+        self.write("triage.toml", '[item.kanata]\nstatus = "later"\n')
         code, err = self.check()
         self.assertEqual(code, 1)
         self.assertIn("later", err)
 
-    def test_report_names_the_dakota_element(self):
+    def test_report_counts_kinds_and_names_both_images(self):
         ib.write_report()
         report = (self.base / "GAP.md").read_text()
-        self.assertIn("gnome-build-meta.bst-core-gnome-initial-setup.bst", report)
-        self.assertIn("1 user unit", report)
-
-    def test_report_classifies_missing_firefox_defaults_and_ignores_shipped_assets(self):
-        path = "/usr/share/ublue-os/firefox-config/01-bluefin-global.js"
-        self.write("bluefin/surface.tsv", f"firefox-defaults\t{path}\n")
-        ib.write_report()
-        self.assertEqual(ib.gaps(), {"firefox-defaults": [path]})
-        self.assertIn("| firefox-defaults | **new** | 1 ublue asset |",
-                      (self.base / "GAP.md").read_text())
-
-        # Common's overlay can ship the same asset without owning an RPM.
-        self.write("utah/surface.tsv", f"(unowned)\t{path}\n")
-        ib.write_report()
-        self.assertEqual(ib.gaps(), {})
-        self.assertNotIn("| firefox-defaults |", (self.base / "GAP.md").read_text())
+        self.assertIn("| kanata | **new** | 1 command, 1 system unit |", report)
+        self.assertIn("d@sha256:1", report)
+        self.assertIn("u@sha256:2", report)
+        self.assertNotIn("Bluefin", report)
 
     def test_report_renders_the_triage_reason_and_its_issue(self):
         self.write("triage.toml",
-                   '[package.gnome-initial-setup]\n'
-                   'status = "planned"\nreason = "waiting on the installer"\n'
-                   'issue = "#261"\n')
+                   '[item.kanata]\n'
+                   'status = "planned"\nreason = "Utah ships input-remapper"\n'
+                   'issue = "#1222"\n')
         ib.write_report()
         report = (self.base / "GAP.md").read_text()
-        self.assertIn("waiting on the installer (#261)", report)
+        self.assertIn("Utah ships input-remapper (#1222)", report)
         self.assertIn("| planned |", report)
 
     def test_a_reasonless_entry_still_renders_its_issue(self):
         self.write("triage.toml",
-                   '[package.gnome-initial-setup]\nstatus = "waived"\nissue = "#9"\n')
+                   '[item.kanata]\nstatus = "waived"\nissue = "#9"\n')
         ib.write_report()
         # No reason, so the cell is the bare issue rather than " (#9)".
         self.assertIn("| (#9) |", (self.base / "GAP.md").read_text())
 
-    def test_no_dakota_baseline_leaves_the_column_empty(self):
-        (self.base / "dakota/elements.tsv").unlink()
-        self.assertEqual(ib.dakota_has("gnome-initial-setup"), "")
-
-    def test_a_package_dakota_does_not_ship_has_no_element(self):
-        self.assertEqual(ib.dakota_has("plymouth"), "")
-
-    def test_an_unjunctioned_element_matches_by_exact_name(self):
-        self.write("dakota/elements.tsv",
-                   "# element\tname\tversion\nplymouth.bst\tplymouth\t24\n")
-        self.assertEqual(ib.dakota_has("plymouth"), "plymouth.bst")
-
     def test_a_closed_gap_is_reported_as_droppable_from_triage(self):
         self.write("triage.toml",
-                   '[package.gnome-initial-setup]\nstatus = "planned"\n'
-                   '[package.plymouth]\nstatus = "waived"\n')
+                   '[item]\nkanata = { status = "planned" }\n'
+                   '"/usr/bin/weird" = { status = "untriaged" }\n'
+                   'plymouth = { status = "waived" }\n')
         out = io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
             code = ib.check()
         self.assertEqual(code, 0)
         self.assertIn("drop from triage.toml: plymouth", out.getvalue())
+
+
+class GuessElementTests(unittest.TestCase):
+    """Dakota has no RPM database; the SBOM names elements, not files."""
+
+    NAMES = ["kanata", "libvirt", "ghostty", "toolbox", "sudo-rs", "sudo", "oo7-daemon",
+             "oo7-portal", "make", "go", "gnome-shell"]
+
+    def guess(self, path):
+        return ib.guess_element(path, sorted(self.NAMES, key=lambda n: (-len(n), n)))
+
+    def test_obvious_cases_map(self):
+        for path, element in (
+            ("/usr/bin/kanata", "kanata"),
+            ("/usr/lib/systemd/system/kanata.service", "kanata"),
+            ("/usr/bin/libvirtd", "libvirt"),
+            ("/usr/lib/systemd/system/libvirtd-ro.socket", "libvirt"),
+            ("/usr/lib/systemd/system/virtqemud.service", "libvirt"),
+            ("/usr/bin/virsh", "libvirt"),
+            ("/usr/share/applications/com.mitchellh.ghostty.desktop", "ghostty"),
+            ("/usr/bin/toolbox", "toolbox"),
+            ("/usr/bin/sudo-rs", "sudo-rs"),
+            ("/usr/bin/sudo", "sudo"),
+            ("/usr/bin/sudo_logsrvd", "sudo"),
+            ("/usr/lib/systemd/user/dbus-org.freedesktop.secrets.service", "oo7-daemon"),
+            ("/usr/lib/systemd/user/oo7-portal.service", "oo7-portal"),
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(self.guess(path), element)
+
+    def test_a_prefix_without_a_separator_does_not_match(self):
+        self.assertEqual(self.guess("/usr/bin/makeconv"), "")
+        self.assertEqual(self.guess("/usr/bin/gobject-query"), "")
+
+    def test_an_alias_to_an_absent_element_is_skipped(self):
+        self.assertEqual(self.guess("/usr/bin/snap"), "")
+
+    def test_the_element_list_feeds_the_guess(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        path = Path(tmp.name) / "elements.tsv"
+        path.write_text("# element\tname\tversion\nbluefin-kanata.bst\tkanata\t1\nbase.bst\n"
+                        "gnome-build-meta.bst-core-deps-libvirt.bst\tlibvirt\t12\n")
+        self.assertEqual(ib.element_names(path), ["libvirt", "kanata"])
+        self.assertEqual(ib.element_names(Path(tmp.name) / "missing.tsv"), [])
 
 
 class ExtractTests(unittest.TestCase):
@@ -166,7 +188,7 @@ class ExtractTests(unittest.TestCase):
         self.calls: list[list[str]] = []
         self.script_body = None
 
-    def runner(self, digest: str):
+    def runner(self, digest: str, rpm: bool = True):
         def fake_run(argv, *args, **kwargs):
             self.calls.append(argv)
             if argv[:3] == ["podman", "image", "inspect"]:
@@ -175,19 +197,31 @@ class ExtractTests(unittest.TestCase):
             shared = Path(mount[: -len(":/out:z")])
             self.script_body = (shared / "x.sh").read_text()
             # Stand in for what EXTRACT writes from inside the image.
-            (shared / "rpms.tsv").write_text("bash\t5.3-1\n")
-            (shared / "surface.tsv").write_text("bash\t/usr/bin/bash\n")
+            if rpm:
+                (shared / "rpms.tsv").write_text("bash\t5.3-1\n")
+                (shared / "surface.tsv").write_text("bash\t/usr/bin/bash\n")
+            else:
+                (shared / "surface.tsv").write_text(
+                    "(norpm)\t/usr/bin/kanata\n(norpm)\t/usr/bin/weird\n")
             return subprocess.CompletedProcess(argv, 0, "", "")
         return fake_run
 
-    def extract(self, image, digest="sha256:abc\n"):
-        with mock.patch.object(ib.subprocess, "run", self.runner(digest)):
+    def extract(self, image, digest="sha256:abc\n", rpm=True):
+        with mock.patch.object(ib.subprocess, "run", self.runner(digest, rpm)):
             ib.extract(image, self.out)
 
     def test_the_baselines_are_copied_out_of_the_container(self):
         self.extract("ghcr.io/projectbluefin/utah:latest")
         self.assertEqual((self.out / "rpms.tsv").read_text(), "bash\t5.3-1\n")
         self.assertEqual((self.out / "surface.tsv").read_text(), "bash\t/usr/bin/bash\n")
+
+    def test_an_image_without_rpm_gets_element_guesses(self):
+        self.out.mkdir()
+        (self.out / "elements.tsv").write_text("# element\tname\tversion\nbluefin-kanata.bst\tkanata\t1\n")
+        self.extract("ghcr.io/projectbluefin/dakota:testing", rpm=False)
+        self.assertFalse((self.out / "rpms.tsv").exists())
+        self.assertEqual((self.out / "surface.tsv").read_text(),
+                         "(dakota)\t/usr/bin/weird\nkanata\t/usr/bin/kanata\n")
 
     def test_the_recorded_image_is_pinned_to_the_inspected_digest(self):
         self.extract("ghcr.io/projectbluefin/utah:latest")
@@ -210,10 +244,11 @@ class ExtractTests(unittest.TestCase):
         self.extract("ghcr.io/projectbluefin/utah:latest")
         self.assertEqual(self.script_body, ib.EXTRACT)
 
-    def test_the_script_is_mounted_read_only(self):
+    def test_the_script_is_mounted_read_only_without_network(self):
         self.extract("ghcr.io/projectbluefin/utah:latest")
         run = self.calls[-1]
         self.assertIn("--rm", run)
+        self.assertIn("--network=none", run)
         self.assertTrue(any(a.endswith("/x.sh:ro,z") for a in run),
                         f"x.sh must be mounted ro: {run}")
 
@@ -294,19 +329,16 @@ class DakotaSbomTests(unittest.TestCase):
         self.assertIn("12345", source)
         self.assertIn("sbom-dakota", source)
 
-    def test_the_element_list_feeds_dakota_has(self):
-        # The point of the file: write_report() reads it back by package name.
+    def test_the_element_list_feeds_the_guess(self):
+        # The point of the file: extract() reads the names back for the guess.
         self.dakota()
-        saved = ib.BASE
-        ib.BASE = self.out.parent
-        self.addCleanup(lambda: setattr(ib, "BASE", saved))
-        self.assertEqual(
-            ib.dakota_has("gnome-initial-setup"),
-            "gnome-build-meta.bst-core-gnome-initial-setup.bst")
+        names = ib.element_names(self.out / "elements.tsv")
+        self.assertEqual(ib.guess_element("/usr/bin/gnome-initial-setup", names),
+                         "gnome-initial-setup")
 
 
 class MainDispatchTests(unittest.TestCase):
-    """The subcommands `just baselines` and `just check-parity` call.
+    """The subcommands `just baselines` and `just check` call.
 
     Justfile runs `image-baseline.py check` as a gate and `extract`/`dakota`/
     `gap` to refresh the snapshots. The dispatch had no coverage, so a renamed

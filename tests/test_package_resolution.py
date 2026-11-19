@@ -77,7 +77,7 @@ class PackageResolutionTests(unittest.TestCase):
 
     def resolve(self, output, code=1):
         with tempfile.TemporaryDirectory() as tmp:
-            base = Path(tmp) / "bluefin.toml"
+            base = Path(tmp) / "base.toml"
             overlay = Path(tmp) / "utah.toml"
             base.write_text('[fedora]\npackages=["base", "unavailable"]\n'
                             '[fedora_v44]\npackages=["release-specific"]\n')
@@ -289,7 +289,7 @@ class PackageResolutionTests(unittest.TestCase):
     def test_check_requires_hummingbird_and_utah_packages(self):
         with tempfile.TemporaryDirectory() as tmp:
             dirpath = Path(tmp)
-            base = dirpath / "bluefin.toml"
+            base = dirpath / "base.toml"
             overlay = dirpath / "utah.toml"
             base.write_text('[fedora]\npackages=["base"]\n')
             overlay.write_text('[gnome]\npackages=[]\n')
@@ -356,7 +356,7 @@ class ResolveOneTests(unittest.TestCase):
         for flag in ("--resolve", "--check"):
             with self.subTest(flag=flag), \
                  patch("sys.argv", ["install", "--resolve-one", "candidate",
-                                    flag, "bluefin.toml", "utah.toml"]), \
+                                    flag, "base.toml", "utah.toml"]), \
                  contextlib.redirect_stderr(io.StringIO()):
                 with self.assertRaises(SystemExit):
                     installer.main()
@@ -424,7 +424,7 @@ class UnavailableContractTests(unittest.TestCase):
         # what makes them parity debt. The assertion belongs on contract(),
         # which must subtract every one of them on every Fedora major the
         # manifest defines a section for.
-        base = ROOT / "packages/bluefin.toml"
+        base = ROOT / "packages/base.toml"
         majors = [None] + [section.removeprefix("fedora_v")
                            for section in tomllib.loads(base.read_text())
                            if section.startswith("fedora_v")]
@@ -437,24 +437,33 @@ class UnavailableContractTests(unittest.TestCase):
 
 
 class ParityContractTests(unittest.TestCase):
-    MANIFEST = ROOT / "packages/bluefin.toml"
+    MANIFEST = ROOT / "packages/base.toml"
     OVERLAY = ROOT / "packages/utah.toml"
 
+    def test_input_methods_remain_in_the_install_contract(self):
+        contract = set(installer.contract(self.MANIFEST, self.OVERLAY, "44"))
+        expected = {
+            "ibus-hangul", "ibus-libpinyin",
+            "libhangul", "libpinyin", "m17n-db", "m17n-lib",
+            "ibus-mozc", "ibus-unikey",
+        }
+        self.assertFalse(expected - contract, f"missing input methods: {expected - contract}")
+
     def test_parity_section_reaches_the_install_set(self):
-        contract = installer.contract(ROOT / "packages/bluefin.toml", self.OVERLAY, "44")
+        contract = installer.contract(ROOT / "packages/base.toml", self.OVERLAY, "44")
         for pkg in installer.section(self.OVERLAY, "parity"):
             with self.subTest(package=pkg):
                 self.assertIn(pkg, contract)
 
     def test_parity_section_duplicates_nothing_but_the_build_tooling_it_keeps(self):
-        # A name both in [parity] and in bluefin.toml or another overlay section
+        # A name both in [parity] and in base.toml or another overlay section
         # is a duplicate claim the verifier rejects. unzip is the one deliberate
         # overlap with [build]: configure-services.sh removes the build tooling
         # after the extension build and has to keep unzip for the same reason
         # it is listed here.
         parity = installer.section(self.OVERLAY, "parity")
         self.assertEqual(len(set(parity)), len(parity))
-        others = set(installer.section(ROOT / "packages/bluefin.toml", "fedora"))
+        others = set(installer.section(ROOT / "packages/base.toml", "fedora"))
         for name in ("gnome", "services", "unavailable"):
             others |= set(installer.section(self.OVERLAY, name))
         self.assertEqual(sorted(set(parity) & others), [])
@@ -487,38 +496,6 @@ class ParityContractTests(unittest.TestCase):
             code = verifier.main()
         self.assertEqual(code, 1)
         self.assertIn(f"  - {target}\n", stderr.getvalue())
-
-    def test_parity_ref_exists_and_contains_valid_commit_sha(self):
-        """Verifies the #152 pinned-parity-ref invariant.
-
-        These assertions belong to the pinned-ref work (#152), not the
-        contract-composition change that bundled them in; they pin the
-        parity revision the build must track. Kept in ParityContractTests
-        because that is where the parity file is read.
-        """
-        ref_file = ROOT / "packages/.bluefin-parity-ref"
-        self.assertTrue(ref_file.is_file(), "packages/.bluefin-parity-ref must exist")
-        ref = ref_file.read_text().strip()
-        self.assertRegex(
-            ref,
-            r"^[0-9a-f]{40}$",
-            "packages/.bluefin-parity-ref must contain a 40-character hex SHA",
-        )
-
-    def test_check_parity_recipe_guards_the_ref_format(self):
-        """Covers the #152 pinned-ref format guard in the Justfile.
-
-        Part of the pinned-ref work (#152) that was bundled into an
-        unrelated PR; asserts the check-parity recipe rejects a ref that is
-        not a full 40-character SHA before it is fetched.
-        """
-        justfile = (ROOT / "Justfile").read_text()
-        self.assertIn("packages/.bluefin-parity-ref", justfile)
-        self.assertRegex(
-            justfile,
-            r'\[\[\s*!\s*"\$ref"\s*=~\s*\^\[0-9a-f\]\{40\}\$\s*\]\]',
-            "Justfile check-parity recipe must validate the SHA format before fetching",
-        )
 
 
 class ImageSizeTests(unittest.TestCase):

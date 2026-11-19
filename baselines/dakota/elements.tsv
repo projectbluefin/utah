@@ -24,7 +24,6 @@ bluefin-ghostty.bst	ghostty
 bluefin-glog.bst	glog
 bluefin-gnome-epub-thumbnailer.bst	gnome-epub-thumbnailer
 bluefin-gnome-ponytail-daemon.bst	gnome-ponytail-daemon
-bluefin-gnome-rounded-blur.bst	gnome-rounded-blur
 bluefin-gnome-shell-extensions.bst	gnome-shell-extensions
 bluefin-gtk4-layer-shell.bst	gtk4-layer-shell
 bluefin-gum.bst	gum
@@ -51,6 +50,7 @@ bluefin-networkmanager-polkit.bst	networkmanager-polkit
 bluefin-nfs-utils.bst	nfs-utils
 bluefin-nicstat.bst	nicstat
 bluefin-nspawn.bst	nspawn
+bluefin-oo7-passwd-pam.bst	oo7-passwd-pam
 bluefin-open-vm-tools.bst	open-vm-tools
 bluefin-opencc.bst	opencc
 bluefin-plymouth-bluefin-theme.bst	plymouth-bluefin-theme

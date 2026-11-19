@@ -15,8 +15,8 @@
         "promotion"
       ],
       "description": "Build and contract jobs, promotion, branch sync, parity and extension update workflows, reusable actions and Renovate pins. Use when editing GitHub Actions or debugging CI.",
-      "version": "1.3",
-      "last_updated": "2026-10-31",
+      "version": "1.4",
+      "last_updated": "2026-11-07",
       "doc_type": "reference"
     },
     {
@@ -52,7 +52,7 @@
       ],
       "description": "The runtime desktop contract in contracts/bluefin-desktop.toml and its in-image verifiers. Use when changing branding, os-release, service presets, GNOME extensions, or first-boot Flatpak behavior.",
       "version": "1.0",
-      "last_updated": "2026-11-07",
+      "last_updated": "2026-11-16",
       "doc_type": "policy"
     },
     {
@@ -145,7 +145,7 @@
       ],
       "description": "Atomic bootc lifecycle transitions between two immutable Utah digests in QEMU: baseline, staging, reboot, and rollback. BLS boot-file and boot-manager checks, verify-boot-files.sh, uupd versus bootc staging, and the e2e harness.",
       "version": "1.0",
-      "last_updated": "2026-10-29",
+      "last_updated": "2026-11-17",
       "doc_type": "runbook"
     },
     {
@@ -170,19 +170,19 @@
     {
       "id": "package-contract",
       "name": "package-contract",
-      "one_line_purpose": "Maintain Bluefin package parity and Utah's overlay manifest.",
+      "one_line_purpose": "Maintain Utah's base manifest, overlay and Dakota parity triage.",
       "entry_point": "docs/skills/package-contract.md",
       "category": "contracts",
       "status": "active",
       "tags": [
         "packages",
         "parity",
-        "bluefin",
+        "dakota",
         "contracts"
       ],
-      "description": "Bluefin parity contract: verbatim bluefin.toml, utah.toml overlay, device firmware, [unavailable] rules, repository policy (on-image reposdir scan). Use when adding, removing, or debugging packages or parity/check-repos failures.",
-      "version": "1.1",
-      "last_updated": "2026-10-03",
+      "description": "Package contract: Utah-owned base.toml, utah.toml overlay, device firmware, [unavailable] rules, repository policy, Dakota gap triage (baselines/GAP.md). Use when adding, removing, or debugging packages or parity/check-repos failures.",
+      "version": "2.0",
+      "last_updated": "2026-11-14",
       "doc_type": "policy"
     },
     {

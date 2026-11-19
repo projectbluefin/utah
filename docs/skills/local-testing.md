@@ -368,7 +368,10 @@ Do not create the directory in the test: `scripts/clean-stage.sh` removes
 boot by a rule shipped under `system_files/shared/usr/lib/tmpfiles.d/`.
 `utah-logrotate.conf` supplies the root-owned directory for logrotate (#386).
 A build-time `mkdir` or a clean bootc lint result alone does not prove that
-service state exists on a fresh installed system.
+service state exists on a fresh installed system. The same gate fails on any
+AVC denial whose `comm` is `chcon` or `bootc`: bootc's
+`mac_admin` probe from a plain service must stay hidden by the
+`utah_bootc_probe` policy module (#1198; [SELinux modules](desktop-contract/references/selinux-modules.md)).
 
 Passing runs refresh `docs/verification/README.md`, its screenshots, and the
 delimited verification block in the root README. These are historical local

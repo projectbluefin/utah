@@ -1,7 +1,7 @@
 ---
 name: lifecycle-e2e
 version: "1.0"
-last_updated: "2026-10-29"
+last_updated: "2026-11-17"
 id: lifecycle-e2e
 one_line_purpose: Run the QEMU lifecycle harness and validate bootc upgrade, rollback, and BLS boot files.
 entry_point: docs/skills/lifecycle-e2e.md
@@ -143,6 +143,14 @@ this does not enable autologin or alter the published image's login policy.
 ```bash
 just lifecycle-test ghcr.io/projectbluefin/utah@sha256:<candidate-digest>
 ```
+
+CI runs this harness on every testing build: the `lifecycle` job in
+`post-testing-e2e.yml` installs the digest `:testing` served before the run
+from a debug ISO and stages the run's `utah` digest, and `promote-to-testing`
+needs it, so a failed lifecycle blocks promotion. It is skipped, never passed,
+when `:testing` already serves the candidate. Evidence lands in the
+`lifecycle-<image>-<backend>` run artifact. See
+[ISO end-to-end verification](ci-workflows/references/iso-e2e.md).
 
 ```bash
 just check

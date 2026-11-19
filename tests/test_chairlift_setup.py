@@ -18,7 +18,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = ROOT / "contracts/bluefin-desktop.toml"
-BLUEFIN_TOML = ROOT / "packages/bluefin.toml"
+BASE_TOML = ROOT / "packages/base.toml"
 UTAH_TOML = ROOT / "packages/utah.toml"
 CONFIGURE_SERVICES = ROOT / "scripts/configure-services.sh"
 USER_PRESET = ROOT / "system_files/shared/usr/lib/systemd/user-preset/85-utah-desktop.preset"
@@ -223,20 +223,19 @@ class HomebrewToolchainRetentionTests(unittest.TestCase):
     """Issue #676: Homebrew's internal Bundler runs with a strict PATH filter
     (/usr/bin:/bin:/usr/sbin:/sbin) and unbuffered native extensions. If a
     cask or formula triggers a gem compile, the absence of /usr/bin/make
-    bricks the persistent /home/linuxbrew/.linuxbrew prefix. Bluefin's
-    [fedora] contract retains `make`, `gcc`, and `gcc-c++` precisely so the
-    build chain survives a non-empty PATH. Utah copies bluefin.toml verbatim
-    (`just check-parity`) so the same retention must hold here; if it drifts,
-    `just check` must fail.
+    bricks the persistent /home/linuxbrew/.linuxbrew prefix. The base
+    manifest's [fedora] section (frozen from Bluefin's) retains `make`, `gcc`,
+    and `gcc-c++` precisely so the build chain survives a non-empty PATH; if
+    that retention is dropped, `just check` must fail.
     """
 
     @classmethod
     def setUpClass(cls):
-        cls.bluefin = tomllib.loads(BLUEFIN_TOML.read_text())
+        cls.base = tomllib.loads(BASE_TOML.read_text())
         cls.utah = tomllib.loads(UTAH_TOML.read_text())
 
     def _fedora_packages(self):
-        return list(self.bluefin.get("fedora", {}).get("packages", []))
+        return list(self.base.get("fedora", {}).get("packages", []))
 
     def test_bluefin_contract_retains_make(self):
         self.assertIn("make", self._fedora_packages())
@@ -255,7 +254,7 @@ class HomebrewToolchainRetentionTests(unittest.TestCase):
         # `[excluded]`, or any Fedora-version-conditional one: an image built
         # on Fedora 43 must install `make` for the same reason an image on
         # Fedora 44 does, so the name belongs in the common section.
-        section = self.bluefin.get("fedora", {})
+        section = self.base.get("fedora", {})
         packages = section.get("packages", [])
         for name in ("make", "gcc", "gcc-c++"):
             self.assertIn(name, packages)
@@ -286,19 +285,18 @@ class HomebrewToolchainRetentionTests(unittest.TestCase):
                 f"configure-services.sh must still remove {required}",
             )
 
-    def test_bluefin_toml_is_byte_for_byte_match(self):
+    def test_overlays_do_not_redefine_the_toolchain(self):
         # Utah's [parity] / [unavailable] overlay must not redefine any of
-        # the toolchain packages. bluefin.toml is the parity contract; an
-        # entry for `make`, `gcc`, or `gcc-c++` in either overlay would
-        # suggest someone tried to override the contract rather than
-        # satisfy it.
+        # the toolchain packages. base.toml owns that retention; an entry for
+        # `make`, `gcc`, or `gcc-c++` in either overlay would suggest someone
+        # tried to override the contract rather than satisfy it.
         for overlay in ("parity", "unavailable", "excluded", "build"):
             packages = self.utah.get(overlay, {}).get("packages", [])
             for name in ("make", "gcc", "gcc-c++"):
                 self.assertNotIn(
                     name, packages,
                     f"utah.toml [{overlay}] must not redefine {name}; "
-                    "bluefin.toml owns the toolchain retention",
+                    "base.toml owns the toolchain retention",
                 )
 
 

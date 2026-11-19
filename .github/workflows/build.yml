@@ -14,11 +14,11 @@ on:
   # consistently refer to refs/heads/testing, not the default main branch.
   workflow_dispatch:
     inputs:
-      # update-bluefin-parity.yml dispatches this on its unreviewed bump
-      # branch. A dispatch is not a pull_request event, so the reusable build
-      # would push and sign testing images from upstream content nobody has
-      # reviewed yet. contract_only skips publication; review_vm can still
-      # build a local image and offline ISO for a disposable VM test.
+      # A maintainer can dispatch this on an unreviewed branch. A dispatch is
+      # not a pull_request event, so the reusable build would push and sign
+      # testing images from content nobody has reviewed yet. contract_only
+      # skips publication; review_vm can still build a local image and offline
+      # ISO for a disposable VM test.
       review_vm:
         description: Build and VM-test a disposable local review image (requires contract_only)
         type: boolean
@@ -75,7 +75,7 @@ jobs:
   pinned_fetches:
     permissions:
       contents: read
-    uses: projectbluefin/actions/.github/workflows/reusable-pinned-fetches.yml@3adf1194c894fe7b1ae54e583c56306c6a2382ee # v1
+    uses: projectbluefin/actions/.github/workflows/reusable-pinned-fetches.yml@75348afb3a34c6006a3d3da51e51c9a3818b2616 # v1
     with:
       mode: fail
 
@@ -126,8 +126,6 @@ jobs:
         run: just check
       - name: Run unit suite
         run: just test
-      - name: Check Bluefin parity
-        run: just check-parity
       - name: Check package availability in Utah's repositories
         run: just check-repos
       # config/flavors.json is the single source for the build, promote and
@@ -285,7 +283,7 @@ jobs:
   build_main:
     needs: [contract, kernel_cache]
     if: ${{ github.event_name != 'merge_group' && !cancelled() && !inputs.contract_only && needs.contract.result == 'success' && needs.kernel_cache.result == 'success' && needs.kernel_cache.outputs.available == 'true' && needs.contract.outputs.main_flavors != '[]' }}
-    uses: projectbluefin/actions/.github/workflows/reusable-build.yml@3adf1194c894fe7b1ae54e583c56306c6a2382ee # v1
+    uses: projectbluefin/actions/.github/workflows/reusable-build.yml@75348afb3a34c6006a3d3da51e51c9a3818b2616 # v1
     permissions:
       contents: read
       packages: write
@@ -335,7 +333,7 @@ jobs:
   build_kernel:
     needs: [contract, kernel_cache]
     if: ${{ github.event_name != 'merge_group' && !cancelled() && !inputs.contract_only && needs.contract.result == 'success' && needs.kernel_cache.result == 'success' && needs.kernel_cache.outputs.available == 'true' && needs.contract.outputs.kernel_flavors != '[]' }}
-    uses: projectbluefin/actions/.github/workflows/reusable-build.yml@3adf1194c894fe7b1ae54e583c56306c6a2382ee # v1
+    uses: projectbluefin/actions/.github/workflows/reusable-build.yml@75348afb3a34c6006a3d3da51e51c9a3818b2616 # v1
     permissions:
       contents: read
       packages: write
