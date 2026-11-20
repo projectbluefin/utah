@@ -44,8 +44,6 @@ class FlathubDescriptorIntegrityTests(unittest.TestCase):
         uupd = self.root / "tmp/uupd"
         uupd.mkdir(parents=True)
         (uupd / "uupd").write_text("#!/bin/sh\nexit 0\n")
-        (uupd / "uupd.service").write_text("[Service]\nExecStart=/usr/bin/uupd\n")
-        (uupd / "uupd.timer").write_text("[Timer]\nOnBootSec=1h\n")
 
     def run_script(self):
         source = (ROOT / "scripts/configure-services.sh").read_text()

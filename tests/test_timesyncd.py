@@ -57,16 +57,24 @@ class TimesyncdTests(unittest.TestCase):
         self.assertIn("chronyd.service", services["disabled"])
 
     def test_install_date_waits_for_the_first_sync(self):
-        # Dakota files/firstboot/ublue-firstboot-date.path, verbatim.
-        path_unit = ini(SYSTEMD / "system/ublue-firstboot-date.path")
-        self.assertEqual(path_unit["Path"]["PathExists"], "/run/systemd/timesync/synchronized")
-        self.assertEqual(path_unit["Install"]["WantedBy"], "multi-user.target")
-        service = ini(SYSTEMD / "system/ublue-firstboot-date.service")
-        self.assertFalse(service.has_section("Install"))
-        self.assertEqual(service["Service"]["ExecStart"], "/usr/bin/ublue-firstboot-date")
-        script = ROOT / "system_files/shared/usr/bin/ublue-firstboot-date"
-        self.assertTrue(script.stat().st_mode & 0o111)
-        self.assertIn("record=/var/lib/ublue-os/install-date", script.read_text())
+        # dakota-config-firstboot-date ships Dakota's files/firstboot units and
+        # script (#1265); Utah keeps no copy, which the package would overwrite.
+        parity = tomllib.loads((ROOT / "packages/utah.toml").read_text())["parity"]["packages"]
+        self.assertIn("dakota-config-firstboot-date", parity)
+        for copy in ("lib/systemd/system/ublue-firstboot-date.path",
+                     "lib/systemd/system/ublue-firstboot-date.service",
+                     "bin/ublue-firstboot-date"):
+            self.assertFalse((ROOT / "system_files/shared/usr" / copy).exists(), copy)
+        contains = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())[
+            "configuration"]["file_contains"]
+        self.assertIn("PathExists=/run/systemd/timesync/synchronized",
+                      contains["/usr/lib/systemd/system/ublue-firstboot-date.path"])
+
+    def test_install_date_units_describe_utah(self):
+        for unit in ("ublue-firstboot-date.path", "ublue-firstboot-date.service"):
+            dropin = ini(SYSTEMD / f"system/{unit}.d/10-utah-description.conf")
+            self.assertIn("Utah", dropin["Unit"]["Description"])
+            self.assertNotIn("Dakota", dropin["Unit"]["Description"])
 
 
 if __name__ == "__main__":

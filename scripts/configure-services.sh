@@ -55,13 +55,29 @@ sed -i --follow-symlinks \
     -e 's/^IPv6_rpfilter=.*/IPv6_rpfilter=loose/' /etc/firewalld/firewalld.conf
 grep -qx 'DefaultZone=lax' /etc/firewalld/firewalld.conf
 grep -qx 'IPv6_rpfilter=loose' /etc/firewalld/firewalld.conf
+
 # Apply Dakota's runtime desktop integrations onto common's files. Each patch
 # is guarded: already-patched is a no-op, an unrecognized upstream file fails
 # the build loudly instead of silently shipping unpatched behavior.
-# Wallpaper rotation stays with Common's per-user bluefin-dynamic-wallpaper
-# timer (hemisphere-aware, live month-boundary rotation) rather than Dakota's
-# boot-time month symlink: repointing the default would stand the Common
-# rotator down with no replacement until reboot (#675 decision, #732 review).
+# Monthly wallpaper, as Dakota's effective image has it (#1266): both month
+# units keep their links current, but the default stays common's zz0 value.
+# Dakota's common.bst repoints zz0 from 12-bluefin.xml to
+# /var/lib/ublue-os/current-bluefin.xml, and common names another month, so
+# that sed matches nothing (projectbluefin/dakota#1902) and common's per-user,
+# hemisphere-aware bluefin-dynamic-wallpaper rotator stays in charge. Fail if
+# common ever names 12-bluefin.xml: Dakota's repoint would then take effect
+# there, and Utah has to follow it. The contract fails the build if common
+# drops the file.
+ZZ0_OVERRIDE=/usr/share/glib-2.0/schemas/zz0-bluefin-modifications.gschema.override
+if [ -f "${ZZ0_OVERRIDE}" ]; then
+    if grep -qF 'file:///usr/share/backgrounds/bluefin/12-bluefin.xml' "${ZZ0_OVERRIDE}"; then
+        echo "ERROR: ${ZZ0_OVERRIDE} names 12-bluefin.xml, so Dakota's current-bluefin.xml repoint now applies -- re-fit it (projectbluefin/dakota#1902)" >&2
+        exit 1
+    elif ! grep -qE "^picture-uri='file:///usr/share/backgrounds/bluefin/[0-9]{2}-bluefin\.xml'$" "${ZZ0_OVERRIDE}"; then
+        echo "ERROR: ${ZZ0_OVERRIDE} changed upstream -- re-check Dakota's wallpaper repoint (projectbluefin/dakota#1902)" >&2
+        exit 1
+    fi
+fi
 # Installation date for fastfetch: read the first-boot timestamp instead of
 # inferring the image age from /var/log timestamps.
 FASTFETCH_JSONC=/usr/share/ublue-os/fastfetch.jsonc
@@ -75,21 +91,44 @@ if [ -f "${FASTFETCH_JSONC}" ]; then
         exit 1
     fi
 fi
-# Community stats for fastfetch: read what bluefin-stats-refresh.service last
-# fetched, and fall back to the build-time placeholder until it has run once.
-# Common reads only the /usr/share/ublue-os copy, which is read-only at runtime,
-# so without this the banner shows the placeholder forever (#860).
-STATS_CACHE=/var/cache/bluefin-stats
+# Weekly community stats: Dakota drops common's two fastfetch lines and the
+# break after them (patches/common/0006-fastfetch-drop-weekly-stats.patch)
+# and fetches nothing at runtime, so Utah does the same (#1266). Already
+# dropped is a no-op; any other shape fails the build.
 if [ -f "${FASTFETCH_JSONC}" ]; then
-    if grep -qF "${STATS_CACHE}/" "${FASTFETCH_JSONC}"; then
+    python3 - "${FASTFETCH_JSONC}" <<'PY'
+import re
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8") as f:
+    text = f.read()
+stats = ("/usr/share/ublue-os/fastfetch-user-count", "/usr/share/ublue-os/bazaar-install-count")
+if not any(stat in text for stat in stats):
+    sys.exit(0)
+# One object per stat: its lines up to the closing brace, which no inner line
+# matches (the format strings carry {1}, so a brace-free match cannot work).
+body = r'(?:(?![ \t]*\},?\n)[^\n]*\n)*?'
+entry = r'\{\n' + body + r'[ \t]*"text": "cat %s",\n' + body + r'[ \t]*\},\s*'
+pattern = "".join(entry % re.escape(stat) for stat in stats) + r'"break",\s*'
+text, count = re.subn(pattern, "", text)
+if count != 1:
+    sys.exit(f"ERROR: {path} changed upstream -- re-fit Dakota's weekly-stats drop (patches/common/0006)")
+with open(path, "w", encoding="utf-8") as f:
+    f.write(text)
+PY
+fi
+# Ghostty's skeleton config follows GNOME's light/dark style, as Dakota
+# patches it (patches/common/0002-ghostty-dual-theme.patch, #1266).
+GHOSTTY_SKEL=/etc/skel/.config/ghostty/config.ghostty
+GHOSTTY_DUAL_THEME='theme = light:Catppuccin Latte,dark:Catppuccin Mocha'
+if [ -f "${GHOSTTY_SKEL}" ]; then
+    if grep -qxF "${GHOSTTY_DUAL_THEME}" "${GHOSTTY_SKEL}"; then
         : already patched
-    elif grep -qF '"cat /usr/share/ublue-os/fastfetch-user-count"' "${FASTFETCH_JSONC}" \
-        && grep -qF '"cat /usr/share/ublue-os/bazaar-install-count"' "${FASTFETCH_JSONC}"; then
-        for stat in fastfetch-user-count bazaar-install-count; do
-            sed -i "s#\"cat /usr/share/ublue-os/${stat}\"#\"cat ${STATS_CACHE}/${stat} 2>/dev/null || cat /usr/share/ublue-os/${stat}\"#" "${FASTFETCH_JSONC}"
-        done
+    elif grep -qxF 'theme = Catppuccin Mocha' "${GHOSTTY_SKEL}"; then
+        sed -i "s/^theme = Catppuccin Mocha\$/${GHOSTTY_DUAL_THEME}/" "${GHOSTTY_SKEL}"
     else
-        echo "ERROR: ${FASTFETCH_JSONC} changed upstream -- re-fit the community-stats patch (see bluefin-stats-refresh.service)" >&2
+        echo "ERROR: ${GHOSTTY_SKEL} changed upstream -- re-fit Dakota's dual-theme patch (patches/common/0002)" >&2
         exit 1
     fi
 fi
@@ -145,6 +184,7 @@ fi
 rm -f /usr/share/applications/system-update.desktop \
     /usr/share/applications/discourse.desktop \
     /usr/share/applications/documentation.desktop
+
 # Bluefin's Brewfile and Bazaar preinstall hook need the Flathub remote before
 # first boot. Keep this as a .flatpakrepo descriptor so the remote is available
 # to both flatpak-preinstall and brew-setup without baking mutable /var state.
@@ -176,9 +216,9 @@ grep -q '^DeployCollectionID=' /etc/flatpak/remotes.d/flathub.flatpakrepo ||
 grep -qx 'DeployCollectionID=org.flathub.Stable' /etc/flatpak/remotes.d/flathub.flatpakrepo
 # BudsLink backs the BudsLink-Companion extension enabled by default; Dakota
 # appends it to common's system Flatpaks and preinstalls it
-# (projectbluefin/dakota elements/bluefin/common.bst,
-# files/oci/bluefin-flatpak/preinstall.d/io.github.maniacx.BudsLink.preinstall).
-# The desktop contract's [flatpak] apps list fails the build if it is missing.
+# (projectbluefin/dakota elements/bluefin/common.bst; the preinstall comes from
+# the factory's dakota-config-flatpak-apps). The desktop contract's [flatpak]
+# apps list fails the build if it is missing.
 SYSTEM_FLATPAKS=/usr/share/ublue-os/homebrew/system-flatpaks.Brewfile
 if [ -f "${SYSTEM_FLATPAKS}" ] && ! grep -qxF 'flatpak "io.github.maniacx.BudsLink"' "${SYSTEM_FLATPAKS}"; then
     echo 'flatpak "io.github.maniacx.BudsLink"' >>"${SYSTEM_FLATPAKS}"
@@ -296,18 +336,16 @@ if ! matchpathcon /var/swap/swapfile | grep -q ':swapfile_t:'; then
 fi
 
 # uupd is distributed as a release binary, not an RPM in the Hummingbird
-# repositories. Keep its version pinned by the Containerfile argument.
-# Dakota's elements/bluefin/uupd.bst writes the same upstream units, with the
-# distrobox flag below, so the downloads give Dakota's units. Installing them
-# here replaces Common's uupd.timer (four runs a day) with upstream's daily
-# 04:00 timer, which is also what wins on Dakota: BuildStream stages
-# bluefin/uupd.bst after bluefin/common.bst. uupd-manual.service, its polkit
-# rule and /etc/uupd/config.json come from Dakota via system_files.
+# repositories. Keep its version pinned by the Containerfile argument. Its
+# units, uupd-manual.service, polkit rule and /etc/uupd/config.json come from
+# dakota-config-uupd (Dakota's elements/bluefin/uupd.bst), which replaces
+# Common's four-a-day uupd.timer with the daily 04:00 one, as on Dakota.
 install -Dm0755 /tmp/uupd/uupd /usr/bin/uupd
-install -Dm0644 /tmp/uupd/uupd.service /usr/lib/systemd/system/uupd.service
-install -Dm0644 /tmp/uupd/uupd.timer /usr/lib/systemd/system/uupd.timer
-# Avoid pulling the distrobox module on every update, as in Dakota's uupd.service.
-sed -i 's|uupd|& --disable-module-distrobox|' /usr/lib/systemd/system/uupd.service
+# Common ships its own /etc/uupd/config.json, so rpm installs the package's
+# copy as .rpmnew; Dakota's hardware-check config must win.
+if [ -f /etc/uupd/config.json.rpmnew ]; then
+    mv -f /etc/uupd/config.json.rpmnew /etc/uupd/config.json
+fi
 
 # Apply the system presets to every installed unit, so the image carries the
 # state first-boot preset application would give it and the desktop contract

@@ -86,14 +86,13 @@ The TOML's sections are the contract's table of contents:
   carry active `timers.target.wants` symlinks that bypass uupd staging or undo manual rollbacks.
   Switchers can mask them by hand if a local `/etc` symlink survived. uupd matches Dakota ([uupd](desktop-contract/references/uupd.md)).
 
-  `ublue-firstboot-date.path` (Dakota's, waits for timesyncd's first sync, #1228) and `ublue-booted-image.service` are Dakota parity (#675): install-date stamping and the
-  booted-image snapshot Common's `/usr/libexec/ublue-booted-image` falls back to.
-  `configure-services.sh` patches Common's fastfetch ([stats](desktop-contract/references/stats-refresh.md))
-  and `uwelcome.sh` (non-interactive shells skip the greeting), checks image-info ([bootc compatibility](desktop-contract/references/image-info.md)), and applies [Dakota's desktop defaults](desktop-contract/references/dakota-desktop-defaults.md).
-  Wallpaper rotation is deliberately NOT Dakota parity: Common's per-user `bluefin-dynamic-wallpaper`
-  timer is hemisphere-aware and rotates live at month boundaries, while
-  Dakota's boot-time month symlink is northern-only and stale until reboot, so
-  repointing the default would stand the better rotator down (#675 decision).
+  The firstboot-date, booted-image and remove-installer units, from `dakota-config-firstboot-date`
+  (#1265), are Dakota parity (#675): install-date stamping once timesyncd reports its first sync
+  (`ublue-firstboot-date.path`, #1228) and the booted-image snapshot Common's
+  `/usr/libexec/ublue-booted-image` falls back to.
+  `configure-services.sh` applies [Dakota's edits to Common](desktop-contract/references/dakota-common-edits.md)
+  (month units, weekly stats, Ghostty theme, logos; #1266),
+  patches `uwelcome.sh` (non-interactive shells skip the greeting), checks image-info ([bootc compatibility](desktop-contract/references/image-info.md)), and applies [Dakota's desktop defaults](desktop-contract/references/dakota-desktop-defaults.md).
 
   bootc applies presets on first boot, so a unit's state comes from the
   presets, never from a build-time `systemctl enable` (#98: `flatpak-preinstall`
@@ -182,7 +181,7 @@ one is pending a composefs boot check (see below):
 
 - `Failed to resolve group 'plugdev'` / `'nintendo_switch'`, about 100 lines:
   udev rules from libfido2 and common name groups nothing creates.
-  `sysusers.d/utah-udev-groups.conf` creates them.
+  `sysusers.d/bluefin-udev-groups.conf` (`dakota-config-udev-groups`, #1265) creates them.
 - `fchmod() of / failed: Read-only file system`: systemd's `root.conf`
   (`z / 555`) cannot apply to the composefs root. `/etc/tmpfiles.d/root.conf`
   masks it by name with a comment-only file.
@@ -315,12 +314,11 @@ a `path=` the extensions ship; it skips when the submodules are not checked out.
 
 GNOME Initial Setup's welcome page shows the icon named by os-release
 `LOGO`. Distributor builds of Settings > About use the compiled PNG paths
-described below. Fedora sets `LOGO=fedora-logo-icon` and
-Bluefin keeps it; common overlays the raptor at
-`/usr/share/pixmaps/fedora-logo-icon.png`. Hummingbird's os-release has no
-`LOGO`, so Utah showed the generic GNOME foot with the raptor already on disk.
-`configure-branding.sh` sets it, and the contract asserts both the key and the
-icon file. To check without a build: `bootc usr-overlay`, append the key to
+described below. Hummingbird's os-release has no `LOGO`, so Utah showed the
+generic GNOME foot. `configure-branding.sh` sets `LOGO=img-logo-icon` as
+Dakota does, and the `artwork` stage installs Dakota's four
+`/usr/share/pixmaps/img-logo-icon*.svg` wordmarks (#1266); the contract asserts
+the key and the files. To check without a build: `bootc usr-overlay`, append the key to
 `/usr/lib/os-release`, `systemctl restart gdm`, and look at Initial Setup.
 
 ## The GDM greeter logo is Bluefin, not Fedora (#378)
@@ -384,7 +382,7 @@ build.
 Hummingbird defaults to a server preset and disables unlisted services, so
 the desktop policy is applied explicitly. `scripts/configure-services.sh`
 mirrors bluefin-lts's `40-services.sh`: it applies the desktop presets,
-enables GDM, input-remapper, firmware updates, Tailscale, uupd, user setup and resolved,
+enables GDM, firmware updates, Tailscale, uupd, user setup and resolved, keeps kanata opt-in,
 configures authselect, and removes the extension build toolchain before
 cleanup. Lid/sleep stay at logind defaults; Dakota-copied sysctl, WirePlumber
 and polkit defaults: [Dakota system defaults](desktop-contract/references/dakota-system-defaults.md).

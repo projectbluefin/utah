@@ -46,7 +46,6 @@ are never enabled by a preset.
   gssproxy, nftables beside firewalld), CNI, and helpers that
   need configuration or change the system unasked (brltty, fancontrol,
   powertop, xfs_healer, canberra sounds, lastlog2 import, man-db cache).
-  `bluefin-stats-refresh.service` runs from its timer only.
 - mdadm's `mdcheck_start.timer`, `mdcheck_continue.timer` and
   `mdmonitor-oneshot.timer`, although Dakota runs them (#1271). Utah keeps
   Fedora's `raid-check.timer` (#1268), and the mdcheck pair would schedule a
@@ -75,11 +74,13 @@ they are harmless: `ratbagd.service` (D-Bus alias), `selinux-check-proper-disabl
 
 `[services].enabled` asserts, in the built image: `avahi-daemon.service`,
 `avahi-daemon.socket`, `bluetooth.service`, `ublue-firstboot-date.path`,
-`ublue-booted-image.service`, `bootc-unified-storage.timer`,
-`brew-setup.service`, `cups.socket`, `bluefin-stats-refresh.timer`,
+`ublue-booted-image.service`, `bluefin-remove-installer.service`
+(dakota-config-firstboot-date, #1265), `ublue-wallpaper-month.service`,
+`bluefin-wallpaper-month.service` (#1266), `bootc-unified-storage.timer`,
+`brew-setup.service`, `cups.socket`,
 `dconf-update.service`, `flatpak-nuke-fedora.service`,
 `flatpak-preinstall.service`, `gdm.service`, `colord.service`,
-`accounts-daemon.service`, `input-remapper.service`, `ModemManager.service`,
+`accounts-daemon.service`, `ModemManager.service`,
 `power-profiles-daemon.service`, `rtkit-daemon.service`, `uresourced.service`,
 `upower.service`, `udisks2.service`, `polkit-agent-helper.socket`,
 `cups.service`, `pcscd.socket`, `gnome-remote-desktop.service`,
@@ -147,6 +148,18 @@ run Dakota's `files/just-overrides/devmode.py`, shipped verbatim as
 factory (`[unavailable]`, utah-packages#1021: ipxe-roms-qemu and SDL2_image are
 missing, libvirt is unpublished); until libvirt lands the recipes say so and
 exit. containerd and runc are excluded: podman runs on crun.
+
+### Key remapping (#1222)
+
+Key remapping is kanata plus ydotool, as on Dakota, and input-remapper is
+gone. The factory's `kanata` ships Dakota's `kanata.service` (DynamicUser,
+`input` group, `/dev/uinput`) and its `80-kanata.preset`
+(`disable kanata.service`); `85-utah-desktop.preset` and the contract's
+`disabled` list keep it off as well. The unit has
+`ConditionPathExists=/etc/kanata/kanata.kbd`, so opt in by writing that file
+and running `systemctl enable --now kanata`. `ydotool` brings Dakota's
+`80-ydotool.rules` (uinput to `input`, uaccess) and the `uinput` modules-load
+drop-in (utah-packages#1134).
 
 ### User units
 

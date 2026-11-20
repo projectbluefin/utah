@@ -1,16 +1,23 @@
 ## Dakota system defaults
 
-Utah copies these small system defaults from Dakota (`testing`) and asserts
-each in `contracts/bluefin-desktop.toml` (`[configuration].files` plus
+Utah installs Dakota's and GNOME OS's configuration elements as the factory's
+`dakota-config-*` and `gnome-os-config-*` subpackages (#1265; element list and
+ownership rules in utah-packages `docs/skills/config-packages.md`), never as
+copies in `system_files`, and asserts the files it relies on in
+`contracts/bluefin-desktop.toml` (`[configuration].files` plus
 `file_contains`):
 
-- `system_files/shared/usr/share/wireplumber/wireplumber.conf.d/51-disable-pcsp.conf`
-  (Dakota `files/wireplumber/`, `elements/bluefin/wireplumber-pcsp.bst`) hides
-  the PC-speaker ALSA card so it never becomes the default sink after resume.
-- `system_files/shared/usr/lib/sysctl.d/60-kexec-disable.conf` (Dakota
-  `elements/bluefin/kexec-disable.bst`) sets `kernel.kexec_load_disabled = 1`;
-  bootc upgrades and soft-reboot do not use kexec, and Easy Anti-Cheat
-  requires it off.
+- `dakota-config-wireplumber-pcsp`: `51-disable-pcsp.conf` hides the
+  PC-speaker ALSA card so it never becomes the default sink after resume.
+- `dakota-config-kexec-disable`: `60-kexec-disable.conf` sets
+  `kernel.kexec_load_disabled = 1`; bootc upgrades and soft-reboot do not use
+  kexec, and Easy Anti-Cheat requires it off.
+- `dakota-config-udev-groups`, `-firstboot-date`, `-uupd`, `-flatpak-apps`
+  (BudsLink preinstall), `-custom-command-menu-dconf`
+  (`08-dakota-extension-defaults`), and the rest of the adopted list in
+  `packages/utah.toml` `[parity]`. `dakota-config-firstboot-date`'s
+  `ublue-firstboot-date.path` waits for systemd-timesyncd's sync flag, so the
+  install date is recorded only once timesyncd replaces chrony (#1228).
 - Dakota's `files/polkit/org.freedesktop.NetworkManager.rules` (local wheel
   users modify system connections without a password) is already shipped,
   with an identical rule body, by Hummingbird's NetworkManager RPM at
@@ -77,6 +84,20 @@ Swap follows Dakota (#1224), not zram: `zram-generator(-defaults)` are gone.
   no zswap; `scripts/install-ogc-kernel.sh` builds in `ZSWAP` and
   `CRYPTO_ZSTD` and gates on both, so the kargs take effect there too
   (`docs/skills/kernel-cache.md`).
+
+## Fonts
+
+Dakota ships two fonts Utah's base manifest does not (#1240), both factory
+packages in `packages/utah.toml` `[parity]`:
+
+- `google-noto-serif-cjk-vf-fonts`: GNOME OS's Noto Serif CJK, next to the
+  Sans CJK set the base manifest already carries.
+- `nerd-fonts-symbols`: Dakota's `bluefin/nerd-fonts-symbols.bst`, the
+  icon-only Symbols Nerd Font that common's fastfetch config falls back to.
+  The package ships `10-nerd-font-symbols.conf` in
+  `/usr/share/fontconfig/conf.avail` and enables it with the same
+  `/etc/fonts/conf.d` link the element creates, so Utah adds no fontconfig
+  file of its own; the contract asserts both paths and the family name.
 
 ## Lid and sleep
 

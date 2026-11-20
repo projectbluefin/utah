@@ -48,6 +48,9 @@ RUN /usr/local/libexec/utah-install-v4l2loopback base /out
 #  - /out/branding/bluefin-logo-dark.svg is the source for the GDM greeter logo,
 #    which configure-branding.sh renders after the package transaction because
 #    nothing in this stage can rasterize an SVG.
+#  - img-logo-icon{,-dark,-text,-text-dark}.svg are the os-release LOGO icon
+#    and the variants Settings looks up beside it: the light and dark Bluefin
+#    wordmarks, as Dakota's common.bst installs them (#1266).
 # Sources other than the wallpaper image are commit-pinned with sha256 in
 # config/artwork.lock and verified by scripts/fetch-artwork.sh.
 FROM ${BASE_IMAGE} AS artwork
@@ -67,7 +70,13 @@ RUN set -eu; \
     /artwork/scripts/fetch-artwork.sh assets/vector/icons/logo-menu/logo-utahraptor-menu.svg \
       /out/overlay/usr/share/icons/hicolor/scalable/actions/ublue-logo-symbolic.svg; \
     /artwork/scripts/fetch-artwork.sh assets/vector/logos/bluefin/bluefin-logo-dark.svg \
-      /out/branding/bluefin-logo-dark.svg
+      /out/branding/bluefin-logo-dark.svg; \
+    pix=/out/overlay/usr/share/pixmaps; \
+    /artwork/scripts/fetch-artwork.sh assets/vector/logos/bluefin/bluefin-logo-light.svg \
+      "$pix/img-logo-icon.svg"; \
+    install -m0644 "$pix/img-logo-icon.svg" "$pix/img-logo-icon-text.svg"; \
+    install -m0644 /out/branding/bluefin-logo-dark.svg "$pix/img-logo-icon-dark.svg"; \
+    install -m0644 /out/branding/bluefin-logo-dark.svg "$pix/img-logo-icon-text-dark.svg"
 
 # Stage source origins without committing their COPY mtimes to the runtime image.
 FROM scratch AS inputs
@@ -326,12 +335,9 @@ ARG ENABLE_SSHD=0
 # is otherwise unverified. Both move together, so Renovate updates both.
 ARG UUPD_VERSION=v1.5.5
 ARG UUPD_SHA256=d8d420a153de11589abad3292eef2131a75ac3487414065a2661a558ef0d027c
-# The two systemd units come from raw.githubusercontent at the same tag, and a
-# git tag move changes what raw.* serves for them without touching the release
-# asset the checksum above covers. uupd.service runs as root on a timer, so
-# verify the units against their own digests too; all four ARGs move together.
-ARG UUPD_SERVICE_SHA256=65dd2b64dcb6a9f77227612aa624ef17fe43b32eb835b51d7d22a22755dc21a8
-ARG UUPD_TIMER_SHA256=bbb5f098ec33d047bdef571e0bc112364df157e0f92d73e0febab703c4a3c099
+# The units, uupd-manual.service, the polkit rule and /etc/uupd/config.json
+# are Dakota's (elements/bluefin/uupd.bst), installed by the factory's
+# dakota-config-uupd package; only the binary is downloaded here.
 
 # Hummingbird defaults to a server preset that disables unlisted services;
 # Utah's presets enable them instead, as Dakota does (#1233).
@@ -361,12 +367,6 @@ RUN --mount=type=bind,from=artwork,source=/out/branding,target=/tmp/utah-artwork
       -o /tmp/uupd/uupd_Linux_x86_64.tar.gz && \
     echo "${UUPD_SHA256}  /tmp/uupd/uupd_Linux_x86_64.tar.gz" | sha256sum --check --strict && \
     tar -xzf /tmp/uupd/uupd_Linux_x86_64.tar.gz -C /tmp/uupd && \
-    curl -fsSL "https://raw.githubusercontent.com/ublue-os/uupd/${UUPD_VERSION}/uupd.service" \
-      -o /tmp/uupd/uupd.service && \
-    curl -fsSL "https://raw.githubusercontent.com/ublue-os/uupd/${UUPD_VERSION}/uupd.timer" \
-      -o /tmp/uupd/uupd.timer && \
-    echo "${UUPD_SERVICE_SHA256}  /tmp/uupd/uupd.service" | sha256sum --check --strict && \
-    echo "${UUPD_TIMER_SHA256}  /tmp/uupd/uupd.timer" | sha256sum --check --strict && \
     /usr/local/libexec/utah-build-gnome-extensions && \
     /usr/local/libexec/utah-verify-gnome-extensions --record-provenance && \
     glib-compile-schemas /usr/share/glib-2.0/schemas && \

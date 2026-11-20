@@ -607,6 +607,7 @@ class DesktopUnitEnablementTests(unittest.TestCase):
             if line.startswith(f"{verb} ")
         }
 
+
     def test_systemd_boot_update_enabled_and_gated_on_the_loader(self):
         # projectbluefin/utah#363: on systemd-boot systems bootupd stands down
         # by design ("managed with bootctl"), so the image must carry the boot

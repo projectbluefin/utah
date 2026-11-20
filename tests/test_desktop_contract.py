@@ -61,11 +61,13 @@ class ValidateContractTests(unittest.TestCase):
         data = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
         self.assertEqual(desktop.validate_contract(data), [])
 
-    def test_shipped_contract_enables_input_remapper(self):
+    def test_shipped_contract_keeps_kanata_opt_in_without_input_remapper(self):
         import tomllib
 
         data = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
-        self.assertIn("input-remapper.service", data.get("services", {}).get("enabled", []))
+        services = data.get("services", {})
+        self.assertIn("kanata.service", services.get("disabled", []))
+        self.assertNotIn("input-remapper.service", services.get("enabled", []))
 
     def test_every_missing_section_is_named(self):
         errors = desktop.validate_contract({})
@@ -498,26 +500,27 @@ class ServiceMaskParityTests(unittest.TestCase):
         self.assertRegex(services, r"(?m)^systemctl preset-all$")
         self.assertNotRegex(services, r"(?m)^\s*systemctl (enable|disable) ")
         self.assertNotIn("enable_unit", services)
-        uupd = services.index("install -Dm0644 /tmp/uupd/uupd.timer")
+        uupd = services.index("mv -f /etc/uupd/config.json.rpmnew /etc/uupd/config.json")
         self.assertLess(uupd, services.index("\nsystemctl preset-all\n"))
 
     def test_the_reported_desktop_units_are_enabled(self):
-        # projectbluefin/utah#99: input-remapper was installed and its unit
-        # never started. #19: the first-boot Flatpak, setup, statistics,
-        # update and Tailscale units need an enablement policy too. #675:
-        # Dakota's first-boot date and booted-image units.
+        # projectbluefin/utah#99: an installed unit that never started. #19: the
+        # first-boot Flatpak, setup, update and Tailscale units need an
+        # enablement policy too. #675, #1265: Dakota's first-boot date and
+        # booted-image units. #1266: Dakota's monthly-wallpaper units.
         enabled = self.contract_services()["enabled"]
         for unit in (
             "gdm.service",
-            "input-remapper.service",
+            "ublue-wallpaper-month.service",
             "flatpak-preinstall.service",
             "ublue-system-setup.service",
-            "bluefin-stats-refresh.timer",
+            "bluefin-wallpaper-month.service",
             "projectbluefin-countme.timer",
             "uupd.timer",
             "accounts-daemon.service",
             "ublue-firstboot-date.path",
             "ublue-booted-image.service",
+            "bluefin-remove-installer.service",
         ):
             with self.subTest(unit=unit):
                 self.assertIn(unit, enabled)
@@ -526,8 +529,12 @@ class ServiceMaskParityTests(unittest.TestCase):
         # the contract cannot require it enabled; the preset still turns it on.
         self.assertNotIn("colord.service", enabled)
         self.assertEqual(preset_verdict("colord.service")[0], "enable")
-        for unit in ("ublue-firstboot-date.path", "ublue-booted-image.service"):
-            self.assertTrue((ROOT / "system_files/shared/usr/lib/systemd/system" / unit).is_file())
+        # dakota-config-firstboot-date ships these units (#1265); Utah keeps no copy.
+        parity = tomllib.loads((ROOT / "packages/utah.toml").read_text())["parity"]["packages"]
+        self.assertIn("dakota-config-firstboot-date", parity)
+        for unit in ("ublue-firstboot-date.path", "ublue-booted-image.service",
+                     "bluefin-remove-installer.service"):
+            self.assertFalse((ROOT / "system_files/shared/usr/lib/systemd/system" / unit).exists())
 
     def test_dakota_gnome_user_units_enabled_in_contract_preset_and_script(self):
         # Dakota inherits these from gnome-build-meta's user presets.
@@ -651,11 +658,14 @@ class ServiceMaskParityTests(unittest.TestCase):
                 self.assertIn(path, files)
                 self.assertIn(path, file_contains)
 
-    def test_dakota_uupd_files_shipped_and_required(self):
-        # Dakota's elements/bluefin/uupd.bst ships these beside the binary.
+    def test_dakota_uupd_files_come_from_the_factory_and_are_required(self):
+        # Dakota's elements/bluefin/uupd.bst ships these beside the binary;
+        # dakota-config-uupd packages them (#1265), so Utah keeps no copy.
         contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
         files = contract["configuration"]["files"]
         file_contains = contract["configuration"]["file_contains"]
+        manifest = tomllib.loads((ROOT / "packages/utah.toml").read_text())["parity"]["packages"]
+        self.assertIn("dakota-config-uupd", manifest)
         for path in (
             "/usr/lib/systemd/system/uupd-manual.service",
             "/etc/polkit-1/rules.d/uupd.rules",
@@ -663,14 +673,13 @@ class ServiceMaskParityTests(unittest.TestCase):
         ):
             with self.subTest(path=path):
                 self.assertIn(path, files)
-                self.assertTrue((ROOT / "system_files/shared" / path.lstrip("/")).is_file())
-        # The downloaded units land after Common's copy; pin which one ships.
-        for path in ("/usr/lib/systemd/system/uupd.timer", "/usr/lib/systemd/system/uupd.service"):
+                self.assertFalse((ROOT / "system_files/shared" / path.lstrip("/")).exists())
+        # The package's units replace Common's copies; pin which one ships.
+        for path in ("/usr/lib/systemd/system/uupd.timer", "/usr/lib/systemd/system/uupd.service",
+                     "/etc/uupd/config.json"):
             with self.subTest(path=path):
                 self.assertIn(path, files)
                 self.assertIn(path, file_contains)
-        config = json.loads((ROOT / "system_files/shared/etc/uupd/config.json").read_text())
-        self.assertTrue(config["checks"]["hardware"]["enable"])
 
     def test_bootc_fetch_apply_updates_masked_and_disabled(self):
         preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset").read_text()
@@ -1073,96 +1082,111 @@ class FwupdRefreshDropInTests(unittest.TestCase):
             )
 
 
-class StatsRefreshCacheTests(unittest.TestCase):
-    """fastfetch must be able to read what bluefin-stats-refresh.service fetched.
+class DakotaCommonEditTests(unittest.TestCase):
+    """Dakota's edits to common's files, applied by configure-services.sh (#1266).
 
-    The unit used DynamicUser=yes, which always puts CacheDirectory= under
-    /var/cache/private (mode 0700), and Common's fastfetch.jsonc only read
-    the read-only /usr/share/ublue-os placeholders, so the banner showed the
-    placeholder forever (#860).
+    Each edit must be idempotent and fail the build when common's file no
+    longer has the shape it was written against.
     """
 
-    UNIT = ROOT / "system_files/shared/usr/lib/systemd/system/bluefin-stats-refresh.service"
-    SYSUSERS = ROOT / "system_files/shared/usr/lib/sysusers.d/utah-bluefin-stats.conf"
-    SCRIPT = ROOT / "system_files/shared/usr/libexec/bluefin-refresh-stats"
-    CACHE = "/var/cache/bluefin-stats"
-    STATS = ("fastfetch-user-count", "bazaar-install-count")
+    SERVICES = (ROOT / "scripts/configure-services.sh").read_text()
+    COMMON_STATS = """    "break",
+    {
+      "type": "command",
+      "text": "cat /usr/share/ublue-os/fastfetch-user-count",
+      "format": "Murder Chickens: {1} (weekly)"
+    },
+    {
+      "type": "command",
+      "text": "cat /usr/share/ublue-os/bazaar-install-count",
+      "format": "Bazaar Installs: {1} (weekly)"
+    },
+    "break",
+    {
+      "type": "host"
+    }
+"""
+    DAKOTA_STATS = """    "break",
+    {
+      "type": "host"
+    }
+"""
 
-    @staticmethod
-    def directives(path):
-        return [
-            line.strip() for line in path.read_text().splitlines()
-            if line.strip() and not line.lstrip().startswith("#")
-        ]
-
-    def test_unit_cache_is_public_and_owned_by_a_static_user(self):
-        lines = self.directives(self.UNIT)
-        for required in (
-            "DynamicUser=no",
-            "User=bluefin-stats",
-            "Group=bluefin-stats",
-            "CacheDirectory=bluefin-stats",
-            "CacheDirectoryMode=0755",
-            # Implied by DynamicUser=yes, not by DynamicUser=no.
-            "NoNewPrivileges=yes",
-            "PrivateTmp=yes",
-            "RemoveIPC=yes",
-            "RestrictSUIDSGID=yes",
-            "ProtectSystem=strict",
-        ):
-            with self.subTest(directive=required):
-                self.assertIn(required, lines)
-        self.assertNotIn("DynamicUser=yes", lines)
-        # Reusing "bluefin" would make systemd rename the existing
-        # /var/cache/private/bluefin back on upgraded machines.
-        self.assertNotIn("CacheDirectory=bluefin", lines)
-
-    def test_sysusers_allocates_the_unit_user(self):
-        active = self.directives(self.SYSUSERS)
-        self.assertEqual(len(active), 1)
-        fields = active[0].split(None, 3)
-        self.assertEqual(fields[:3], ["u", "bluefin-stats", "-"])
-
-    def test_script_writes_where_fastfetch_reads(self):
-        script = self.SCRIPT.read_text()
-        self.assertIn(f"${{CACHE_DIRECTORY:-{self.CACHE}}}", script)
-        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
-        wanted = contract["configuration"]["file_contains"]["/usr/share/ublue-os/fastfetch.jsonc"]
-        for stat in self.STATS:
-            with self.subTest(stat=stat):
-                self.assertIn(f"write_stat {stat} ", script)
-                self.assertIn(
-                    f"cat {self.CACHE}/{stat} 2>/dev/null || cat /usr/share/ublue-os/{stat}",
-                    wanted,
-                )
-
-    def test_fastfetch_patch_rewrites_common_lines_once(self):
+    def block(self, start):
         import re
+
+        return re.search(rf"^{re.escape(start)}.*?^fi$", self.SERVICES, re.S | re.M).group(0)
+
+    def run_block(self, block, env_line):
         import subprocess
 
-        services = (ROOT / "scripts/configure-services.sh").read_text()
-        block = re.search(r"^STATS_CACHE=.*?^fi$", services, re.S | re.M).group(0)
-        common = "\n".join(
-            f'      "text": "cat /usr/share/ublue-os/{stat}",' for stat in self.STATS
-        ) + "\n"
+        return subprocess.run(
+            ["bash", "-euo", "pipefail", "-c", f"{env_line}\n{block}\n"],
+            capture_output=True, text=True,
+        )
+
+    def test_weekly_stats_drop_matches_dakota_patch_once(self):
+        block = self.block("# Weekly community stats")
         with tempfile.TemporaryDirectory() as tmp:
             jsonc = Path(tmp) / "fastfetch.jsonc"
-            jsonc.write_text(common)
-            script = f"FASTFETCH_JSONC={jsonc}\n{block}\n"
+            jsonc.write_text(self.COMMON_STATS)
             for _ in range(2):
-                subprocess.run(["bash", "-euo", "pipefail", "-c", script], check=True)
-            patched = jsonc.read_text()
-            for stat in self.STATS:
-                with self.subTest(stat=stat):
-                    self.assertEqual(
-                        patched.count(f"cat {self.CACHE}/{stat} 2>/dev/null || cat /usr/share/ublue-os/{stat}"),
-                        1,
-                    )
+                result = self.run_block(block, f"FASTFETCH_JSONC={jsonc}")
+                self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(jsonc.read_text(), self.DAKOTA_STATS)
 
-            jsonc.write_text('      "text": "cat /somewhere/else",\n')
-            result = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+            jsonc.write_text('      "text": "cat /usr/share/ublue-os/fastfetch-user-count",\n')
+            result = self.run_block(block, f"FASTFETCH_JSONC={jsonc}")
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("re-fit the community-stats patch", result.stderr)
+            self.assertIn("re-fit Dakota's weekly-stats drop", result.stderr)
+
+    def test_ghostty_skel_follows_light_and_dark_once(self):
+        block = self.block("GHOSTTY_SKEL=")
+        with tempfile.TemporaryDirectory() as tmp:
+            skel = Path(tmp) / "config.ghostty"
+            block = block.replace("/etc/skel/.config/ghostty/config.ghostty", str(skel))
+            skel.write_text("# comment\ntheme = Catppuccin Mocha\nwindow-theme = ghostty\n")
+            for _ in range(2):
+                result = self.run_block(block, "")
+                self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                skel.read_text(),
+                "# comment\ntheme = light:Catppuccin Latte,dark:Catppuccin Mocha\nwindow-theme = ghostty\n",
+            )
+
+            skel.write_text("theme = Dracula\n")
+            result = self.run_block(block, "")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("re-fit Dakota's dual-theme patch", result.stderr)
+
+    def test_zz0_check_fails_when_dakotas_repoint_would_apply(self):
+        block = self.block("ZZ0_OVERRIDE=")
+        with tempfile.TemporaryDirectory() as tmp:
+            override = Path(tmp) / "zz0.override"
+            block = block.replace(
+                "/usr/share/glib-2.0/schemas/zz0-bluefin-modifications.gschema.override", str(override)
+            )
+            uri = "picture-uri='file:///usr/share/backgrounds/bluefin/{}-bluefin.xml'\n"
+            override.write_text(uri.format("06"))
+            self.assertEqual(self.run_block(block, "").returncode, 0)
+            override.write_text(uri.format("12"))
+            result = self.run_block(block, "")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("projectbluefin/dakota#1902", result.stderr)
+            override.write_text("picture-uri='file:///var/lib/ublue-os/current-bluefin.xml'\n")
+            self.assertNotEqual(self.run_block(block, "").returncode, 0)
+
+    def test_month_units_ship_as_dakota_and_are_enabled(self):
+        import os
+
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        for unit in ("ublue-wallpaper-month.service", "bluefin-wallpaper-month.service"):
+            with self.subTest(unit=unit):
+                self.assertTrue((ROOT / "system_files/shared/usr/lib/systemd/system" / unit).is_file())
+                self.assertIn(unit, contract["services"]["enabled"])
+                self.assertEqual(preset_verdict(unit)[0], "enable")
+        sync = ROOT / "system_files/shared/usr/libexec/bluefin-wallpaper-month-sync"
+        self.assertTrue(os.access(sync, os.X_OK))
 
 
 if __name__ == "__main__":

@@ -221,6 +221,14 @@ packages = [
     # it, stays out until its own parity ticket (#263); this adds the font
     # itself (#382).
     "stix-fonts",
+    # Dakota's other two fonts (#1240): GNOME OS ships Noto Serif CJK next to
+    # the Sans CJK the base manifest carries, and Dakota's
+    # bluefin/nerd-fonts-symbols.bst adds Symbols Nerd Font as the icon
+    # fallback for common's fastfetch config. nerd-fonts-symbols ships
+    # 10-nerd-font-symbols.conf in conf.avail and enables it from
+    # /etc/fonts/conf.d itself, as the element does.
+    "google-noto-serif-cjk-vf-fonts",
+    "nerd-fonts-symbols",
     # Shell and tooling Bluefin users reach for
     "bash-completion",
     "man-db",
@@ -391,6 +399,35 @@ packages = [
     # the lax zone; the resolved drop-in applies on its own.
     "gnome-os-config-firewalld",
     "gnome-os-config-resolved-fallback-dns",
+    # The rest of Dakota's and GNOME OS's configuration elements, packaged by
+    # the factory (utah-packages packages/dakota-config and gnome-os-config,
+    # docs/skills/config-packages.md) instead of copied into system_files
+    # (#1265). Each subpackage installs one element's files at the element's
+    # paths; the desktop contract asserts the ones Utah relies on.
+    # dakota-config-firstboot-date's ublue-firstboot-date.path waits for
+    # systemd-timesyncd's sync flag, so it records the install date only once
+    # timesyncd replaces chrony (#1228).
+    "dakota-config-composefs-loop-udisks-ignore",
+    "dakota-config-custom-command-menu-dconf",
+    "dakota-config-firstboot-date",
+    "dakota-config-flatpak-apps",
+    "dakota-config-kexec-disable",
+    "dakota-config-network",
+    "dakota-config-ntsync-modules-load",
+    "dakota-config-rpcbind-preset",
+    "dakota-config-sudo-linuxbrew-path",
+    "dakota-config-tailscale-preset",
+    "dakota-config-tailscale-setup",
+    "dakota-config-udev-groups",
+    "dakota-config-user-avatars",
+    "dakota-config-uupd",
+    "dakota-config-wireplumber-pcsp",
+    "gnome-os-config-hidraw-udev",
+    "gnome-os-config-journald-config",
+    "gnome-os-config-modprobe-config",
+    "gnome-os-config-systemd-presets",
+    "gnome-os-config-uinput",
+    "gnome-os-config-wpa-supplicant-config",
     # Everyday command-line tools (#392). xdg-utils supplies xdg-open, which
     # nothing else in the image provides. nano-default-editor sets EDITOR.
     "xdg-utils",
@@ -407,6 +444,12 @@ packages = [
     "pinentry-gnome3",
     "brltty",
     "ptyxis",
+    # Key remapping as Dakota ships it (bluefin/kanata.bst, bluefin/ydotool.bst),
+    # in place of input-remapper (#1222). kanata.service stays off until the
+    # user writes /etc/kanata/kanata.kbd and enables it (the package's
+    # 80-kanata.preset); ydotool brings the uinput udev rule and modules-load.
+    "kanata",
+    "ydotool",
     # Network file systems and Windows domain clients (the NFS family follows
     # in the second-wave block below).
     "cifs-utils",
@@ -956,6 +999,27 @@ parity = [
     "uresourced",
     "gnome-os-config-firewalld",
     "gnome-os-config-resolved-fallback-dns",
+    "dakota-config-composefs-loop-udisks-ignore",
+    "dakota-config-custom-command-menu-dconf",
+    "dakota-config-firstboot-date",
+    "dakota-config-flatpak-apps",
+    "dakota-config-kexec-disable",
+    "dakota-config-network",
+    "dakota-config-ntsync-modules-load",
+    "dakota-config-rpcbind-preset",
+    "dakota-config-sudo-linuxbrew-path",
+    "dakota-config-tailscale-preset",
+    "dakota-config-tailscale-setup",
+    "dakota-config-udev-groups",
+    "dakota-config-user-avatars",
+    "dakota-config-uupd",
+    "dakota-config-wireplumber-pcsp",
+    "gnome-os-config-hidraw-udev",
+    "gnome-os-config-journald-config",
+    "gnome-os-config-modprobe-config",
+    "gnome-os-config-systemd-presets",
+    "gnome-os-config-uinput",
+    "gnome-os-config-wpa-supplicant-config",
     "xdg-utils",
     "rsync",
     "nano",
@@ -967,6 +1031,8 @@ parity = [
     "pinentry-gnome3",
     "brltty",
     "ptyxis",
+    "kanata",
+    "ydotool",
     "cifs-utils",
     "rpcbind",
     "autofs",
@@ -1073,4 +1139,6 @@ parity = [
     "bindfs",
     "malcontent-tools",
     "nfs-python-utils",
+    "google-noto-serif-cjk-vf-fonts",
+    "nerd-fonts-symbols",
 ]

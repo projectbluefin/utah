@@ -28,8 +28,12 @@ files = [
   "/usr/share/bluefin-artwork-logos/bluefin-logo-dark.png",
   "/usr/share/icons/hicolor/scalable/actions/ublue-logo-symbolic.svg",
   "/usr/share/icons/hicolor/icon-theme.cache",
-  # The os-release LOGO icon; common ships Bluefin's raptor under this name.
-  "/usr/share/pixmaps/fedora-logo-icon.png",
+  # The os-release LOGO icon and the names GNOME looks up beside it, Bluefin's
+  # artwork wordmarks as Dakota installs them (common.bst, #1266).
+  "/usr/share/pixmaps/img-logo-icon.svg",
+  "/usr/share/pixmaps/img-logo-icon-dark.svg",
+  "/usr/share/pixmaps/img-logo-icon-text.svg",
+  "/usr/share/pixmaps/img-logo-icon-text-dark.svg",
   # The boot splash watermark the bgrt theme draws (Bluefin's raptor, from
   # common); fedora-logos owns and erases this path during the logo swap.
   "/usr/share/plymouth/themes/spinner/watermark.png",
@@ -38,8 +42,6 @@ files = [
   "/usr/share/backgrounds/bluefin/01-bluefin.xml",
   "/usr/share/backgrounds/bluefin/06-bluefin.xml",
   "/usr/share/glib-2.0/schemas/zz0-bluefin-modifications.gschema.override",
-  "/usr/share/ublue-os/fastfetch-user-count",
-  "/usr/share/ublue-os/bazaar-install-count",
   "/usr/bin/chairlift-helper",
   "/usr/share/polkit-1/actions/io.projectbluefin.chairlift.ublue.policy",
 ]
@@ -57,7 +59,7 @@ VENDOR_URL = "https://projectbluefin.io"
 DEFAULT_HOSTNAME = "bluefin"
 VERSION_CODENAME = "Utahraptor"
 IMAGE_ID = "utah"
-LOGO = "fedora-logo-icon"
+LOGO = "img-logo-icon"
 
 [branding.os_release_patterns]
 PRETTY_NAME = '^Bluefin \(Version: .+\)$'
@@ -109,7 +111,11 @@ files = [
   "/etc/dconf/db/distro.d/02-bluefin-keybindings",
   "/etc/dconf/db/distro.d/03-bluefin-ptyxis-palette",
   "/etc/dconf/db/distro.d/04-bluefin-custom-command-menu",
+  # Dakota's extension defaults and keybindings (dakota-config-custom-command-menu-dconf).
+  "/etc/dconf/db/distro.d/06-dakota-keybindings",
   "/etc/dconf/db/distro.d/08-dakota-extension-defaults",
+  # Dakota's avatar directories (dakota-config-user-avatars).
+  "/etc/dconf/db/distro.d/07-dakota-avatar-directories",
   "/etc/dconf/db/distro.d/locks/01-bluefin-locked-settings",
   # GDM greeter logo. GDM uses its own "gdm" dconf profile (provided by the
   # gdm RPM at /etc/dconf/profile/gdm); without this keyfile gnome-shell
@@ -129,15 +135,21 @@ files = [
   # fails the health check. The drop-in widens the burst window; #741.
   "/usr/lib/systemd/system/projectbluefin-countme.service.d/10-utah-burst-tolerance.conf",
   # Dakota desktop parity (#675): first-boot install-date stamping and the
-  # booted-image snapshot for fastfetch. Wallpaper rotation stays with
-  # Common's per-user timer (see configure-services.sh), so the Dakota month
-  # symlink units are intentionally not shipped. The install date is written
-  # once timesyncd reports a sync (Dakota's ublue-firstboot-date.path, #1228).
+  # booted-image snapshot for fastfetch, plus the one-shot removal of the live
+  # ISO's installer Flatpak, all from dakota-config-firstboot-date (#1265).
+  # The install date is written once timesyncd reports a sync (Dakota's
+  # ublue-firstboot-date.path, #1228).
   "/usr/lib/systemd/system/ublue-firstboot-date.path",
   "/usr/lib/systemd/system/ublue-firstboot-date.service",
   "/usr/bin/ublue-firstboot-date",
   "/usr/lib/systemd/system/ublue-booted-image.service",
   "/usr/bin/ublue-booted-image-sync",
+  "/usr/lib/systemd/system/bluefin-remove-installer.service",
+  # Dakota's two monthly-wallpaper units (#1266); the default wallpaper stays
+  # common's (see configure-services.sh).
+  "/usr/lib/systemd/system/ublue-wallpaper-month.service",
+  "/usr/lib/systemd/system/bluefin-wallpaper-month.service",
+  "/usr/libexec/bluefin-wallpaper-month-sync",
   # GNOME OS's fallback NTP server for systemd-timesyncd (#1228).
   "/usr/lib/systemd/timesyncd.conf.d/10-gnome-os-fallback-ntp.conf",
   # Common files configure-services.sh patches or checks for Dakota parity.
@@ -147,6 +159,15 @@ files = [
   "/usr/bin/ublue-image-info.sh",
   "/usr/libexec/ublue-booted-image",
   "/etc/profile.d/uwelcome.sh",
+  "/etc/skel/.config/ghostty/config.ghostty",
+  # Dakota's key remapper and its uinput helper (#1222): kanata's opt-in unit
+  # and preset, and ydotool's uinput udev rule and modules-load drop-in.
+  "/usr/bin/kanata",
+  "/usr/lib/systemd/system/kanata.service",
+  "/usr/lib/systemd/system-preset/80-kanata.preset",
+  "/usr/bin/ydotool",
+  "/usr/lib/udev/rules.d/80-ydotool.rules",
+  "/usr/lib/modules-load.d/ydotool.conf",
   # Dakota's shell defaults (projectbluefin/dakota elements/bluefin/common.bst).
   "/etc/profile.d/bluefin-shell-defaults.sh",
   # Common's Red Hat signature policy uses the unsuffixed key path. The pinned
@@ -156,12 +177,17 @@ files = [
   "/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release-2",
   # Plymouth stays graphical with Hummingbird's console=ttyS0 karg (#461).
   "/usr/lib/bootc/kargs.d/10-utah-plymouth.toml",
-  # Dakota system defaults (projectbluefin/dakota elements/bluefin/
-  # wireplumber-pcsp.bst, kexec-disable.bst, networkmanager-polkit.bst).
-  # Hummingbird's NetworkManager RPM already ships Dakota's wheel rule at the
-  # same path, so Utah asserts it but must not overlay its own copy.
+  # Dakota system defaults, from the factory's dakota-config and
+  # gnome-os-config subpackages (#1265): wireplumber-pcsp, kexec-disable,
+  # udev-groups, composefs-loop-udisks-ignore, journald-config.
+  # Hummingbird's NetworkManager RPM already ships Dakota's wheel rule
+  # (networkmanager-polkit.bst) at the same path, so Utah asserts it but must
+  # not overlay its own copy.
   "/usr/share/wireplumber/wireplumber.conf.d/51-disable-pcsp.conf",
   "/usr/lib/sysctl.d/60-kexec-disable.conf",
+  "/usr/lib/sysusers.d/bluefin-udev-groups.conf",
+  "/usr/lib/udev/rules.d/90-hide-composefs-loop.rules",
+  "/usr/lib/systemd/journald.conf.d/90-persistent-journal.conf",
   # Dakota's zswap and disk-backed swapfile (elements/bluefin/zswap-config.bst,
   # swapfile.bst), plus the zstd initramfs driver and swapfile_t label Utah's
   # kernel and SELinux need (#1224). The swap unit is wanted statically.
@@ -189,7 +215,8 @@ files = [
   "/usr/share/polkit-1/rules.d/org.freedesktop.NetworkManager.rules",
   # Dakota's elements/bluefin/uupd.bst: the update units, user-startable
   # manual updates, and the hardware-check config that replaces Common's
-  # distrobox-only one. file_contains below pins the units' contents.
+  # distrobox-only one (dakota-config-uupd; the binary is downloaded by the
+  # Containerfile). file_contains below pins the units' contents.
   "/usr/bin/uupd",
   "/usr/lib/systemd/system/uupd.service",
   "/usr/lib/systemd/system/uupd.timer",
@@ -203,6 +230,10 @@ files = [
   "/etc/pkcs11/modules/opensc.module",
   # Common's PipeWire drop-in; Utah no longer overrides it (#1267).
   "/usr/share/pipewire/pipewire-pulse.conf.d/50-bluefin-bt-switch.conf",
+  # Dakota's Symbols Nerd Font fallback rule (bluefin/nerd-fonts-symbols.bst),
+  # shipped and enabled by the nerd-fonts-symbols package (#1240).
+  "/usr/share/fontconfig/conf.avail/10-nerd-font-symbols.conf",
+  "/etc/fonts/conf.d/10-nerd-font-symbols.conf",
 ]
 
 [configuration.file_contains]
@@ -234,13 +265,25 @@ files = [
 "/usr/lib/systemd/timesyncd.conf.d/10-gnome-os-fallback-ntp.conf" = [
   "FallbackNTP=gnome.pool.ntp.org",
 ]
+# dakota-config-firstboot-date's path unit waits for timesyncd's first sync
+# (#1228); the drop-ins give both units Utah's descriptions.
+"/usr/lib/systemd/system/ublue-firstboot-date.path" = [
+  "PathExists=/run/systemd/timesync/synchronized",
+]
+"/usr/lib/systemd/system/ublue-firstboot-date.path.d/10-utah-description.conf" = [
+  "Description=Record Utah installation date once the clock is synchronized",
+]
+"/usr/lib/systemd/system/ublue-firstboot-date.service.d/10-utah-description.conf" = [
+  "Description=Record Utah first-boot installation date",
+]
 # Dakota parity (#675): fastfetch reads the first-boot install date stamped
 # by ublue-firstboot-date.service instead of inferring age from /var/log.
 "/usr/share/ublue-os/fastfetch.jsonc" = [
   "/var/lib/ublue-os/install-date",
-  # The community stats come from bluefin-stats-refresh.service's cache (#860).
-  "cat /var/cache/bluefin-stats/fastfetch-user-count 2>/dev/null || cat /usr/share/ublue-os/fastfetch-user-count",
-  "cat /var/cache/bluefin-stats/bazaar-install-count 2>/dev/null || cat /usr/share/ublue-os/bazaar-install-count",
+]
+# Dakota's patches/common/0002-ghostty-dual-theme.patch (#1266).
+"/etc/skel/.config/ghostty/config.ghostty" = [
+  "theme = light:Catppuccin Latte,dark:Catppuccin Mocha",
 ]
 # Dakota parity (#675): ublue-image-info.sh reads the booted tag through
 # Common's ublue-booted-image reader, which falls back to the boot-time
@@ -318,6 +361,11 @@ files = [
 "/usr/lib/sysctl.d/60-kexec-disable.conf" = [
   "kernel.kexec_load_disabled = 1",
 ]
+# Udev rules name these groups; dakota-config-udev-groups creates them (#444).
+"/usr/lib/sysusers.d/bluefin-udev-groups.conf" = [
+  "g plugdev",
+  "g nintendo_switch",
+]
 # Dakota parity (#1224): zswap in front of /var/swap/swapfile.
 "/usr/lib/bootc/kargs.d/20-zswap.toml" = [
   '"zswap.enabled=1"',
@@ -390,6 +438,9 @@ files = [
 "/usr/share/pipewire/pipewire-pulse.conf.d/50-bluefin-bt-switch.conf" = [
   "pulse.cmd = [ ]",
 ]
+"/etc/fonts/conf.d/10-nerd-font-symbols.conf" = [
+  "<family>Symbols Nerd Font</family>",
+]
 
 [flatpak]
 files = [
@@ -399,7 +450,7 @@ files = [
   # Spacebar file previews in Files (Sushi), from Flathub (#1015).
   "/usr/share/flatpak/preinstall.d/nautilus-previewer.preinstall",
   # BudsLink backs the default-enabled BudsLink-Companion extension
-  # (projectbluefin/dakota files/oci/bluefin-flatpak/preinstall.d/).
+  # (dakota-config-flatpak-apps: Dakota's files/oci/bluefin-flatpak/preinstall.d/).
   "/usr/share/flatpak/preinstall.d/io.github.maniacx.BudsLink.preinstall",
   "/etc/flatpak/remotes.d/tuna-os.flatpakrepo",
   "/usr/share/ublue-os/privileged-setup.hooks.d/99-flatpaks.sh",
@@ -519,13 +570,15 @@ enabled = [
   # qemu-guest-agent unit); each starts only on its hypervisor (#1232).
   "vmtoolsd.service",
   "qemu-guest-agent.service",
-  # Dakota desktop parity (#675).
+  # Dakota desktop parity (#675, #1265).
   "ublue-firstboot-date.path",
   "ublue-booted-image.service",
+  "bluefin-remove-installer.service",
   "bootc-unified-storage.timer",
   "brew-setup.service",
   "cups.socket",
-  "bluefin-stats-refresh.timer",
+  "ublue-wallpaper-month.service",
+  "bluefin-wallpaper-month.service",
   "dconf-update.service",
   "flatpak-nuke-fedora.service",
   "flatpak-preinstall.service",
@@ -535,7 +588,6 @@ enabled = [
   # without an [Install] section, so it is D-Bus activated and `systemctl
   # enable` is a no-op (the nvidia/gaming image builds failed on it).
   "accounts-daemon.service",
-  "input-remapper.service",
   "ModemManager.service",
   "power-profiles-daemon.service",
   # Dakota's effective service state (#1233): on by enable-by-default
@@ -668,6 +720,8 @@ disabled = [
   "sysstat-collect.timer",
   "sysstat-summary.timer",
   "sysstat-rotate.timer",
+  # Key remapping is opt-in, as on Dakota (#1222).
+  "kanata.service",
   # Utah-only units Dakota does not run (#1233).
   "multipathd.service",
   "lm_sensors.service",

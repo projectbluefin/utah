@@ -1,4 +1,0 @@
-[Flatpak Preinstall io.github.maniacx.BudsLink]
-Branch=stable
-IsRuntime=false
-CollectionID=org.flathub.Stable

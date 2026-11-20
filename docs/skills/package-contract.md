@@ -370,8 +370,8 @@ Never append rows from a newer image to an older snapshot: `image.txt` must
 describe the same image as its `surface.tsv`; after a refresh,
 [remove resolved triage entries](package-contract/references/factory-consumption.md#closing-baseline-gaps).
 
-Current counts, per the README "Parity with Dakota" section: 58 base manifest
-packages installed, 308 Utah additions (GNOME 51, base-image parity, device
+Current counts, per the README "Parity with Dakota" section: 57 base manifest
+packages installed, 333 Utah additions (GNOME 51, base-image parity, device
 firmware, desktop services), 9 genuinely unavailable. After changing a manifest,
 run `python3 scripts/generate-site-data.py`, then
 `python3 scripts/check-doc-counts.py --write` to refresh both documents.

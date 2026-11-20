@@ -151,9 +151,6 @@ disable canberra-system-shutdown-reboot.service
 disable foomaticrip-upgrade.service
 disable lastlog2-import.service
 disable man-db-restart-cache-update.service
-# The community-stats fetch runs from bluefin-stats-refresh.timer, not at
-# every boot.
-disable bluefin-stats-refresh.service
 
 # mdadm's scrub and reminder timers, which Dakota runs, stay off (#1271).
 # raid-check.timer already scrubs every array weekly (kept by #1268), so
