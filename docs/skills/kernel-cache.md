@@ -1,7 +1,7 @@
 ---
 name: kernel-cache
 version: "1.0"
-last_updated: "2026-11-07"
+last_updated: "2026-11-20"
 id: kernel-cache
 one_line_purpose: Understand and rebuild the kernel cache image (patched Fedora kernel, OGC kernel, NVIDIA module).
 entry_point: docs/skills/kernel-cache.md
@@ -10,12 +10,12 @@ mcp_compliance_level: partial
 optimization_status: draft
 status: active
 dependencies: []
-tags: [kernel, nvidia, ogc, cache, btrfs, fsverity]
+tags: [kernel, nvidia, ogc, cache, btrfs, fsverity, secure-boot]
 description: >-
   The kernel cache image, its content-hash tag, and unpack-or-compile
   behavior. Use when touching install-fedora-kernel.sh, kernel-patches,
-  install-ogc-kernel.sh, install-nvidia.sh, Containerfile.kernel, or
-  debugging flavored builds.
+  install-ogc-kernel.sh, install-nvidia.sh, Containerfile.kernel,
+  flavored builds, or Secure Boot status.
 metadata:
   type: reference
 ---
@@ -66,9 +66,12 @@ arrived, the kernel logs `fs-verity (dm-0, inode N): FILE CORRUPTED!` with
 usually successfully, sometimes as `EIO` in userspace. A composefs root is
 nothing but fs-verity objects, so a composefs install on btrfs (`bootc install
 --composefs-backend`, or bootc-migrate's OSTree to composefs conversion) reads
-its own system files through the bug. The upstream fix is linux-next
-`dcf8811f63af` ("btrfs: fix the fsverity callback where unexpected range is
-verified"); no released kernel carries it yet (bootc-dev/bootc#2471).
+its own system files through the bug. The fix ("btrfs: fix the fsverity
+callback where unexpected range is verified") is mainline `254e15591ee4`, first
+in v7.4-rc2. The patch file carries its linux-next id, `dcf8811f63af`. It has
+no `Cc: stable`, so no 7.3.y release and no Fedora 44 kernel carries it yet
+(bootc-dev/bootc#2471). The stable and kernel-ark `fedora-7.3` backports are
+tracked in [Secure Boot](kernel-cache/references/secure-boot.md).
 
 `scripts/install-fedora-kernel.sh build` rebuilds Fedora's own source RPM for
 the base image's kernel (Koji's copy signed with the Fedora 44 key, also
@@ -102,9 +105,15 @@ base. Moving `BASE_IMAGE` to a new kernel before then means moving
 compiles the old kernel successfully, then `rpm -U` rejects replacing the
 newer base kernel. Never use `--oldpackage` to hide a stale source pin; rebuild
 the base's exact Fedora version and retain source signature and digest checks.
-The `check` also rejects a cache with the wrong module tree. Secure Boot: the
-rebuild is not signed by Fedora's key, so with Secure Boot enforcing, shim
-refuses it just as it refuses the OGC kernel.
+The `check` also rejects a cache with the wrong module tree.
+
+Two costs of the rebuild go away with it. First, it is signed with pesign's
+Red Hat Test Certificate, not Fedora's key, so with Secure Boot enforcing, shim
+refuses it just as it refuses the OGC kernel. Second, `--without debuginfo`
+drops `CONFIG_DEBUG_INFO_BTF` and with it `CONFIG_SCHED_CLASS_EXT`, so `main`
+and `nvidia` lack the sched_ext that Fedora's own kernel has. Getting the fix
+into a Fedora-signed kernel, rather than signing Utah's rebuild, is the plan:
+[Secure Boot](kernel-cache/references/secure-boot.md).
 
 ## What the tag hashes
 
