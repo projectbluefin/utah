@@ -1,0 +1,6 @@
+{
+  "image": "ghcr.io/projectbluefin/utah@sha256:bc60ff0b77afae562f0ca7d7e9f5a2ef71f69b3f260a0829485405495b0f4a89",
+  "source_sha": "2411c38d33ce040118cb37b4f609412935a1e1c1",
+  "build_run": "44751046006",
+  "e2e_run": "44764429105"
+}
