@@ -616,8 +616,10 @@ packages = [
     # by `just baselines` on 2026-11-20 (baselines/GAP.md). The monitoring
     # tools are the user-facing CLIs #1263 adopted. pam-u2f installs the
     # module only; PAM is left unconfigured. pam_pkcs11 waits for the
-    # smart-card PAM decision (#1257); nmtui, whiptail, bpftool and lzip wait
-    # for the next factory pin (#1360).
+    # smart-card PAM decision (#1257). bpftool, newt (whiptail, and the
+    # libnewt NetworkManager-tui needs), lzip and the Dell smbios-utils
+    # arrived with factory pin c288398 (#1360); iSCSI and umotd wait for
+    # decisions.
     "tealdeer",
     "nethogs",
     "tiptop",
@@ -652,6 +654,12 @@ packages = [
     "bindfs",
     "malcontent-tools",
     "nfs-python-utils",
+    "bpftool",
+    "newt",
+    "NetworkManager-tui",
+    "lzip",
+    "smbios-utils-bin",
+    "smbios-utils-python",
     # DLNA/UPnP media sharing (GNOME Settings > Sharing > Media Sharing), as
     # Dakota ships it (#1258). The rygel package carries /etc/rygel.conf and
     # the rygel.service user unit Settings starts; gupnp-av's factory recipe
@@ -1180,6 +1188,11 @@ parity = [
     "bindfs",
     "malcontent-tools",
     "nfs-python-utils",
+    "bpftool",
+    "newt",
+    "lzip",
+    "smbios-utils-bin",
+    "smbios-utils-python",
     "google-noto-serif-cjk-vf-fonts",
     "nerd-fonts-symbols",
     # DLNA/UPnP media sharing (#1258).

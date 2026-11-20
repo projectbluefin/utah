@@ -100,15 +100,15 @@ malcontent = { status = "planned", area = "desktop-apps", issue = "#1359", reaso
 nfs-utils = { status = "planned", area = "network-fs", issue = "#1359", reason = "nfsiostat, mountstats and rpcctl from nfs-python-utils, installed in [parity]" }
 pam-pkcs11 = { status = "planned", area = "auth-security", issue = "#1359", reason = "Smart-card login; resolves, but its PAM wiring is decided with opensc (#1257) first" }
 
-# Waiting on the next factory pin (#1347) or an unpublished dependency (#1360).
-NetworkManager = { status = "planned", area = "networking", issue = "#1360", reason = "nmtui (NetworkManager-tui) needs libnewt from the next factory pin; the initrd and nm-cloud-setup units come along with it" }
-"/usr/bin/bpftool" = { status = "planned", area = "cli-tools", issue = "#1360", reason = "Published in the next factory pin" }
-newt = { status = "planned", area = "cli-tools", issue = "#1360", reason = "whiptail; published in the next factory pin" }
-lzip = { status = "planned", area = "cli-tools", issue = "#1360", reason = "Published in the next factory pin" }
-libsmbios = { status = "planned", area = "hardware-power", issue = "#1360", reason = "Dell smbios-* tools (smbios-utils-bin); published in the next factory pin" }
-open-iscsi = { status = "planned", area = "network-fs", issue = "#1360", reason = "iscsi-initiator-utils; published in the next factory pin" }
-open-isns = { status = "planned", area = "network-fs", issue = "#1360", reason = "isns-utils; published in the next factory pin" }
-umotd = { status = "planned", area = "desktop-defaults", issue = "#1360", reason = "Published in the next factory pin; decided alongside uwelcome and the MOTD-off default (#1252)" }
+# Published since factory pin c288398 (#1347); tracked on #1360.
+NetworkManager = { status = "planned", area = "networking", issue = "#1360", reason = "nmtui from NetworkManager-tui, installed in [parity]; the initrd and nm-cloud-setup units stay out" }
+"/usr/bin/bpftool" = { status = "planned", area = "cli-tools", issue = "#1360", reason = "Installed in [parity]" }
+newt = { status = "planned", area = "cli-tools", issue = "#1360", reason = "whiptail, installed in [parity]" }
+lzip = { status = "planned", area = "cli-tools", issue = "#1360", reason = "Installed in [parity]" }
+libsmbios = { status = "planned", area = "hardware-power", issue = "#1360", reason = "Dell smbios-* tools (smbios-utils-bin, smbios-utils-python), installed in [parity]" }
+open-iscsi = { status = "planned", area = "network-fs", issue = "#1360", reason = "iscsi-initiator-utils resolves; its units need a service-policy decision first" }
+open-isns = { status = "planned", area = "network-fs", issue = "#1360", reason = "isns-utils resolves; decided with the iSCSI initiator" }
+umotd = { status = "planned", area = "desktop-defaults", issue = "#1360", reason = "Resolves; decided alongside uwelcome and the MOTD-off default (#1252)" }
 erofs-utils = { status = "planned", area = "files-devices", issue = "#1360", reason = "The factory builds it, but it needs libqpl.so.1, which nothing publishes" }
 nicstat = { status = "planned", area = "cli-tools", issue = "#1360", reason = "Not published by the factory" }
 
