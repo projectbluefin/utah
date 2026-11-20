@@ -62,7 +62,7 @@ required_config=(SCHED_CLASS_EXT NTSYNC ANDROID_BINDERFS
                  BLK_DEV_LOOP ISO9660_FS BLK_DEV_DM DM_SNAPSHOT DM_CRYPT
                  CRYPTO_XTS FUSE_FS FS_VERITY
                  SYSFB_SIMPLEFB DRM_SIMPLEDRM VIDEO_DEV USER_NS TUN
-                 INPUT_UINPUT ZRAM CGROUP_BPF
+                 INPUT_UINPUT ZSWAP CRYPTO_ZSTD CGROUP_BPF
                  DRM_AMDGPU DRM_XE)
 verify_config() {
   local config="$1" symbol
@@ -183,11 +183,13 @@ scripts/config --enable NAMESPACES --enable USER_NS --module TUN
 # closes cleanly via Ctrl+Q" on the gaming flavors). Module, as Fedora ships
 # it (CONFIG_INPUT_UINPUT=m); the harness modprobes it before use.
 scripts/config --module INPUT_UINPUT
-# zram-generator-defaults asks for /dev/zram0, and x86_64_defconfig has no
-# zram: systemd then waits 50s for dev-zram0.device, and the late boot starves
-# geoclue past its start timeout (#741, gaming smoke-b "No failed systemd
-# units at boot"). Module with the zsmalloc allocator, as Fedora ships it.
-scripts/config --enable ZSMALLOC --module ZRAM
+# Swap is a /var/swap/swapfile fronted by zswap, as on Dakota (#1224):
+# kargs.d/20-zswap.toml sets zswap.enabled=1 zswap.compressor=zstd on every
+# image, and x86_64_defconfig has neither, so the kargs would be ignored and
+# the swapfile would run uncompressed. Both built in: zswap initialises before
+# the initramfs could load a zstd module, and regenerate-initramfs.sh only has
+# to carry zstd when it is modular.
+scripts/config --enable ZSMALLOC --enable ZSWAP --enable CRYPTO_ZSTD
 # The V4L2 core for v4l2loopback (see required_config). VIDEO_DEV sits inside
 # `if MEDIA_SUPPORT`, in a menu that MEDIA_SUPPORT_FILTER (on by default
 # without EXPERT) hides, so it takes its default -- which is on only when a
@@ -222,7 +224,8 @@ require_config '^CONFIG_DRM_AMD_DC=y$' CONFIG_DRM_AMD_DC
 require_config '^CONFIG_DRM_XE=(y|m)$' CONFIG_DRM_XE
 require_config '^CONFIG_DRM_FBDEV_EMULATION=y$' CONFIG_DRM_FBDEV_EMULATION
 require_config '^CONFIG_INPUT_UINPUT=(y|m)$' CONFIG_INPUT_UINPUT
-require_config '^CONFIG_ZRAM=(y|m)$' CONFIG_ZRAM
+require_config '^CONFIG_ZSWAP=y$' CONFIG_ZSWAP
+require_config '^CONFIG_CRYPTO_ZSTD=y$' CONFIG_CRYPTO_ZSTD
 verify_config .config
 
 make modules_prepare

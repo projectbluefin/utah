@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-16",
+  "generated_at": "2026-11-20",
   "generator": "scripts/generate-site-data.py",
   "groups": [
     {
@@ -12,13 +12,13 @@
         "alsa-tools-firmware",
         "bootc",
         "bootupd",
-        "containerd",
         "ddcutil",
         "distrobox",
         "dracut-live",
         "evtest",
         "fastfetch",
         "firewall-config",
+        "fish",
         "flatpak-spawn",
         "fzf",
         "gcc",
@@ -43,8 +43,6 @@
         "libblockdev-mpath",
         "libcamera-gstreamer",
         "libcamera-tools",
-        "libgda",
-        "libgda-sqlite",
         "libratbag-ratbagd",
         "libva-utils",
         "libxcrypt-compat",
@@ -65,8 +63,7 @@
         "wl-clipboard",
         "xdg-terminal-exec",
         "xorriso",
-        "zenity",
-        "zsh"
+        "zenity"
       ],
       "title": "Base manifest",
       "transient": false
@@ -124,7 +121,9 @@
         "abattis-cantarell-fonts",
         "acl",
         "alsa-ucm",
+        "alsa-ucm-utils",
         "alsa-utils",
+        "anthy-unicode",
         "argyllcms",
         "attr",
         "autofs",
@@ -132,10 +131,16 @@
         "bash-completion",
         "bc",
         "bind-utils",
+        "bindfs",
         "bluez-cups",
         "bolt",
         "borgbackup",
+        "bpftop",
         "brltty",
+        "bsdcat",
+        "bsdcpio",
+        "bsdtar",
+        "bsdunzip",
         "buildah",
         "bzip2",
         "c2esp",
@@ -158,11 +163,13 @@
         "desktop-file-utils",
         "dnf5daemon-server",
         "dnsmasq",
+        "dvb-tools",
         "dymo-cups-drivers",
         "ethtool",
         "exfatprogs",
         "f2fs-tools",
-        "ffmpegthumbnailer",
+        "fcitx5-gtk",
+        "fido2-tools",
         "file",
         "foo2zjs",
         "foomatic-db-filesystem",
@@ -173,22 +180,28 @@
         "gamemode",
         "gdbm",
         "ghostscript",
+        "git-lfs",
         "glycin-thumbnailer",
         "gnome-disk-utility",
         "gnome-epub-thumbnailer",
         "gnome-os-config-firewalld",
         "gnome-os-config-resolved-fallback-dns",
         "gnupg2-scdaemon",
+        "gnupg2-smime",
+        "gnupg2-utils",
+        "gnutls-utils",
         "google-noto-sans-math-fonts",
         "google-noto-sans-mono-vf-fonts",
         "google-noto-sans-symbols-2-fonts",
         "google-noto-serif-vf-fonts",
         "gssproxy",
+        "gst-thumbnailers",
         "gstreamer1-plugin-dav1d",
         "gstreamer1-plugin-libav",
         "gstreamer1-plugin-openh264",
         "gstreamer1-plugins-bad-free",
         "gstreamer1-plugins-bad-free-libs",
+        "gstreamer1-plugins-base-tools",
         "gstreamer1-plugins-ugly-free",
         "gutenprint",
         "gutenprint-cups",
@@ -200,13 +213,17 @@
         "hplip-common",
         "hplip-libs",
         "htop",
+        "hyperv-daemons",
         "ibus-gtk4",
         "ibus-hangul",
         "ibus-libpinyin",
+        "ifuse",
+        "integritysetup",
         "intel-gmmlib",
         "intel-mediasdk",
         "intel-vpl-gpu-rt",
         "ipp-usb",
+        "iproute-tc",
         "iptables-nft",
         "iw",
         "keyutils",
@@ -215,6 +232,7 @@
         "langpacks-fonts-en",
         "lcms",
         "less",
+        "libcamera-v4l2",
         "libhangul",
         "libieee1284",
         "libimobiledevice-utils",
@@ -230,27 +248,37 @@
         "lm_sensors",
         "lshw",
         "lsof",
+        "lz4",
         "m17n-db",
         "m17n-lib",
         "m4",
+        "malcontent-tools",
         "man-db",
         "man-pages",
         "mpage",
         "mtr",
         "nano",
         "nano-default-editor",
+        "nethogs",
         "nfs-client-utils",
         "nfs-common-utils",
+        "nfs-python-utils",
         "nfs-utils",
         "nfsv3-client-utils",
         "nfsv4-client-utils",
+        "numactl",
         "nvme-cli",
         "nvtop",
+        "open-vm-tools",
         "openal-soft",
         "openconnect",
         "openh264",
+        "openldap-clients",
+        "opensc",
         "openvpn",
         "orca",
+        "pam-u2f",
+        "pamu2fcfg",
         "papers-libs",
         "papers-nautilus",
         "papers-thumbnailer",
@@ -279,8 +307,10 @@
         "python3-charset-normalizer",
         "python3-idna",
         "python3-pip",
+        "qemu-guest-agent",
         "qt6-qtbase",
         "quota",
+        "rc-tools",
         "rpcbind",
         "rsync",
         "samba",
@@ -298,7 +328,9 @@
         "speech-dispatcher",
         "speech-dispatcher-espeak-ng",
         "speech-dispatcher-utils",
+        "spice-vdagent",
         "splix",
+        "sqlite",
         "stix-fonts",
         "stoken-libs",
         "sysstat",
@@ -307,16 +339,23 @@
         "systemd-container",
         "tcl",
         "tcpdump",
+        "tealdeer",
         "thermald",
+        "tiptop",
         "tmux",
+        "toolbox",
         "totem-pl-parser",
         "tpm2-tools",
+        "trace-cmd",
         "tree",
         "unbound-anchor",
         "unzip",
         "uresourced",
         "uriparser",
         "usermode",
+        "util-linux-script",
+        "v4l-utils",
+        "veritysetup",
         "vim-enhanced",
         "vpnc",
         "vpnc-script",
@@ -329,6 +368,8 @@
         "xdg-utils",
         "xmlsec1",
         "xxd",
+        "xxhash",
+        "xz-lzma-compat",
         "zip"
       ],
       "title": "Base-image parity",
@@ -362,9 +403,7 @@
         "nss-mdns",
         "systemd-boot-unsigned",
         "systemd-resolved",
-        "tailscale",
-        "zram-generator",
-        "zram-generator-defaults"
+        "tailscale"
       ],
       "title": "Desktop services",
       "transient": false
@@ -384,8 +423,8 @@
     }
   ],
   "totals": {
-    "installed": 327,
-    "unavailable": 6
+    "installed": 366,
+    "unavailable": 9
   },
   "unavailable": [
     {
@@ -395,20 +434,10 @@
       "name": "anaconda-live"
     },
     {
-      "issues": [],
-      "name": "evolution-ews-core"
-    },
-    {
       "issues": [
         35
       ],
       "name": "firefox"
-    },
-    {
-      "issues": [
-        419
-      ],
-      "name": "fish"
     },
     {
       "issues": [
@@ -417,10 +446,30 @@
       "name": "grub2-efi-x64-cdboot"
     },
     {
+      "issues": [],
+      "name": "libvirt-client"
+    },
+    {
+      "issues": [],
+      "name": "libvirt-daemon-config-network"
+    },
+    {
+      "issues": [],
+      "name": "libvirt-daemon-kvm"
+    },
+    {
+      "issues": [],
+      "name": "qemu-kvm"
+    },
+    {
       "issues": [
         83
       ],
       "name": "slitherer"
+    },
+    {
+      "issues": [],
+      "name": "virtiofsd"
     }
   ]
 }

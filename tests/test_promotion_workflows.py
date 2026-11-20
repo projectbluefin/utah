@@ -71,11 +71,11 @@ class PromoteToTestingTests(unittest.TestCase):
 
     def test_the_job_can_write_statuses_and_stays_behind_the_full_matrix(self):
         self.assertEqual(self.job["permissions"]["statuses"], "write")
-        self.assertEqual(set(self.job["needs"]), {"resolve", "luks", "production-iso", "lifecycle"})
+        self.assertEqual(set(self.job["needs"]), {"resolve", "luks", "production-iso", "lifecycle", "testsuite"})
         # The only job condition is the lifecycle gate: every other need must
         # succeed, and lifecycle may be absent only when resolve skipped it.
         condition = self.job["if"]
-        for need in ["resolve", "luks", "production-iso"]:
+        for need in ["resolve", "luks", "production-iso", "testsuite"]:
             self.assertIn(f"needs.{need}.result == 'success'", condition)
         self.assertIn("needs.lifecycle.result == 'success'", condition)
         self.assertIn("needs.lifecycle.result == 'skipped' && needs.resolve.outputs.lifecycle == 'skip'",
@@ -83,6 +83,13 @@ class PromoteToTestingTests(unittest.TestCase):
         self.assertIn("!cancelled()", condition)
         self.assertNotIn("always()", condition)
         self.assertNotIn("failure", condition)
+
+    def test_a_red_testsuite_blocks_promotion(self):
+        """#1329: the testsuite matrix gates :testing; no `if: always()` may bypass it."""
+        self.assertIn("testsuite", self.job["needs"])
+        self.assertNotIn("continue-on-error", E2E["jobs"]["testsuite"])
+        for step in self.job["steps"]:
+            self.assertNotIn("always()", step.get("if", ""), step)
 
     def test_promotions_are_serialised_by_the_workflow_concurrency_group(self):
         self.assertEqual(E2E["concurrency"]["group"], "utah-iso-e2e")
@@ -205,7 +212,8 @@ class EnvironmentContractTests(unittest.TestCase):
         record = steps_running(job, f"{SCRIPT} record")[0]
         decide = steps_running(job, f"{SCRIPT} decide")[0]
         self.assertEqual(self.run_step(record, world, matrix), 0)
-        self.assertEqual(len(world.posted), len(fixtures.FLAVORS) + 1)
+        # Two per-digest statuses (post-testing and testsuite) plus the aggregate.
+        self.assertEqual(len(world.posted), 2 * len(fixtures.FLAVORS) + 1)
         self.assertEqual(self.run_step(decide, world, matrix), 0)
 
     def test_release_gate_step_receives_everything_the_script_reads(self):

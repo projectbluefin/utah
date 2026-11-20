@@ -1125,7 +1125,7 @@ class SupplyChainTests(unittest.TestCase):
         factory_parity = set(self.module.section(overlay, "factory", "parity"))
         media = {
             "intel-gmmlib", "libva-intel-media-driver", "intel-mediasdk",
-            "intel-vpl-gpu-rt", "ffmpegthumbnailer",
+            "intel-vpl-gpu-rt", "gst-thumbnailers",
         }
         self.assertLessEqual(media, factory_parity)
         installed = {pkg: {"release": "1-1.hum.x86_64"} for pkg in media}

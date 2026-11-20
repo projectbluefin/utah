@@ -32,6 +32,7 @@ jobs:
       lifecycle_baseline: ${{ steps.baseline.outputs.baseline }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        timeout-minutes: 10
         with:
           persist-credentials: false
       - id: inputs
@@ -75,6 +76,7 @@ jobs:
       # job can move the tag, so the job never tests a build against itself.
       # The workflow concurrency group keeps :testing still until we finish.
       - id: baseline
+        timeout-minutes: 15
         env:
           GH_TOKEN: ${{ github.token }}
           MAIN_REF: ${{ steps.inputs.outputs.main_ref }}
@@ -111,8 +113,9 @@ jobs:
   # forged under this identity -- is rejected before those privileged jobs
   # touch it. Gate luks, lifecycle and tacklebox-iso on it so the check must
   # pass first.
-  # (testsuite pulls the same digests without waiting on this job by design; it
-  # only surfaces results and never gates :testing promotion.)
+  # (testsuite pulls the same digests without waiting on this job by design;
+  # it runs unprivileged in its own VM. It still gates :testing promotion:
+  # promote-to-testing needs it, #1329.)
   verify-provenance:
     needs: resolve
     runs-on: ubuntu-26.04
@@ -125,6 +128,7 @@ jobs:
       matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        timeout-minutes: 10
         with:
           ref: ${{ needs.resolve.outputs.sha }}
           persist-credentials: false
@@ -147,11 +151,25 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
     steps:
+      # The harness fails with its evidence (exit 75) 10 minutes before
+      # timeout-minutes would kill the job with nothing uploaded.
+      # TIMEOUT_MINUTES must equal this job's timeout-minutes.
+      - name: Set the job deadline
+        env:
+          TIMEOUT_MINUTES: "180"
+        run: echo "E2E_WALL_CLOCK_DEADLINE=$(( $(date +%s) + (TIMEOUT_MINUTES - 10) * 60 ))" >> "$GITHUB_ENV"
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        timeout-minutes: 10
         with:
           ref: ${{ needs.resolve.outputs.sha }}
           persist-credentials: false
+      # Network steps (checkout, apt, GHCR login and pulls) carry their own
+      # timeout-minutes, so a wedged mirror or registry fails as a named step
+      # instead of burning the job's timeout. apt on these runners has taken
+      # up to 31 minutes and still succeeded (job 135107979619: multi-minute
+      # stalls between packages), so apt steps get 40; pulls take 1-2.
       - name: Prepare ISO and QEMU host
+        timeout-minutes: 40
         run: |
           set -euo pipefail
           # These hosted-runner SDKs are unused by ISO composition.
@@ -166,6 +184,7 @@ jobs:
           mkdir -p output evidence
           df -h .
       - name: Pull exact published payload
+        timeout-minutes: 20
         env:
           GH_TOKEN: ${{ github.token }}
           IMAGE_REF: ${{ matrix.ref }}
@@ -253,11 +272,18 @@ jobs:
           - image: utah
             backend: ostree
     steps:
+      # See the luks job: the harness fails with evidence before the timeout.
+      - name: Set the job deadline
+        env:
+          TIMEOUT_MINUTES: "240"
+        run: echo "E2E_WALL_CLOCK_DEADLINE=$(( $(date +%s) + (TIMEOUT_MINUTES - 10) * 60 ))" >> "$GITHUB_ENV"
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        timeout-minutes: 10
         with:
           ref: ${{ needs.resolve.outputs.sha }}
           persist-credentials: false
       - name: Prepare ISO and QEMU host
+        timeout-minutes: 40
         run: |
           set -euo pipefail
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
@@ -287,6 +313,7 @@ jobs:
             echo "- Candidate (this build): \`$CANDIDATE_REF\`"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Pull the baseline payload
+        timeout-minutes: 20
         env:
           GH_TOKEN: ${{ github.token }}
           BASELINE_REF: ${{ needs.resolve.outputs.lifecycle_baseline }}
@@ -351,10 +378,12 @@ jobs:
       packages: read
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        timeout-minutes: 10
         with:
           ref: ${{ needs.resolve.outputs.sha }}
           persist-credentials: false
       - name: Prepare ISO and QEMU host
+        timeout-minutes: 40
         run: |
           set -euo pipefail
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
@@ -362,6 +391,11 @@ jobs:
           sudo apt-get install -y podman skopeo uidmap slirp4netns fuse-overlayfs \
             squashfs-tools xorriso dosfstools mtools qemu-system-x86 qemu-utils \
             ovmf
+          # Same KVM grant as luks and lifecycle: the job user cannot open
+          # /dev/kvm by default, and without it the boot gate fell back to TCG.
+          test -c /dev/kvm
+          sudo chmod a+rw /dev/kvm
+          test -r /dev/kvm && test -w /dev/kvm
           mkdir -p evidence
           df -h .
       - name: Build the ISO with tacklebox
@@ -374,6 +408,7 @@ jobs:
           sudo bash iso/scripts/build-iso-tacklebox.sh main testing ghcr "$digest" 1 \
             2>&1 | tee evidence/tbx-build.log
       - name: Verify the ISO with tacklebox
+        timeout-minutes: 20
         run: |
           set -euo pipefail
           tacklebox_image=$(< config/tacklebox-image)
@@ -394,12 +429,14 @@ jobs:
           limit=$((8 * 1024 * 1024 * 1024))
           echo "utah-main-tacklebox.iso is $size_bytes bytes"
           test "$size_bytes" -le "$limit" || { echo "ISO exceeds the size budget" >&2; exit 1; }
+      # Under KVM the live session reaches the marker in well under a minute
+      # (the luks job's live boot: ~35 s); the gate returns as soon as it does.
       - name: Live-boot and observe the UTAH_LIVE_READY marker
         env:
-          UTAH_ISO_BOOT_TIMEOUT: 1800
+          UTAH_ISO_BOOT_TIMEOUT: 600
+          UTAH_ISO_BOOT_WORK: ${{ runner.temp }}/utah-tbx-boot
         run: |
           set -euo pipefail
-          # No KVM on GitHub-hosted runners: the gate falls back to TCG.
           bash iso/scripts/tacklebox-boot-gate.sh "$PWD/output/utah-main-tacklebox.iso" UTAH_LIVE_READY \
             2>&1 | tee evidence/tbx-boot.log
       - name: Preserve diagnostics even on failure
@@ -411,6 +448,7 @@ jobs:
           if-no-files-found: warn
           path: |
             evidence/
+            ${{ runner.temp }}/utah-tbx-boot/serial.log
 
   # Test credentials are only present in the DEBUG=1 ISO above. Build this
   # artifact after the whole matrix passes, so a retained ISO is production
@@ -427,10 +465,12 @@ jobs:
       matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        timeout-minutes: 10
         with:
           ref: ${{ needs.resolve.outputs.sha }}
           persist-credentials: false
       - name: Prepare production ISO host
+        timeout-minutes: 40
         run: |
           set -euo pipefail
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
@@ -440,6 +480,7 @@ jobs:
           mkdir -p output
           df -h .
       - name: Pull exact published payload
+        timeout-minutes: 20
         env:
           GH_TOKEN: ${{ github.token }}
           IMAGE_REF: ${{ matrix.ref }}
@@ -470,15 +511,16 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: production-iso-${{ matrix.image }}
-          retention-days: 30
+          retention-days: 3
           if-no-files-found: error
           path: |
             output/utah-live.iso
             output/utah-live.iso.sha256
 
-  # Run the testsuite against each exact built digest asynchronously.
-  # This surfaces scenario results and desktop screenshots for every flavor
-  # directly in the workflow run without blocking :testing promotion.
+  # Run the testsuite against each exact built digest, in parallel with the
+  # ISO jobs. It surfaces scenario results and desktop screenshots for every
+  # flavor, and it gates promotion: promote-to-testing needs it, so a red leg
+  # leaves :testing where it is and records no E2E evidence (#1329).
   testsuite:
     needs: resolve
     permissions:
@@ -489,7 +531,7 @@ jobs:
       fail-fast: false
       matrix:
         include: ${{ fromJSON(needs.resolve.outputs.suites) }}
-    uses: projectbluefin/testsuite/.github/workflows/e2e.yml@5d942c2b156730ee9a3764a4c5b4270521c3887d # v1
+    uses: projectbluefin/testsuite/.github/workflows/e2e.yml@570922fe9181e3fa7b97cfcf2545dc681ddddb9e # v1
     with:
       image: ${{ fromJSON(needs.resolve.outputs.digests)[matrix.image] }}
       compose_image: false
@@ -497,7 +539,7 @@ jobs:
       test_repository: projectbluefin/testsuite
       # The tests checked out must be the commit the e2e.yml above comes from,
       # or workflow and tests drift apart (#946). Renovate bumps both together.
-      test_ref: 5d942c2b156730ee9a3764a4c5b4270521c3887d # v1
+      test_ref: 570922fe9181e3fa7b97cfcf2545dc681ddddb9e # v1
 
   # :testing is a ratchet over commits, not a mirror of the branch tip. The
   # tested digests become :testing when their commit is the promoted commit or
@@ -513,16 +555,22 @@ jobs:
   # statuses recorded here, and a dispatch from another ref runs another
   # branch's copy of this file. Such a run still tests; it just cannot publish
   # evidence or move a tag.
+  #
+  # Every E2E job must pass first, the testsuite matrix included (#1329): a red
+  # or skipped leg skips this job, so no evidence is recorded and no tag moves.
+  # There is no override; fix or scope the failing scenario upstream instead.
   promote-to-testing:
-    needs: [resolve, luks, production-iso, lifecycle]
+    needs: [resolve, luks, production-iso, lifecycle, testsuite]
     # The lifecycle job may only be absent when resolve skipped it on purpose
     # (:testing already serves the candidate, or does not exist yet); a
-    # failed, cancelled or upstream-skipped lifecycle blocks this job.
+    # failed, cancelled or upstream-skipped lifecycle blocks this job. The
+    # testsuite matrix must pass in full (#1329).
     if: >-
       ${{ !cancelled()
       && needs.resolve.result == 'success'
       && needs.luks.result == 'success'
       && needs.production-iso.result == 'success'
+      && needs.testsuite.result == 'success'
       && (needs.lifecycle.result == 'success'
       || (needs.lifecycle.result == 'skipped' && needs.resolve.outputs.lifecycle == 'skip')) }}
     runs-on: ubuntu-26.04
@@ -536,10 +584,12 @@ jobs:
         run: |
           echo "::warning::Not running from main (${GITHUB_REF}); E2E evidence is kept, but no status is recorded and no tag moves."
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        timeout-minutes: 10
         if: github.ref == 'refs/heads/main'
         with:
           persist-credentials: false
       - name: Authenticate to GHCR
+        timeout-minutes: 15
         if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -548,8 +598,8 @@ jobs:
           command -v skopeo >/dev/null || { sudo apt-get update && sudo apt-get install -y skopeo; }
           echo "$GH_TOKEN" | skopeo login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
       # Recorded before the ratchet decides, because it is true whatever the
-      # ratchet says: this exact digest passed LUKS and production-ISO. The
-      # release gate reads it back per digest and per commit.
+      # ratchet says: this exact digest passed LUKS, production-ISO and the
+      # testsuite. The release gate reads it back per digest and per commit.
       - name: Record E2E evidence for the tested digests
         if: github.ref == 'refs/heads/main'
         env:
@@ -601,9 +651,11 @@ jobs:
       actions: read
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        timeout-minutes: 10
         with:
           ref: main
       - name: Download passing main-desktop screenshots
+        timeout-minutes: 10
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: iso-verified-utah

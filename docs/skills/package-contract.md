@@ -1,7 +1,7 @@
 ---
 name: package-contract
 version: "2.0"
-last_updated: "2026-11-14"
+last_updated: "2026-11-20"
 id: package-contract
 one_line_purpose: Maintain Utah's base manifest, overlay and Dakota parity triage.
 entry_point: docs/skills/package-contract.md
@@ -66,9 +66,13 @@ payloads need an inline drop condition in `packages/utah.toml`; the factory
 follows the same rule when importing recipes. Dakota parity installs `wget2`
 and `wget2-wget` (the `wget` link); the desktop file contract checks both commands.
 
-Utah requests available Dakota input engines and language libraries in `[parity]` (#1256).
-Keep the base manifest's Mozc and Unikey; ibus-anthy and ibus-typing-booster await
-`kasumi-unicode` and `cldr-emoji-annotation`, which neither the factory nor Hummingbird publishes.
+Utah requests available Dakota input packages in `[parity]` (#1256).
+Dakota's Anthy library is packaged as `anthy-unicode`; it can ship independently
+of the `ibus-anthy` engine. `fcitx5-gtk` supplies GTK integration without
+installing the Fcitx daemon. Keep the base manifest's Mozc and Unikey.
+Do not treat a published engine RPM as installable on its own: `ibus-anthy`
+needs Kasumi, `ibus-typing-booster` needs `cldr-emoji-annotation`, and
+`ibus-rime` needs `brise` and the OpenCC library through `librime`.
 
 ## Wi-Fi documentation currency
 
@@ -108,7 +112,7 @@ pull it in, so read the resolved origin from the build's
 Utah also requests `libvpl`, which is not an overrides name but a dependency
 of `intel-vpl-gpu-rt`, so the media request is five packages in total.
 
-The four requested overrides and `ffmpegthumbnailer` are in `[factory].parity`;
+The four requested overrides and `gst-thumbnailers` are in `[factory].parity`;
 their installed releases must carry `.bfin` to prevent base substitution.
 Check new names with `just check-repos` and the image's `package-origins.txt`.
 
@@ -121,7 +125,10 @@ working decoder. Recheck the digest-pinned repodata before carrying forward
 an older publication blocker.
 
 Utah also consumes libav, dav1d, bad-free and ugly-free GStreamer plugins,
-`ffmpegthumbnailer`, `gnome-epub-thumbnailer`, and the Papers thumbnailer.
+`gst-thumbnailers`, `gnome-epub-thumbnailer`, and the Papers thumbnailer.
+`gst-thumbnailers` replaced `ffmpegthumbnailer` (#1262), as on Dakota: both
+claim the same video MIME types, GNOME uses one thumbnailer per type, and
+only the GStreamer one can preview H.264 (through `openh264dec`).
 Package installation does not prove codec functionality. On Intel hardware,
 run `vainfo` against the render device and confirm the iHD driver loads and
 advertises the expected decode profiles. Inspect `avdec_h264`, `openh264dec`,
@@ -130,8 +137,7 @@ The PR #919 decoder-load probe failed for H.264: the factory's `gstreamer1-plugi
 `utah-verify-desktop-contract` loads each `[media].decoders` entry in `contracts/bluefin-desktop.toml` with `gst-inspect-1.0` and blocks the image build on failure; `avdec_h264` returns only when the factory ships full FFmpeg.
 
 Remaining #383 gaps include full FFmpeg (the decided direction, replacing
-`-free`) and `gst-thumbnailers` (factory #527); neither is published in this
-pin. Keep #383 open for those factory deliveries and hardware/codec proof.
+`-free`) and hardware/codec proof. Keep #383 open for those.
 
 ## Repository policy
 
@@ -349,11 +355,14 @@ is its own item. Details and the refresh flow: `baselines/README.md`.
 Every item needs an entry in `baselines/triage.toml` (`just check` runs
 `image-baseline.py check`): `planned` with an issue (#1236 is the epic; its
 children #1222-#1235 track the structural moves such as kanata,
-systemd-boot, AppArmor, oo7, sudo-rs, virtualization and service policy),
-`waived` with a reason (GNOME OS or BuildStream internals, Flatpak-first apps
+systemd-boot, oo7, sudo-rs, virtualization and service policy),
+`waived` with a reason (GNOME OS or BuildStream internals, AppArmor since
+Utah keeps SELinux (#1226), the developer toolchain (#1263), library
+utilities GNOME OS ships unsplit, Flatpak-first apps
 such as Ghostty, baobab, Papers and sushi: #1270 keeps user apps as Flatpaks
 even where Dakota builds them natively), `unavailable` for names in `[unavailable]`, or
-`untriaged` with an `area`. Closing a gap means shipping the files Utah lacks,
+`untriaged` with an `area`. The 2026-11-20 re-measure left none untriaged.
+Closing a gap means shipping the files Utah lacks,
 usually by adding the Fedora package to `base.toml` or `utah.toml`, then
 re-measuring and dropping the entry `check` reports as no longer a gap.
 
@@ -361,11 +370,12 @@ Never append rows from a newer image to an older snapshot: `image.txt` must
 describe the same image as its `surface.tsv`; after a refresh,
 [remove resolved triage entries](package-contract/references/factory-consumption.md#closing-baseline-gaps).
 
-Current counts, per the README "Parity with Dakota" section: 61 base manifest
-packages installed, 266 Utah additions (GNOME 51, base-image parity, device
-firmware, desktop services), 6 genuinely unavailable. `scripts/check-doc-counts.py` (part of
-`just check`) recomputes these from the manifests and fails if either
-document drifts from `site/data/packages.json`.
+Current counts, per the README "Parity with Dakota" section: 58 base manifest
+packages installed, 308 Utah additions (GNOME 51, base-image parity, device
+firmware, desktop services), 9 genuinely unavailable. After changing a manifest,
+run `python3 scripts/generate-site-data.py`, then
+`python3 scripts/check-doc-counts.py --write` to refresh both documents.
+`just check` validates the inventory and both sets of counts.
 
 ## A section nobody reads installs nothing
 

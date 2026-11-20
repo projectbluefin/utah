@@ -10,6 +10,7 @@ bluefin-brlaser.bst	brlaser
 bluefin-chairlift.bst	chairlift
 bluefin-common.bst	common
 bluefin-composefs-loop-udisks-ignore.bst	composefs-loop-udisks-ignore
+bluefin-ddcutil.bst	ddcutil
 bluefin-deps.bst	deps
 bluefin-distrobox.bst	distrobox
 bluefin-efibootmgr.bst	efibootmgr
@@ -53,6 +54,7 @@ bluefin-nspawn.bst	nspawn
 bluefin-oo7-passwd-pam.bst	oo7-passwd-pam
 bluefin-open-vm-tools.bst	open-vm-tools
 bluefin-opencc.bst	opencc
+bluefin-pam-u2f.bst	pam-u2f
 bluefin-plymouth-bluefin-theme.bst	plymouth-bluefin-theme
 bluefin-powertop.bst	powertop
 bluefin-qemu-guest-agent.bst	qemu-guest-agent

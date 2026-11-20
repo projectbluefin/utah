@@ -635,6 +635,7 @@
 (dakota)	/usr/bin/pam_namespace_helper
 (dakota)	/usr/bin/pam_timestamp_check
 (dakota)	/usr/bin/pamon
+(dakota)	/usr/bin/pamu2fcfg
 (dakota)	/usr/bin/paplay
 (dakota)	/usr/bin/parec
 (dakota)	/usr/bin/parecord
@@ -1858,6 +1859,7 @@
 (dakota)	/usr/sbin/pam_namespace_helper
 (dakota)	/usr/sbin/pam_timestamp_check
 (dakota)	/usr/sbin/pamon
+(dakota)	/usr/sbin/pamu2fcfg
 (dakota)	/usr/sbin/paplay
 (dakota)	/usr/sbin/parec
 (dakota)	/usr/sbin/parecord
@@ -2767,6 +2769,8 @@ dconf	/usr/bin/dconf
 dconf	/usr/lib/systemd/system/dconf-update.service
 dconf	/usr/lib/systemd/user/dconf.service
 dconf	/usr/sbin/dconf
+ddcutil	/usr/bin/ddcutil
+ddcutil	/usr/sbin/ddcutil
 debugedit	/usr/bin/debugedit
 debugedit	/usr/sbin/debugedit
 debuginfod	/usr/bin/debuginfod

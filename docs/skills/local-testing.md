@@ -368,7 +368,8 @@ gate itself, rather than the image, is at fault: `UTAH_E2E_FLATPAKS` sets the
 expected Flatpak set directly (empty skips the check), and
 `UTAH_E2E_PAYLOAD_CHECK=""` skips the booted-image assertion. The booted-image
 read falls back to `sudo` when `bootc status --json` returns nothing to the
-unprivileged test user.
+unprivileged test user. A failure exits 10 + the failing phase number
+([exit codes](lifecycle-e2e.md#exit-codes)).
 
 When `UTAH_E2E_EXPECT_FLAVOR` is set (the `review_vm` workflow), the harness
 also checks first-boot service policy and status plus the Flathub remote, then

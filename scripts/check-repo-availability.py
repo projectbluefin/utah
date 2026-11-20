@@ -31,9 +31,7 @@ from pathlib import Path
 # exclusion that stops resolving -- or vanishes from the overlay -- has lost
 # the property this set asserts.
 DELIBERATELY_EXCLUDED = frozenset({
-    # Bluefin classic shipping every shell was a mistake Utah does not repeat;
-    # users who want fish get it from Homebrew.
-    "fish",
+    # Empty since fish joined the contract (#1230, Dakota ships it).
     # NOTE: firefox is not here. Its entry reads like a deliberate exclusion
     # -- Utah ships org.mozilla.firefox as a Flatpak -- but no enabled
     # repository provides the RPM at all, which makes it blocked debt with a
