@@ -277,6 +277,8 @@
         "libsane-hpaio",
         "libuser",
         "libva-intel-media-driver",
+        "libvirt-client",
+        "libvirt-daemon-config-network",
         "libvpl",
         "linux-atm-libs",
         "lm_sensors",
@@ -472,8 +474,8 @@
     }
   ],
   "totals": {
-    "installed": 415,
-    "unavailable": 8
+    "installed": 417,
+    "unavailable": 6
   },
   "unavailable": [
     {
@@ -493,14 +495,6 @@
         253
       ],
       "name": "grub2-efi-x64-cdboot"
-    },
-    {
-      "issues": [],
-      "name": "libvirt-client"
-    },
-    {
-      "issues": [],
-      "name": "libvirt-daemon-config-network"
     },
     {
       "issues": [],
