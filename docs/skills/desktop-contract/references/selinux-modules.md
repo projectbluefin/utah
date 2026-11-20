@@ -34,16 +34,26 @@ boot-time source: with CountMe skipped, the review VM logged none (#1198,
 #1247). Running bootc as a unit's bare `ExecStart` doesn't change the domain:
 #1220's VM still logged both denials.
 
-The module is a single rule:
-`(dontaudit unconfined_service_t self (capability2 (mac_admin)))`.
+A unit whose `ExecStart` is a shell (`/bin/sh <script>`) runs in `initrc_t`
+instead (`type_transition init_t shell_exec_t:process initrc_t`), and bootc
+called from it logs the same two denials in `initrc_t`. bootc-installer
+v2026.11.16 writes one such unit into every install:
+`/etc/systemd/system/fisherman-boot-receipt.service`
+(`ExecStart=/bin/sh /etc/fisherman/boot-receipt.sh`) runs `bootc status` once,
+on the first boot. Every flavor of review run 44663789174 failed the gate on it
+(#1129).
+
+The module is two rules, one per domain:
+`(dontaudit unconfined_service_t self (capability2 (mac_admin)))` and
+`(dontaudit initrc_t self (capability2 (mac_admin)))`.
 
 - **dontaudit, not allow.** bootc treats the denial as the answer and works
-  without the capability. An allow would let every unconfined service write
+  without the capability. An allow would let every such service write
   labels the policy doesn't know, and would change what the probe decides.
 - **As narrow as the language allows.** A capability check has no target
   object except the process itself, so a domain plus one permission is the
   smallest rule. The cost: a `mac_admin` denial from any other
-  `unconfined_service_t` process is hidden too.
+  `unconfined_service_t` or `initrc_t` process is hidden too.
 - The kernel still logs `SELINUX_ERR op=setxattr
   invalid_context=...invalid_bootcinstall_testlabel_t` for the probe. That
   record is not an AVC, and the gate ignores it.

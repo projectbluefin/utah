@@ -1084,14 +1084,39 @@ ssh_target "
 echo "  logrotate.service: succeeded with a nonempty state file"
 
 # bootc's mac_admin probe (a chcon to an undefined label) is denied whenever a
-# plain service runs bootc, such as common's projectbluefin-countme. The
-# utah_bootc_probe policy module dontaudits it; any such AVC on the installed
-# system means the module is not loaded (#1198; check from #1220).
+# plain service runs bootc: common's projectbluefin-countme (unconfined_service_t)
+# or the installer's first-boot fisherman-boot-receipt.service, which runs its
+# script with /bin/sh (initrc_t). The utah_bootc_probe policy module dontaudits
+# both; any such AVC on the installed system means the module is not loaded or
+# a caller runs bootc from a domain it does not cover (#1198, #1129; check
+# from #1220).
 echo "Verifying bootc's SELinux probe logs no AVC denials..."
 ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' sh -c 'grep -hF avc: /var/log/audit/audit.log 2>/dev/null; journalctl -b --no-pager -o cat 2>/dev/null | grep -F avc:; true'" \
     > "${WORK}/avc.log" || fail "could not read the installed system's AVC records"
 if grep -E 'denied .*comm="(chcon|bootc)"' "${WORK}/avc.log" >&2; then
-    fail "chcon was denied mac_admin during boot (#1198): utah_bootc_probe is not in effect"
+    # The AVC names only the probe's domain. Keep what identifies the caller:
+    # the probe's SYSCALL records (ppid, exe), the services whose main PID
+    # precedes it, and the labels and mounts the transition depends on.
+    cat > "${WORK}/bootc-probe-diag.sh" <<'DIAG'
+echo "## SYSCALL records of chcon/bootc"
+grep -E 'type=SYSCALL.*comm="(chcon|bootc)"' /var/log/audit/audit.log
+echo "## pid 1"
+ps -o pid,label,args -p 1
+echo "## labels"
+ls -Z /usr/bin/bootc /usr/bin/chcon /usr/bin/bash /usr/bin/unshare \
+    /usr/bin/ublue-booted-image-sync /usr/libexec/projectbluefin-countme 2>&1
+echo "## mounts"
+findmnt -o TARGET,SOURCE,FSTYPE,OPTIONS / /usr /etc /var /sysroot 2>&1
+echo "## services by main PID"
+systemctl show --type=service --all -p Id -p ExecMainPID -p ExecMainStartTimestampMonotonic '*' \
+    | awk -F= '/^Id=/{id=$2} /^ExecMainPID=/{pid=$2} /^ExecMainStartTimestampMonotonic=/{if (pid > 0) print pid, $2, id}' \
+    | sort -n
+DIAG
+    scp_target "${WORK}/bootc-probe-diag.sh" "${TEST_USER}@127.0.0.1:/tmp/utah-bootc-probe-diag.sh" >/dev/null \
+        && ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' sh /tmp/utah-bootc-probe-diag.sh" \
+            > "${WORK}/bootc-probe-diag.log" 2>&1 || true
+    cat "${WORK}/bootc-probe-diag.log" >&2 || true
+    fail "chcon was denied mac_admin during boot (#1198): utah_bootc_probe is not in effect (callers: bootc-probe-diag.log)"
 fi
 echo "  bootc chcon AVC denials: none"
 
