@@ -309,6 +309,9 @@ class EvidenceTests(unittest.TestCase):
             steps["Propose updated verification link"]["with"]["token"],
             "${{ steps.app-token.outputs.token }}",
         )
+        guard = "github.repository_owner == 'projectbluefin' && github.ref == 'refs/heads/main'"
+        for name in ["Get repository-scoped mergeraptor token", "Propose updated verification link"]:
+            self.assertEqual(steps[name].get("if"), guard, name)
 
     def test_debug_images_and_test_disks_are_not_uploaded(self):
         import yaml

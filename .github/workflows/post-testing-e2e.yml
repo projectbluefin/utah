@@ -690,7 +690,10 @@ jobs:
           RECORD: ${{ runner.temp }}/verification
           RECORD_COMMIT: ${{ steps.publish.outputs.record_commit }}
         run: python3 scripts/update-e2e-readme.py "$RECORD"
+      # Only trusted main may mint the App token and open the PR; a dispatch
+      # on any other ref publishes the record branch but proposes nothing.
       - name: Get repository-scoped mergeraptor token
+        if: github.repository_owner == 'projectbluefin' && github.ref == 'refs/heads/main'
         id: app-token
         uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3
         with:
@@ -700,6 +703,7 @@ jobs:
           permission-contents: write
           permission-pull-requests: write
       - name: Propose updated verification link
+        if: github.repository_owner == 'projectbluefin' && github.ref == 'refs/heads/main'
         uses: peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1 # v8
         with:
           token: ${{ steps.app-token.outputs.token }}
