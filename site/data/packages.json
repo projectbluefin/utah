@@ -115,6 +115,7 @@
         "NetworkManager-openconnect-gnome",
         "NetworkManager-openvpn",
         "NetworkManager-openvpn-gnome",
+        "NetworkManager-tui",
         "NetworkManager-wifi",
         "NetworkManager-wwan",
         "abattis-cantarell-fonts",
@@ -135,6 +136,7 @@
         "bluez-cups",
         "bolt",
         "borgbackup",
+        "bpftool",
         "bpftop",
         "brltty",
         "bsdcat",
@@ -278,6 +280,7 @@
         "lshw",
         "lsof",
         "lz4",
+        "lzip",
         "m17n-db",
         "m17n-lib",
         "m4",
@@ -290,6 +293,7 @@
         "nano-default-editor",
         "nerd-fonts-symbols",
         "nethogs",
+        "newt",
         "nfs-client-utils",
         "nfs-common-utils",
         "nfs-python-utils",
@@ -359,6 +363,8 @@
         "sane-backends-drivers-scanners",
         "sane-backends-libs",
         "setools-console",
+        "smbios-utils-bin",
+        "smbios-utils-python",
         "soundtouch",
         "speech-dispatcher",
         "speech-dispatcher-espeak-ng",
@@ -459,7 +465,7 @@
     }
   ],
   "totals": {
-    "installed": 402,
+    "installed": 408,
     "unavailable": 9
   },
   "unavailable": [
