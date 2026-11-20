@@ -393,6 +393,9 @@ under `[services]` in `packages/utah.toml` and configured in
 `scripts/configure-services.sh`, which also disables `PrivateTmp` on
 `systemd-resolved.service` for bootc early-boot DNS resolution.
 
+GTK3 apps follow the light/dark style through Bluefin's `adw-gtk3` default and
+theme-sync user service ([GTK3 dark style](desktop-contract/references/gtk3-dark-style.md), #1342).
+
 ### Discovery and hybrid-GPU services (#387)
 
 Enable-by-default turns these on (#1233); the contract asserts them. Bluefin's

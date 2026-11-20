@@ -318,6 +318,11 @@ fi
 # unlocks the login keyring.
 user_unit_exists oo7-daemon.service
 systemctl --global enable oo7-daemon.service
+# GTK3 apps follow the light/dark style (#1342), as on Bluefin
+# (ublue-os/bluefin#5163). Required: Utah ships the unit, and without it the
+# adw-gtk3 default keeps GTK3 apps light in Dark mode.
+user_unit_exists ublue-gtk3-theme-sync.service
+systemctl --global enable ublue-gtk3-theme-sync.service
 
 # Common's user preset is not applied by bootc's system preset-all. Without
 # a global enablement, ChairLift's GUI Brewfile is present but never installed.

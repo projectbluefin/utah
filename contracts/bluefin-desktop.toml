@@ -123,6 +123,12 @@ files = [
   # and the login screen shows the Fedora wordmark instead of Bluefin (#378).
   "/etc/dconf/db/gdm.d/01-bluefin-gdm-logo",
   "/usr/share/glib-2.0/schemas/zz3-bluefin-unsupported-stuff.gschema.override",
+  # GTK3 apps follow the light/dark style (#1342): the user service that
+  # switches gtk-theme between adw-gtk3 and adw-gtk3-dark, and the theme.
+  "/usr/libexec/ublue-gtk3-theme-sync",
+  "/usr/lib/systemd/user/ublue-gtk3-theme-sync.service",
+  "/usr/share/themes/adw-gtk3/gtk-3.0/gtk.css",
+  "/usr/share/themes/adw-gtk3-dark/gtk-3.0/gtk.css",
   # systemd-remount-fs.service.d/10-utah-composefs-skip.conf. On the composefs
   # image / is mounted read-only and the upstream unit unconditionally tries
   # to remount it read-write, fails with "overlay: No changes allowed in
@@ -588,6 +594,9 @@ schema_dir = "/usr/share/glib-2.0/schemas"
 # Effective values `gsettings get SCHEMA KEY` must print in the composed image.
 [gsettings.values]
 "org.gnome.shell.extensions.dash-to-dock disable-overview-on-startup" = "true"
+# GTK3 reads gtk-theme, not color-scheme; ublue-gtk3-theme-sync.service keeps
+# it on the matching adw-gtk3 variant (#1342).
+"org.gnome.desktop.interface gtk-theme" = "'adw-gtk3'"
 # Default-enabled extensions are exactly Dakota's set, in Dakota's order
 # (projectbluefin/dakota elements/bluefin/shell-extensions/disable-ext-validator.bst).
 # Utah's other bundled extensions stay installed but opt-in.
@@ -714,6 +723,8 @@ user_enabled = [
   "xdg-desktop-portal-rewrite-launchers.service",
   # The Secret Service, as GNOME OS starts it with the session (#1227).
   "oo7-daemon.service",
+  # GTK3 apps follow the light/dark style (#1342), as on Bluefin.
+  "ublue-gtk3-theme-sync.service",
 ]
 masked = [
   "bootc-fetch-apply-updates.service",
