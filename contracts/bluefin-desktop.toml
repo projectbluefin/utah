@@ -561,7 +561,9 @@ apps = [
 # against ffmpeg-free, which registers no H.264 decoder, so avdec_h264 is not
 # part of the contract.
 [media]
-decoders = ["openh264dec"]
+# dav1ddec is gstreamer-plugins-rs's AV1 decoder (gstreamer1-plugin-dav1d), as
+# Dakota ships it (#12).
+decoders = ["openh264dec", "dav1ddec"]
 
 # Every [section] in schema_dir/*.gschema.override must name a schema some
 # *.gschema.xml there declares. glib-compile-schemas drops a section for a
