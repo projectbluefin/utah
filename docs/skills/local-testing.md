@@ -239,6 +239,16 @@ The live ISO installer configuration (`iso/live/src/etc/bootc-installer/recipe.j
 `composeFsBackend` are `false`, and the recipe's empty `image` plus
 `targetImgref` installs offline from the embedded payload.
 
+The `images.json` entry carries `extras` with all four of fisherman's desktop
+steps on (`printServices`, `oemSetup`, `audioNames`, `bootSplash`). Fisherman
+from v2026.11.16 runs them only for an image that asks: the recipe's `extras`,
+else the image's catalog entry, and a catalog entry without `extras` gets none
+(`Desktop extras: none (the catalog entry Utah sets none)` in the install
+log). Without `bootSplash` no `rhgb quiet` reaches the boot entry and the LUKS
+prompt is Plymouth's text mode (#1129, review run 44470274049). The recipes
+carry no `extras`, so the GUI and the e2e both take the catalog's;
+`luks-e2e.sh` fails before the boot on any entry without `rhgb`.
+
 Fisherman (bootc-installer v2026.11.16 and later) refuses to install on live
 media (`/etc/bootc-installer/live-iso-mode`) unless
 `/etc/bootc-installer/media-input.json` binds a verified payload on a
@@ -279,6 +289,8 @@ that ostree installs did not:
   `chpasswd --root <deploy dir>`, which runs PAM in a directory that holds
   only `/etc` state ("pam_chauthtok() failed: Module is unknown";
   fisherman#396).
+- **The catalog entry's `extras`.** The same bump made fisherman's desktop
+  steps opt-in; see above. Older fisherman ran all four for every install.
 - **The OGC kernel needs `CGROUP_BPF`.** crun's cgroup-v2 device filter for
   that container fails without it ("crun: bpf create: Invalid argument"). See
   [kernel-cache.md](kernel-cache.md).

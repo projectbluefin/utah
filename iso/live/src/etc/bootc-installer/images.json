@@ -11,7 +11,8 @@
       "filesystem": "btrfs",
       "composefs": false,
       "needs_user_creation": false,
-      "filesystems": ["btrfs", "xfs"]
+      "filesystems": ["btrfs", "xfs"],
+      "extras": {"printServices": true, "oemSetup": true, "audioNames": true, "bootSplash": true}
     }
   ]
 }

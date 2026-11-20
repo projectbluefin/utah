@@ -137,5 +137,38 @@ class InstallerBackendTests(unittest.TestCase):
                         script.index("sudo /usr/local/bin/fisherman"))
 
 
+class InstallerExtrasTests(unittest.TestCase):
+    """fisherman runs its desktop steps only for an image that asks (#1129).
+
+    The installer pinned since v2026.11.16 reads them from the recipe's
+    `extras`, else from the image's catalog entry, and a catalog entry with no
+    `extras` gets none: no `rhgb quiet`, so the LUKS prompt was Plymouth's
+    text mode instead of the Bluefin splash, and no print discovery, audio
+    names or OEM setup. Before that pin every install ran all four.
+    """
+
+    STEPS = ("printServices", "oemSetup", "audioNames", "bootSplash")
+
+    def test_catalog_entry_turns_every_extra_on(self):
+        for image in json.loads(IMAGES.read_text())["images"]:
+            extras = image.get("extras")
+            self.assertIsInstance(extras, dict, f"{image['name']} has no extras: fisherman runs none of its steps")
+            self.assertEqual(set(extras), set(self.STEPS))
+            for step in self.STEPS:
+                self.assertIs(extras[step], True, f"{image['name']}: extras.{step} is off")
+
+    def test_recipes_leave_extras_to_the_catalog(self):
+        # An `extras` object in a recipe replaces the catalog's whole; the GUI
+        # copies the catalog's, and the e2e must exercise that same entry.
+        self.assertNotIn("extras", json.loads(RECIPE.read_text()))
+        self.assertNotIn('"extras"', LUKS_E2E.read_text())
+
+    def test_luks_e2e_fails_fast_on_an_entry_without_rhgb(self):
+        script = LUKS_E2E.read_text()
+        self.assertIn("grep -qw rhgb", script)
+        self.assertIn("[ \\$splashless -eq 0 ] || exit 3", script)
+        self.assertLess(script.index("grep -qw rhgb"), script.index('sed -i \\"s/ quiet//\\"'))
+
+
 if __name__ == "__main__":
     unittest.main()

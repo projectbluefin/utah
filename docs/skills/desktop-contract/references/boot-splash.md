@@ -2,9 +2,9 @@
 
 Utah ships Bluefin's splash: the factory Plymouth, Fedora's `bgrt` default
 theme (the spinner on the firmware logo), and common's raptor as the spinner
-theme's `watermark.png`. Two Hummingbird-composition bugs each took part of it
-away, and every earlier check stayed green because the splash still unlocked
-the disk:
+theme's `watermark.png`. Two Hummingbird-composition bugs and one installer
+change each took part of it away; the first two stayed green in every earlier
+check because the splash still unlocked the disk:
 
 - **Text prompt on any machine with a serial port.** Hummingbird's
   `/usr/lib/bootc/kargs.d/00-base.toml` sets `console=ttyS0,115200n8`, and
@@ -23,6 +23,14 @@ the disk:
   `configure-branding.sh` re-applies common's `usr/share/plymouth` tree from
   the pinned common image after the transaction (bind-mounted by the
   Containerfile) and `cmp`s the default theme's watermark against it.
+- **No `rhgb` from the installer.** The image does not set `rhgb quiet`;
+  fisherman writes them into the boot entry. From bootc-installer
+  v2026.11.16 it does so only when `extras.bootSplash` is on, and the
+  installer reads that from Utah's own catalog entry
+  (`iso/live/src/etc/bootc-installer/images.json`), which had none: every
+  flavor booted to the text prompt and failed the watermark check (#1129).
+  The entry turns all four extras on, and `luks-e2e.sh` rejects an installed
+  boot entry without `rhgb` before booting it.
 
 Guards, in build order: the contract's `[branding].files` asserts the
 watermark and `[configuration]` the karg file; `regenerate-initramfs.sh`

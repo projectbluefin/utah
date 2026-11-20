@@ -104,6 +104,10 @@ so there is no tag-name continuity to lean on when bumping it.
 take the digest from that release's `org.bootcinstaller.Installer.flatpak`
 asset (`digest` field of `gh api repos/tuna-os/bootc-installer/releases/tags/<tag>`,
 or download and `sha256sum` it) rather than guessing or reusing an old value.
+Read the pinned fisherman's `README.md` and the bundle's
+`shared/CHANGELOG.md` for recipe and catalog changes before bumping: the move
+to v2026.11.16 made fisherman's desktop extras opt-in per catalog entry, and
+Utah's entry without `extras` silently lost the boot splash (#1129).
 `install-flatpaks.sh` also shims the container-build environment: a machine id,
 a session bus (only OCI remotes reach for either), and `/var/tmp` (flatpak's OCI
 token cache, hardcoded, ignoring `$TMPDIR`; tmpfiles creates it on boot, but an

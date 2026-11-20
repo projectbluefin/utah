@@ -829,17 +829,28 @@ ssh_live 'sudo /usr/local/bin/fisherman /tmp/luks-recipe.json'
 # serial log, so the graphical-target check below also asks systemd over SSH.
 # Dakota patches the same entries; it only has to add the console because its
 # entries lack one.
+#
+# fisherman writes "rhgb quiet" only when extras.bootSplash is on, and for an
+# image in a catalog it takes extras from that entry alone: an entry without
+# them turned the splash off (#1129, "Desktop extras: none (the catalog entry
+# Utah sets none)"). An entry without rhgb fails here, before the boot, with
+# that cause rather than as a missing watermark in phase 5.
 echo "Making the installed system boot verbosely on the serial console..."
+bls_status=0
 ssh_live 'sudo bash -euc "
     tmp=\$(mktemp -d)
     trap \"umount \$tmp 2>/dev/null || true; rmdir \$tmp\" EXIT
-    seen=0
+    seen=0 splashless=0
     for part in /dev/vda2 /dev/vda1; do
         mount \$part \$tmp 2>/dev/null || continue
         for entry in \$tmp/loader/entries/*.conf \$tmp/EFI/*/loader/entries/*.conf; do
             [ -f \"\$entry\" ] || continue
             grep -q \"^options \" \"\$entry\" || continue
             seen=\$((seen+1))
+            if ! grep \"^options \" \"\$entry\" | grep -qw rhgb; then
+                splashless=\$((splashless+1))
+                echo \"  \$(basename \$entry) has no rhgb: \$(grep \"^options \" \"\$entry\")\" >&2
+            fi
             sed -i \"s/ quiet//\" \"\$entry\"
             grep -q \"console=ttyS0\" \"\$entry\" || \
                 sed -i \"s|^options .*|& console=tty0 console=ttyS0|\" \"\$entry\"
@@ -869,8 +880,14 @@ ssh_live 'sudo bash -euc "
     blockdev --flushbufs /dev/vda2 2>/dev/null || true
     blockdev --flushbufs /dev/vda 2>/dev/null || true
     echo \"boot entries seen: \$seen\"
-    [ \$seen -gt 0 ]
-"' || fail "found no boot entry to make verbose -- the install may not have written one"
+    [ \$seen -gt 0 ] || exit 1
+    [ \$splashless -eq 0 ] || exit 3
+"' || bls_status=$?
+case "${bls_status}" in
+    0) ;;
+    3) fail "the installer wrote a boot entry without rhgb, so Plymouth will draw its text prompt: does the catalog entry in iso/live/src/etc/bootc-installer/images.json turn extras.bootSplash on (and does the install log say so under \"Desktop extras\")?" ;;
+    *) fail "found no boot entry to make verbose -- the install may not have written one" ;;
+esac
 
 echo "Install complete. Powering the live VM down..."
 # Wait for it to actually exit, rather than assuming a few seconds is enough.
