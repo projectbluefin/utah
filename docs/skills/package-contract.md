@@ -1,7 +1,7 @@
 ---
 name: package-contract
 version: "2.0"
-last_updated: "2026-11-14"
+last_updated: "2026-11-20"
 id: package-contract
 one_line_purpose: Maintain Utah's base manifest, overlay and Dakota parity triage.
 entry_point: docs/skills/package-contract.md
@@ -353,11 +353,14 @@ is its own item. Details and the refresh flow: `baselines/README.md`.
 Every item needs an entry in `baselines/triage.toml` (`just check` runs
 `image-baseline.py check`): `planned` with an issue (#1236 is the epic; its
 children #1222-#1235 track the structural moves such as kanata,
-systemd-boot, AppArmor, oo7, sudo-rs, virtualization and service policy),
-`waived` with a reason (GNOME OS or BuildStream internals, Flatpak-first apps
+systemd-boot, oo7, sudo-rs, virtualization and service policy),
+`waived` with a reason (GNOME OS or BuildStream internals, AppArmor since
+Utah keeps SELinux (#1226), the developer toolchain (#1263), library
+utilities GNOME OS ships unsplit, Flatpak-first apps
 such as Ghostty, baobab, Papers and sushi: #1270 keeps user apps as Flatpaks
 even where Dakota builds them natively), `unavailable` for names in `[unavailable]`, or
-`untriaged` with an `area`. Closing a gap means shipping the files Utah lacks,
+`untriaged` with an `area`. The 2026-11-20 re-measure left none untriaged.
+Closing a gap means shipping the files Utah lacks,
 usually by adding the Fedora package to `base.toml` or `utah.toml`, then
 re-measuring and dropping the entry `check` reports as no longer a gap.
 
@@ -366,7 +369,7 @@ describe the same image as its `surface.tsv`; after a refresh,
 [remove resolved triage entries](package-contract/references/factory-consumption.md#closing-baseline-gaps).
 
 Current counts, per the README "Parity with Dakota" section: 59 base manifest
-packages installed, 268 Utah additions (GNOME 51, base-image parity, device
+packages installed, 302 Utah additions (GNOME 51, base-image parity, device
 firmware, desktop services), 6 genuinely unavailable. After changing a manifest,
 run `python3 scripts/generate-site-data.py`, then
 `python3 scripts/check-doc-counts.py --write` to refresh both documents.
