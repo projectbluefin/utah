@@ -78,9 +78,6 @@ packages = [
     "libblockdev-mpath",
     "libcamera-gstreamer",
     "libcamera-tools",
-    # Runtime dependencies for the maintained Copyous extension (#1210).
-    "libgda",
-    "libgda-sqlite",
     "libratbag-ratbagd",
     "libva-utils",
     "libxcrypt-compat",

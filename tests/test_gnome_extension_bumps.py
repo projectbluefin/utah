@@ -51,7 +51,7 @@ class ExtensionBumpPreparationTests(unittest.TestCase):
 
             remotes = {}
             # "archived" ships from a pinned zip (ARCHIVES in the verifier),
-            # so its gitlink must not move on its own (#1290, Copyous).
+            # so its gitlink must not move on its own (#1290).
             (root / "scripts").mkdir()
             (root / "scripts/verify-gnome-extensions.py").write_text(
                 'SOURCE_EXTENSIONS = {"archived@example": "archived/resources/metadata.json"}\n'

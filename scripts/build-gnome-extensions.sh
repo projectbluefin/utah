@@ -99,16 +99,6 @@ mkdir -p "${tilingshell_dir}"
 unzip -o "${tilingshell_zip}" -d "${tilingshell_dir}"
 rm -f "${tilingshell_zip}"
 
-# Quick Settings Audio Panel
-qsap_zip="/tmp/quick-settings-audio-panel.zip"
-qsap_sha256="3a6da80e9b391251149bcf87a9cb5dbbccee827887d1aef43be4ee090b04a29f"
-qsap_dir="/usr/share/gnome-shell/extensions/quick-settings-audio-panel@rayzeq.github.io"
-curl -fsSL "https://github.com/Rayzeq/quick-settings-audio-panel/releases/download/v103/quick-settings-audio-panel%40rayzeq.github.io.shell-extension.zip" -o "${qsap_zip}"
-echo "${qsap_sha256}  ${qsap_zip}" | sha256sum --check --strict
-mkdir -p "${qsap_dir}"
-unzip -o "${qsap_zip}" -d "${qsap_dir}"
-rm -f "${qsap_zip}"
-
 # Quick Settings Audio Devices Hider
 hider_zip="/tmp/quicksettings-audio-devices-hider.zip"
 hider_sha256="217082e049572ae54bc90bc09240f896e25f4a2609e0c0aa4b7133bed46d935d"
@@ -128,16 +118,6 @@ echo "${renamer_sha256}  ${renamer_zip}" | sha256sum --check --strict
 mkdir -p "${renamer_dir}"
 unzip -o "${renamer_zip}" -d "${renamer_dir}"
 rm -f "${renamer_zip}"
-
-# Copyous clipboard manager (Gda/libgda-sqlite come from packages/base.toml)
-copyous_zip="/tmp/copyous@boerdereinar.dev.zip"
-copyous_sha256="e4af596ffeab8137c90b0c178b44160e9fc4dfb1296fb5573ae36871e485a90a"
-copyous_dir="/usr/share/gnome-shell/extensions/copyous@boerdereinar.dev"
-curl -fsSL "https://github.com/boerdereinar/copyous/releases/download/v2.1.2/copyous@boerdereinar.dev.zip" -o "${copyous_zip}"
-echo "${copyous_sha256}  ${copyous_zip}" | sha256sum --check --strict
-mkdir -p "${copyous_dir}"
-unzip -o "${copyous_zip}" -d "${copyous_dir}"
-rm -f "${copyous_zip}"
 
 rm -rf /usr/share/gnome-shell/extensions/tmp
 

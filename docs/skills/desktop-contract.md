@@ -250,7 +250,7 @@ for the live image's own `installer-local` remote.
 
 Utah deliberately differs from Bluefin Classic's RPM path: selected GNOME Shell
 extensions are pinned Git submodules and built into the image. `.gitmodules`
-has 16 trees under `system_files/shared/usr/share/gnome-shell/extensions/`;
+has 14 trees under `system_files/shared/usr/share/gnome-shell/extensions/`;
 gitlinks pin exact commits. Weekly automation proposes valid tracked-branch
 heads; missing or invalid metadata keeps that source pinned and does not block
 other candidates. Only matching Utah submodules represent extensions; do not
@@ -261,7 +261,7 @@ contract and image-build CI run on its exact head instead of a contract-only
 dispatch. Hive review, required checks and the normal merge policy still
 govern landing, and no automated merge is enabled. Source metadata alone does
 not prove GNOME 51 runtime compatibility. Edit `.gitmodules` for source URL or branch changes; automation advances existing pins.
-Search Light was dropped: GNOME 51 removed `set_shader_source`, which its shader code calls, so it failed ISO tests. Only Dakota's extension set is enabled by default ([Dakota desktop defaults](desktop-contract/references/dakota-desktop-defaults.md)).
+Search Light was dropped: GNOME 51 removed `set_shader_source`, which its shader code calls, so it failed ISO tests. Only Dakota's extension set is enabled by default, and the installed set is Dakota's plus two recorded extras ([Dakota desktop defaults](desktop-contract/references/dakota-desktop-defaults.md)).
 
 `scripts/verify-gnome-extensions.py` checks GNOME 51 support and provenance:
 
