@@ -63,3 +63,32 @@ RPM level, and sudo-rs replaces `/usr/bin/sudo` in the image build.
 The contract asserts `uutils-coreutils`, `uutils-ls`, `uu_ls`, `env`,
 `sudo-rs`, C sudo's PAM stacks and `/etc/sudoers`. The local image build
 behind #1305 recorded the checks below.
+
+- **Factory RPMs** (projectbluefin/utah-packages#1234, hermetic lane run
+  44676259983). `uutils-coreutils-replace-0.7.0-9.hum1.bfin` owns 213 files:
+  the 104 GNU program names, `[` included, and 109 `uutils-<prog>` names, all
+  linked to `uutils-coreutils`; every name is in `uutils-coreutils --list`.
+  It owns no `env`, `kill`, `uptime`, `hostname` or `more`, provides
+  `coreutils = 9.12`, and requires `gnu-env` and the matching
+  `uutils-coreutils`. `gnu-env-9.12-1.hum1.bfin` owns `/usr/bin/env` and
+  conflicts with `coreutils(x86-64)` and `coreutils-single`. `rpm -U --test`
+  of the unversioned first build hit util-linux's `coreutils < 8.20`
+  conflict, hence the version.
+- **Image build** (`just build-local` on #1305, against the c288398 factory
+  repository plus those RPMs). One transaction installed the replacement and
+  `gnu-env` and removed `coreutils-single`; all 398 contract packages
+  verified. `configure-services.sh` passed its uutils, `gnu-env`, sudo-rs link
+  and `sudo_exec_t` checks. The dracut initramfs rebuild passed its
+  microcode, unlock-module, Plymouth and zstd checks on uutils, and
+  `bootc container lint` passed 13 checks. `just check-desktop-contract`
+  passed.
+- **Finished image.** `sudo --version` is sudo-rs 0.2.15, `ls --version`
+  uutils 0.7.0, `env --version` GNU 9.12, `sort` uutils. `rpm -q
+  --whatprovides coreutils` names only the replacement; `coreutils-single` is
+  gone; `rpm -V` of uutils-coreutils, the replacement and `gnu-env` is clean.
+  `/usr/bin/sudo` is setuid and byte-identical to `sudo-rs`, `sudoedit`
+  links to it, `su-rs` is not setuid. `rpm -V sudo` reports only
+  `/usr/bin/sudo`, plus the `sudoers.d` mode and `/var/db/sudo` it reported
+  before. `kill` and `more` stay util-linux's, `uptime` procps-ng's,
+  `hostname` the hostname package's. `sudo -u nobody id -un`,
+  `visudo-rs -c`, `ujust --list`, `uupd --help` and `dracut --help` work.
