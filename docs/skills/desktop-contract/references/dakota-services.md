@@ -135,7 +135,7 @@ directories with the RPM's modes, and systemd-tmpfiles is allowed to.
 
 ### Virtualization (#1232)
 
-QEMU/KVM, toolbox, systemd-container and the guest agents (qemu-guest-agent,
+Toolbox, systemd-container and the guest agents (qemu-guest-agent,
 spice-vdagent, open-vm-tools, hyperv-daemons) are installed, as on Dakota.
 Dakota's presets need no file of their own here: `80-libvirt.preset`'s
 disables are in `98-utah-enable-default.preset`, and the enables in its
@@ -143,9 +143,10 @@ disables are in `98-utah-enable-default.preset`, and the enables in its
 `hypervfcopyd`) follow from `enable *`; each agent is gated on its hypervisor.
 `ujust setup-virtualization` and `manage-virtualization` (`60-custom.just`)
 run Dakota's `files/just-overrides/devmode.py`, shipped verbatim as
-`/usr/libexec/dakota-devmode`. libvirt and virtiofsd wait on the factory
-(`[unavailable]`, utah-packages#1021); until libvirt lands the recipes say so
-and exit. containerd and runc are excluded: podman runs on crun.
+`/usr/libexec/dakota-devmode`. qemu-kvm, virtiofsd and libvirt wait on the
+factory (`[unavailable]`, utah-packages#1021: ipxe-roms-qemu and SDL2_image are
+missing, libvirt is unpublished); until libvirt lands the recipes say so and
+exit. containerd and runc are excluded: podman runs on crun.
 
 ### User units
 
