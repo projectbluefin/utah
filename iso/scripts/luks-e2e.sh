@@ -16,6 +16,10 @@
 # because it deploys asynchronously on first boot and checking right after
 # login undercounts it.
 #
+# A failure in phase N exits 10 + N; E2E_WALL_CLOCK_DEADLINE (epoch seconds)
+# makes the harness fail with exit 75 and its evidence once it passes, and a
+# missing QEMU or OVMF exits 77 (iso/scripts/e2e-exit.sh).
+#
 # Phases 2 and 7 are the point. An image can install perfectly, unlock
 # perfectly, and still be useless if the desktop never starts -- and a boot
 # that stops at a text console looks identical to a working one if all you
@@ -36,6 +40,7 @@ VM_RAM="${UTAH_E2E_RAM:-8192}"
 VM_CPUS="${UTAH_E2E_CPUS:-4}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "${ROOT}/iso/scripts/extension-state.sh"
+source "${ROOT}/iso/scripts/e2e-exit.sh"
 
 # The account the installer creates, and the one phase 6 logs in as.
 TEST_USER="${UTAH_E2E_USER:-utahtest}"
@@ -90,7 +95,7 @@ VNC_INSTALLED="${UTAH_E2E_VNC_INSTALLED:-3}"
 VARS="${WORK}/ovmf-vars.fd"
 
 QEMU="$(command -v qemu-system-x86_64 /usr/libexec/qemu-kvm 2>/dev/null | head -1)"
-[[ -n "${QEMU}" ]] || { echo "qemu-system-x86_64 not found" >&2; exit 1; }
+[[ -n "${QEMU}" ]] || e2e_exit "${E2E_EXIT_DEPENDENCY}" "qemu-system-x86_64 not found"
 
 OVMF_CODE=""
 for f in /usr/share/edk2/ovmf/OVMF_CODE.fd /usr/share/OVMF/OVMF_CODE_4M.fd \
@@ -98,14 +103,14 @@ for f in /usr/share/edk2/ovmf/OVMF_CODE.fd /usr/share/OVMF/OVMF_CODE_4M.fd \
          /home/linuxbrew/.linuxbrew/share/qemu/edk2-x86_64-code.fd; do
     [[ -f "$f" ]] && { OVMF_CODE="$f"; break; }
 done
-[[ -n "${OVMF_CODE}" ]] || { echo "OVMF firmware not found" >&2; exit 1; }
+[[ -n "${OVMF_CODE}" ]] || e2e_exit "${E2E_EXIT_DEPENDENCY}" "OVMF firmware not found"
 OVMF_VARS_SRC=""
 for f in /usr/share/edk2/ovmf/OVMF_VARS.fd /usr/share/OVMF/OVMF_VARS_4M.fd \
          /usr/share/OVMF/OVMF_VARS.fd \
          /home/linuxbrew/.linuxbrew/share/qemu/edk2-i386-vars.fd; do
     [[ -f "$f" ]] && { OVMF_VARS_SRC="$f"; break; }
 done
-[[ -n "${OVMF_VARS_SRC}" ]] || { echo "OVMF variable store not found" >&2; exit 1; }
+[[ -n "${OVMF_VARS_SRC}" ]] || e2e_exit "${E2E_EXIT_DEPENDENCY}" "OVMF variable store not found"
 
 ACCEL="-accel kvm"
 test -r /dev/kvm || { echo "No /dev/kvm; falling back to TCG (much slower)"; ACCEL="-accel tcg,thread=multi"; }
@@ -353,12 +358,14 @@ preserve_failed_disk_diagnostics() {
 
 cleanup() {
     # $? must be read before anything else runs in this function, or it
-    # stops reflecting the exit that triggered the trap. `fail()` funnels
-    # every deliberate failure through `exit 1`, but a bare command failing
-    # under `set -e` (the installer step in phase 3, for one) aborts here
-    # directly without ever calling `fail()` -- so diagnostics belong in the
-    # trap that always runs, not only in the helper that sometimes does.
+    # stops reflecting the exit that triggered the trap. A bare command
+    # failing under `set -e` (the installer step in phase 3, for one) aborts
+    # here directly without ever calling `fail()` -- so diagnostics belong in
+    # the trap that always runs, not only in the helper that sometimes does.
+    # The same holds for the exit status: e2e_status reports the phase's code
+    # for either kind of failure (iso/scripts/e2e-exit.sh).
     local status=$?
+    trap '' USR1
     (( status != 0 )) && preserve_failed_disk_diagnostics
     if [[ -n "${serial_follow_pid}" ]]; then
         kill "${serial_follow_pid}" 2>/dev/null || true
@@ -367,10 +374,23 @@ cleanup() {
     for pid in "${qemu_pids[@]:-}"; do
         [[ -n "${pid}" ]] && kill "${pid}" 2>/dev/null || true
     done
+    exit "$(e2e_status "${status}")"
 }
 trap cleanup EXIT
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
+
+# Fail before CI's timeout-minutes kills the job, so the diagnostics upload.
+# The EXIT trap above still runs: it keeps the disk metadata and stops QEMU.
+deadline_reached() {
+    E2E_EXIT_CODE="${E2E_EXIT_DEADLINE}"
+    local sock
+    for sock in "${MONITOR_INSTALLED}" "${MONITOR_LIVE}"; do
+        [[ -S "${sock}" ]] && { shot "deadline-$(basename "${sock}" .sock)" "${sock}" || true; }
+    done
+    e2e_exit "${E2E_EXIT_DEADLINE}" "E2E_WALL_CLOCK_DEADLINE reached (exit code for the phase in progress: ${E2E_PHASE_EXIT}); failing now so the evidence uploads before the job is killed"
+}
+e2e_deadline_start deadline_reached
 
 check_system_unit_state() {
     local unit="$1" required_enabled="${2:-false}" required_run="${3:-false}" boot_pass="${4:-first}"
@@ -615,6 +635,7 @@ if [[ -f "${WORK}/try.pid" ]] && kill -0 "$(cat "${WORK}/try.pid" 2>/dev/null)" 
     fail "a VM from 'just try-installed' is running on this work directory (pid $(cat "${WORK}/try.pid")); stop it first: kill \$(cat ${WORK}/try.pid)"
 fi
 
+E2E_PHASE_EXIT=11
 echo "=== Phase 1/7: boot the live ISO ==="
 rm -f "${INSTALL_DISK}" "${MONITOR_LIVE}" "${MONITOR_INSTALLED}" \
       "${SERIAL_LIVE}" "${SERIAL_INSTALLED}"
@@ -660,6 +681,7 @@ for i in $(seq 1 90); do
     sleep 5
 done
 
+E2E_PHASE_EXIT=12
 echo "=== Phase 2/7: prove the live session reached a desktop ==="
 # The live ISO autologins liveuser into GNOME. If that silently degraded to a
 # text console the installer would still be reachable over SSH and every other
@@ -709,6 +731,7 @@ live_session_type="$(ssh_live "loginctl show-session \$(loginctl show-user liveu
 echo "  live session type: ${live_session_type:-unknown}"
 shot_until_drawn live-desktop "${MONITOR_LIVE}"
 
+E2E_PHASE_EXIT=13
 echo "=== Phase 3/7: install onto an encrypted disk ==="
 # The ISO installs with the ostree backend (#1129): an empty "image" with a
 # "targetImgref" is the offline ostree shape, installing from
@@ -882,6 +905,7 @@ kill -0 "${live_pid}" 2>/dev/null && fail "the live VM would not exit; refusing 
 echo "  live VM exited cleanly"
 sync
 
+E2E_PHASE_EXIT=14
 echo "=== Phase 4/7: boot the installed disk ==="
 # Carry the live VM's firmware variables over rather than starting from a
 # pristine copy. The installer writes an NVRAM boot entry pointing at
@@ -909,6 +933,7 @@ qemu_pids+=("$(cat "${WORK}/installed.pid")")
 echo "  watch the installed VM: vnc://127.0.0.1:$((5900 + VNC_INSTALLED))"
 sleep 5
 
+E2E_PHASE_EXIT=15
 echo "=== Phase 5/7: see Plymouth's branded passphrase prompt and answer it ==="
 verify_plymouth_prompt installed-luks-prompt "${SERIAL_INSTALLED}"
 status=0
@@ -923,6 +948,7 @@ if [[ ${status} -ne 0 ]]; then
     fail "LUKS unlock or post-unlock boot failed (exit ${status})"
 fi
 
+E2E_PHASE_EXIT=16
 echo "=== Phase 6/7: reach the graphical target and verify the offline payload ==="
 echo "Waiting for the installed system to reach the graphical target..."
 emergency_seen=""
@@ -1052,6 +1078,7 @@ if grep -E 'denied .*comm="(chcon|bootc)"' "${WORK}/avc.log" >&2; then
 fi
 echo "  bootc chcon AVC denials: none"
 
+E2E_PHASE_EXIT=17
 echo "=== Phase 7/7: log in and prove the desktop starts ==="
 ssh_target 'systemctl is-active gdm.service' 2>/dev/null | grep -qx active \
     || fail "gdm is not running on the installed system"
