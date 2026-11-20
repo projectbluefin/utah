@@ -131,6 +131,7 @@
         "bc",
         "bind-utils",
         "bindfs",
+        "bluefin-cli",
         "bluez-cups",
         "bolt",
         "borgbackup",
@@ -457,8 +458,8 @@
     }
   ],
   "totals": {
-    "installed": 400,
-    "unavailable": 10
+    "installed": 401,
+    "unavailable": 9
   },
   "unavailable": [
     {
@@ -466,10 +467,6 @@
         83
       ],
       "name": "anaconda-live"
-    },
-    {
-      "issues": [],
-      "name": "bluefin-cli"
     },
     {
       "issues": [

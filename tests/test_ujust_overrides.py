@@ -314,12 +314,6 @@ class UjustOverridesTests(unittest.TestCase):
         self.assertIn("unsupported shell: tcsh", result.stderr)
         self.assertEqual(self.calls(), "")
 
-    def test_bluefin_cli_explains_a_missing_binary(self):
-        result = self.run_recipe("bluefin-cli")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("bluefin-cli is not installed", result.stderr)
-        self.assertEqual(self.calls(), "")
-
     def setup_debug_tools(self, uid=0, bootc_exit=0):
         self.mock("id", f'echo {uid}')
         self.mock("sudo", 'echo "sudo" >> "$CALLS"')

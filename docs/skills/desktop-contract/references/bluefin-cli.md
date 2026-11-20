@@ -26,10 +26,8 @@ with Utah as the reference.
   `bash-preexec-rearm.sh`). bluefin-cli's init script keeps bash-preexec's
   DEBUG trap armed itself.
 - **Package.** utah-packages builds the RPM (`packages/bluefin-cli`) from the
-  release tag plus the release's vendored Go modules. A `/usr/bin` install
-  never updates itself; bluefin-cli updates with the image. Until the pinned
-  factory image carries it, `bluefin-cli` sits in `packages/utah.toml`
-  `[unavailable]`: the shims then do nothing, and `ujust bluefin-cli` says
-  it is missing.
+  release tag plus the release's vendored Go modules (utah-packages#1235);
+  `packages/utah.toml` installs it from `[parity]` and `[factory].parity`. A
+  `/usr/bin` install never updates itself; bluefin-cli updates with the image.
 - **Tests.** `tests/test_ujust_overrides.py` (the recipe) and
   `tests/test_desktop_contract.py` (shims and removals).
