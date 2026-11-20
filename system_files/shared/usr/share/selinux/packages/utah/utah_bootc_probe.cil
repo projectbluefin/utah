@@ -21,3 +21,10 @@
 ; modules list asserts it is loaded.
 (dontaudit unconfined_service_t self (capability2 (mac_admin)))
 (dontaudit initrc_t self (capability2 (mac_admin)))
+
+; systemd-nsresourced checks dac_read_search on its own process while it
+; walks user namespace state at boot, and the policy denies it. The daemon
+; carries on without it; the testsuite's SELinux gate counted the denial and
+; failed every Post-Testing E2E job (#1329). Same shape as the rules above: a
+; dontaudit of one capability on the daemon's own domain, nothing granted.
+(dontaudit systemd_nsresourced_t self (capability (dac_read_search)))

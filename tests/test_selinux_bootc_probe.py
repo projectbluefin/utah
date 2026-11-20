@@ -27,6 +27,9 @@ CONTRACT = ROOT / "contracts/bluefin-desktop.toml"
 RULES = [
     "(dontaudit unconfined_service_t self (capability2 (mac_admin)))",
     "(dontaudit initrc_t self (capability2 (mac_admin)))",
+    # systemd-nsresourced's own dac_read_search check, denied at every boot and
+    # counted by the testsuite's SELinux gate (#1329).
+    "(dontaudit systemd_nsresourced_t self (capability (dac_read_search)))",
 ]
 
 
