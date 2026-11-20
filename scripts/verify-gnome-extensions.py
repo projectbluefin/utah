@@ -26,11 +26,9 @@ SOURCE_EXTENSIONS = {
     "tilingshell@ferrarodomenico.com": "tmp/tilingshell@ferrarodomenico.com/resources/metadata.json",
     "BudsLink-Companion@maniacx.github.com": "BudsLink-Companion@maniacx.github.com/metadata.json",
     "fuzzy-application-search@mkhl.codeberg.page": "fuzzy-application-search@mkhl.codeberg.page/metadata.json",
-    "quick-settings-audio-panel@rayzeq.github.io": "tmp/quick-settings-audio-panel/resources/metadata.json",
     "quicksettings-audio-devices-hider@marcinjahn.com": "tmp/quicksettings-audio-devices-hider/resources/metadata.json",
     "quicksettings-audio-devices-renamer@marcinjahn.com": "tmp/quicksettings-audio-devices-renamer/resources/metadata.json",
     "tailscale-gnome-qs@tailscale-qs.github.io": "tmp/tailscale-gnome-qs/tailscale-gnome-qs@tailscale-qs.github.io/metadata.json",
-    "copyous@boerdereinar.dev": "tmp/copyous/resources/metadata.json",
     "syncthing-toggle@rehhouari.github.com": "tmp/syncthing-toggle-rehhouari/metadata.json",
 }
 
@@ -69,10 +67,8 @@ if _SOURCE_BASE.is_dir():
 
 ARCHIVES = {
     "tilingshell@ferrarodomenico.com": "tilingshell",
-    "quick-settings-audio-panel@rayzeq.github.io": "qsap",
     "quicksettings-audio-devices-hider@marcinjahn.com": "hider",
     "quicksettings-audio-devices-renamer@marcinjahn.com": "renamer",
-    "copyous@boerdereinar.dev": "copyous",
 }
 
 

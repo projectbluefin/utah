@@ -43,8 +43,6 @@
         "libblockdev-mpath",
         "libcamera-gstreamer",
         "libcamera-tools",
-        "libgda",
-        "libgda-sqlite",
         "libratbag-ratbagd",
         "libva-utils",
         "libxcrypt-compat",
@@ -391,7 +389,7 @@
     }
   ],
   "totals": {
-    "installed": 334,
+    "installed": 332,
     "unavailable": 9
   },
   "unavailable": [
