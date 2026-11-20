@@ -640,6 +640,22 @@ class ServiceMaskParityTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertRegex(tmpfiles, rf"(?m)^d {path} 07\d\d root root -$")
 
+    def test_syncthing_ships_opt_in(self):
+        # Native syncthing as on Dakota (#1361): installed, its user unit never
+        # enabled for everyone, and the RPM's app-grid launchers removed.
+        packages = tomllib.loads((ROOT / "packages/utah.toml").read_text())
+        self.assertIn("syncthing", packages["parity"]["packages"])
+        self.assertIn("syncthing.service", self.contract_services()["user_disabled"])
+        user_preset = (ROOT / "system_files/shared/usr/lib/systemd/user-preset/85-utah-desktop.preset").read_text()
+        self.assertNotIn("syncthing", user_preset)
+        services = (ROOT / "scripts/configure-services.sh").read_text()
+        self.assertNotIn("enable syncthing", services)
+        self.assertIn(
+            "rm -f /usr/share/applications/syncthing-start.desktop \\\n"
+            "    /usr/share/applications/syncthing-ui.desktop\n",
+            services,
+        )
+
     def test_first_boot_cannot_reset_build_time_state(self):
         # authselect-first-boot.service re-selects @system-default on first
         # boot, dropping the features configure-services.sh enables; livesys

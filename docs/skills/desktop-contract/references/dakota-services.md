@@ -205,6 +205,22 @@ xdg-user-dirs, obex, mpris-proxy, `speech-dispatcher.socket` and
 `xdg-desktop-portal-rewrite-launchers.service` (gnome-build-meta's
 `80-speechd.preset` and `80-xdg.preset`); `[services].user_enabled` asserts them.
 
+### Syncthing and Sysprof (#1361)
+
+`syncthing` is installed from the factory, as Dakota ships it. It is a
+background daemon, so Flatpak-first does not apply. Its `syncthing.service`
+user unit stays off: the catch-all disable covers it, and
+`[services].user_disabled` asserts that no user gets it unasked (opt in with
+`systemctl --user enable --now syncthing`). The `syncthing@.service` system
+template has no default instance. `configure-services.sh` removes the RPM's
+"Start Syncthing" and "Syncthing Web UI" launchers, which Dakota does not
+ship. bling's Sync Folder toggle runs its own Syncthing container and
+migrates a native setup. Sysprof's app is the Flathub `org.gnome.Sysprof`,
+which `ujust install-dev-flatpaks` offers. The host daemon (`sysprof-cli`:
+`sysprofd`, `sysprof3.service`) waits on utah-packages#1239, because
+Hummingbird's `sysprof-cli` requires `kernel-tools` and no enabled repository
+publishes it.
+
 ### Re-measuring
 
 Run `systemctl --root=/ preset-all` inside both images and diff

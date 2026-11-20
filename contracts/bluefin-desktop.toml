@@ -89,6 +89,9 @@ files = [
   # wget2-wget supplies the traditional command as a link to wget2.
   "/usr/bin/wget",
   "/usr/bin/wget2",
+  # Syncthing's daemon and its opt-in user unit, as Dakota ships them (#1361).
+  "/usr/bin/syncthing",
+  "/usr/lib/systemd/user/syncthing.service",
   # Common owns ChairLift's GUI preinstall and system integration (as on Dakota).
   "/usr/share/applications/io.projectbluefin.chairlift.desktop",
   "/usr/share/icons/hicolor/scalable/apps/io.projectbluefin.chairlift.svg",
@@ -731,6 +734,13 @@ user_enabled = [
   "oo7-daemon.service",
   # GTK3 apps follow the light/dark style (#1342), as on Bluefin.
   "ublue-gtk3-theme-sync.service",
+]
+# Per-user daemons that ship but stay opt-in, checked with
+# `systemctl --global is-enabled`: none may be enabled for every user.
+user_disabled = [
+  # Syncthing shares folders over the network only once its user starts it
+  # (`systemctl --user enable --now syncthing`), as on Dakota (#1361).
+  "syncthing.service",
 ]
 masked = [
   "bootc-fetch-apply-updates.service",
