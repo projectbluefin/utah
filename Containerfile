@@ -359,7 +359,8 @@ ARG UUPD_SHA256=d8d420a153de11589abad3292eef2131a75ac3487414065a2661a558ef0d027c
 # lists them under [selinux]: the module store is under read-only /usr once
 # booted (#551), so the build is the only place to change it. -n: no reload,
 # the build has no selinuxfs. utah_bootc_probe dontaudits bootc's expected
-# mac_admin probe from plain services (#1198; the .cil says why not allow).
+# mac_admin probe from plain services (#1198; the .cil says why not allow), and
+# systemd_nsresourced_t's dac_read_search on its own domain (#1329).
 RUN --mount=type=bind,from=artwork,source=/out/branding,target=/tmp/utah-artwork-branding,ro \
     --mount=type=bind,from=common,source=/system_files/bluefin/usr/share/plymouth,target=/tmp/utah-common-plymouth,ro \
     mkdir -p /tmp/uupd && \
