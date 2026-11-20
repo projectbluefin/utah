@@ -182,7 +182,7 @@
       ],
       "description": "Package contract: Utah-owned base.toml, utah.toml overlay, device firmware, [unavailable] rules, repository policy, Dakota gap triage (baselines/GAP.md). Use when adding, removing, or debugging packages or parity/check-repos failures.",
       "version": "2.0",
-      "last_updated": "2026-11-14",
+      "last_updated": "2026-11-20",
       "doc_type": "policy"
     },
     {

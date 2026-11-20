@@ -525,6 +525,46 @@ packages = [
     "papers-libs",
     "papers-thumbnailer",
     "papers-nautilus",
+    # Command-line, device and security tools Dakota ships (#1359), measured
+    # by `just baselines` on 2026-11-20 (baselines/GAP.md). The monitoring
+    # tools are the user-facing CLIs #1263 adopted. pam-u2f installs the
+    # module only; PAM is left unconfigured. pam_pkcs11 waits for the
+    # smart-card PAM decision (#1257); nmtui, whiptail, bpftool and lzip wait
+    # for the next factory pin (#1360).
+    "tealdeer",
+    "nethogs",
+    "tiptop",
+    "trace-cmd",
+    "numactl",
+    "bpftop",
+    "alsa-ucm-utils",
+    "v4l-utils",
+    "rc-tools",
+    "dvb-tools",
+    "gstreamer1-plugins-base-tools",
+    "libcamera-v4l2",
+    "iproute-tc",
+    "util-linux-script",
+    "xz-lzma-compat",
+    "lz4",
+    "sqlite",
+    "bsdtar",
+    "bsdcpio",
+    "bsdcat",
+    "bsdunzip",
+    "xxhash",
+    "fido2-tools",
+    "pam-u2f",
+    "pamu2fcfg",
+    "gnutls-utils",
+    "gnupg2-smime",
+    "gnupg2-utils",
+    "openldap-clients",
+    "integritysetup",
+    "veritysetup",
+    "bindfs",
+    "malcontent-tools",
+    "nfs-python-utils",
     #
     # Left out (resolved against sha256:d3b5bac2):
     #   tuned, tuned-ppd            Dakota runs power-profiles-daemon, which is
@@ -1002,4 +1042,21 @@ parity = [
     "papers-libs",
     "papers-thumbnailer",
     "papers-nautilus",
+    # Dakota image-scan tools (#1359).
+    "tealdeer",
+    "nethogs",
+    "tiptop",
+    "trace-cmd",
+    "bpftop",
+    "alsa-ucm-utils",
+    "v4l-utils",
+    "rc-tools",
+    "dvb-tools",
+    "gstreamer1-plugins-base-tools",
+    "libcamera-v4l2",
+    "pam-u2f",
+    "pamu2fcfg",
+    "bindfs",
+    "malcontent-tools",
+    "nfs-python-utils",
 ]

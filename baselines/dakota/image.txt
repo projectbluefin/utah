@@ -1,1 +1,1 @@
-ghcr.io/projectbluefin/dakota:testing@sha256:3f9d062f3b2a717592496ae0bfecd9520808bceac094789c2e0161a7b0253c06
+ghcr.io/projectbluefin/dakota:testing@sha256:a81ae3c0a45bc944b986462436a48f0f4c5484ea2b698818bc03cc2508c2d457

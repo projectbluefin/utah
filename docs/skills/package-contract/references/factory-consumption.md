@@ -67,3 +67,23 @@ from `baselines/triage.toml`. Those notices are advisory, so a passing
 check does not mean the triage cleanup is complete. If the refresh is
 still in an open PR, validate the cleanup with its snapshots and land
 the refresh first; the old snapshots still require those triage entries.
+
+To triage new gaps, map each Dakota path to the package that ships it. Start a
+container from the pinned `BASE_IMAGE` with the factory's metadata layer
+mounted at `/etc/utah-packages` and `packages/` at `/etc/yum.repos.d`, the
+same mounts `scripts/check-repo-availability.py` uses, then run
+`dnf repoquery --setopt=optional_metadata_types=filelists --whatprovides PATH`.
+Without filelists, dnf5 matches only the primary metadata's paths. Do a dry-run
+`dnf install --assumeno` before requesting a name: a published
+package can still need an unpublished library, as `erofs-utils` needs
+`libqpl`. Query the next Renovate factory pin's metadata too, so items it will
+publish are planned against that bump, not waived.
+
+Statuses follow the owner decisions: Flatpak-first (#1270), SELinux kept
+(#1226), no homed (#1238), and the developer toolchain waived (#1263).
+Also waive GNOME OS packaging artefacts: an unsplit library element ships
+its test and conversion CLIs, which Fedora puts in a `-tools` or `-utils`
+subpackage. Also waive tools Utah installs under another path. Look those
+up in the Utah image (`rpm -ql`), not the gap report. `triage.toml`'s
+header names these waiver reasons. A gap an open PR closes points at
+that PR's issue as `planned`.
