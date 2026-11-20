@@ -1171,4 +1171,9 @@ parity = [
     "nfs-python-utils",
     "google-noto-serif-cjk-vf-fonts",
     "nerd-fonts-symbols",
+    # DLNA/UPnP media sharing (#1258).
+    "rygel",
+    "gupnp-av",
+    "gupnp-dlna",
+    "gst-editing-services",
 ]
