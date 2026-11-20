@@ -207,9 +207,12 @@ replaced by the branch. The README links to the whole run, which also holds the
 independent testsuite legs; those do not gate the record and may still be
 running or red, so the README says so without predicting either outcome. The
 evidence update requires the LUKS and production-ISO jobs to pass.
-The repository must allow Actions to create pull requests; a denied write fails
-this job visibly, without deleting test artifacts. It does not auto-merge
-the evidence PR or imply a fresh pass for a different commit.
+The job token only pushes the `verification` branch. Trusted `main` alone
+mints a repository-scoped Mergeraptor App token (contents and pull-request
+write) to open the PR, so its normal pull_request checks run and Hive's
+review can land it like other bot proposals. A missing App secret or
+installation fails this job visibly, without deleting test artifacts. The job
+does not arm native auto-merge or imply a fresh pass for a different commit.
 
 For a deliberate rerun, dispatch Post-Testing E2E with `build_run_id` from a
 successful testing build containing the current harness. Do not pass a PR

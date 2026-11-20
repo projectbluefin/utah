@@ -113,7 +113,9 @@ post-build verification workflows, not the complete workflow inventory:
   `:testing` through a monotonic ratchet; a red testsuite leg blocks
   promotion, with no override (#1329). The promotion to `main` sets
   `run_e2e: false`; the release gate requires that evidence for the exact
-  `:testing` digests and re-runs `smoke,common`.
+  `:testing` digests and re-runs `smoke,common`. Its `documentation` job
+  opens the README evidence-link PR with a repository-scoped Mergeraptor App
+  token, minted only on trusted `main`, like the extension updater.
   See [testsuite triage](ci-workflows/references/testsuite-triage.md) for
   known failures and [iso-e2e](ci-workflows/references/iso-e2e.md) for the
   ratchet.
