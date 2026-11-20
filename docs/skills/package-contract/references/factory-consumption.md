@@ -71,11 +71,15 @@ container from the pinned `BASE_IMAGE` with the factory's metadata layer
 mounted at `/etc/utah-packages` and `packages/` at `/etc/yum.repos.d`, the
 same mounts `scripts/check-repo-availability.py` uses, then run
 `dnf repoquery --setopt=optional_metadata_types=filelists --whatprovides PATH`.
-Without filelists, dnf5 matches only the primary metadata's paths. Do a dry-run
-`dnf install --assumeno` before requesting a name: a published
-package can still need an unpublished library, as `erofs-utils` needs
-`libqpl`. Query the next Renovate factory pin's metadata too, so items it will
-publish are planned against that bump, not waived.
+Without filelists, dnf5 matches only the primary metadata's paths. Probe a name
+with `python3 /tmp/install-packages.py --resolve-one NAME` (mounted as
+`check-repo-availability.py` does) before requesting it: a published package
+can still need an unpublished library, as `erofs-utils` needed `libqpl` until
+utah-packages#1241. A bare `dnf install --assumeno` also enables the
+builder-only Fedora 44 repositories in `packages/`, so it can pull a
+dependency the image never gets (`kernel-tools` for `sysprof-cli`). Query the
+next Renovate factory pin's metadata too, so items it will publish are planned
+against that bump, not waived.
 
 Statuses follow the owner decisions: Flatpak-first (#1270), SELinux kept
 (#1226), no homed (#1238), and the developer toolchain waived (#1263).

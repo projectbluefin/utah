@@ -9,5 +9,5 @@ flatpak "io.github.getnf.embellish"
 flatpak "io.podman_desktop.PodmanDesktop"
 flatpak "me.iepure.devtoolbox"
 # Sysprof: Dakota builds the app into its image; Utah ships the Flathub app
-# (Flatpak-first, #1361). Whole-system profiling needs sysprofd on the host.
+# (Flatpak-first, #1361) and the host's sysprof-cli provides sysprofd for it.
 flatpak "org.gnome.Sysprof"

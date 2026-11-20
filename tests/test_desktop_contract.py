@@ -656,6 +656,27 @@ class ServiceMaskParityTests(unittest.TestCase):
             services,
         )
 
+    def test_sysprofd_and_erofs_utils_ship_native(self):
+        # Dakota ships Sysprof's host daemon and erofs-utils (#1361, #1360).
+        # sysprof3.service has no [Install] section: D-Bus activates it when
+        # the Flathub app asks, so no preset list may name it.
+        packages = tomllib.loads((ROOT / "packages/utah.toml").read_text())
+        installed = packages["parity"]["packages"]
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        files = contract["configuration"]["files"]
+        for package, path in (
+            ("sysprof-cli", "/usr/libexec/sysprofd"),
+            ("sysprof-cli", "/usr/lib/systemd/system/sysprof3.service"),
+            ("sysprof-cli", "/usr/share/dbus-1/system-services/org.gnome.Sysprof3.service"),
+            ("erofs-utils", "/usr/bin/mkfs.erofs"),
+        ):
+            with self.subTest(path=path):
+                self.assertIn(package, installed)
+                self.assertIn(path, files)
+        for listing, units in self.contract_services().items():
+            with self.subTest(listing=listing):
+                self.assertNotIn("sysprof3.service", units)
+
     def test_first_boot_cannot_reset_build_time_state(self):
         # authselect-first-boot.service re-selects @system-default on first
         # boot, dropping the features configure-services.sh enables; livesys

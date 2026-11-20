@@ -673,6 +673,14 @@ packages = [
     # does not have, are removed by configure-services.sh. The Sync Folder
     # toggle runs its own Syncthing container and migrates a native setup.
     "syncthing",
+    # Sysprof's host side, as Dakota ships it (#1361): sysprof-cli carries
+    # sysprofd and its D-Bus-activated sysprof3.service, which the Flathub
+    # org.gnome.Sysprof app needs for whole-system profiling. The factory's
+    # rebuild only recommends kernel-tools (utah-packages#1242).
+    "sysprof-cli",
+    # EROFS image tools, as Dakota ships them (#1360); the factory builds them
+    # without Intel QPL (utah-packages#1241).
+    "erofs-utils",
     # DLNA/UPnP media sharing (GNOME Settings > Sharing > Media Sharing), as
     # Dakota ships it (#1258). The rygel package carries /etc/rygel.conf and
     # the rygel.service user unit Settings starts; gupnp-av's factory recipe
@@ -1211,6 +1219,8 @@ parity = [
     "nicstat",
     "syncthing",
     "virtiofsd",
+    "sysprof-cli",
+    "erofs-utils",
     "google-noto-serif-cjk-vf-fonts",
     "nerd-fonts-symbols",
     # DLNA/UPnP media sharing (#1258).

@@ -108,12 +108,12 @@ lzip = { status = "planned", area = "cli-tools", issue = "#1360", reason = "Inst
 libsmbios = { status = "planned", area = "hardware-power", issue = "#1360", reason = "Dell smbios-* tools (smbios-utils-bin, smbios-utils-python), installed in [parity]" }
 open-iscsi = { status = "planned", area = "network-fs", issue = "#1360", reason = "iscsi-initiator-utils, installed in [parity] with every unit off, as Dakota's 50-iscsi.preset" }
 open-isns = { status = "planned", area = "network-fs", issue = "#1360", reason = "isns-utils, installed in [parity]; isnsd stays off, as Dakota's 50-iscsi.preset" }
-erofs-utils = { status = "planned", area = "files-devices", issue = "projectbluefin/utah-packages#1238", reason = "The factory builds it, but it needs libqpl.so.1, which nothing publishes" }
+erofs-utils = { status = "planned", area = "files-devices", issue = "#1360", reason = "Installed in [parity]; projectbluefin/utah-packages#1241 builds it without Intel QPL" }
 nicstat = { status = "planned", area = "cli-tools", issue = "#1360", reason = "Installed in [parity]" }
 
 # Decided on #1361 under Flatpak-first (#1270): background daemons native, apps
 # from Flathub.
-sysprof = { status = "planned", area = "desktop-apps", issue = "projectbluefin/utah-packages#1239", reason = "The app is org.gnome.Sysprof from Flathub (dakota-dev-flatpaks.Brewfile); sysprof-cli and sysprofd go native once kernel-tools, which Hummingbird's sysprof-cli requires, is published" }
+sysprof = { status = "planned", area = "desktop-apps", issue = "#1361", reason = "sysprof-cli (sysprofd, D-Bus-activated sysprof3.service) installed in [parity]; the app is org.gnome.Sysprof from Flathub (dakota-dev-flatpaks.Brewfile)" }
 syncthing = { status = "planned", area = "desktop-apps", issue = "#1361", reason = "Installed in [parity]; the syncthing.service user unit stays opt-in" }
 
 # --- Deliberate differences -------------------------------------------------

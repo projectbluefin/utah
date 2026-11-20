@@ -34,9 +34,9 @@ toggles on the marker line bluefin-cli writes into the shell's rc file
 shell on. `toggle-user-motd` stays Common's: uwelcome is the greeting.
 
 For #920, `install-debug-tools` is the on-demand path for diagnosing shell
-hangs, chosen over shipping `gdb-headless`, `elfutils` and `sysprof-cli` in the
-base image (about 23 MB for every user) or adding a debug flavor. It runs
-`bootc usr-overlay` and installs the three packages from the enabled
+hangs, chosen over shipping `gdb-headless` and `elfutils` in the base image or
+adding a debug flavor. `sysprof-cli` is in the image itself since #1361. The
+recipe runs `bootc usr-overlay` and installs the two packages from the enabled
 Hummingbird repository; the overlay is transient, so the tools vanish on
 reboot. The recipe re-executes itself under `sudo` when not root, and stops
 with bootc's error when `/usr` cannot be unlocked instead of letting `dnf`

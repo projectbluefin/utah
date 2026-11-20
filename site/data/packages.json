@@ -182,6 +182,7 @@
         "dnsmasq",
         "dvb-tools",
         "dymo-cups-drivers",
+        "erofs-utils",
         "ethtool",
         "exfatprogs",
         "f2fs-tools",
@@ -378,6 +379,7 @@
         "stix-fonts",
         "stoken-libs",
         "syncthing",
+        "sysprof-cli",
         "sysstat",
         "system-config-printer-libs",
         "system-config-printer-udev",
@@ -470,7 +472,7 @@
     }
   ],
   "totals": {
-    "installed": 413,
+    "installed": 415,
     "unavailable": 8
   },
   "unavailable": [
