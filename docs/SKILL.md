@@ -22,7 +22,7 @@ next to the code, and the skills cite them.
 | Build the image locally (quickstart) | [`building.md`](building.md#build-locally) |
 | Add, remove, or debug packages, fix check-repos failures, or triage a Dakota parity gap (`baselines/GAP.md`) | [`skills/package-contract.md`](skills/package-contract.md) |
 | Add, remove, or retire an image flavor | [`skills/flavors.md`](skills/flavors.md) |
-| Work on the OGC kernel or NVIDIA module cache | [`skills/kernel-cache.md`](skills/kernel-cache.md) |
+| Work on the patched Fedora kernel, OGC kernel or NVIDIA module cache, or check what blocks Secure Boot and its upstream signing route | [`skills/kernel-cache.md`](skills/kernel-cache.md), [Secure Boot](skills/kernel-cache/references/secure-boot.md) |
 | Edit the `Containerfile`, add a script, or investigate build time | [`skills/containerfile.md`](skills/containerfile.md) |
 | Validate changes end-to-end in a VM or live ISO | [`skills/local-testing.md`](skills/local-testing.md) |
 | Validate bootc upgrade, rollback, and BLS boot files in the QEMU lifecycle harness | [`skills/lifecycle-e2e.md`](skills/lifecycle-e2e.md) |

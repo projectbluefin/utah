@@ -188,24 +188,24 @@ Production live boot entries configure:
 
 ### Secure Boot strategy
 
-- **Live ISO bootloader**: The image carries `systemd-boot-unsigned`, which the
-  live ISO boots from.
-  On hardware with Microsoft UEFI Secure Boot enabled, firmware will reject the
-  unsigned EFI loader unless Secure Boot is temporarily disabled in UEFI setup.
-  Production releases will incorporate Fedora's signed shim (`shimx64.efi`) and
-  a signed bootloader binary.
-- **Custom flavor kernels (`gaming`, `nvidia-gaming`)**: The OGC gaming kernel
-  (`linux-ogc`) is compiled from source and unsigned. Secure Boot systems
-  require either disabling Secure Boot or manually enrolling a Machine Owner Key
-  (MOK) into UEFI NVRAM using `mokutil` (planned tooling; no automated helper
-  currently exists in-tree).
-- **Custom flavor modules (`nvidia`, `nvidia-gaming`) and v4l2loopback (every
-  flavor)**: Out-of-tree NVIDIA and v4l2loopback kernel modules compiled
-  against the base or OGC kernel run under kernel lockdown when Secure Boot is
-  active. Unsigned modules fail to load; signing modules with an enrolled MOK
-  key (e.g. via the kernel's `sign-file` utility) is planned for future release
-  pipelines, but currently module signing is not implemented in-tree and Secure
-  Boot must remain disabled.
+Every Utah image and the live ISO currently need Secure Boot **off**. The
+owner decided on 2026-11-20 that Utah gets signed through Hummingbird and
+Fedora upstream, never with a Utah key or MOK enrollment the way Dakota does.
+The per-component inventory, the evidence and the upstream route for each
+piece are in
+[kernel-cache/references/secure-boot.md](kernel-cache/references/secure-boot.md).
+In short:
+
+- **Live ISO**: `EFI/BOOT/BOOTX64.EFI` is `systemd-boot-unsigned`, which
+  firmware refuses with Secure Boot on. The kernel it loads is Utah's rebuild
+  (below), so switching the ESP to Fedora's shim and GRUB alone would still not
+  boot it.
+- **Installed systems**: Fedora shim (Microsoft UEFI CA) loads Fedora GRUB
+  (Fedora CA), which is valid. Shim then refuses the kernel, because every
+  flavor boots Utah's rebuilt Fedora kernel (`*.utah1`, signed with pesign's
+  Red Hat Test Certificate) or the unsigned OGC kernel.
+- **Out-of-tree modules** (NVIDIA open, v4l2loopback): unsigned, so lockdown
+  refuses to load them when Secure Boot is on.
 
 The Flatpak list both ISO bakes install comes from
 `scripts/verify-desktop-contract.py --flatpaks` (the single Brewfile parser;
