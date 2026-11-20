@@ -218,10 +218,12 @@ template has no default instance. `configure-services.sh` removes the RPM's
 "Start Syncthing" and "Syncthing Web UI" launchers, which Dakota does not
 ship. bling's Sync Folder toggle runs its own Syncthing container and
 migrates a native setup. Sysprof's app is the Flathub `org.gnome.Sysprof`,
-which `ujust install-dev-flatpaks` offers. The host daemon (`sysprof-cli`:
-`sysprofd`, `sysprof3.service`) waits on utah-packages#1239, because
-Hummingbird's `sysprof-cli` requires `kernel-tools` and no enabled repository
-publishes it.
+which `ujust install-dev-flatpaks` offers. Its host daemon is native, as on
+Dakota: `sysprof-cli` ships `sysprofd` and `sysprof3.service`, which has no
+`[Install]` section and starts only when the app calls `org.gnome.Sysprof3`
+over D-Bus (polkit authorizes the profiling session). The factory's rebuild
+(utah-packages#1242) only recommends `kernel-tools`, which Utah's install
+repositories do not publish; it supplies the RAPL energy counters only.
 
 ### Re-measuring
 

@@ -326,7 +326,7 @@ class UjustOverridesTests(unittest.TestCase):
         result = self.run_recipe("install-debug-tools")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.calls(), "bootc usr-overlay\n"
-                         "dnf5 install -y gdb-headless elfutils sysprof-cli\n")
+                         "dnf5 install -y gdb-headless elfutils\n")
         self.assertIn('pgrep -u "$USER" -x gnome-shell', result.stdout)
         self.assertNotIn("pidof", result.stdout)
 
@@ -352,7 +352,7 @@ class UjustOverridesTests(unittest.TestCase):
         line = next((l for l in result.stdout.splitlines()
                      if l.strip().startswith("install-debug-tools ")), None)
         self.assertIsNotNone(line, f"install-debug-tools missing from --list; got {result.stdout!r}")
-        self.assertIn("# Install gdb, elfutils and sysprof-cli until reboot", line)
+        self.assertIn("# Install gdb and elfutils until reboot", line)
 
     def test_virtualization_recipes_run_dakota_devmode_when_libvirt_is_installed(self):
         unit = self.root / "virtqemud.socket"

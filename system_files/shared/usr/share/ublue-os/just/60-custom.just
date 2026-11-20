@@ -65,7 +65,7 @@ changelogs:
         printf '%s\n' "$CONTENT"
     fi
 
-# Install gdb, elfutils and sysprof-cli until reboot to diagnose shell hangs
+# Install gdb and elfutils until reboot to diagnose shell hangs
 [group('System')]
 install-debug-tools:
     #!/usr/bin/bash
@@ -85,7 +85,7 @@ install-debug-tools:
         echo 'Using the existing /usr overlay.' >&2
     fi
     DNF="$(command -v dnf5 || command -v dnf)"
-    "$DNF" install -y gdb-headless elfutils sysprof-cli
+    "$DNF" install -y gdb-headless elfutils
     echo 'Installed until the next reboot. Attach with: sudo gdb -p $(pgrep -u "$USER" -x gnome-shell)'
 
 # Set up VMM and local libvirt together, or disable activation without removing data

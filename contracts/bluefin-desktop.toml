@@ -92,6 +92,15 @@ files = [
   # Syncthing's daemon and its opt-in user unit, as Dakota ships them (#1361).
   "/usr/bin/syncthing",
   "/usr/lib/systemd/user/syncthing.service",
+  # Sysprof's host daemon, D-Bus activated for the Flathub app's whole-system
+  # profiling, as Dakota ships it (#1361).
+  "/usr/bin/sysprof-cli",
+  "/usr/libexec/sysprofd",
+  "/usr/lib/systemd/system/sysprof3.service",
+  "/usr/share/dbus-1/system-services/org.gnome.Sysprof3.service",
+  # EROFS image tools, as on Dakota (#1360).
+  "/usr/bin/mkfs.erofs",
+  "/usr/bin/fsck.erofs",
   # Common owns ChairLift's GUI preinstall and system integration (as on Dakota).
   "/usr/share/applications/io.projectbluefin.chairlift.desktop",
   "/usr/share/icons/hicolor/scalable/apps/io.projectbluefin.chairlift.svg",
