@@ -7,6 +7,7 @@ contract -- but neither had any unit coverage, so a gate that silently stopped
 rejecting anything would still report success.
 """
 
+import fnmatch
 import importlib.util
 import json
 import tomllib
@@ -443,40 +444,97 @@ class GnomeExtensionTests(unittest.TestCase):
                 self.assertIn(uuid, extensions.SOURCE_EXTENSIONS)
 
 
+SYSTEM_PRESETS = ROOT / "system_files/shared/usr/lib/systemd/system-preset"
+
+
+def preset_verdict(unit):
+    """The first preset line matching `unit` across Utah's system presets.
+
+    systemd reads preset files in lexical order of their names and the first
+    matching line wins. Hummingbird's own 80-/90- files are not in the tree;
+    85-utah-desktop.preset sorts before them for the units they name.
+    """
+    for path in sorted(SYSTEM_PRESETS.glob("*.preset"), key=lambda p: p.name):
+        for line in path.read_text().splitlines():
+            words = line.split()
+            if len(words) >= 2 and words[0] in ("enable", "disable") and fnmatch.fnmatchcase(unit, words[1]):
+                return words[0], path.name
+    return None, None
+
+
 class ServiceMaskParityTests(unittest.TestCase):
-    def test_dakota_parity_units_enabled_in_contract_preset_and_script(self):
-        # dakota-config-firstboot-date ships the units (#1265); Utah wires them.
-        contract = (ROOT / "contracts/bluefin-desktop.toml").read_text()
-        preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset").read_text()
+    """Utah's services follow its presets, enabled by default as on Dakota (#1233)."""
+
+    def contract_services(self):
+        return tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())["services"]
+
+    def test_enable_by_default_outranks_hummingbirds_catch_all_disable(self):
+        # Hummingbird ships 99-default-disable.preset ("disable *"); a line
+        # that matches first in a lower-sorting file wins, so 98 must be the
+        # last Utah file and must end on the catch-all.
+        names = sorted(p.name for p in SYSTEM_PRESETS.glob("*.preset"))
+        self.assertEqual(names[-1], "98-utah-enable-default.preset")
+        self.assertLess(names[-1], "99-default-disable.preset")
+        lines = [
+            line for line in (SYSTEM_PRESETS / names[-1]).read_text().splitlines()
+            if line.strip() and not line.startswith("#")
+        ]
+        self.assertEqual(lines[-1], "enable *")
+        self.assertEqual([line for line in lines if line.split()[-1] == "*"], ["enable *"])
+
+    def test_contract_enabled_units_resolve_to_enabled(self):
+        for unit in self.contract_services()["enabled"]:
+            with self.subTest(unit=unit):
+                self.assertEqual(preset_verdict(unit)[0], "enable")
+
+    def test_contract_disabled_and_masked_units_resolve_to_disabled(self):
+        services = self.contract_services()
+        for unit in services["disabled"] + services["masked"]:
+            with self.subTest(unit=unit):
+                self.assertEqual(preset_verdict(unit)[0], "disable")
+
+    def test_configure_services_applies_the_presets(self):
+        # The build applies the same presets first boot would, instead of a
+        # per-unit enable list that can drift from them (#98, #1233).
         services = (ROOT / "scripts/configure-services.sh").read_text()
-        manifest = tomllib.loads((ROOT / "packages/utah.toml").read_text())["parity"]["packages"]
-        self.assertIn("dakota-config-firstboot-date", manifest)
+        self.assertRegex(services, r"(?m)^systemctl preset-all$")
+        self.assertNotRegex(services, r"(?m)^\s*systemctl (enable|disable) ")
+        self.assertNotIn("enable_unit", services)
+        uupd = services.index("mv -f /etc/uupd/config.json.rpmnew /etc/uupd/config.json")
+        self.assertLess(uupd, services.index("\nsystemctl preset-all\n"))
+
+    def test_the_reported_desktop_units_are_enabled(self):
+        # projectbluefin/utah#99: an installed unit that never started. #19: the
+        # first-boot Flatpak, setup, update and Tailscale units need an
+        # enablement policy too. #675, #1265: Dakota's first-boot date and
+        # booted-image units. #1266: Dakota's monthly-wallpaper units.
+        enabled = self.contract_services()["enabled"]
         for unit in (
+            "gdm.service",
+            "ublue-wallpaper-month.service",
+            "flatpak-preinstall.service",
+            "ublue-system-setup.service",
+            "bluefin-wallpaper-month.service",
+            "projectbluefin-countme.timer",
+            "uupd.timer",
+            "accounts-daemon.service",
             "ublue-firstboot-date.path",
             "ublue-booted-image.service",
             "bluefin-remove-installer.service",
         ):
             with self.subTest(unit=unit):
-                self.assertIn(f'"{unit}"', contract)
-                self.assertIn(f"enable {unit}", preset)
-                self.assertIn(f"enable_unit {unit}", services)
-                self.assertFalse((ROOT / "system_files/shared/usr/lib/systemd/system" / unit).exists())
-        # The service has no [Install]; only its path unit can be enabled.
-        self.assertNotIn('"ublue-firstboot-date.service"', contract.split("[services]", 1)[1])
-
-    def test_dakota_gnome_system_units_enabled_in_contract_preset_and_script(self):
-        # Dakota inherits these from gnome-build-meta's 80-gnome.preset.
-        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
-        preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset").read_text()
-        services = (ROOT / "scripts/configure-services.sh").read_text()
-        for unit in ("colord.service", "accounts-daemon.service"):
-            with self.subTest(unit=unit):
-                self.assertIn(f"enable {unit}\n", preset)
-                self.assertIn(f"enable_unit {unit}\n", services)
-        # colord has no [Install] section in the factory build, so the image
-        # contract cannot require it to be enabled.
-        self.assertNotIn("colord.service", contract["services"]["enabled"])
-        self.assertIn("accounts-daemon.service", contract["services"]["enabled"])
+                self.assertIn(unit, enabled)
+                self.assertEqual(preset_verdict(unit)[0], "enable")
+        # colord.service has no [Install] section in the factory build, so
+        # the contract cannot require it enabled; the preset still turns it on.
+        self.assertNotIn("colord.service", enabled)
+        self.assertEqual(preset_verdict("colord.service")[0], "enable")
+        # dakota-config-firstboot-date ships these units (#1265); Utah keeps no copy.
+        parity = tomllib.loads((ROOT / "packages/utah.toml").read_text())["parity"]["packages"]
+        self.assertIn("dakota-config-firstboot-date", parity)
+        for unit in ("ublue-firstboot-date.path", "ublue-booted-image.service",
+                     "bluefin-remove-installer.service"):
+            self.assertFalse((ROOT / "system_files/shared/usr/lib/systemd/system" / unit).exists())
 
     def test_dakota_gnome_user_units_enabled_in_contract_preset_and_script(self):
         # Dakota inherits these from gnome-build-meta's user presets.
@@ -490,24 +548,101 @@ class ServiceMaskParityTests(unittest.TestCase):
                 self.assertIn(f"enable {unit}\n", preset)
                 self.assertIn(unit, user_loop)
 
-    def test_sysstat_collection_is_opt_in_like_dakota(self):
-        # Dakota's elements/bluefin/sysstat.bst presets all four units off.
-        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
-        preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset").read_text()
-        services = (ROOT / "scripts/configure-services.sh").read_text()
-        for unit in (
-            "sysstat.service",
-            "sysstat-collect.timer",
-            "sysstat-summary.timer",
-            "sysstat-rotate.timer",
+    def test_dakota_and_gnome_os_disables_are_carried(self):
+        # GNOME OS's openssh/wpa-supplicant/80-network presets and Dakota's
+        # 50-*/80-* presets (sysstat, libvirt, rpcbind, pcrlock, ...).
+        for unit, verdict in (
+            ("sshd.service", "disable"),
+            ("systemd-networkd.service", "disable"),
+            ("wpa_supplicant@.service", "disable"),
+            ("iscsid.socket", "disable"),
+            ("libvirtd.socket", "disable"),
+            ("virtqemud.service", "disable"),
+            ("nfs-server.service", "disable"),
+            ("rpcbind.socket", "disable"),
+            ("lm_sensors.service", "disable"),
+            ("kanata.service", "disable"),
+            ("kmscon.service", "disable"),
+            ("systemd-pcrlock-firmware-code.service", "disable"),
+            ("systemd-pcrlock-machine-id.service", "enable"),
+            ("sysstat.service", "disable"),
+            ("sysstat-collect.timer", "disable"),
+            ("sysstat-summary.timer", "disable"),
+            ("sysstat-rotate.timer", "disable"),
         ):
             with self.subTest(unit=unit):
-                self.assertIn(unit, contract["services"]["disabled"])
-                self.assertNotIn(unit, contract["services"]["enabled"])
-                self.assertIn(f"disable {unit}\n", preset)
-                self.assertNotIn(f"enable {unit}\n", preset)
-                self.assertIn(f"disable_unit {unit}\n", services)
-                self.assertNotIn(f"enable_unit {unit}\n", services)
+                self.assertEqual(preset_verdict(unit)[0], verdict)
+
+    def test_units_hummingbird_enables_are_disabled_before_its_presets(self):
+        # Hummingbird's 90-default.preset enables these; only a line in a file
+        # sorting before it can turn them off.
+        for unit in (
+            "sshd.service",
+            "multipathd.service",
+            "lm_sensors.service",
+            "iscsid.socket",
+            "iscsiuio.socket",
+        ):
+            with self.subTest(unit=unit):
+                self.assertEqual(preset_verdict(unit), ("disable", "85-utah-desktop.preset"))
+
+    def test_first_boot_cannot_reset_build_time_state(self):
+        # authselect-first-boot.service re-selects @system-default on first
+        # boot, dropping the features configure-services.sh enables; livesys
+        # is live-media setup; dbus-daemon would take dbus-broker's alias.
+        for unit in ("authselect-first-boot.service", "livesys.service", "dbus-daemon.service"):
+            with self.subTest(unit=unit):
+                self.assertEqual(preset_verdict(unit)[0], "disable")
+
+    def test_dakota_upstream_preset_units_enabled_in_contract_and_presets(self):
+        # Units upstream presets enable that a booted Dakota runs (#1271,
+        # #1272); enable-by-default turns them on and the contract asserts it.
+        enabled = self.contract_services()["enabled"]
+        for unit in (
+            "nvmf-autoconnect.service",
+            "nvmefc-boot-connections.service",
+            "systemd-imdsd.socket",
+            "speech-dispatcherd.service",
+            "podman.service",
+            "netavark-dhcp-proxy.socket",
+            "netavark-dhcp-proxy.service",
+            "netavark-firewalld-reload.service",
+            "netavark-nftables-reload.service",
+        ):
+            with self.subTest(unit=unit):
+                self.assertIn(unit, enabled)
+                self.assertEqual(preset_verdict(unit)[0], "enable")
+
+    def test_mdadm_timers_stay_off_beside_raid_check(self):
+        # raid-check.timer is the scrub scheduler (#1268); mdadm's own timers
+        # would scrub the same arrays again (#1271).
+        disabled = self.contract_services()["disabled"]
+        for unit in ("mdcheck_start.timer", "mdcheck_continue.timer", "mdmonitor-oneshot.timer"):
+            with self.subTest(unit=unit):
+                self.assertIn(unit, disabled)
+                self.assertEqual(preset_verdict(unit), ("disable", "98-utah-enable-default.preset"))
+
+    def test_nfs_client_target_enabled_with_gssproxy_state_dirs(self):
+        # Dakota enables nfs-client.target; on Utah it pulls in gssproxy, whose
+        # StateDirectory= systemd cannot create under SELinux on the stripped
+        # /var, so tmpfiles must ship the RPM's directories (#1269).
+        # Hummingbird's 90-default.preset enables the target; no Utah preset
+        # may turn it off first.
+        self.assertIn("nfs-client.target", self.contract_services()["enabled"])
+        self.assertEqual(preset_verdict("nfs-client.target"), ("enable", "98-utah-enable-default.preset"))
+        tmpfiles = [
+            line.split()
+            for line in (ROOT / "system_files/shared/usr/lib/tmpfiles.d/utah-gssproxy.conf").read_text().splitlines()
+            if line.strip() and not line.startswith("#")
+        ]
+        self.assertEqual(
+            tmpfiles,
+            [
+                ["d", "/var/lib/gssproxy", "0755", "root", "root", "-"],
+                ["d", "/var/lib/gssproxy/clients", "0700", "root", "root", "-"],
+                ["d", "/var/lib/gssproxy/rcache", "0700", "root", "root", "-"],
+            ],
+        )
 
     def test_dakota_parity_patch_targets_are_required_files(self):
         contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
@@ -1044,14 +1179,12 @@ class DakotaCommonEditTests(unittest.TestCase):
     def test_month_units_ship_as_dakota_and_are_enabled(self):
         import os
 
-        contract = (ROOT / "contracts/bluefin-desktop.toml").read_text()
-        preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset").read_text()
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
         for unit in ("ublue-wallpaper-month.service", "bluefin-wallpaper-month.service"):
             with self.subTest(unit=unit):
                 self.assertTrue((ROOT / "system_files/shared/usr/lib/systemd/system" / unit).is_file())
-                self.assertIn(f'"{unit}"', contract)
-                self.assertIn(f"enable {unit}", preset)
-                self.assertIn(f"enable_unit {unit}", self.SERVICES)
+                self.assertIn(unit, contract["services"]["enabled"])
+                self.assertEqual(preset_verdict(unit)[0], "enable")
         sync = ROOT / "system_files/shared/usr/libexec/bluefin-wallpaper-month-sync"
         self.assertTrue(os.access(sync, os.X_OK))
 

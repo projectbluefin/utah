@@ -137,6 +137,8 @@ files = [
   # Dakota desktop parity (#675): first-boot install-date stamping and the
   # booted-image snapshot for fastfetch, plus the one-shot removal of the live
   # ISO's installer Flatpak, all from dakota-config-firstboot-date (#1265).
+  # The install date is written once timesyncd reports a sync (Dakota's
+  # ublue-firstboot-date.path, #1228).
   "/usr/lib/systemd/system/ublue-firstboot-date.path",
   "/usr/lib/systemd/system/ublue-firstboot-date.service",
   "/usr/bin/ublue-firstboot-date",
@@ -148,6 +150,8 @@ files = [
   "/usr/lib/systemd/system/ublue-wallpaper-month.service",
   "/usr/lib/systemd/system/bluefin-wallpaper-month.service",
   "/usr/libexec/bluefin-wallpaper-month-sync",
+  # GNOME OS's fallback NTP server for systemd-timesyncd (#1228).
+  "/usr/lib/systemd/timesyncd.conf.d/10-gnome-os-fallback-ntp.conf",
   # Common files configure-services.sh patches or checks for Dakota parity.
   # file_contains skips missing files, so list them here to fail the build if
   # Common drops one.
@@ -184,6 +188,27 @@ files = [
   "/usr/lib/sysusers.d/bluefin-udev-groups.conf",
   "/usr/lib/udev/rules.d/90-hide-composefs-loop.rules",
   "/usr/lib/systemd/journald.conf.d/90-persistent-journal.conf",
+  # Dakota's zswap and disk-backed swapfile (elements/bluefin/zswap-config.bst,
+  # swapfile.bst), plus the zstd initramfs driver and swapfile_t label Utah's
+  # kernel and SELinux need (#1224). The swap unit is wanted statically.
+  "/usr/lib/bootc/kargs.d/20-zswap.toml",
+  "/usr/lib/sysctl.d/60-zswap.conf",
+  "/usr/lib/dracut/dracut.conf.d/50-utah-zswap-zstd.conf",
+  "/usr/libexec/bluefin-swapfile-init",
+  "/usr/lib/systemd/system/bluefin-swapfile-init.service",
+  "/usr/lib/systemd/system/var-swap-swapfile.swap",
+  "/usr/lib/systemd/system/swap.target.wants/var-swap-swapfile.swap",
+  "/usr/share/selinux/packages/utah-swapfile.cil",
+  # Dakota's /home bind mount (elements/bluefin/bindmounts.bst) and the
+  # passwd migration for legacy /var/home fields (migrate-var-home-passwd.bst),
+  # #1234. home.mount is wanted statically by local-fs.target.
+  "/usr/lib/systemd/system/home.mount",
+  "/usr/lib/systemd/system/local-fs.target.wants/home.mount",
+  "/usr/libexec/bluefin-migrate-var-home-passwd",
+  "/usr/lib/systemd/system/bluefin-migrate-var-home-passwd.service",
+  "/usr/lib/systemd/system-preset/80-bluefin-migrate-var-home-passwd.preset",
+  # Dakota's devmode helper behind `ujust setup-virtualization` (#1232).
+  "/usr/libexec/dakota-devmode",
   # GNOME OS firewall zone and fallback DNS (gnome-os-config subpackages).
   "/usr/lib/firewalld/zones/lax.xml",
   "/usr/lib/systemd/resolved.conf.d/50-gnome-os-fallback-dns.conf",
@@ -198,6 +223,13 @@ files = [
   "/usr/lib/systemd/system/uupd-manual.service",
   "/etc/polkit-1/rules.d/uupd.rules",
   "/etc/uupd/config.json",
+  # Dakota ships freedesktop-sdk's git-lfs with a system LFS filter; the
+  # git-lfs RPM's %post writes it (`git lfs install --system`).
+  "/etc/gitconfig",
+  # GNOME OS's opensc.module (#1257): keeps opensc out of GNOME's own daemons.
+  "/etc/pkcs11/modules/opensc.module",
+  # Common's PipeWire drop-in; Utah no longer overrides it (#1267).
+  "/usr/share/pipewire/pipewire-pulse.conf.d/50-bluefin-bt-switch.conf",
 ]
 
 [configuration.file_contains]
@@ -223,6 +255,22 @@ files = [
 "/usr/share/glib-2.0/schemas/zz0-bluefin-modifications.gschema.override" = [
   "io.github.kolunmi.Bazaar.desktop",
   "picture-uri='file:///usr/share/backgrounds/bluefin/",
+]
+# GNOME OS's fallback NTP server; Hummingbird's compiled-in pool does not
+# resolve publicly (#594, #1228).
+"/usr/lib/systemd/timesyncd.conf.d/10-gnome-os-fallback-ntp.conf" = [
+  "FallbackNTP=gnome.pool.ntp.org",
+]
+# dakota-config-firstboot-date's path unit waits for timesyncd's first sync
+# (#1228); the drop-ins give both units Utah's descriptions.
+"/usr/lib/systemd/system/ublue-firstboot-date.path" = [
+  "PathExists=/run/systemd/timesync/synchronized",
+]
+"/usr/lib/systemd/system/ublue-firstboot-date.path.d/10-utah-description.conf" = [
+  "Description=Record Utah installation date once the clock is synchronized",
+]
+"/usr/lib/systemd/system/ublue-firstboot-date.service.d/10-utah-description.conf" = [
+  "Description=Record Utah first-boot installation date",
 ]
 # Dakota parity (#675): fastfetch reads the first-boot install date stamped
 # by ublue-firstboot-date.service instead of inferring age from /var/log.
@@ -314,6 +362,28 @@ files = [
   "g plugdev",
   "g nintendo_switch",
 ]
+# Dakota parity (#1224): zswap in front of /var/swap/swapfile.
+"/usr/lib/bootc/kargs.d/20-zswap.toml" = [
+  '"zswap.enabled=1"',
+  '"zswap.compressor=zstd"',
+  '"zswap.max_pool_percent=20"',
+  '"zswap.shrinker_enabled=1"',
+]
+"/usr/lib/sysctl.d/60-zswap.conf" = [
+  "vm.swappiness = 100",
+  "vm.watermark_scale_factor = 200",
+  "vm.watermark_boost_factor = 0",
+]
+"/usr/lib/dracut/dracut.conf.d/50-utah-zswap-zstd.conf" = [
+  'add_drivers+=" zstd "',
+]
+"/usr/lib/systemd/system/var-swap-swapfile.swap" = [
+  "What=/var/swap/swapfile",
+  "Requires=bluefin-swapfile-init.service",
+]
+"/usr/libexec/bluefin-swapfile-init" = [
+  'restorecon "${SWAPFILE}"',
+]
 # Dakota parity: GNOME OS's lax zone is the default, with loose IPv6 rpfilter.
 "/etc/firewalld/firewalld.conf" = [
   "DefaultZone=lax",
@@ -339,6 +409,30 @@ files = [
 ]
 "/etc/uupd/config.json" = [
   '"bat-min-percent": 20',
+]
+# Dakota parity (#1259): freedesktop-sdk components/git-lfs.bst appends this
+# [filter "lfs"] stanza to /etc/gitconfig; Hummingbird's git-lfs writes the
+# same four keys from its %post, so Utah asserts it rather than overlaying it.
+"/etc/gitconfig" = [
+  '[filter "lfs"]',
+  "required = true",
+  "clean = git-lfs clean -- %f",
+  "smudge = git-lfs smudge -- %f",
+  "process = git-lfs filter-process",
+]
+# Dakota parity (#1257): gnome-build-meta files/opensc/opensc.module. Smart
+# cards grant exclusive access, so GNOME OS keeps the user daemons from holding
+# the card open and starving GnuPG and other PIN users.
+"/etc/pkcs11/modules/opensc.module" = [
+  "module: opensc-pkcs11.so",
+  "disable-in: goa-daemon gsd-smartcard evolution-source-registry evolution-calendar-factory gnome-shell",
+]
+# PipeWire 1.6 rejects a conf.d file with no assignments ("error loading
+# config ... Invalid argument" on every login). Common's copy carries an empty
+# pulse.cmd array since sha256:9faad517, so Utah dropped its override (#1267);
+# this keeps a Common regression from bringing the login error back.
+"/usr/share/pipewire/pipewire-pulse.conf.d/50-bluefin-bt-switch.conf" = [
+  "pulse.cmd = [ ]",
 ]
 
 [flatpak]
@@ -463,6 +557,12 @@ enabled = [
   "avahi-daemon.service",
   "avahi-daemon.socket",
   "bluetooth.service",
+  # Rewrites legacy /var/home passwd fields before any login (#1234).
+  "bluefin-migrate-var-home-passwd.service",
+  # VM guest agents, enabled as on Dakota (80-open-vm-tools.preset and its
+  # qemu-guest-agent unit); each starts only on its hypervisor (#1232).
+  "vmtoolsd.service",
+  "qemu-guest-agent.service",
   # Dakota desktop parity (#675, #1265).
   "ublue-firstboot-date.path",
   "ublue-booted-image.service",
@@ -483,7 +583,8 @@ enabled = [
   "accounts-daemon.service",
   "ModemManager.service",
   "power-profiles-daemon.service",
-  # Dakota's effective service state (#1233); see 85-utah-desktop.preset.
+  # Dakota's effective service state (#1233): on by enable-by-default
+  # (98-utah-enable-default.preset), measured on a booted Dakota.
   "rtkit-daemon.service",
   "uresourced.service",
   "upower.service",
@@ -511,12 +612,41 @@ enabled = [
   "systemd-storage-fs.socket",
   "systemd-udev-load-credentials.service",
   "systemd-userdb-load-credentials.service",
+  # More upstream preset units a booted Dakota runs, on by enable-by-default
+  # (#1271, #1272). nvme-cli's two are each gated on NVMe-oF config or FC
+  # hardware by their own Condition.
+  "nvmf-autoconnect.service",
+  "nvmefc-boot-connections.service",
+  "systemd-imdsd.socket",
+  "speech-dispatcherd.service",
+  # NFS client services, as on Dakota (#1269): Hummingbird's 90-default.preset
+  # enables the target once 85-utah-desktop.preset no longer disables it.
+  "nfs-client.target",
   "thermald.service",
   "projectbluefin-countme.timer",
   "switcheroo-control.service",
   "ublue-system-setup.service",
   "uupd.timer",
+  "tailscaled.service",
+  "firewalld.service",
+  "fwupd-refresh.timer",
+  # Hummingbird's 90-default.preset disables it; 85-utah-desktop.preset
+  # turns it back on (#363).
   "systemd-boot-update.service",
+  # Time sync is systemd-timesyncd, as on GNOME OS and Dakota (#1228);
+  # Hummingbird's 90-default.preset disables it, 85-utah-desktop.preset
+  # turns it back on.
+  "systemd-timesyncd.service",
+  # Dakota's 80-pcrlock.preset; no-ops unless booted from a measured UKI.
+  "systemd-pcrlock-make-policy.service",
+  "systemd-pcrlock-machine-id.service",
+  "systemd-pcrlock-secureboot-authority.service",
+  # Container networking and API, as on Dakota (#1272).
+  "podman.service",
+  "netavark-dhcp-proxy.socket",
+  "netavark-dhcp-proxy.service",
+  "netavark-firewalld-reload.service",
+  "netavark-nftables-reload.service",
 ]
 # Per-user services, checked with `systemctl --global is-enabled`. Hummingbird's
 # user preset disables everything but dbus; without these an installed Utah had
@@ -542,7 +672,8 @@ masked = [
 ]
 # Network daemons added by the parity package rollout (#868): dnsmasq, rpcbind,
 # autofs, openvpn, saned (sane-backends) and ipp-usb. None is meant to run on a
-# desktop; Hummingbird's 99-default-disable keeps them off. This list is the
+# desktop. Utah enables every unit no preset turns off (#1233), so
+# 98-utah-enable-default.preset disables each of them. This list is the
 # machine-checked half of that promise -- without it the build passes as long as
 # the enabled and masked sets are right, and any one of these flipping on would
 # go undetected. Assert they stay disabled. Names are the units the packages
@@ -550,6 +681,16 @@ masked = [
 # also socket-activated, and saned is socket-activated from sane-backends-daemon
 # (not installed today, so saned.socket reports not-found until it is).
 disabled = [
+  # Owner decision on #1238: no homed. homectl's console prompt would run
+  # before GDM on an install with no user, ahead of gnome-initial-setup.
+  "systemd-homed-firstboot.service",
+  # Dakota's 80-libvirt.preset (carried in 98-utah-enable-default.preset):
+  # libvirt stays off until `ujust setup-virtualization` (#1232). Absent units
+  # count as off, so these hold once the factory publishes libvirt.
+  "libvirtd.socket",
+  "virtqemud.socket",
+  "virtqemud.service",
+  "virtnetworkd.socket",
   "dnsmasq.service",
   "rpcbind.service",
   "rpcbind.socket",
@@ -577,4 +718,30 @@ disabled = [
   # Utah-only units Dakota does not run (#1233).
   "multipathd.service",
   "lm_sensors.service",
+  # GNOME OS and Dakota presets (98-utah-enable-default.preset): no
+  # systemd-networkd beside NetworkManager, no NFS or iSCSI server side.
+  "systemd-networkd.service",
+  "systemd-networkd.socket",
+  "nfs-server.service",
+  "iscsid.socket",
+  # Enable-by-default must not reach these (#1233): authselect-first-boot
+  # would reset the build's authselect features on first boot, livesys is
+  # live-media setup, dbus-daemon would claim dbus-broker's alias, nftables
+  # loads a ruleset beside firewalld's, and cups-browsed listens on UDP 631.
+  "authselect-first-boot.service",
+  "authselect-apply-changes.service",
+  "livesys.service",
+  "livesys-late.service",
+  "dbus-daemon.service",
+  "nftables.service",
+  "cups-browsed.service",
+  "powertop.service",
+  # chrony is not installed (#1228); absent counts as off, and this fails the
+  # build if a dependency ever pulls it back in enabled beside timesyncd.
+  "chronyd.service",
+  # mdadm's scrub and reminder timers, which Dakota runs: raid-check.timer
+  # scrubs instead (#1268, #1271); see 98-utah-enable-default.preset.
+  "mdcheck_start.timer",
+  "mdcheck_continue.timer",
+  "mdmonitor-oneshot.timer",
 ]

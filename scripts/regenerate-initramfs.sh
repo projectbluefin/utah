@@ -79,3 +79,15 @@ want="$(sha256sum <"${sysroot}${watermark}")"
 got="$(lsinitrd -f "${watermark#/}" "$image" | sha256sum)"
 [[ "$got" == "$want" ]] || fail "${image} carries a different ${watermark} than the image"
 echo "${image}: Plymouth ${theme} theme (${plugin}) and its watermark present"
+
+# zswap.compressor=zstd (/usr/lib/bootc/kargs.d/20-zswap.toml) is resolved
+# while the kernel initialises, before the root filesystem is mounted, so a
+# kernel that builds zstd as a module (Hummingbird's: CONFIG_CRYPTO_ZSTD=m)
+# can only load it from the initramfs; dracut.conf.d/50-utah-zswap-zstd.conf
+# adds it. Without it zswap falls back to lzo with only a kernel log line
+# (#1224). A kernel with zstd built in, or without it, has nothing to carry.
+if compgen -G "${sysroot}/usr/lib/modules/${kver}/kernel/crypto/zstd.ko*" >/dev/null; then
+    in_initramfs "usr/lib/modules/${kver}/kernel/crypto/zstd[.]ko([.](xz|zst|gz))?" \
+        || fail "${image} lacks the zstd module that zswap.compressor=zstd needs"
+    echo "${image}: zstd module for zswap present"
+fi
