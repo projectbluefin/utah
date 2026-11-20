@@ -12,7 +12,6 @@
 # Sections:
 #   [multimedia_overrides]   packages synced from fedora-multimedia repo
 #   [fedora]                 base Fedora packages, all versions
-#   [fedora_v42]             additions for Fedora 42 only
 #   [fedora_v43]             additions for Fedora 43 only
 #   [fedora_v44]             additions for Fedora 44 only
 #   [excluded]               packages removed from the base image
@@ -45,7 +44,6 @@ packages = [
     "anaconda-live",
     "bootc",
     "bootupd",
-    "containerd",
     "ddcutil",
     "distrobox",
     "dracut-live",
@@ -100,18 +98,10 @@ packages = [
     "xdg-terminal-exec",
     "xorriso",
     "zenity",
-    "zsh",
-]
-
-[fedora_v42]
-# TODO: remove when F42 is dropped
-packages = [
-    "evolution-ews-core",
 ]
 
 [fedora_v43]
 packages = [
-    "evolution-ews-core",
     "gnupg2-scdaemon",
 ]
 
@@ -123,6 +113,13 @@ packages = [
 [excluded]
 # Packages removed from the base image — conflicts with or replaced by image content.
 packages = [
+    # Hummingbird's base ships chrony; Utah syncs time with systemd-timesyncd
+    # as GNOME OS and Dakota do (#1228).
+    "chrony",
+    # Dakota ships neither containerd nor runc; containers run on podman and
+    # crun (#1232). runc only ever arrived as containerd's dependency.
+    "containerd",
+    "runc",
     "default-fonts-cjk-sans",
     "fedora-bookmarks",
     "fedora-chromium-config",

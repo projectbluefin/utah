@@ -12,13 +12,13 @@
         "alsa-tools-firmware",
         "bootc",
         "bootupd",
-        "containerd",
         "ddcutil",
         "distrobox",
         "dracut-live",
         "evtest",
         "fastfetch",
         "firewall-config",
+        "fish",
         "flatpak-spawn",
         "fzf",
         "gcc",
@@ -63,8 +63,7 @@
         "wl-clipboard",
         "xdg-terminal-exec",
         "xorriso",
-        "zenity",
-        "zsh"
+        "zenity"
       ],
       "title": "Base manifest",
       "transient": false
@@ -170,7 +169,6 @@
         "exfatprogs",
         "f2fs-tools",
         "fcitx5-gtk",
-        "ffmpegthumbnailer",
         "fido2-tools",
         "file",
         "foo2zjs",
@@ -182,6 +180,7 @@
         "gamemode",
         "gdbm",
         "ghostscript",
+        "git-lfs",
         "glycin-thumbnailer",
         "gnome-disk-utility",
         "gnome-epub-thumbnailer",
@@ -196,6 +195,7 @@
         "google-noto-sans-symbols-2-fonts",
         "google-noto-serif-vf-fonts",
         "gssproxy",
+        "gst-thumbnailers",
         "gstreamer1-plugin-dav1d",
         "gstreamer1-plugin-libav",
         "gstreamer1-plugin-openh264",
@@ -213,9 +213,11 @@
         "hplip-common",
         "hplip-libs",
         "htop",
+        "hyperv-daemons",
         "ibus-gtk4",
         "ibus-hangul",
         "ibus-libpinyin",
+        "ifuse",
         "integritysetup",
         "intel-gmmlib",
         "intel-mediasdk",
@@ -267,10 +269,12 @@
         "numactl",
         "nvme-cli",
         "nvtop",
+        "open-vm-tools",
         "openal-soft",
         "openconnect",
         "openh264",
         "openldap-clients",
+        "opensc",
         "openvpn",
         "orca",
         "pam-u2f",
@@ -303,6 +307,7 @@
         "python3-charset-normalizer",
         "python3-idna",
         "python3-pip",
+        "qemu-guest-agent",
         "qt6-qtbase",
         "quota",
         "rc-tools",
@@ -323,6 +328,7 @@
         "speech-dispatcher",
         "speech-dispatcher-espeak-ng",
         "speech-dispatcher-utils",
+        "spice-vdagent",
         "splix",
         "sqlite",
         "stix-fonts",
@@ -337,6 +343,7 @@
         "thermald",
         "tiptop",
         "tmux",
+        "toolbox",
         "totem-pl-parser",
         "tpm2-tools",
         "trace-cmd",
@@ -396,9 +403,7 @@
         "nss-mdns",
         "systemd-boot-unsigned",
         "systemd-resolved",
-        "tailscale",
-        "zram-generator",
-        "zram-generator-defaults"
+        "tailscale"
       ],
       "title": "Desktop services",
       "transient": false
@@ -418,8 +423,8 @@
     }
   ],
   "totals": {
-    "installed": 361,
-    "unavailable": 6
+    "installed": 366,
+    "unavailable": 9
   },
   "unavailable": [
     {
@@ -429,20 +434,10 @@
       "name": "anaconda-live"
     },
     {
-      "issues": [],
-      "name": "evolution-ews-core"
-    },
-    {
       "issues": [
         35
       ],
       "name": "firefox"
-    },
-    {
-      "issues": [
-        419
-      ],
-      "name": "fish"
     },
     {
       "issues": [
@@ -451,10 +446,30 @@
       "name": "grub2-efi-x64-cdboot"
     },
     {
+      "issues": [],
+      "name": "libvirt-client"
+    },
+    {
+      "issues": [],
+      "name": "libvirt-daemon-config-network"
+    },
+    {
+      "issues": [],
+      "name": "libvirt-daemon-kvm"
+    },
+    {
+      "issues": [],
+      "name": "qemu-kvm"
+    },
+    {
       "issues": [
         83
       ],
       "name": "slitherer"
+    },
+    {
+      "issues": [],
+      "name": "virtiofsd"
     }
   ]
 }

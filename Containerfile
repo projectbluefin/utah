@@ -229,14 +229,9 @@ RUN --mount=type=bind,from=v4l2loopback,source=/out,target=/tmp/utah-v4l2loopbac
     cp -a /tmp/utah-inputs/tmp/utah-local/. / && \
     cp -a /tmp/utah-v4l2loopback/. / && \
     rm -rf /tmp/utah-scripts /tmp/utah-common /tmp/utah-bluefin /tmp/utah-brew /tmp/utah-artwork /tmp/utah-local && \
-    rm -f /etc/dconf/db/distro.d/05-bluefin-searchlight-extension && \
     curl -fsSL "${GENERIC_LOGOS_URL}" -o /tmp/generic-logos.rpm && \
     echo "${GENERIC_LOGOS_SHA256}  /tmp/generic-logos.rpm" | sha256sum --check --strict && \
     /usr/local/libexec/utah-pin-build-mtimes
-# The last line drops Common's settings for the Search Light extension. Utah no
-# longer ships that extension: its shader code calls set_shader_source, which
-# GNOME 51 removed, so it errored at load and failed the ISO end-to-end test.
-# Settings for an extension the image does not carry are noise in dconf.
 
 # This first check covers the flavor-independent contract only, which is why it
 # pins IMAGE_FLAVOR=main. verify-rpm-contract.py reads IMAGE_FLAVOR from the
@@ -338,7 +333,8 @@ ARG UUPD_SHA256=d8d420a153de11589abad3292eef2131a75ac3487414065a2661a558ef0d027c
 ARG UUPD_SERVICE_SHA256=65dd2b64dcb6a9f77227612aa624ef17fe43b32eb835b51d7d22a22755dc21a8
 ARG UUPD_TIMER_SHA256=bbb5f098ec33d047bdef571e0bc112364df157e0f92d73e0febab703c4a3c099
 
-# Hummingbird defaults to a server preset and disables unlisted services.
+# Hummingbird defaults to a server preset that disables unlisted services;
+# Utah's presets enable them instead, as Dakota does (#1233).
 # configure-services is the Utah equivalent of bluefin-lts's 40-services.sh:
 # it applies the desktop service policy, login defaults, update policy, and
 # removes the extension build toolchain before the final cleanup.
@@ -380,10 +376,6 @@ RUN --mount=type=bind,from=artwork,source=/out/branding,target=/tmp/utah-artwork
     /usr/local/libexec/utah-verify-desktop-contract /usr/share/utah/bluefin-desktop.toml && \
     /usr/local/libexec/utah-mirror-shim && \
     /usr/local/libexec/utah-verify-efi-chain && \
-    # Preserve the vendor pool and add a public fallback (#594), before
-    # generated metadata is normalized for this layer.
-    (grep -q '^pool pool\.ntp\.org' /etc/chrony.conf || \
-      echo 'pool pool.ntp.org iburst' >> /etc/chrony.conf) && \
     rm -f /usr/lib/sysimage/libdnf5/transaction_history.sqlite \
           /usr/lib/sysimage/libdnf5/transaction_history.sqlite-shm \
           /usr/lib/sysimage/libdnf5/transaction_history.sqlite-wal \
@@ -451,16 +443,26 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
 # /var/home is created after clean-stage (which strips all of /var except
 # cache) but before lint, so lint still proves the directory is covered by a
 # tmpfiles.d entry (utah-home.conf). The directory must ship in the image:
-# /home is a symlink to var/home and useradd ships HOME=/home (#576), so any
-# `useradd --create-home` fails on a dangling symlink -- the installer chroot
-# on a fresh install, the tacklebox customize container, and the live ISO
-# build all broke with "cannot create directory /home", exit 12 (#602).
+# useradd ships HOME=/home (#576) and home.mount binds /var/home over /home,
+# so the homes live there -- the installer pre-creates it in the stateroot,
+# and the tacklebox customize container and live ISO build create liveuser's
+# home in it (#602).
+#
 # GRUB can report the ESP to systemd, which chooses /efi when /boot is busy.
 # The immutable root cannot create that mountpoint at boot (#1326).
+#
+# /home itself becomes an empty directory, Dakota's bind-mount point (#1234),
+# in place of Hummingbird's /home -> var/home symlink. It must stay empty:
+# home.mount hides whatever the image carries there.
 RUN --mount=type=bind,from=inputs,source=/tmp/utah-scripts,target=/utah-build-tools,ro \
     /usr/local/libexec/utah-fix-home-labels --check && \
     /usr/local/libexec/utah-clean-stage && \
     mkdir -p /var/home /efi && \
+    if [ -L /home ]; then rm /home; fi && \
+    mkdir -p -m 0755 /home && \
+    if [ -n "$(ls -A /home)" ]; then \
+      echo "ERROR: /home is not empty; home.mount would hide its contents" >&2; exit 1; \
+    fi && \
     bootc container lint --fatal-warnings --skip nonempty-boot && \
     python3 /utah-build-tools/pin-build-mtimes.py
 

@@ -239,6 +239,15 @@ packages = [
     "crypto-policies-scripts",
     "python3-pip",
     "systemd-container",
+    # Virtualization, as on Dakota (#1232): toolbox and the guest agents for
+    # QEMU (with SPICE), VMware and Hyper-V. The guest agents start only on
+    # their hypervisor (udev or ConditionVirtualization). qemu-kvm, virtiofsd
+    # and libvirt are still in [unavailable] (utah-packages#1021).
+    "qemu-guest-agent",
+    "spice-vdagent",
+    "open-vm-tools",
+    "hyperv-daemons",
+    "toolbox",
     # pam_pwquality's dictionary. Fedora's Silverblue base pulls it in;
     # Hummingbird's cracklib does not require it. Without it libpwquality
     # fails every candidate with "error loading dictionary", so passwd (via
@@ -280,18 +289,6 @@ packages = [
     "pipewire-utils",
     "pulseaudio-utils",
     "glycin-thumbnailer",
-    # Video thumbnailer for the media codec parity work (#383). The factory
-    # published it after the Intel runtimes landed in #397, so it resolves
-    # today against the pinned factory repodata (sha256:0f8595d) + Hummingbird
-    # primary: ffmpegthumbnailer-libs and the libav*-free 9.0.1 libraries it
-    # links (libavcodec/libavformat/libavutil/libavfilter) come from the
-    # factory, plus libjpeg-turbo/libpng from Hummingbird. libavformat-free and
-    # libavfilter-free are new to the image and pull zeromq, libssh, and
-    # libvmaf from Hummingbird, so expect image growth. The other thumbnailers
-    # and GStreamer plugins (gnome-epub-thumbnailer, papers-thumbnailer,
-    # gstreamer1-plugin-libav, -dav1d, -bad-free, -ugly-free) are requested in
-    # the parity block below (#383).
-    "ffmpegthumbnailer",
     "samba-client",
     "samba-common-tools",
     "krb5-workstation",
@@ -363,6 +360,12 @@ packages = [
     "qt6-qtbase",
     "python3-charset-normalizer",
     "python3-idna",
+    # Dakota's git-lfs (#1259; freedesktop-sdk components/git-lfs.bst, pulled
+    # in by projectbluefin/dakota elements/bluefin/deps.bst). Hummingbird
+    # builds it. Its %post runs `git lfs install --system`, which writes the
+    # [filter "lfs"] stanza fdsdk's integration command appends to
+    # /etc/gitconfig; contracts/bluefin-desktop.toml asserts the stanza.
+    "git-lfs",
     # Factory-published Bluefin tools consumed from the pinned image (#263).
     # Everything below is built by utah-packages and is asserted in
     # [factory].parity. Flatpak-first applies: no RPM here duplicates a
@@ -492,7 +495,9 @@ packages = [
     # djvulibre, liba52, libmpeg2) are published, so the names they gated resolve.
     # sysstat ships for on-demand sar/iostat; its collection units are opt-in
     # and preset-disabled, as in Dakota (elements/bluefin/sysstat.bst; see
-    # 85-utah-desktop.preset). nfs-client.target is disabled there too.
+    # 98-utah-enable-default.preset). nfs-client.target is enabled, as on
+    # Dakota; tmpfiles.d/utah-gssproxy.conf gives gssproxy its state
+    # directories (#1269).
     "tmux",
     "powertop",
     "sysstat",
@@ -525,6 +530,25 @@ packages = [
     "papers-libs",
     "papers-thumbnailer",
     "papers-nautilus",
+    # iOS file access as Dakota ships it (#1261; projectbluefin/dakota
+    # elements/bluefin/ifuse.bst, 1.2.1): ifuse mounts an iPhone's media and
+    # app documents over libimobiledevice, which libimobiledevice-utils above
+    # already brings in.
+    "ifuse",
+    # Smart card tools and PKCS#11 module as Dakota ships them (#1257;
+    # freedesktop-sdk-extra components/opensc.bst, 0.27.1). pcscd.socket is
+    # already enabled. GNOME OS keeps the module out of the desktop's own
+    # daemons (gnome-build-meta files/opensc/opensc.module); Utah ships that
+    # file as /etc/pkcs11/modules/opensc.module, which outranks the RPM's copy.
+    "opensc",
+    # GNOME's video and audio thumbnailers, as Dakota ships them (#1262;
+    # gnome-build-meta core/gst-thumbnailers.bst, 1.1.0). They replace
+    # ffmpegthumbnailer, which Dakota doesn't ship: both register for
+    # video/mp4, video/webm, video/x-matroska and most other video types, and
+    # GNOME's thumbnail factory uses one thumbnailer per MIME type.
+    # gst-video-thumbnailer decodes through GStreamer, so H.264 previews go
+    # through openh264dec; ffmpegthumbnailer's ffmpeg-free has no H.264 (#1116).
+    "gst-thumbnailers",
     # Command-line, device and security tools Dakota ships (#1359), measured
     # by `just baselines` on 2026-11-20 (baselines/GAP.md). The monitoring
     # tools are the user-facing CLIs #1263 adopted. pam-u2f installs the
@@ -687,17 +711,12 @@ packages = [
 # no-Secure-Boot posture; GRUB and shim stay the Secure Boot story and keep
 # flowing through bootupd.
 #
-# zram-generator + zram-generator-defaults are the bare-metal swap (#384). The
-# audit found swapon -s empty and zramctl showing nothing: the server base
-# ships no swap at all. zram-generator-defaults ships
-# /usr/lib/systemd/zram-generator.conf, which the generator reads at boot, so
-# installing the two packages both adds the swap and enables the generator --
-# one zram device sized zram-size = min(ram, 8192), i.e. all of RAM capped at
-# 8 GiB. That is exactly what Bluefin ships (it has no custom zram config of
-# its own), so the size is the package default, not something restated here.
-# Not verified in-tree: #384's acceptance check is `swapon -s` showing a zram
-# device on a booted install, and no e2e job here asserts in-VM swap. Run it
-# against the next `testing` image before closing #384.
+# Swap is Dakota's zswap over a disk-backed /var/swap/swapfile (#1224), not
+# zram: the server base ships no swap at all (#384), and Dakota drops GNOME
+# OS's zram default. The swapfile, its init unit, the zswap kargs and sysctls
+# are files under system_files (desktop-contract's Dakota system defaults
+# reference), so no package is needed; zram-generator(-defaults) are gone.
+#
 # systemd-oomd runs enabled, as on Dakota (#1233): GNOME OS enables it through
 # its enable-by-default preset policy and ships no oomd.conf.d or ManagedOOM
 # drop-ins of its own, so Utah enables the daemon and adds no
@@ -716,8 +735,6 @@ packages = [
     "systemd-boot-unsigned",
     "systemd-resolved",
     "tailscale",
-    "zram-generator",
-    "zram-generator-defaults",
 ]
 
 [unavailable]
@@ -733,24 +750,6 @@ packages = [
 #
 # Each entry MUST carry a tracking issue: this list is the documented parity
 # debt, not a dumping ground for packages that are merely inconvenient.
-#
-# evolution-ews-core
-#
-#   The Exchange Web Services plugin for Evolution (fedora_v43 section of
-#   the base manifest). Building it requires both the evolution-data-server
-#   stack -- camel, libebook, libecal, libedata-book -- and Evolution itself,
-#   which is where evolution-mail and evolution-shell come from.
-#   utah-packages now builds evolution-data-server (3.61.3), so the EDS half of
-#   that closure is covered. The remaining gap is two recipes the factory does
-#   not have: evolution, and evolution-ews itself. Move this entry out of
-#   [unavailable] into the contract once utah-packages builds both; tracked by
-#   #10.
-#
-# fish
-#   Deliberately excluded, not blocked: the factory builds it and it resolves,
-#   but Bluefin classic shipping every shell was a mistake Utah does not repeat.
-#   Users who want fish get it from Homebrew. Tracked by #419. Dakota ships
-#   fish from GNOME OS; whether Utah follows is #1230.
 #
 # firefox
 #   Neither enabled repository provides the firefox RPM: the factory does
@@ -780,13 +779,26 @@ packages = [
 # pipewire-libs-extra is supplied by the pinned September 10 factory candidate
 # and returns to the install contract (#35).
 #
+# qemu-kvm, libvirt-daemon-kvm, libvirt-daemon-config-network, libvirt-client, virtiofsd
+#   Dakota installs QEMU/KVM, libvirt (its own elements/bluefin/libvirt.bst)
+#   and virtiofsd, libvirt off by preset until `ujust setup-virtualization`
+#   turns the modular virt*d sockets on (#1232). The kvm daemon set, the
+#   default NAT network that setup binds to the libvirt firewall zone, and
+#   virsh, which it uses to check the daemon. At factory c288398 none of them
+#   resolve: virtiofsd's qemu-common needs ipxe-roms-qemu, qemu-kvm's
+#   qemu-ui-sdl needs SDL2_image (libSDL2_image-2.0.so.0), and libvirt is not
+#   published. Tracked by utah-packages#1021. Move them into [parity] once
+#   `just check-repos` reports them stale.
 packages = [
     "grub2-efi-x64-cdboot",
     "anaconda-live",
-    "evolution-ews-core",
     "firefox",
-    "fish",
+    "libvirt-client",
+    "qemu-kvm",
+    "libvirt-daemon-config-network",
+    "libvirt-daemon-kvm",
     "slitherer",
+    "virtiofsd",
 ]
 
 # nvidia-container-toolkit was recorded here as a second gap. It is not one, and
@@ -933,7 +945,7 @@ parity = [
     "libva-intel-media-driver",
     "intel-mediasdk",
     "intel-vpl-gpu-rt",
-    "ffmpegthumbnailer",
+    "gst-thumbnailers",
     "totem-pl-parser",
     "gstreamer1-plugin-openh264",
     "openh264",
@@ -1042,6 +1054,8 @@ parity = [
     "papers-libs",
     "papers-thumbnailer",
     "papers-nautilus",
+    "ifuse",
+    "opensc",
     # Dakota image-scan tools (#1359).
     "tealdeer",
     "nethogs",

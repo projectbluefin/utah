@@ -55,6 +55,8 @@ class FlathubDescriptorIntegrityTests(unittest.TestCase):
         transport_and_services = '''\
 systemctl() { return 0; }
 authselect() { return 0; }
+semodule() { return 0; }
+matchpathcon() { echo "$1 system_u:object_r:swapfile_t:s0"; }
 dnf5() { return 0; }
 rpm() { return 1; }
 curl() {

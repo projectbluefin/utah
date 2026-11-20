@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SYSTEMD = ROOT / "system_files/shared/usr/lib/systemd"
 UNIT = SYSTEMD / "system/bootc-unified-storage.service"
 TIMER = SYSTEMD / "system/bootc-unified-storage.timer"
-PRESET = SYSTEMD / "system-preset/85-utah-desktop.preset"
+PRESETS = SYSTEMD / "system-preset"
 
 
 def load(path: Path = UNIT) -> configparser.ConfigParser:
@@ -38,11 +38,16 @@ def minutes(span: str) -> int:
 class UnifiedStorageUnitTests(unittest.TestCase):
     def test_nothing_at_boot_starts_the_service(self):
         # No [Install]: enabling it would put the multi-GB pull back into
-        # first boot. The timer is the only thing that starts it.
+        # first boot, so enable-by-default (#1233) cannot reach it. The timer,
+        # enabled by default and asserted by the desktop contract, is the only
+        # thing that starts it.
         self.assertFalse(load().has_section("Install"))
-        preset = PRESET.read_text().splitlines()
-        self.assertNotIn("enable bootc-unified-storage.service", preset)
-        self.assertIn("enable bootc-unified-storage.timer", preset)
+        for path in PRESETS.glob("*.preset"):
+            lines = path.read_text().splitlines()
+            self.assertNotIn("enable bootc-unified-storage.service", lines)
+            self.assertNotIn("disable bootc-unified-storage.timer", lines)
+        self.assertIn("enable *", (PRESETS / "98-utah-enable-default.preset").read_text().splitlines())
+        self.assertTrue(load(TIMER).has_section("Install"))
 
     def test_timer_starts_it_well_after_boot(self):
         timer = load(TIMER)

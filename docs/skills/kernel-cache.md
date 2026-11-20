@@ -225,11 +225,11 @@ every uinput step errors (smoke-b "Settings closes cleanly via Ctrl+Q" on the
 gaming flavors, #741). The script builds it as a module, as Fedora ships it,
 and gates on it like the options above.
 
-zram is missing too, but nothing errors outright: zram-generator asks for
-`/dev/zram0`, systemd waits 50s for `dev-zram0.device`, and the late boot
-pushes `geoclue.service` past its start timeout ("No failed systemd units at
-boot" on the gaming flavors, #741). A serial log with `Timed out waiting for
-device dev-zram0.device` means this. Built as a module with `ZSMALLOC`, gated.
+zswap is missing too, but nothing errors: `kargs.d/20-zswap.toml` sets
+`zswap.enabled=1 zswap.compressor=zstd` on every image (#1224), the defconfig
+kernel ignores them, and `/var/swap/swapfile` runs as plain uncompressed swap.
+`ZSWAP` and `CRYPTO_ZSTD` are built in with `ZSMALLOC`, gated. zram is not
+built: Utah dropped zram-generator for Dakota's zswap swapfile.
 
 The contract also covers the display. `x86_64_defconfig` enables DRM and the
 Intel i915 driver and nothing else, so on any other GPU, QEMU's included, the

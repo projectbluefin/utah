@@ -112,7 +112,7 @@ pull it in, so read the resolved origin from the build's
 Utah also requests `libvpl`, which is not an overrides name but a dependency
 of `intel-vpl-gpu-rt`, so the media request is five packages in total.
 
-The four requested overrides and `ffmpegthumbnailer` are in `[factory].parity`;
+The four requested overrides and `gst-thumbnailers` are in `[factory].parity`;
 their installed releases must carry `.bfin` to prevent base substitution.
 Check new names with `just check-repos` and the image's `package-origins.txt`.
 
@@ -125,7 +125,10 @@ working decoder. Recheck the digest-pinned repodata before carrying forward
 an older publication blocker.
 
 Utah also consumes libav, dav1d, bad-free and ugly-free GStreamer plugins,
-`ffmpegthumbnailer`, `gnome-epub-thumbnailer`, and the Papers thumbnailer.
+`gst-thumbnailers`, `gnome-epub-thumbnailer`, and the Papers thumbnailer.
+`gst-thumbnailers` replaced `ffmpegthumbnailer` (#1262), as on Dakota: both
+claim the same video MIME types, GNOME uses one thumbnailer per type, and
+only the GStreamer one can preview H.264 (through `openh264dec`).
 Package installation does not prove codec functionality. On Intel hardware,
 run `vainfo` against the render device and confirm the iHD driver loads and
 advertises the expected decode profiles. Inspect `avdec_h264`, `openh264dec`,
@@ -134,8 +137,7 @@ The PR #919 decoder-load probe failed for H.264: the factory's `gstreamer1-plugi
 `utah-verify-desktop-contract` loads each `[media].decoders` entry in `contracts/bluefin-desktop.toml` with `gst-inspect-1.0` and blocks the image build on failure; `avdec_h264` returns only when the factory ships full FFmpeg.
 
 Remaining #383 gaps include full FFmpeg (the decided direction, replacing
-`-free`) and `gst-thumbnailers` (factory #527); neither is published in this
-pin. Keep #383 open for those factory deliveries and hardware/codec proof.
+`-free`) and hardware/codec proof. Keep #383 open for those.
 
 ## Repository policy
 
@@ -368,9 +370,9 @@ Never append rows from a newer image to an older snapshot: `image.txt` must
 describe the same image as its `surface.tsv`; after a refresh,
 [remove resolved triage entries](package-contract/references/factory-consumption.md#closing-baseline-gaps).
 
-Current counts, per the README "Parity with Dakota" section: 59 base manifest
-packages installed, 302 Utah additions (GNOME 51, base-image parity, device
-firmware, desktop services), 6 genuinely unavailable. After changing a manifest,
+Current counts, per the README "Parity with Dakota" section: 58 base manifest
+packages installed, 308 Utah additions (GNOME 51, base-image parity, device
+firmware, desktop services), 9 genuinely unavailable. After changing a manifest,
 run `python3 scripts/generate-site-data.py`, then
 `python3 scripts/check-doc-counts.py --write` to refresh both documents.
 `just check` validates the inventory and both sets of counts.

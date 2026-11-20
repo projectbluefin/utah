@@ -9,7 +9,10 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-RECIPES = ROOT / "system_files/shared/usr/share/ublue-os/just/60-custom.just"
+JUST_DIR = ROOT / "system_files/shared/usr/share/ublue-os/just"
+RECIPES = JUST_DIR / "60-custom.just"
+# Dakota's recipe files Utah ships in place of Common's (#1231).
+DAKOTA_RECIPES = [JUST_DIR / name for name in ("default.just", "system.just", "flutter.just")]
 BASELINE = ROOT / "baselines/utah/rpms.tsv"
 
 
@@ -99,7 +102,9 @@ class UjustOverridesTests(unittest.TestCase):
         self.root = Path(self.tmp.name)
         self.bin = self.root / "bin"
         self.bin.mkdir()
-        for name in ("cat", "mktemp", "rm", "jq", "grep", "sh"):
+        # default.just evaluates `id -u` and `cut` at load time; Dakota's
+        # recipes start with `#!/usr/bin/env bash`.
+        for name in ("cat", "mktemp", "rm", "jq", "grep", "sh", "id", "cut", "bash"):
             (self.bin / name).symlink_to(shutil.which(name))
         self.just = shutil.which("just")
         self.log = self.root / "calls"
@@ -115,23 +120,26 @@ class UjustOverridesTests(unittest.TestCase):
         for name in ("sudo", "mokutil"):
             self.mock(name, f'echo "{name}" >> "$CALLS"; exit 99')
         self.mock("curl", 'echo "curl $*" >> "$CALLS"; echo \'{"body":"# Release notes"}\'')
-        # Common imports defaults before custom recipes at the same depth.
-        # Utah wraps that entry point to make its override import shallower.
-        original = self.root / "default.just"
-        original.write_text("device-info:\n    exit 99\nchangelogs:\n    exit 99\n"
-                            "enroll-secure-boot-key:\n    exit 99\n")
+        # Common's entry imports its recipe files, then 60-custom.just, at the
+        # same depth. Utah ships Dakota's default.just, system.just and
+        # flutter.just over Common's; changelog.just stays Common's, mocked
+        # here with the recipe Utah overrides.
+        common_recipes = self.root / "changelog.just"
+        common_recipes.write_text("changelogs:\n    exit 99\n")
+        imports = "".join(f'import "{path}"\n'
+                          for path in (common_recipes, *DAKOTA_RECIPES, RECIPES))
         common = self.root / "00-common.just"
-        common.write_text('set allow-duplicate-recipes\n_default:\n    @echo common-default\n'
-                          'unrelated:\n    @echo common-unrelated\n'
-                          f'import "{original}"\n'
-                          f'import "{RECIPES}"\n')
+        common.write_text('set allow-duplicate-recipes\nset ignore-comments\n'
+                          '_default:\n    @echo common-default\n'
+                          'unrelated:\n    @echo common-unrelated\n' + imports)
         self.entry = self.root / "entry.just"
-        entry = (RECIPES.parent / "00-entry.just").read_text()
+        entry = (JUST_DIR / "00-entry.just").read_text()
         self.entry.write_text(entry.replace("/usr/share/ublue-os/just/00-common.just", str(common))
                               .replace("/usr/share/ublue-os/just/60-custom.just", str(RECIPES)))
 
     def mock(self, name, body):
         path = self.bin / name
+        path.unlink(missing_ok=True)
         path.write_text("#!/usr/bin/bash\n" + body + "\n")
         path.chmod(0o755)
 
@@ -225,12 +233,56 @@ class UjustOverridesTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(result.stdout, "")
 
-    def test_enrollment_explains_missing_support_without_privileged_calls(self):
-        result = self.run_recipe("enroll-secure-boot-key")
+    def test_secure_boot_recipes_point_at_1225_without_privileged_calls(self):
+        for recipe in ("enroll-secure-boot-key", "secure-boot-status",
+                       "check-anticheat", "reseal-tpm-unlock"):
+            with self.subTest(recipe=recipe):
+                result = self.run_recipe(recipe)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("projectbluefin/utah", result.stderr)
+                self.assertIn("1225", result.stderr)
+                self.assertEqual(self.calls(), "")
+
+    def test_network_monitoring_explains_missing_nethogs_mount(self):
+        result = self.run_recipe("toggle-network-monitoring")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("does not yet ship", result.stderr)
-        self.assertIn("https://github.com/projectbluefin/utah/issues/395", result.stderr)
+        self.assertIn("does not ship nethogs", result.stderr)
         self.assertEqual(self.calls(), "")
+
+    def test_toggle_user_motd_drives_uwelcome(self):
+        # Common's uwelcome.sh keeps the banner state in
+        # ~/.config/uwelcome/disabled; Dakota's recipe toggled a flag nothing
+        # reads, so it could hide the banner but never bring it back.
+        self.mock("uwelcome", f'echo "uwelcome $*" >>"{self.log}"')
+        result = self.run_recipe("toggle-user-motd")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.calls(), "uwelcome toggle\n")
+
+    def test_check_local_overrides_ships(self):
+        # The testsuite runs `ujust check-local-overrides` on Utah.
+        result = subprocess.run([self.just, "--justfile", str(self.entry), "--show",
+                                 "check-local-overrides"],
+                                env=self.env, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("/usr/etc /etc", result.stdout)
+
+    def test_dakota_recipes_send_issues_to_utah(self):
+        self.mock("gum", 'echo "gum $*" >> "$CALLS"; echo "Bug report"')
+        self.mock("xdg-open", 'echo "xdg-open $*" >> "$CALLS"')
+        result = self.run_recipe("file-issue")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("xdg-open https://github.com/projectbluefin/utah/issues/new", self.calls())
+        text = "".join(path.read_text() for path in DAKOTA_RECIPES)
+        self.assertNotIn("projectbluefin/dakota/issues", text)
+        self.assertEqual(text.count('REPO="projectbluefin/utah"'), 2,
+                         "confirm and verify must report to projectbluefin/utah")
+
+    def test_rebase_helper_offers_utah_images(self):
+        text = (JUST_DIR / "system.just").read_text()
+        body = text[text.index("\nrebase-helper:"):text.index("\nenroll-secure-boot-key:")]
+        self.assertIn('REGISTRY="ghcr.io/projectbluefin"', body)
+        self.assertIn("utah(-nvidia)?(-gaming)?", body)
+        self.assertNotIn("dakota", body.lower())
 
     def setup_debug_tools(self, uid=0, bootc_exit=0):
         self.mock("id", f'echo {uid}')
@@ -271,6 +323,29 @@ class UjustOverridesTests(unittest.TestCase):
                      if l.strip().startswith("install-debug-tools ")), None)
         self.assertIsNotNone(line, f"install-debug-tools missing from --list; got {result.stdout!r}")
         self.assertIn("# Install gdb, elfutils and sysprof-cli until reboot", line)
+
+    def test_virtualization_recipes_run_dakota_devmode_when_libvirt_is_installed(self):
+        unit = self.root / "virtqemud.socket"
+        unit.write_text("")
+        self.env["LIBVIRT_SOCKET_UNIT"] = str(unit)
+        self.mock("devmode", 'echo "devmode $*" >> "$CALLS"')
+        self.env["DAKOTA_DEVMODE"] = str(self.bin / "devmode")
+        for recipe, action in (("setup-virtualization", "setup"),
+                               ("manage-virtualization", "virtualization")):
+            with self.subTest(recipe=recipe):
+                self.log.unlink(missing_ok=True)
+                result = self.run_recipe(recipe)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(self.calls(), f"devmode {action}\n")
+
+    def test_virtualization_recipes_explain_missing_libvirt(self):
+        self.env["LIBVIRT_SOCKET_UNIT"] = str(self.root / "absent.socket")
+        self.mock("devmode", 'echo "devmode $*" >> "$CALLS"')
+        self.env["DAKOTA_DEVMODE"] = str(self.bin / "devmode")
+        result = self.run_recipe("setup-virtualization")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("libvirt is not in this image yet", result.stderr)
+        self.assertEqual(self.calls(), "")
 
 if __name__ == "__main__":
     unittest.main()

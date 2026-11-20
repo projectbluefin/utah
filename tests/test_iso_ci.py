@@ -1212,16 +1212,18 @@ class OgcKernelConfigGateTests(unittest.TestCase):
         self.assertRegex(
             self.SCRIPT.read_text(), r"--module INPUT_UINPUT(?:\s|$)")
 
-    def test_zram_is_required_so_boot_does_not_wait_for_zram0(self):
-        # zram-generator asks for /dev/zram0; without CONFIG_ZRAM systemd waits
-        # 50s for it and geoclue times out on the gaming flavors (#741).
+    def test_zswap_and_zstd_are_required_for_the_zswap_kargs(self):
+        # kargs.d/20-zswap.toml ships on every image (#1224); without these the
+        # gaming kernel ignores zswap.* and the swapfile runs uncompressed.
         symbols = self.required_symbols()
-        self.assertIn("ZRAM", symbols)
-        body = "".join(f"CONFIG_{s}=y\n" for s in symbols if s != "ZRAM")
-        result = self.gate(body)
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("missing CONFIG_ZRAM", result.stderr)
-        self.assertRegex(self.SCRIPT.read_text(), r"--module ZRAM(?:\s|$)")
+        for symbol in ("ZSWAP", "CRYPTO_ZSTD"):
+            with self.subTest(symbol=symbol):
+                self.assertIn(symbol, symbols)
+                body = "".join(f"CONFIG_{s}=y\n" for s in symbols if s != symbol)
+                result = self.gate(body)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(f"missing CONFIG_{symbol}", result.stderr)
+        self.assertIn("--enable ZSWAP --enable CRYPTO_ZSTD", self.SCRIPT.read_text())
 
     def test_a_config_missing_btrfs_is_rejected_by_name(self):
         body = "".join(f"CONFIG_{s}=y\n" for s in self.required_symbols()
