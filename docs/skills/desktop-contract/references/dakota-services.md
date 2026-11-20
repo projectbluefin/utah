@@ -12,7 +12,7 @@ order of their names; the first line that matches a unit wins.
 |---|---|---|
 | `00-`…`03-*.preset` | brew, uupd, common | vendor enables |
 | `80-hummingbird.preset` | Hummingbird | `disable dnf-makecache.timer`, `enable bootloader-update.service` |
-| `85-utah-desktop.preset` | Utah | overrides the base's 80/90 files: `enable systemd-boot-update.service`; `disable` sshd, multipathd, lm_sensors, Dakota's iSCSI set, the serial getty, `getty@` (kmscon owns the VTs), rpm-ostree and bootc-fetch-apply-updates |
+| `85-utah-desktop.preset` | Utah | overrides the base's 80/90 files: `enable systemd-boot-update.service`; `disable` sshd, multipathd, lm_sensors, Dakota's iSCSI set (plus Fedora's `iscsi-starter`/`iscsi-onboot`), the serial getty, `getty@` (kmscon owns the VTs), rpm-ostree and bootc-fetch-apply-updates |
 | `90-default.preset`, `90-systemd.preset` | Hummingbird | Fedora's server enables and disables, upstream systemd's list |
 | `98-utah-enable-default.preset` | Utah | GNOME OS's and Dakota's disables, Utah's own disables, then `enable *` |
 | `99-default-disable.preset` | Hummingbird | `disable *`; never reached |
@@ -161,6 +161,25 @@ gone. The factory's `kanata` ships Dakota's `kanata.service` (DynamicUser,
 and running `systemctl enable --now kanata`. `ydotool` brings Dakota's
 `80-ydotool.rules` (uinput to `input`, uaccess) and the `uinput` modules-load
 drop-in (utah-packages#1134).
+
+### iSCSI initiator (#1360)
+
+`iscsi-initiator-utils` (with `-iscsiuio`) and `isns-utils` are installed, as
+Dakota ships open-iscsi and open-isns, and every unit they ship stays off.
+`85-utah-desktop.preset` carries Dakota's `50-iscsi.preset` (gnome-build-meta
+`files/gnomeos/iscsi-config/`) verbatim, plus `iscsi-starter.service` and
+`iscsi-onboot.service`: Fedora's package adds both, and Hummingbird's
+`90-default.preset` enables them. `iscsi-shutdown.service` has no `[Install]`
+section. The packages' NetworkManager dispatcher script only reloads
+`iscsi.service`, which is a no-op while the unit is inactive. clean-stage strips
+`/var`, so `tmpfiles.d/utah-iscsi.conf` recreates `/var/lib/iscsi` (with its
+node database directories) and `/var/lib/isns` with the RPMs' modes and their
+policy labels. To use iSCSI, run
+`systemctl enable --now iscsid.socket iscsi.service`. The contract's `disabled`
+list asserts eight of the nine units. It leaves out `iscsi.service`, because
+Fedora's `[Install]` section for it holds only `Also=iscsi-starter.service`.
+`systemctl is-enabled` therefore reports `indirect` whatever the preset says,
+and `iscsi-starter.service`, which starts it at boot, is asserted instead.
 
 ### Console (#1237)
 

@@ -792,11 +792,25 @@ disabled = [
   "multipathd.service",
   "lm_sensors.service",
   # GNOME OS and Dakota presets (98-utah-enable-default.preset): no
-  # systemd-networkd beside NetworkManager, no NFS or iSCSI server side.
+  # systemd-networkd beside NetworkManager, no NFS server side.
   "systemd-networkd.service",
   "systemd-networkd.socket",
   "nfs-server.service",
+  # iscsi-initiator-utils and isns-utils ship as on Dakota with every unit
+  # off (#1360): Dakota's 50-iscsi.preset, plus the two Fedora-only units
+  # Hummingbird's 90-default.preset enables, all in 85-utah-desktop.preset.
+  # iscsi.service is not listed: Fedora's [Install] section holds only
+  # Also=iscsi-starter.service, so `systemctl is-enabled` reports it as
+  # "indirect" whatever the preset says. iscsi-starter.service is the unit
+  # that starts it at boot, and it is asserted below.
+  "iscsi-init.service",
+  "iscsi-starter.service",
+  "iscsi-onboot.service",
+  "iscsid.service",
   "iscsid.socket",
+  "iscsiuio.service",
+  "iscsiuio.socket",
+  "isnsd.service",
   # Enable-by-default must not reach these (#1233): authselect-first-boot
   # would reset the build's authselect features on first boot, livesys is
   # live-media setup, dbus-daemon would claim dbus-broker's alias, nftables

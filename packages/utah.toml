@@ -618,8 +618,9 @@ packages = [
     # module only; PAM is left unconfigured. pam_pkcs11 waits for the
     # smart-card PAM decision (#1257). bpftool, newt (whiptail, and the
     # libnewt NetworkManager-tui needs), lzip and the Dell smbios-utils
-    # arrived with factory pin c288398 (#1360); iSCSI and umotd wait for
-    # decisions.
+    # arrived with factory pin c288398 (#1360). The iSCSI initiator and iSNS
+    # tools ship as on Dakota, every unit off (85-utah-desktop.preset carries
+    # Dakota's 50-iscsi.preset); umotd is waived for uwelcome.
     "tealdeer",
     "nethogs",
     "tiptop",
@@ -660,6 +661,9 @@ packages = [
     "lzip",
     "smbios-utils-bin",
     "smbios-utils-python",
+    "iscsi-initiator-utils",
+    "isns-utils",
+    "nicstat",
     # DLNA/UPnP media sharing (GNOME Settings > Sharing > Media Sharing), as
     # Dakota ships it (#1258). The rygel package carries /etc/rygel.conf and
     # the rygel.service user unit Settings starts; gupnp-av's factory recipe
@@ -1193,6 +1197,9 @@ parity = [
     "lzip",
     "smbios-utils-bin",
     "smbios-utils-python",
+    "iscsi-initiator-utils",
+    "isns-utils",
+    "nicstat",
     "google-noto-serif-cjk-vf-fonts",
     "nerd-fonts-symbols",
     # DLNA/UPnP media sharing (#1258).
