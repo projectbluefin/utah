@@ -645,9 +645,12 @@ jobs:
       && (needs.lifecycle.result == 'success'
       || (needs.lifecycle.result == 'skipped' && needs.resolve.outputs.lifecycle == 'skip')) }}
     runs-on: ubuntu-26.04
+    # The workflow token still pushes the `verification` record branch. The
+    # README pull request is opened with the mergeraptor App token below, so
+    # its normal pull_request checks run and the hive treats it as a trusted
+    # bot PR; a PR opened with the workflow token gets no checks of its own.
     permissions:
       contents: write
-      pull-requests: write
       actions: read
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -687,9 +690,19 @@ jobs:
           RECORD: ${{ runner.temp }}/verification
           RECORD_COMMIT: ${{ steps.publish.outputs.record_commit }}
         run: python3 scripts/update-e2e-readme.py "$RECORD"
+      - name: Get repository-scoped mergeraptor token
+        id: app-token
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3
+        with:
+          client-id: ${{ secrets.MERGERAPTOR_APP_ID }}
+          private-key: ${{ secrets.MERGERAPTOR_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
       - name: Propose updated verification link
         uses: peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1 # v8
         with:
+          token: ${{ steps.app-token.outputs.token }}
           branch: automation/iso-verification
           title: 'docs: refresh verified ISO record link'
           commit-message: 'docs: refresh verified ISO record link'

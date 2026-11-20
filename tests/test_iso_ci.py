@@ -296,6 +296,20 @@ class EvidenceTests(unittest.TestCase):
             self.assertIn("production-iso", jobs[name]["needs"])
             self.assertIn("needs.production-iso.result == 'success'", jobs[name]["if"])
 
+    def test_the_iso_record_pr_is_opened_as_mergeraptor(self):
+        # A PR opened with the workflow token gets no pull_request checks and
+        # an untrusted author, so it waits for a hand merge. The App token
+        # opens it instead; the workflow token keeps only the record push.
+        import yaml
+        job = yaml.safe_load((ROOT / ".github/workflows/post-testing-e2e.yml").read_text())["jobs"]["documentation"]
+        self.assertNotIn("pull-requests", job["permissions"])
+        steps = {step.get("name"): step for step in job["steps"]}
+        self.assertIn("actions/create-github-app-token@", steps["Get repository-scoped mergeraptor token"]["uses"])
+        self.assertEqual(
+            steps["Propose updated verification link"]["with"]["token"],
+            "${{ steps.app-token.outputs.token }}",
+        )
+
     def test_debug_images_and_test_disks_are_not_uploaded(self):
         import yaml
         jobs = yaml.safe_load((ROOT / ".github/workflows/post-testing-e2e.yml").read_text())["jobs"]
