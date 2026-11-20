@@ -206,6 +206,19 @@ files = [
   "/usr/lib64/kmscon/mod-pango.so",
   "/etc/kmscon/kmscon.conf",
   "/usr/lib/systemd/system/gdm.service.d/kmscon.conf",
+  # uutils is coreutils and sudo-rs is sudo, as on Dakota (#1229).
+  # uutils-coreutils-replace links the GNU names (and Dakota's uutils-<prog>
+  # names) to uutils; gnu-env keeps /usr/bin/env. sudo-rs is /usr/bin/sudo and
+  # reads C sudo's PAM stacks (sudo, and sudo-i for `sudo -i`) and sudoers.
+  # configure-services.sh fails the build if a link or label is wrong.
+  "/usr/bin/uutils-coreutils",
+  "/usr/bin/uutils-ls",
+  "/usr/bin/uu_ls",
+  "/usr/bin/env",
+  "/usr/bin/sudo-rs",
+  "/etc/pam.d/sudo",
+  "/etc/pam.d/sudo-i",
+  "/etc/sudoers",
   # Dakota's shell defaults (projectbluefin/dakota elements/bluefin/common.bst).
   "/etc/profile.d/bluefin-shell-defaults.sh",
   # bluefin-cli shims in place of Common's bling (projectbluefin/common#1719):

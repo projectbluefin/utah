@@ -303,6 +303,35 @@ class PackageResolutionTests(unittest.TestCase):
                     installer.main()
                 self.assertIn("public-hummingbird-x86_64-rpms", str(ctx.exception))
 
+    def test_check_rejects_a_swap_outside_the_install_set(self):
+        # #1229: [swap] names the base package a contract package replaces;
+        # the replacement must be in the contract and the removed one must not.
+        with tempfile.TemporaryDirectory() as tmp:
+            dirpath = Path(tmp)
+            base = dirpath / "base.toml"
+            overlay = dirpath / "utah.toml"
+            base.write_text('[fedora]\npackages=["base"]\n')
+            repos_dir = dirpath / "repos"
+            repos_dir.mkdir()
+            (repos_dir / "u.repo").write_text(
+                "[utah-packages]\n# utah-install: true\npriority=1\n"
+                "[public-hummingbird-x86_64-rpms]\n# utah-install: true\npriority=10\n")
+            argv = ["install", "--check", "--repos-dir", str(repos_dir), str(base), str(overlay)]
+            for parity, message in (
+                ('[]', "replacement uutils-coreutils-replace is not in the install set"),
+                ('["uutils-coreutils-replace", "coreutils-single"]',
+                 "removes coreutils-single, which is in the install set"),
+            ):
+                overlay.write_text(f'[parity]\npackages={parity}\n'
+                                   '[swap]\ncoreutils-single = "uutils-coreutils-replace"\n')
+                with patch("sys.argv", argv), self.assertRaises(ValueError) as ctx:
+                    installer.main()
+                self.assertIn(message, str(ctx.exception))
+            overlay.write_text('[parity]\npackages=["uutils-coreutils-replace"]\n'
+                               '[swap]\ncoreutils-single = "uutils-coreutils-replace"\n')
+            with patch("sys.argv", argv), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(installer.main(), 0)
+
 
 class ResolveOneTests(unittest.TestCase):
     """--resolve-one is the single-name probe the unavailable-entry gate loops over."""
