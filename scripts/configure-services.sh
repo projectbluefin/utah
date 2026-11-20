@@ -437,16 +437,32 @@ if [ -f "${PASSWD_PAM}" ]; then
     fi
 fi
 
-# uutils-coreutils sits beside GNU coreutils rather than over it (#1229).
-# Dakota overwrites the GNU names, but here GNU's files belong to the
-# coreutils-single RPM that every later package scriptlet, dracut's initramfs
-# rebuild and SELinux relabelling in this build run against. Utah exposes uutils
-# under Dakota's own uutils-<prog> names, next to the RPM's uu_<prog> links.
-test -x /usr/bin/uutils-coreutils
-for prog in $(/usr/bin/uutils-coreutils --list); do
-    ln -sfn uutils-coreutils "/usr/bin/uutils-${prog}"
+# uutils is coreutils and sudo-rs is sudo, as on Dakota (#1229;
+# docs/skills/desktop-contract/references/sudo-rs-uutils.md).
+#
+# uutils-coreutils-replace replaced coreutils-single in the package
+# transaction ([swap] in packages/utah.toml): the GNU names link to uutils,
+# except env, which gnu-env keeps GNU's for pkexec (Dakota's reason).
+[ "$(readlink /usr/bin/ls)" = uutils-coreutils ]
+[ "$(rpm -qf --queryformat '%{NAME}' /usr/bin/env)" = gnu-env ]
+
+# sudo-rs needs C sudo's /etc/pam.d/sudo and sudo-i, /etc/sudoers and
+# sudoers.d, so C sudo stays installed (sudo-rs Requires it), as Dakota
+# stages it first. sudo-rs then takes /usr/bin/sudo, as Dakota's element
+# overwrites it: a hard link, so sudo stays a setuid regular file, and
+# sudoedit, C sudo's link to sudo, reaches sudo-rs too. `rpm -V sudo` reports
+# /usr/bin/sudo changed. visudo and su stay C sudo's and util-linux's, as on
+# Dakota. Fedora's policy labels both paths sudo_exec_t, so the SELinux
+# domain transition matches C sudo's; fail the build if that ever changes.
+test -u /usr/bin/sudo-rs
+ln -f /usr/bin/sudo-rs /usr/bin/sudo
+[ /usr/bin/sudo -ef /usr/bin/sudo-rs ]
+[ "$(readlink /usr/bin/sudoedit)" = sudo ]
+for path in /usr/bin/sudo /usr/bin/sudo-rs; do
+    [ "$(matchpathcon -n "${path}")" = system_u:object_r:sudo_exec_t:s0 ]
 done
-[ "$(readlink /usr/bin/uutils-ls)" = uutils-coreutils ]
+# Dakota ships no su-rs, and nothing runs it: no spare setuid-root su.
+chmod u-s /usr/bin/su-rs
 
 # uupd is distributed as a release binary, not an RPM in the Hummingbird
 # repositories. Keep its version pinned by the Containerfile argument. Its

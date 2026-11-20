@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-18",
+  "generated_at": "2026-11-20",
   "generator": "scripts/generate-site-data.py",
   "groups": [
     {
@@ -198,6 +198,7 @@
         "gnome-os-config-systemd-presets",
         "gnome-os-config-uinput",
         "gnome-os-config-wpa-supplicant-config",
+        "gnu-env",
         "gnupg2-scdaemon",
         "google-noto-sans-math-fonts",
         "google-noto-sans-mono-vf-fonts",
@@ -322,6 +323,7 @@
         "splix",
         "stix-fonts",
         "stoken-libs",
+        "sudo-rs",
         "sysstat",
         "system-config-printer-libs",
         "system-config-printer-udev",
@@ -339,6 +341,7 @@
         "uriparser",
         "usermode",
         "uutils-coreutils",
+        "uutils-coreutils-replace",
         "vim-enhanced",
         "vpnc",
         "vpnc-script",
@@ -407,7 +410,7 @@
     }
   ],
   "totals": {
-    "installed": 350,
+    "installed": 353,
     "unavailable": 6
   },
   "unavailable": [

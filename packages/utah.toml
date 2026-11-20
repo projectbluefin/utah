@@ -14,6 +14,7 @@
 #   [hardware]     device firmware the bootable base leaves out entirely
 #   [build]        toolchain needed to build the pinned GNOME extensions
 #   [services]     desktop daemons enabled after the server base (cryptsetup, flatpak, fwupd, ...)
+#   [swap]         base packages a contract package replaces in the same transaction
 #   [unavailable]  parity gaps none of Utah's enabled repositories provide --
 #                  from the base manifest or from a measured image baseline
 #
@@ -446,10 +447,15 @@ packages = [
     "pam_oo7",
     "oo7-portal",
     "oo7-cli",
-    # Memory-safe coreutils, as Dakota ships them (bluefin/uutils-coreutils.bst;
-    # #1229). uutils runs beside GNU coreutils. sudo-rs is deferred: see
-    # docs/skills/desktop-contract/references/sudo-rs-uutils.md.
+    # sudo-rs as sudo and uutils as coreutils, as Dakota ships them
+    # (bluefin/sudo-rs.bst, bluefin/uutils-coreutils.bst; #1229).
+    # uutils-coreutils-replace takes coreutils-single's place ([swap] below)
+    # and gnu-env keeps /usr/bin/env GNU's; configure-services.sh points sudo
+    # at sudo-rs. See docs/skills/desktop-contract/references/sudo-rs-uutils.md.
+    "sudo-rs",
     "uutils-coreutils",
+    "uutils-coreutils-replace",
+    "gnu-env",
     # Network file systems and Windows domain clients (the NFS family follows
     # in the second-wave block below).
     "cifs-utils",
@@ -726,6 +732,17 @@ packages = [
     "zram-generator-defaults",
 ]
 
+[swap]
+# Base packages a contract package replaces outright: base name = replacement.
+# The replacement conflicts with the base package, so the install transaction
+# removes the base package in the same step (dnf5 do --action=remove), and
+# whatever requires it stays satisfied by the replacement's Provides.
+#
+# coreutils-single: uutils-coreutils-replace links the GNU coreutils names to
+# uutils and provides coreutils, as Dakota ships uutils (#1229). Its gnu-env
+# requirement keeps /usr/bin/env GNU's, as on Dakota.
+coreutils-single = "uutils-coreutils-replace"
+
 [unavailable]
 # Parity gaps none of Utah's enabled repositories provide.  Two kinds of gap
 # land here and both count as parity debt:
@@ -988,7 +1005,10 @@ parity = [
     "pam_oo7",
     "oo7-portal",
     "oo7-cli",
+    "sudo-rs",
     "uutils-coreutils",
+    "uutils-coreutils-replace",
+    "gnu-env",
     "cifs-utils",
     "rpcbind",
     "autofs",

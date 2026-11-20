@@ -56,6 +56,14 @@ policy for changing them.
     and iwlegacy packages are named explicitly — the X230's
     `iwlwifi-6000g2a-6.ucode` ships in `iwlwifi-dvm-firmware` (#97).
   - `[services]` — desktop services Bluefin adds on top of the server base.
+  - `[swap]` — base packages a contract package replaces outright, as
+    `base name = "replacement"`. The replacement conflicts with the base
+    package, so a plain `dnf install` refuses it; the install transaction
+    becomes `dnf5 do --action=install <contract> --action=remove <base>`, and
+    the build fails if the base package is still installed afterwards.
+    `--check` fails unless the replacement is in the contract and the base
+    package is not. `coreutils-single = "uutils-coreutils-replace"` makes
+    uutils the system coreutils, as on Dakota (#1229).
   - `[unavailable]` — parity gaps none of Utah's enabled repositories
     provide, whether the name comes from `base.toml` or from a measured image
     baseline.
@@ -290,7 +298,9 @@ The install transaction follows a strict execution sequence tested in
    and continues (fails open).
 2. **Install**: DNF runs with `--disablerepo=*`, enables only marked
    `# utah-install: true` repositories in ascending priority order, excludes
-   `PackageKit*`, and installs the contract plus `[build]` tooling.
+   `PackageKit*`, and installs the contract plus `[build]` tooling. When a
+   `[swap]` base package is installed, the same transaction removes it
+   (`dnf5 do`), and the step fails if it is still there afterwards.
 3. **Mark user**: `dnf mark user` marks all installed contract packages and
    build dependencies as user-installed before excluded package removal. This
    prevents DNF autoremove cascades from uninstalling contract packages (such as
@@ -357,7 +367,7 @@ describe the same image as its `surface.tsv`; after a refresh,
 [remove resolved triage entries](package-contract/references/factory-consumption.md#closing-baseline-gaps).
 
 Current counts, per the README "Parity with Dakota" section: 60 base manifest
-packages installed, 290 Utah additions (GNOME 51, base-image parity, device
+packages installed, 293 Utah additions (GNOME 51, base-image parity, device
 firmware, desktop services), 6 genuinely unavailable. `scripts/check-doc-counts.py` (part of
 `just check`) recomputes these from the manifests and fails if either
 document drifts from `site/data/packages.json`.

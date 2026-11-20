@@ -159,15 +159,29 @@ RESOLVE_ERRORS = r"No match for argument|nothing provides|conflicting requests|c
 RESOLVE_SUMMARY = r"(?m)^Transaction Summary:?\s*$|^Nothing to do\.?\s*$"
 
 
-def dnf_assumeno(dnf: str, repos: tuple[str, ...], packages: list[str]) -> subprocess.CompletedProcess:
+def dnf_assumeno(dnf: str, repos: tuple[str, ...], packages: list[str],
+                 removals: list[str] | tuple[str, ...] = ()) -> subprocess.CompletedProcess:
     """Resolve an install transaction without installing anything."""
     return subprocess.run(
         [dnf, "--assumeno", "--disablerepo=*",
          *(f"--enablerepo={r}" for r in repos),
-         "-x", "PackageKit*", "install", *packages],
+         "-x", "PackageKit*", *transaction(packages, removals)],
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
         env={**os.environ, "LC_ALL": "C"}, check=False,
     )
+
+
+def swaps(overlay: Path) -> dict[str, str]:
+    """[swap]: base package -> the contract package that replaces it."""
+    return dict(tomllib.loads(overlay.read_text()).get("swap", {}))
+
+
+def transaction(packages: list[str], removals: list[str] | tuple[str, ...]) -> list[str]:
+    """The dnf subcommand and arguments: install, removing `removals` in the
+    same transaction (dnf5 do) when a replacement conflicts with them."""
+    if not removals:
+        return ["install", *packages]
+    return ["do", "--action=install", *packages, "--action=remove", *removals]
 
 
 def transaction_resolves(result: subprocess.CompletedProcess) -> bool:
@@ -349,6 +363,11 @@ def main() -> int:
         overlap = sorted(set(unavailable) & set(packages))
         if overlap:
             raise ValueError(f"[unavailable] packages still in install set: {overlap}")
+        for old, new in swaps(overlay).items():
+            if new not in packages:
+                raise ValueError(f"[swap] replacement {new} is not in the install set")
+            if old in packages:
+                raise ValueError(f"[swap] removes {old}, which is in the install set")
         if "utah-packages" not in repos:
             raise ValueError("utah-packages repository not found in install repositories")
         if "public-hummingbird-x86_64-rpms" not in repos:
@@ -363,9 +382,11 @@ def main() -> int:
     packages = contract(args.manifest, overlay, major)
     build_deps = section(overlay, "build")
     excluded = section(args.manifest, "excluded")
+    swapped = swaps(overlay)
 
     if args.resolve:
-        result = dnf_assumeno(dnf, repos, [*packages, *build_deps])
+        result = dnf_assumeno(dnf, repos, [*packages, *build_deps],
+                              removals=installed(list(swapped)))
         print(result.stdout, end="", flush=True)
         if not transaction_resolves(result):
             return 1
@@ -391,15 +412,25 @@ def main() -> int:
         # -- the name is known-missing parity debt, not a dropped request.
         print(f"NOTE: {pkg} is a tracked parity gap with no source in Utah's repositories and is not installed (see packages/utah.toml)")
 
+    # A [swap] replacement conflicts with the base package it replaces, so a
+    # plain install cannot take it. The same transaction removes the base
+    # package instead: dependents stay satisfied, because the replacement
+    # provides what they require.
+    removals = installed(list(swapped))
+
     # Bluefin excludes PackageKit from its bulk install; an image-based system
     # must not carry a second package manager that can write to /usr.
     rc = run(
         dnf, "-y", "--disablerepo=*",
         *(f"--enablerepo={r}" for r in repos),
-        "-x", "PackageKit*", "install", *packages, *build_deps,
+        "-x", "PackageKit*", *transaction([*packages, *build_deps], removals),
     )
     if rc:
         return rc
+    left = installed(list(swapped))
+    if left:
+        print(f"ERROR: [swap] left base packages installed: {' '.join(left)}", file=sys.stderr)
+        return 1
 
     # Everything in the contract is installed on purpose.  Without this, dnf
     # treats packages that merely arrived as dependencies as autoremovable,
