@@ -46,7 +46,8 @@ post-build verification workflows, not the complete workflow inventory:
   With the default `review_vm=false`, only the source checks run. Set
   `review_vm=true` as well to build a disposable image on the runner, compose
   and boot an offline ISO, and retain test evidence; `review_iso_all_flavors`
-  expands that job from main flavors to every flavor in `config/flavors.json`.
+  expands that job from main flavors to every flavor in `config/flavors.json`,
+  and `review_composefs_backend` installs with the composefs backend (#1129).
   The review ISO defaults to zstd level 15 so all flavors fit for VM testing.
   Set `review_iso_compression_level=3` to measure the production ISO budget;
   `evidence/iso-size.json` records the image size even when the 8 GiB guard

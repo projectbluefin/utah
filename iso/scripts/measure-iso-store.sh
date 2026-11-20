@@ -2,7 +2,8 @@
 # Measure the live-rootfs squashfs size of a Utah testing image under different
 # embedded-container-store and compression strategies, for #875.
 #
-# This mirrors the store-embed + squashfs assembly of iso/scripts/build-iso.sh
+# This mirrors the store-embed (iso/scripts/embed-store-payload.sh) + squashfs
+# assembly of iso/scripts/build-iso.sh
 # so the numbers compare to a real ISO. It intentionally does NOT assemble the
 # ISO or boot it (that stays in build-iso.sh and the review VM); it measures the
 # squashfs root only, which is the dominant term in the ISO because the offline
@@ -71,8 +72,9 @@ ${sep}{\"flavor\": \"$1\", \"strategy\": \"$2\", \"driver\": \"$3\", \"comp_leve
 
 # ---- per-strategy assembly (mirrors build-iso.sh) --------------------------
 # Assembles one squashfs root for one strategy and prints "squashfs_bytes
-# rootfs_uncompressed_bytes". Reuses build-iso.sh's exact skopeo + storage.conf
-# + podman-run + mksquashfs commands so the number is comparable to a real ISO.
+# rootfs_uncompressed_bytes". Reuses embed-store-payload.sh's exact skopeo +
+# storage.conf + podman-run and build-iso.sh's mksquashfs commands so the
+# number is comparable to a real ISO.
 # The whole assembly runs inside `podman unshare` so rootless Podman accepts
 # `image mount`, exactly as build-iso.sh does.
 measure_strategy() { # LIVE_IMAGE PAYLOAD_IMAGE driver level block dedupe

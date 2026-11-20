@@ -4,7 +4,6 @@
   "welcome_title": "Welcome to Bluefin Utah",
   "distro_logo": "resource:///org/bootcinstaller/Installer/images/bluefin.png",
   "imgref": "ghcr.io/projectbluefin/utah:testing",
-  "local_imgref": "containers-storage:ghcr.io/projectbluefin/utah:testing",
   "bootloader": "grub2",
   "composeFsBackend": false,
   "filesystem": "btrfs",

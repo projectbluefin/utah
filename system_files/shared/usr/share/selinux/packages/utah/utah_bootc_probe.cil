@@ -9,11 +9,15 @@
 ;   avc: denied { mac_admin } capability=33
 ;        scontext=system_u:system_r:unconfined_service_t:s0 tclass=capability2
 ;
-; on every boot. dontaudit, not allow: granting mac_admin would let every
-; unconfined service write labels the policy does not know, and would change
-; what bootc's probe decides. A capability check has no target but the
-; process itself, so this domain plus one permission is the narrowest rule
-; the policy language can express. Installed at build time (the store is on
-; read-only /usr once booted, #551); the desktop contract's [selinux] modules
-; list asserts it is loaded.
+; on every boot. A service whose ExecStart is a shell (/bin/sh <script>) runs
+; in initrc_t instead (init_t shell_exec_t:process initrc_t) and logs the same
+; pair there: the installer's first-boot fisherman-boot-receipt.service runs
+; `bootc status` that way (#1129). dontaudit, not allow: granting mac_admin
+; would let every such service write labels the policy does not know, and
+; would change what bootc's probe decides. A capability check has no target
+; but the process itself, so a domain plus one permission is the narrowest
+; rule the policy language can express. Installed at build time (the store
+; is on read-only /usr once booted, #551); the desktop contract's [selinux]
+; modules list asserts it is loaded.
 (dontaudit unconfined_service_t self (capability2 (mac_admin)))
+(dontaudit initrc_t self (capability2 (mac_admin)))

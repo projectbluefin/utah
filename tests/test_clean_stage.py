@@ -75,6 +75,23 @@ def build_tree(root: Path) -> None:
     (root / "usr/share/fonts/utah/Utah.ttf").write_bytes(b"ttf\n")
     (root / "boot/vmlinuz-7.2.6-ogc1").write_bytes(b"kernel\n")
     (root / "boot/vmlinuz").symlink_to("vmlinuz-7.2.6-ogc1")
+    # regenerate-initramfs.sh promotes the OGC kernel by hardlinking the /boot
+    # file into the module directory bootc deploys from.
+    (root / "usr/lib/modules/7.2.6-ogc1").mkdir(parents=True)
+    (root / "usr/lib/modules/7.2.6-ogc1/vmlinuz").hardlink_to(
+        root / "boot/vmlinuz-7.2.6-ogc1")
+    # What kernel-core's %posttrans `kernel-install add` (grub2-common's
+    # 20-grub.install) left in the kernel cache image's /boot (#1129): the
+    # kernel files and a BLS Type #1 entry carrying the build runner's cmdline.
+    kver = "7.3.3-200.1.utah1.fc44.x86_64"
+    for name in (f"vmlinuz-{kver}", f"initramfs-{kver}.img",
+                 f"System.map-{kver}", f"config-{kver}",
+                 f"symvers-{kver}.xz", f".vmlinuz-{kver}.hmac"):
+        (root / "boot" / name).write_bytes(b"kernel-install copy\n")
+    (root / "boot/loader/entries").mkdir(parents=True)
+    (root / f"boot/loader/entries/7b2d83a8ade047f5b6a8386611853b33-{kver}.conf"
+     ).write_text(f"version {kver}\nlinux /boot/vmlinuz-{kver}\n"
+                  "options root=PARTUUID=96da8223 ro console=ttyS0\n")
     # Year 2036 -- well after the epoch the script pins to -- so a failure to
     # normalise is unmistakable rather than a coincidence with the target.
     future = 2085840000
@@ -320,11 +337,39 @@ class CleanStageTests(unittest.TestCase):
                 f"{path} was not pinned to SOURCE_DATE_EPOCH",
             )
 
-    def test_boot_kernel_directory_and_symlink_are_pinned(self):
+    def test_boot_is_emptied_but_kept_and_pinned(self):
+        """The image must ship an empty /boot (#1129).
+
+        composefs-boot reads the image's /boot/loader/entries/*.conf as Type #1
+        boot entries, and bootc's composefs BLS install bails on them with
+        "Found Type1 entries in /boot". bootc lint's nonempty-boot also requires
+        the directory itself to exist.
+        """
         self.assertCleanSucceeded()
-        for path in (self.root / "boot", self.root / "boot/vmlinuz",
-                     self.root / "boot/vmlinuz-7.2.6-ogc1"):
-            self.assertEqual(int(path.lstat().st_mtime), SOURCE_DATE_EPOCH)
+        boot = self.root / "boot"
+        self.assertTrue(boot.is_dir(), "/boot must survive as a directory")
+        self.assertEqual(sorted(p.name for p in boot.iterdir()), [])
+        self.assertEqual(int(boot.lstat().st_mtime), SOURCE_DATE_EPOCH)
+
+    def test_promoted_ogc_kernel_survives_the_boot_sweep(self):
+        """Removing /boot/vmlinuz-<ogc> must not take the bootc kernel with it."""
+        self.assertCleanSucceeded()
+        self.assertEqual(
+            (self.root / "usr/lib/modules/7.2.6-ogc1/vmlinuz").read_bytes(),
+            b"kernel\n")
+
+    def test_final_lint_checks_boot(self):
+        """The lint after clean-stage must not skip nonempty-boot again.
+
+        It was skipped from the first commit, which let the kernel cache's BLS
+        entry reach every image and broke composefs installs (#1129).
+        """
+        text = (ROOT / "Containerfile").read_text()
+        lint_start = text.index("bootc container lint")
+        lint = text[lint_start:text.index("\n", lint_start)]
+        self.assertNotIn("--skip", lint)
+        self.assertLess(text.index("/usr/local/libexec/utah-clean-stage"),
+                        lint_start)
 
     def test_rewritten_directories_are_pinned_too(self):
         """The directories clean-stage itself rewrites must be pinned as well.

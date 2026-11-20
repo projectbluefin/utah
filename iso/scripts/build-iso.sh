@@ -7,11 +7,14 @@ IMAGE="${1:?image ref is required}"
 OUTPUT_ISO="${2:?output ISO path is required}"
 TITLE="${3:-Utah Live}"
 DEBUG="${4:-0}"
-# SOURCE_IMAGE may be localhost for development, but the embedded store and
+# SOURCE_IMAGE may be localhost for development, but the embedded payload and
 # installer recipe use this stable, publishable reference.
 PUBLISHED_IMAGE="${5:-ghcr.io/projectbluefin/utah:testing}"
-# Live-ISO size budget (#684). The ISO embeds the full container store for
-# offline install, so image growth shows up twice in the ISO. Post-fix E2E run
+# Live-ISO size budget (#684). The ISO embeds the full payload image for
+# offline install as unpacked containers-storage files, which mksquashfs
+# stores once because they are byte-identical to the live root; an OCI layout
+# would be a second, undeduplicable copy (PR #1131 run 43870670314: 9.4-11.3
+# GiB squashfs per flavor at zstd 15). Post-fix E2E run
 # 35469913325 (2026-09-19) measured 3.9G (utah), 4.6G (gaming), 5.2G (nvidia),
 # and 5.3G (nvidia-gaming). Diagnostic run 38175242606 (2026-10-11), at the
 # default zstd level 3, measured 4.7G, 5.5G, 6.0G, and 6.1G respectively; the
@@ -97,49 +100,16 @@ for file in "${VMLINUZ}" "${INITRD}" "${SYSTEMD_BOOT}"; do
     [[ -f "${file}" ]] || { echo "Missing live boot file: ${file}" >&2; exit 1; }
 done
 
-# Start with the live image filesystem, then add the target OCI image as a VFS
-# containers-storage graphroot. This is Dakota's offline-payload design adapted
-# for Utah's bootc install path.
+# Start with the live image filesystem, then add the target OCI image as an
+# unpacked containers-storage graphroot under usr/lib/containers/storage, plus
+# the receipt (/etc/bootc-installer/media-input.json) that binds fisherman to
+# it. The live system bind-mounts that store read-only at
+# /var/lib/containers/storage, the one path the receipt may name; see
+# embed-store-payload.sh and iso/live/src/configure-live.sh.
 SQUASHFS_ROOT="${WORK}/squashfs-root"
 mkdir -p "${SQUASHFS_ROOT}"
 cp -a "${MOUNT}/." "${SQUASHFS_ROOT}/"
-
-PAYLOAD_EXPORT="${WORK}/utah-payload"
-PAYLOAD_STORE="${WORK}/payload-store"
-STORAGE_CONF="${WORK}/payload-storage.conf"
-mkdir -p "${PAYLOAD_STORE}"
-# overlay, and /usr/lib/containers/storage, because that is what the image
-# already resolves to. Hummingbird ships a vendor drop-in
-# (/usr/share/containers/storage.conf.d/00-vendor.conf) that sets
-# driver = "overlay", and drop-ins are applied after /etc/containers/storage.conf
-# -- so a storage.conf written into the live layer cannot move the driver, and
-# podman looks for images in the vendor imagestore no matter what the live
-# environment asks for. Writing the payload anywhere else means the installer
-# does not find it and falls back to pulling from a registry.
-printf '[storage]\ndriver = "overlay"\nrunroot = "/tmp/cs-runroot"\ngraphroot = "/payload-store"\n' >"${STORAGE_CONF}"
-echo "Embedding ${PUBLISHED_IMAGE} for offline installation"
-# Containers-storage exports uncompressed layers; recompression or OCI archive
-# conversion changes the manifest digest. For immutable CI inputs, export the
-# original registry blobs directly and retain their manifest bytes via dir.
-payload_source="containers-storage:${PAYLOAD_IMAGE}"
-copy_flags=(--remove-signatures)
-if [[ "${PUBLISHED_IMAGE}" == *@sha256:* ]]; then
-    [[ "${PAYLOAD_IMAGE}" == "${PUBLISHED_IMAGE}" ]] || {
-        echo 'Digest-pinned live image and offline payload must match' >&2; exit 1;
-    }
-    payload_source="docker://${PUBLISHED_IMAGE}"
-    copy_flags+=(--preserve-digests)
-fi
-skopeo copy "${copy_flags[@]}" "${payload_source}" \
-    "dir:${PAYLOAD_EXPORT}"
-podman run --rm --privileged \
-    -v "${PAYLOAD_EXPORT}:/payload:ro" \
-    -v "${PAYLOAD_STORE}:/payload-store" \
-    -v "${STORAGE_CONF}:/tmp/storage.conf:ro" \
-    "${LIVE_IMAGE}" sh -c 'mkdir -p /tmp/cs-runroot /var/tmp && CONTAINERS_STORAGE_CONF=/tmp/storage.conf skopeo copy --preserve-digests dir:/payload "containers-storage:$1"' sh "${PUBLISHED_IMAGE}"
-mkdir -p "${SQUASHFS_ROOT}/usr/lib/containers/storage"
-cp -a "${PAYLOAD_STORE}/." "${SQUASHFS_ROOT}/usr/lib/containers/storage/"
-rm -rf "${PAYLOAD_EXPORT}" "${PAYLOAD_STORE}" "${STORAGE_CONF}"
+bash iso/scripts/embed-store-payload.sh "${PAYLOAD_IMAGE}" "${PUBLISHED_IMAGE}" "${SQUASHFS_ROOT}" "${WORK}" "${LIVE_IMAGE}"
 
 SQUASHFS="${WORK}/squashfs.img"
 echo "Creating live rootfs (${KERNEL})"

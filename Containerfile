@@ -434,10 +434,13 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
     /usr/local/libexec/utah-pin-build-mtimes
 
 # Everything above writes build-time residue that bootc lint rejects: dnf logs
-# under /var/log, cockpit and dnf state under /run, and ~45 /var directories
-# with no tmpfiles.d entry. This must run after the last package install, which
-# is the NVIDIA and OGC step, not after the main transaction. The lint that
-# checks the result runs in the same layer: nothing can change between the two.
+# under /var/log, cockpit and dnf state under /run, ~45 /var directories
+# with no tmpfiles.d entry, and kernel files plus a BLS entry under /boot. This
+# must run after the last package install, which is the NVIDIA and OGC step,
+# not after the main transaction. The lint that checks the result runs in the
+# same layer: nothing can change between the two. It runs every check,
+# nonempty-boot included: a /boot/loader/entries file in the image is a Type #1
+# entry to the composefs backend, which then refuses to install (#1129).
 # The home-label check runs first: clean-stage removes the utah-* helpers.
 #
 # /var/home is created after clean-stage (which strips all of /var except
@@ -463,7 +466,7 @@ RUN --mount=type=bind,from=inputs,source=/tmp/utah-scripts,target=/utah-build-to
     if [ -n "$(ls -A /home)" ]; then \
       echo "ERROR: /home is not empty; home.mount would hide its contents" >&2; exit 1; \
     fi && \
-    bootc container lint --fatal-warnings --skip nonempty-boot && \
+    bootc container lint --fatal-warnings && \
     python3 /utah-build-tools/pin-build-mtimes.py
 
 LABEL org.opencontainers.image.title="Utah"

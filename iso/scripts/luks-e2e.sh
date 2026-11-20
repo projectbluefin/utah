@@ -733,23 +733,62 @@ shot_until_drawn live-desktop "${MONITOR_LIVE}"
 
 E2E_PHASE_EXIT=13
 echo "=== Phase 3/7: install onto an encrypted disk ==="
+# The live media binds the installer to its embedded payload: an unpacked
+# containers-storage graphroot in the squashfs, bind-mounted read-only at
+# /var/lib/containers/storage and named by /etc/bootc-installer/media-input.json
+# (iso/scripts/embed-store-payload.sh). Fisherman refuses to install on live
+# media without that receipt, and refuses any image other than the one it
+# names. Check the binding first, so a broken one fails here with its cause
+# rather than as local_source_unavailable inside the installer.
+echo "Checking the live media's install-source receipt..."
+ssh_live 'cat /etc/bootc-installer/media-input.json' > "${WORK}/media-input.json" \
+    || fail "the live media has no /etc/bootc-installer/media-input.json: fisherman refuses to install without it"
+MEDIA_BINDING="$(python3 - "${WORK}/media-input.json" "${PAYLOAD_IMAGE}" <<'PY'
+import json
+import sys
+
+receipt = json.load(open(sys.argv[1]))
+payload = sys.argv[2]
+for key in ("image", "targetImgref"):
+    if receipt.get(key) != payload:
+        sys.exit(f"media-input.json {key} is {receipt.get(key)!r}, not the payload {payload!r}")
+store = receipt.get("containersStoragePath", "")
+if receipt.get("schemaVersion") != 1 or store != "/var/lib/containers/storage" or receipt.get("ociLayoutPath"):
+    sys.exit(f"media-input.json is not a v1 receipt for the store at /var/lib/containers/storage: {receipt}")
+print(store, receipt["platformManifestDigest"])
+PY
+)" || fail "the live media's install-source receipt does not bind the payload ${PAYLOAD_IMAGE}"
+read -r MEDIA_STORE MEDIA_DIGEST <<<"${MEDIA_BINDING}"
+ssh_live "findmnt -no OPTIONS -T '${MEDIA_STORE}'" | grep -Eq '^ro(,|$)' \
+    || fail "the embedded payload store ${MEDIA_STORE} is not on a read-only mount: fisherman refuses it"
+# The same lookup fisherman's store gate makes.
+stored_digest="$(ssh_live "sudo skopeo inspect --format '{{.Digest}}' 'containers-storage:${PAYLOAD_IMAGE}'")" \
+    || fail "the live system cannot resolve containers-storage:${PAYLOAD_IMAGE} from the embedded store"
+[[ "${stored_digest}" == "${MEDIA_DIGEST}" ]] \
+    || fail "the embedded store reports ${stored_digest} for ${PAYLOAD_IMAGE}, but the receipt binds ${MEDIA_DIGEST}"
+echo "  receipt: ${PAYLOAD_IMAGE} ${MEDIA_DIGEST} from ${MEDIA_STORE} (read-only)"
+
 # The ISO installs with the ostree backend (#1129): an empty "image" with a
-# "targetImgref" is the offline ostree shape, installing from
-# containers-storage without pulling.
+# "targetImgref" selects the source the receipt binds.
 #
-# UTAH_E2E_COMPOSEFS_BACKEND=1 opts in to the composefs backend. Fisherman then
-# needs an explicit source reference (containers-storage:...) to export an OCI
-# layout before running bootc install; targetImgref is kept for day-2 updates.
-# It is not the default until it passes for every flavor (#1129).
+# UTAH_E2E_COMPOSEFS_BACKEND=1 opts in to the composefs backend, naming the
+# receipt's image as the GUI installer does; fisherman installs it from the
+# embedded store either way. It is not the default until it passes for
+# every flavor (#1129).
 #
 # The user block is what phase 6 logs in as. Without it the installed system
 # has no account at all and the greeter has nobody to offer.
 #
+# No flatpaks key, like the GUI's recipe for Utah's catalog entry: since
+# fisherman 58eaf29e an absent key copies the live system's Flatpaks and []
+# copies none, which left the installed system without Ghostty or any
+# default Flatpak (#1129).
+#
 # Deliberately no scratch disk mounted at /var/lib/containers: Bluefin's ISO
 # pulls the payload from a registry and needs real space for it; Utah's ISO
-# carries the image in the squashfs, and mounting over that path hides it.
+# carries the image in the squashfs.
 if [[ "${UTAH_E2E_COMPOSEFS_BACKEND:-0}" == 1 ]]; then
-    RECIPE_IMAGE="containers-storage:${PAYLOAD_IMAGE}"
+    RECIPE_IMAGE="${PAYLOAD_IMAGE}"
     RECIPE_COMPOSEFS_BACKEND=true
 else
     RECIPE_IMAGE=""
@@ -771,8 +810,7 @@ cat > "${WORK}/recipe.json" <<EOF
     "fullname": "Utah End To End",
     "password": "${TEST_PASSWORD}",
     "groups": ["wheel"]
-  },
-  "flatpaks": []
+  }
 }
 EOF
 scp_live "${WORK}/recipe.json" liveuser@127.0.0.1:/tmp/luks-recipe.json
@@ -809,7 +847,7 @@ ssh_live 'theme=$(plymouth-set-default-theme) &&
 scp_live liveuser@127.0.0.1:/tmp/utah-plymouth-theme "${PLYMOUTH_THEME_FILE}"
 scp_live liveuser@127.0.0.1:/tmp/utah-plymouth-watermark.png "${PLYMOUTH_WATERMARK}"
 
-echo "Running the installer from the ISO's embedded store..."
+echo "Running the installer from the ISO's embedded payload store..."
 ssh_live 'sudo /usr/local/bin/fisherman /tmp/luks-recipe.json'
 
 # The installed system already boots with console=ttyS0, but also with
@@ -821,17 +859,28 @@ ssh_live 'sudo /usr/local/bin/fisherman /tmp/luks-recipe.json'
 # serial log, so the graphical-target check below also asks systemd over SSH.
 # Dakota patches the same entries; it only has to add the console because its
 # entries lack one.
+#
+# fisherman writes "rhgb quiet" only when extras.bootSplash is on, and for an
+# image in a catalog it takes extras from that entry alone: an entry without
+# them turned the splash off (#1129, "Desktop extras: none (the catalog entry
+# Utah sets none)"). An entry without rhgb fails here, before the boot, with
+# that cause rather than as a missing watermark in phase 5.
 echo "Making the installed system boot verbosely on the serial console..."
+bls_status=0
 ssh_live 'sudo bash -euc "
     tmp=\$(mktemp -d)
     trap \"umount \$tmp 2>/dev/null || true; rmdir \$tmp\" EXIT
-    seen=0
+    seen=0 splashless=0
     for part in /dev/vda2 /dev/vda1; do
         mount \$part \$tmp 2>/dev/null || continue
         for entry in \$tmp/loader/entries/*.conf \$tmp/EFI/*/loader/entries/*.conf; do
             [ -f \"\$entry\" ] || continue
             grep -q \"^options \" \"\$entry\" || continue
             seen=\$((seen+1))
+            if ! grep \"^options \" \"\$entry\" | grep -qw rhgb; then
+                splashless=\$((splashless+1))
+                echo \"  \$(basename \$entry) has no rhgb: \$(grep \"^options \" \"\$entry\")\" >&2
+            fi
             sed -i \"s/ quiet//\" \"\$entry\"
             grep -q \"console=ttyS0\" \"\$entry\" || \
                 sed -i \"s|^options .*|& console=tty0 console=ttyS0|\" \"\$entry\"
@@ -861,8 +910,14 @@ ssh_live 'sudo bash -euc "
     blockdev --flushbufs /dev/vda2 2>/dev/null || true
     blockdev --flushbufs /dev/vda 2>/dev/null || true
     echo \"boot entries seen: \$seen\"
-    [ \$seen -gt 0 ]
-"' || fail "found no boot entry to make verbose -- the install may not have written one"
+    [ \$seen -gt 0 ] || exit 1
+    [ \$splashless -eq 0 ] || exit 3
+"' || bls_status=$?
+case "${bls_status}" in
+    0) ;;
+    3) fail "the installer wrote a boot entry without rhgb, so Plymouth will draw its text prompt: does the catalog entry in iso/live/src/etc/bootc-installer/images.json turn extras.bootSplash on (and does the install log say so under \"Desktop extras\")?" ;;
+    *) fail "found no boot entry to make verbose -- the install may not have written one" ;;
+esac
 
 echo "Install complete. Powering the live VM down..."
 # Wait for it to actually exit, rather than assuming a few seconds is enough.
@@ -1005,7 +1060,7 @@ fi
 echo "Verifying the installed system booted the offline embedded payload..."
 # bootc's own view of what is booted is the ground truth for "the offline
 # payload survived the install": fisherman's recipe named targetImgref
-# exactly ${PAYLOAD_IMAGE}, formatted from the ISO's embedded
+# exactly ${PAYLOAD_IMAGE}, installed from the ISO's embedded read-only
 # containers-storage with no network (phase 3), so the booted image
 # reference matching it proves that payload -- not a substitute, and not one
 # reached over a network this guest does not have -- is what is running.
@@ -1031,6 +1086,51 @@ if [[ -n "${UTAH_E2E_PAYLOAD_CHECK-x}" ]]; then
     [[ "${booted_image}" == "${PAYLOAD_IMAGE}" ]] \
         || fail "installed system booted '${booted_image:-<unreadable>}', not the offline payload '${PAYLOAD_IMAGE}'"
     echo "  booted image: ${booted_image}"
+    # Both backends boot a re-serialized manifest: fisherman runs `skopeo copy
+    # containers-storage:<payload> oci:<scratch>` and bootc installs that copy,
+    # so bootc reports the copy's manifest digest, not the receipt's (composefs
+    # run 44688721139, ostree run 44697806988). The config digest survives the
+    # copy, so tie the booted manifest to the receipt's config through what
+    # bootc stored at install. CI compares that config with the payload's.
+    payload_config="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["configDigest"])' "${WORK}/media-input.json")" \
+        || fail "the receipt in ${WORK}/media-input.json has no configDigest"
+    booted_status="$(ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' bootc status --json")" \
+        || fail "could not read bootc status on the installed system"
+    booted_digest="$(python3 -c 'import json, sys; print(json.load(sys.stdin)["status"]["booted"]["image"]["imageDigest"])' <<<"${booted_status}")" \
+        || fail "could not read the booted image digest from bootc status"
+    if [[ "${RECIPE_COMPOSEFS_BACKEND}" == true ]]; then
+        # The install pulls one image into bootc's composefs repository, whose
+        # streams are named by digest: its one manifest must be the booted
+        # one, and its one config the receipt's.
+        cfs_streams="$(ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' ls /sysroot/composefs/streams")" \
+            || fail "could not list bootc's composefs repository (/sysroot/composefs/streams) on the installed system"
+        [[ "$(grep '^oci-manifest-' <<<"${cfs_streams}" || true)" == "oci-manifest-${booted_digest}" \
+           && "$(grep '^oci-config-' <<<"${cfs_streams}" || true)" == "oci-config-${payload_config}" ]] \
+            || fail "bootc's composefs repository does not hold just the booted manifest ${booted_digest} and the receipt's config ${payload_config}: ${cfs_streams//$'\n'/ }"
+    else
+        # ostree-ext records the manifest it imported, and that manifest's
+        # digest, on the merge commit it deploys (`ostree.manifest-digest`,
+        # `ostree.manifest`). `ostree show` prints each as a GVariant string.
+        booted_commit="$(python3 -c 'import json, sys; print(json.load(sys.stdin)["status"]["booted"]["ostree"]["checksum"])' <<<"${booted_status}")" \
+            || fail "bootc status names no booted ostree commit"
+        commit_meta="$(ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' sh -c 'for key in ostree.manifest-digest ostree.manifest; do ostree show --repo=/sysroot/ostree/repo --print-metadata-key=\$key ${booted_commit} || exit; done'")" \
+            || fail "could not read the manifest recorded on the booted ostree commit ${booted_commit}"
+        python3 - "${booted_digest}" "${payload_config}" "${commit_meta}" <<'PY' \
+            || fail "the booted ostree commit ${booted_commit} is not the booted manifest with the receipt's config"
+import ast
+import json
+import sys
+
+booted_digest, payload_config, meta = sys.argv[1:]
+digest, manifest = (ast.literal_eval(line) for line in meta.splitlines())
+config = json.loads(manifest)["config"]["digest"]
+if digest != booted_digest or config != payload_config:
+    sys.exit(f"commit records manifest {digest} with config {config}; "
+             f"expected manifest {booted_digest} with config {payload_config}")
+PY
+    fi
+    printf '%s\n' "${payload_config}" > "${WORK}/booted-config-digest"
+    echo "  booted manifest ${booted_digest} (fisherman's copy) has the receipt's config ${payload_config}"
 fi
 
 # An optional review matrix must prove the requested flavor actually booted.
@@ -1067,14 +1167,39 @@ ssh_target "
 echo "  logrotate.service: succeeded with a nonempty state file"
 
 # bootc's mac_admin probe (a chcon to an undefined label) is denied whenever a
-# plain service runs bootc, such as common's projectbluefin-countme. The
-# utah_bootc_probe policy module dontaudits it; any such AVC on the installed
-# system means the module is not loaded (#1198; check from #1220).
+# plain service runs bootc: common's projectbluefin-countme (unconfined_service_t)
+# or the installer's first-boot fisherman-boot-receipt.service, which runs its
+# script with /bin/sh (initrc_t). The utah_bootc_probe policy module dontaudits
+# both; any such AVC on the installed system means the module is not loaded or
+# a caller runs bootc from a domain it does not cover (#1198, #1129; check
+# from #1220).
 echo "Verifying bootc's SELinux probe logs no AVC denials..."
 ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' sh -c 'grep -hF avc: /var/log/audit/audit.log 2>/dev/null; journalctl -b --no-pager -o cat 2>/dev/null | grep -F avc:; true'" \
     > "${WORK}/avc.log" || fail "could not read the installed system's AVC records"
 if grep -E 'denied .*comm="(chcon|bootc)"' "${WORK}/avc.log" >&2; then
-    fail "chcon was denied mac_admin during boot (#1198): utah_bootc_probe is not in effect"
+    # The AVC names only the probe's domain. Keep what identifies the caller:
+    # the probe's SYSCALL records (ppid, exe), the services whose main PID
+    # precedes it, and the labels and mounts the transition depends on.
+    cat > "${WORK}/bootc-probe-diag.sh" <<'DIAG'
+echo "## SYSCALL records of chcon/bootc"
+grep -E 'type=SYSCALL.*comm="(chcon|bootc)"' /var/log/audit/audit.log
+echo "## pid 1"
+ps -o pid,label,args -p 1
+echo "## labels"
+ls -Z /usr/bin/bootc /usr/bin/chcon /usr/bin/bash /usr/bin/unshare \
+    /usr/bin/ublue-booted-image-sync /usr/libexec/projectbluefin-countme 2>&1
+echo "## mounts"
+findmnt -o TARGET,SOURCE,FSTYPE,OPTIONS / /usr /etc /var /sysroot 2>&1
+echo "## services by main PID"
+systemctl show --type=service --all -p Id -p ExecMainPID -p ExecMainStartTimestampMonotonic '*' \
+    | awk -F= '/^Id=/{id=$2} /^ExecMainPID=/{pid=$2} /^ExecMainStartTimestampMonotonic=/{if (pid > 0) print pid, $2, id}' \
+    | sort -n
+DIAG
+    scp_target "${WORK}/bootc-probe-diag.sh" "${TEST_USER}@127.0.0.1:/tmp/utah-bootc-probe-diag.sh" >/dev/null \
+        && ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' sh /tmp/utah-bootc-probe-diag.sh" \
+            > "${WORK}/bootc-probe-diag.log" 2>&1 || true
+    cat "${WORK}/bootc-probe-diag.log" >&2 || true
+    fail "chcon was denied mac_admin during boot (#1198): utah_bootc_probe is not in effect (callers: bootc-probe-diag.log)"
 fi
 echo "  bootc chcon AVC denials: none"
 
@@ -1083,7 +1208,13 @@ echo "=== Phase 7/7: log in and prove the desktop starts ==="
 ssh_target 'systemctl is-active gdm.service' 2>/dev/null | grep -qx active \
     || fail "gdm is not running on the installed system"
 echo "  gdm.service: active"
-shot installed-greeter "${MONITOR_INSTALLED}"
+# The greeter starts long before graphical.target when a boot unit is slow
+# (flatpak-appstream-refresh held it for five minutes offline in run
+# 44715273054), and GDM blanks an idle screen: the shot was flat black on
+# nvidia and nvidia-gaming (runs 44688721139, 44715273054). Press Shift, which
+# types nothing, to wake it, then retake until the greeter has drawn.
+monitor "${MONITOR_INSTALLED}" "sendkey shift" || true
+shot_until_drawn installed-greeter "${MONITOR_INSTALLED}"
 
 # Arrange for a terminal to open as part of the session that is about to
 # start. Launching a GTK application over SSH does not work and cannot be made
@@ -1443,7 +1574,7 @@ the check beside it passed.
    \`gdm.service\` active and \`gnome-shell\` running — not a text console
    that merely answers SSH.
 2. The installer creates a LUKS2 volume and installs from the ISO's embedded
-   container store, with no network.
+   read-only payload store, bound by its media-input.json receipt, with no network.
 3. The installed disk boots on its own, with no ISO attached.
 4. Plymouth draws its graphical passphrase prompt with the theme's watermark
    in place (not the text fallback), and the passphrase typed there opens the
