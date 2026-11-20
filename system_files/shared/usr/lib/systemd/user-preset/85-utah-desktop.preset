@@ -34,3 +34,7 @@ enable oo7-daemon.service
 
 # Common installs the ChairLift GUI on login; enable globally at build time too.
 enable brew-preinstall.service
+
+# GTK3 apps follow the light/dark style: switches gtk-theme between adw-gtk3
+# and adw-gtk3-dark when color-scheme changes (#1342, as Bluefin).
+enable ublue-gtk3-theme-sync.service

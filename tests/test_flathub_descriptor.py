@@ -32,6 +32,8 @@ class FlathubDescriptorIntegrityTests(unittest.TestCase):
         (user_units / "brew-preinstall.service").write_text("[Service]\nExecStart=/usr/bin/brew-preinstall\n")
         # oo7-daemon is the required Secret Service (#1227).
         (user_units / "oo7-daemon.service").write_text("[Service]\nExecStart=/usr/libexec/oo7-daemon\n")
+        # GTK3 apps follow the light/dark style (#1342); Utah ships the unit.
+        (user_units / "ublue-gtk3-theme-sync.service").write_text("[Service]\nExecStart=/usr/libexec/ublue-gtk3-theme-sync\n")
         # Hummingbird's firewalld: firewalld.conf is a symlink to the
         # standard variant; gnome-os-config-firewalld adds the lax zone.
         zones = self.root / "usr/lib/firewalld/zones"
