@@ -1036,6 +1036,43 @@ GNOME 51.0
 Mutter (Wayland)
 """
 
+    # Verbatim excerpt from fastfetch-ocr.txt in the iso-diagnostics-utah-nvidia
+    # artifact of run 44741850768: the kernel line came back garbled. The
+    # screenshot showed all of fastfetch.
+    GARBLED_KERNEL_TRANSCRIPT = """ujust bluefin-c
+brey
+ujust
++ DReport an issue
++ B Documentation h
+UTAH-E2E-FASTFETCH
+[utahtest@utah-luk
+FriNov 20 1:52PM
+Q Typeto search
+utahtest@utah-luks-test:~
+» Bluefin (Version:
+> Linu 200.1.utah1.fc4:
+Forged on Nov 20 2026
+KVM/QEMU Standard PC (Q35 + ICH9
+» GNOME 51.1
+» Mutter (Wa
+» bash
+» ghostty 1.3.2-HEAD-+ef7edc4
+"""
+
+    # Verbatim excerpt from fastfetch-ocr.txt in the
+    # iso-diagnostics-utah-nvidia-gaming artifact of run 44719832822: no
+    # kernel line at all, on a screenshot that showed "Linux 7.1.8-ogc1".
+    MISSING_KERNEL_TRANSCRIPT = """UTAH-E2E-FASTFETCH
+[utahtest@utah-luks-test ~
+Forged on Nov
+KVM/QEMU
+AMD EPYC 7763 64-Core (2) @ 2.
+» GNOME 51.1
+» Mutter (Wa
+» ghostty 1.
+» 44 (Flatpa
+"""
+
     def matches(self, transcript):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "fastfetch-ocr.txt"
@@ -1059,6 +1096,12 @@ Mutter (Wayland)
 
     def test_accepts_transcript_with_substituted_sentinel_fragment(self):
         self.assertTrue(self.matches(self.SUBSTITUTED_TRANSCRIPT))
+
+    def test_accepts_the_sentinel_with_a_garbled_kernel_line(self):
+        self.assertTrue(self.matches(self.GARBLED_KERNEL_TRANSCRIPT))
+
+    def test_accepts_the_sentinel_with_no_kernel_line(self):
+        self.assertTrue(self.matches(self.MISSING_KERNEL_TRANSCRIPT))
 
     def test_rejects_suffix_with_kernel_but_no_second_body_token(self):
         self.assertFalse(self.matches(
