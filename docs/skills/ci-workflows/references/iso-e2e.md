@@ -270,6 +270,27 @@ Fulcio identity pinned to the tacklebox `release-image.yml` workflow on
 an unsigned image or one attested by any other workflow or repository is
 rejected before each Renovate-driven digest bump can run privileged.
 
+### Tacklebox live-boot gate
+
+`tacklebox-iso` boots its ISO with `iso/scripts/tacklebox-boot-gate.sh` and
+passes when `UTAH_LIVE_READY` reaches the serial log. The gate polls for the
+marker itself and returns as soon as it appears; a kernel panic or a QEMU
+process that exited fails at once, and only a boot showing neither waits out
+`UTAH_ISO_BOOT_TIMEOUT` (600 s in CI). It stops the VM on every exit path,
+and the job uploads `serial.log` with the diagnostics.
+
+Two mistakes made every run cost 30 minutes. The gate left its loop only on a
+systemd `Reached target` line and checked for the marker afterwards; in runs
+44538634534 and 44604822618 that line never ended the loop, so the step ran
+the whole 1800 s timeout (30m03s each) and then passed. The job also never
+granted `/dev/kvm`: GitHub-hosted runners do not make it readable by the job
+user, so the gate logged `No /dev/kvm; falling back to TCG` and booted
+emulated. Every job that runs
+QEMU (`luks`, `lifecycle`, `tacklebox-iso`) runs `sudo chmod a+rw /dev/kvm`
+in its "Prepare ISO and QEMU host" step, and `tests/test_iso_ci.py` asserts
+that. Under KVM the `luks` job's live boot reaches the marker in about
+35 seconds.
+
 ### Utah image provenance
 
 Before `luks` and `tacklebox-iso` pull the new image, `verify-provenance`

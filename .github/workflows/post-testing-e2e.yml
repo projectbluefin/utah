@@ -363,6 +363,11 @@ jobs:
           sudo apt-get install -y podman skopeo uidmap slirp4netns fuse-overlayfs \
             squashfs-tools xorriso dosfstools mtools qemu-system-x86 qemu-utils \
             ovmf
+          # Same KVM grant as luks and lifecycle: the job user cannot open
+          # /dev/kvm by default, and without it the boot gate fell back to TCG.
+          test -c /dev/kvm
+          sudo chmod a+rw /dev/kvm
+          test -r /dev/kvm && test -w /dev/kvm
           mkdir -p evidence
           df -h .
       - name: Build the ISO with tacklebox
@@ -395,12 +400,14 @@ jobs:
           limit=$((8 * 1024 * 1024 * 1024))
           echo "utah-main-tacklebox.iso is $size_bytes bytes"
           test "$size_bytes" -le "$limit" || { echo "ISO exceeds the size budget" >&2; exit 1; }
+      # Under KVM the live session reaches the marker in well under a minute
+      # (the luks job's live boot: ~35 s); the gate returns as soon as it does.
       - name: Live-boot and observe the UTAH_LIVE_READY marker
         env:
-          UTAH_ISO_BOOT_TIMEOUT: 1800
+          UTAH_ISO_BOOT_TIMEOUT: 600
+          UTAH_ISO_BOOT_WORK: ${{ runner.temp }}/utah-tbx-boot
         run: |
           set -euo pipefail
-          # No KVM on GitHub-hosted runners: the gate falls back to TCG.
           bash iso/scripts/tacklebox-boot-gate.sh "$PWD/output/utah-main-tacklebox.iso" UTAH_LIVE_READY \
             2>&1 | tee evidence/tbx-boot.log
       - name: Preserve diagnostics even on failure
@@ -412,6 +419,7 @@ jobs:
           if-no-files-found: warn
           path: |
             evidence/
+            ${{ runner.temp }}/utah-tbx-boot/serial.log
 
   # Test credentials are only present in the DEBUG=1 ISO above. Build this
   # artifact after the whole matrix passes, so a retained ISO is production
