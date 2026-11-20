@@ -624,7 +624,8 @@ schema_dir = "/usr/share/glib-2.0/schemas"
 # with `semodule -l`. The store is on read-only /usr once booted (#551), so a
 # module missing from the build cannot be added later.
 # utah_bootc_probe: dontaudit bootc's expected mac_admin probe from plain
-# services, two AVC denials every boot otherwise (#1198).
+# services, two AVC denials every boot otherwise (#1198). Also dontaudit
+# systemd_nsresourced_t dac_read_search on its own domain (#1329).
 [selinux]
 modules = ["utah_bootc_probe"]
 

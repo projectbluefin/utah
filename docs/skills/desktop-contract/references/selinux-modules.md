@@ -46,8 +46,8 @@ on the first boot. Every flavor of review run 44663789174 failed the gate on it
 The module also carries a third rule for #1329:
 `(dontaudit systemd_nsresourced_t self (capability (dac_read_search)))`.
 systemd-nsresourced logs `{ dac_read_search } comm=systemd-nsresou` at boot,
-carries on without the capability, and the gate counted it on every flavor of
-Post-Testing E2E run 44791358885. The two rules below are the bootc probe.
+carries on without the capability, and the gate counted it and failed the utah and
+utah-nvidia flavors of Post-Testing E2E run 44791358885 (the gaming flavors passed). The two rules below are the bootc probe.
 
 The module is two rules for the probe, one per domain:
 `(dontaudit unconfined_service_t self (capability2 (mac_admin)))` and

@@ -1,4 +1,5 @@
-; Silence bootc's expected mac_admin probe in ordinary services (#1198).
+; Silence bootc's expected mac_admin probe in ordinary services (#1198), and
+; systemd-nsresourced's dac_read_search denial on its own domain (#1329).
 ;
 ; `bootc status` probes for mac_admin by running chcon with a label the policy
 ; does not define (bootc lsm.rs, selinux_ensure_install). Outside install_t
@@ -25,6 +26,7 @@
 ; systemd-nsresourced checks dac_read_search on its own process while it
 ; walks user namespace state at boot, and the policy denies it. The daemon
 ; carries on without it; the testsuite's SELinux gate counted the denial and
-; failed every Post-Testing E2E job (#1329). Same shape as the rules above: a
+; failed the utah and utah-nvidia flavors of Post-Testing E2E run 44791358885
+; (the gaming flavors passed) (#1329). Same shape as the rules above: a
 ; dontaudit of one capability on the daemon's own domain, nothing granted.
 (dontaudit systemd_nsresourced_t self (capability (dac_read_search)))

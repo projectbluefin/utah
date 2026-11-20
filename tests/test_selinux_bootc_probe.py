@@ -1,5 +1,7 @@
 """utah_bootc_probe.cil must dontaudit exactly bootc's mac_admin probe (#1198).
 
+It also carries one rule for systemd_nsresourced_t dac_read_search (#1329).
+
 `bootc status` probes for mac_admin with a chcon to a label the policy does
 not define. Run from a plain service (common's projectbluefin-countme) the
 probe is denied in unconfined_service_t and logs two AVC denials every boot,
