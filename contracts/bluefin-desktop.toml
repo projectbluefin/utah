@@ -230,6 +230,10 @@ files = [
   "/etc/pkcs11/modules/opensc.module",
   # Common's PipeWire drop-in; Utah no longer overrides it (#1267).
   "/usr/share/pipewire/pipewire-pulse.conf.d/50-bluefin-bt-switch.conf",
+  # Dakota's Symbols Nerd Font fallback rule (bluefin/nerd-fonts-symbols.bst),
+  # shipped and enabled by the nerd-fonts-symbols package (#1240).
+  "/usr/share/fontconfig/conf.avail/10-nerd-font-symbols.conf",
+  "/etc/fonts/conf.d/10-nerd-font-symbols.conf",
 ]
 
 [configuration.file_contains]
@@ -433,6 +437,9 @@ files = [
 # this keeps a Common regression from bringing the login error back.
 "/usr/share/pipewire/pipewire-pulse.conf.d/50-bluefin-bt-switch.conf" = [
   "pulse.cmd = [ ]",
+]
+"/etc/fonts/conf.d/10-nerd-font-symbols.conf" = [
+  "<family>Symbols Nerd Font</family>",
 ]
 
 [flatpak]
