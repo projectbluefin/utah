@@ -30,6 +30,8 @@ class FlathubDescriptorIntegrityTests(unittest.TestCase):
         user_units = self.root / "usr/lib/systemd/user"
         user_units.mkdir(parents=True)
         (user_units / "brew-preinstall.service").write_text("[Service]\nExecStart=/usr/bin/brew-preinstall\n")
+        # oo7-daemon is the required Secret Service (#1227).
+        (user_units / "oo7-daemon.service").write_text("[Service]\nExecStart=/usr/libexec/oo7-daemon\n")
         # Hummingbird's firewalld: firewalld.conf is a symlink to the
         # standard variant; gnome-os-config-firewalld adds the lax zone.
         zones = self.root / "usr/lib/firewalld/zones"
