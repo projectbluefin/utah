@@ -444,16 +444,10 @@ jobs:
           image_ref=$(cat evidence/image-ref.txt)
           bash iso/scripts/luks-e2e.sh "$PWD/output/utah-review.iso" "$image_ref" \
             2>&1 | tee evidence/vm-test.log
-          if [ "$UTAH_E2E_COMPOSEFS_BACKEND" = 1 ]; then
-            # A composefs install boots fisherman's re-serialized copy of the
-            # payload; luks-e2e.sh ties that manifest to the payload's config.
-            booted_config=$(cat "$UTAH_E2E_WORK/booted-config-digest")
-            test "$booted_config" = "$(jq -r .config.digest evidence/payload-manifest.json)"
-          else
-            booted_digest=$(jq -r .status.booted.image.imageDigest "$UTAH_E2E_WORK/bootc-status.json")
-            expected_digest="sha256:$(cut -d ' ' -f1 evidence/payload-manifest.sha256)"
-            test "$booted_digest" = "$expected_digest"
-          fi
+          # Both backends boot fisherman's re-serialized copy of the payload;
+          # luks-e2e.sh ties the booted manifest to the payload's config.
+          booted_config=$(cat "$UTAH_E2E_WORK/booted-config-digest")
+          test "$booted_config" = "$(jq -r .config.digest evidence/payload-manifest.json)"
           cp "$UTAH_E2E_WORK/bootc-status.json" "$UTAH_E2E_WORK/flavor-checks.json" evidence/
       - name: Preserve VM evidence on success or failure
         if: always()

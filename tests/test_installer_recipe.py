@@ -145,18 +145,20 @@ class InstallerBackendTests(unittest.TestCase):
         self.assertLess(script.index(receipt),
                         script.index("sudo /usr/local/bin/fisherman"))
 
-    def test_composefs_review_compares_the_config_digest(self):
-        # fisherman's composefs install boots a re-serialized copy of the
-        # payload, so bootc's imageDigest is not the payload manifest's (run
-        # 44688721139); the config digest is the identity that survives.
+    def test_review_compares_the_config_digest_on_both_backends(self):
+        # fisherman installs both backends from a re-serialized copy of the
+        # payload, so bootc's imageDigest is not the payload manifest's
+        # (composefs run 44688721139, ostree run 44697806988); the config
+        # digest is the identity that survives.
         script = LUKS_E2E.read_text()
         self.assertIn("ls /sysroot/composefs/streams", script)
         self.assertIn('"oci-config-${payload_config}"', script)
+        self.assertIn("for key in ostree.manifest-digest ostree.manifest;", script)
+        self.assertIn("--print-metadata-key=\\$key ${booted_commit}", script)
         self.assertIn('> "${WORK}/booted-config-digest"', script)
         step = (ROOT / ".github/workflows/build.yml").read_text()
-        self.assertIn('if [ "$UTAH_E2E_COMPOSEFS_BACKEND" = 1 ]; then', step)
         self.assertIn('test "$booted_config" = "$(jq -r .config.digest evidence/payload-manifest.json)"', step)
-        self.assertIn('test "$booted_digest" = "$expected_digest"', step)
+        self.assertNotIn(".status.booted.image.imageDigest", step)
 
 
 class InstallerExtrasTests(unittest.TestCase):

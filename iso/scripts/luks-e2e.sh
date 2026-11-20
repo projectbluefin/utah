@@ -1083,27 +1083,51 @@ if [[ -n "${UTAH_E2E_PAYLOAD_CHECK-x}" ]]; then
     [[ "${booted_image}" == "${PAYLOAD_IMAGE}" ]] \
         || fail "installed system booted '${booted_image:-<unreadable>}', not the offline payload '${PAYLOAD_IMAGE}'"
     echo "  booted image: ${booted_image}"
-    # A composefs install boots a re-serialized manifest: fisherman runs
-    # `skopeo copy containers-storage:<payload> oci:<scratch>` and bootc
-    # installs that copy, so bootc reports the copy's manifest digest, not the
-    # receipt's (run 44688721139). The config digest survives the copy. The
-    # install pulls one image into bootc's composefs repository, whose streams
-    # are named by digest: its one manifest must be the booted one, and its
-    # one config the receipt's. CI compares that config with the payload's.
+    # Both backends boot a re-serialized manifest: fisherman runs `skopeo copy
+    # containers-storage:<payload> oci:<scratch>` and bootc installs that copy,
+    # so bootc reports the copy's manifest digest, not the receipt's (composefs
+    # run 44688721139, ostree run 44697806988). The config digest survives the
+    # copy, so tie the booted manifest to the receipt's config through what
+    # bootc stored at install. CI compares that config with the payload's.
+    payload_config="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["configDigest"])' "${WORK}/media-input.json")" \
+        || fail "the receipt in ${WORK}/media-input.json has no configDigest"
+    booted_status="$(ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' bootc status --json")" \
+        || fail "could not read bootc status on the installed system"
+    booted_digest="$(python3 -c 'import json, sys; print(json.load(sys.stdin)["status"]["booted"]["image"]["imageDigest"])' <<<"${booted_status}")" \
+        || fail "could not read the booted image digest from bootc status"
     if [[ "${RECIPE_COMPOSEFS_BACKEND}" == true ]]; then
-        payload_config="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["configDigest"])' "${WORK}/media-input.json")" \
-            || fail "the receipt in ${WORK}/media-input.json has no configDigest"
-        booted_digest="$(ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' bootc status --json" \
-            | python3 -c 'import json, sys; print(json.load(sys.stdin)["status"]["booted"]["image"]["imageDigest"])')" \
-            || fail "could not read the booted image digest from bootc status"
+        # The install pulls one image into bootc's composefs repository, whose
+        # streams are named by digest: its one manifest must be the booted
+        # one, and its one config the receipt's.
         cfs_streams="$(ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' ls /sysroot/composefs/streams")" \
             || fail "could not list bootc's composefs repository (/sysroot/composefs/streams) on the installed system"
         [[ "$(grep '^oci-manifest-' <<<"${cfs_streams}" || true)" == "oci-manifest-${booted_digest}" \
            && "$(grep '^oci-config-' <<<"${cfs_streams}" || true)" == "oci-config-${payload_config}" ]] \
             || fail "bootc's composefs repository does not hold just the booted manifest ${booted_digest} and the receipt's config ${payload_config}: ${cfs_streams//$'\n'/ }"
-        printf '%s\n' "${payload_config}" > "${WORK}/booted-config-digest"
-        echo "  booted manifest ${booted_digest} (composefs copy) has the receipt's config ${payload_config}"
+    else
+        # ostree-ext records the manifest it imported, and that manifest's
+        # digest, on the merge commit it deploys (`ostree.manifest-digest`,
+        # `ostree.manifest`). `ostree show` prints each as a GVariant string.
+        booted_commit="$(python3 -c 'import json, sys; print(json.load(sys.stdin)["status"]["booted"]["ostree"]["checksum"])' <<<"${booted_status}")" \
+            || fail "bootc status names no booted ostree commit"
+        commit_meta="$(ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' sh -c 'for key in ostree.manifest-digest ostree.manifest; do ostree show --repo=/sysroot/ostree/repo --print-metadata-key=\$key ${booted_commit} || exit; done'")" \
+            || fail "could not read the manifest recorded on the booted ostree commit ${booted_commit}"
+        python3 - "${booted_digest}" "${payload_config}" "${commit_meta}" <<'PY' \
+            || fail "the booted ostree commit ${booted_commit} is not the booted manifest with the receipt's config"
+import ast
+import json
+import sys
+
+booted_digest, payload_config, meta = sys.argv[1:]
+digest, manifest = (ast.literal_eval(line) for line in meta.splitlines())
+config = json.loads(manifest)["config"]["digest"]
+if digest != booted_digest or config != payload_config:
+    sys.exit(f"commit records manifest {digest} with config {config}; "
+             f"expected manifest {booted_digest} with config {payload_config}")
+PY
     fi
+    printf '%s\n' "${payload_config}" > "${WORK}/booted-config-digest"
+    echo "  booted manifest ${booted_digest} (fisherman's copy) has the receipt's config ${payload_config}"
 fi
 
 # An optional review matrix must prove the requested flavor actually booted.

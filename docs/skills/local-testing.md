@@ -423,11 +423,18 @@ export into the payload store with `--preserve-digests` too.
 Do not export from containers-storage or substitute an OCI archive: the
 former exports uncompressed layers, while the latter can convert manifest
 formats. Either changes the digest and breaks the embedded `image@sha256:...`
-reference. Local tag-based builds may export their local containers-storage;
-the store still keeps that export's manifest digest, which the review VM
-compares with the installed bootc digest. The builder fails if the store
-reports another digest than the exported manifest. A digest-preserving copy
-failure must fail ISO composition, not fall back to a mutable tag.
+reference. Local tag-based builds may export their local containers-storage.
+The builder fails if the store reports another digest than the exported
+manifest. A digest-preserving copy failure must fail ISO composition, not fall
+back to a mutable tag.
+The installed system does not boot that manifest digest: on both backends
+fisherman installs from `skopeo copy containers-storage:<payload>
+oci:<scratch>`, which re-serializes the manifest, so bootc reports the copy's
+digest. The config digest survives the copy. `luks-e2e.sh` checks that what
+bootc stored at install (the composefs repository's streams, or the
+`ostree.manifest-digest` and `ostree.manifest` keys on the booted ostree
+commit) is the booted manifest with the receipt's config, and the review VM
+compares that config with the payload manifest's.
 The live assembler selects a release from `/usr/lib/modules` and uses its
 matching initramfs. Kernel-core provides that release's `vmlinuz` in the module
 directory, while the OGC installer writes `/boot/vmlinuz-<release>`.
