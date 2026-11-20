@@ -160,6 +160,14 @@ class InstallerBackendTests(unittest.TestCase):
         self.assertIn('test "$booted_config" = "$(jq -r .config.digest evidence/payload-manifest.json)"', step)
         self.assertNotIn(".status.booted.image.imageDigest", step)
 
+    def test_greeter_shot_wakes_an_idle_blanked_screen(self):
+        # GDM blanks the greeter while a slow boot unit holds graphical.target
+        # (run 44715273054); the shot must wake it before retaking.
+        script = LUKS_E2E.read_text()
+        wake = 'monitor "${MONITOR_INSTALLED}" "sendkey shift" || true\n'
+        shot = 'shot_until_drawn installed-greeter "${MONITOR_INSTALLED}"\n'
+        self.assertIn(wake + shot, script)
+
 
 class InstallerExtrasTests(unittest.TestCase):
     """fisherman runs its desktop steps only for an image that asks (#1129).

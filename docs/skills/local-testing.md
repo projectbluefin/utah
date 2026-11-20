@@ -400,7 +400,10 @@ terminal overlay, preventing duplicate verification evidence (#240). CI sets
 `UTAH_E2E_REQUIRE_FASTFETCH=1` to require OCR of its completion marker and
 kernel output, and `UTAH_E2E_REQUIRE_SCREENSHOTS=1` to reject missing PNGs and
 blank or flat-colour frames: a solid-black or frozen screen would otherwise pass
-the non-empty check and be published as proof a session started (#786). CI retains the tested commit/image digest and proposes evidence updates in a
+the non-empty check and be published as proof a session started (#786). GDM
+blanks the greeter while a slow boot unit holds `graphical.target`, so the
+harness presses Shift, which types nothing, before it retakes the greeter shot
+until it has drawn. CI retains the tested commit/image digest and proposes evidence updates in a
 documentation PR only after all flavors pass. See [ci-workflows.md](ci-workflows.md).
 
 Ghostty is the only terminal the harness's fastfetch capture can show, and

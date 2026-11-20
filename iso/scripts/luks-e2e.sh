@@ -1205,8 +1205,12 @@ echo "=== Phase 7/7: log in and prove the desktop starts ==="
 ssh_target 'systemctl is-active gdm.service' 2>/dev/null | grep -qx active \
     || fail "gdm is not running on the installed system"
 echo "  gdm.service: active"
-# gdm.service is active before the greeter has drawn: nvidia-gaming's shot at
-# that moment was flat black (run 44688721139) and failed the end-of-run gate.
+# The greeter starts long before graphical.target when a boot unit is slow
+# (flatpak-appstream-refresh held it for five minutes offline in run
+# 44715273054), and GDM blanks an idle screen: the shot was flat black on
+# nvidia and nvidia-gaming (runs 44688721139, 44715273054). Press Shift, which
+# types nothing, to wake it, then retake until the greeter has drawn.
+monitor "${MONITOR_INSTALLED}" "sendkey shift" || true
 shot_until_drawn installed-greeter "${MONITOR_INSTALLED}"
 
 # Arrange for a terminal to open as part of the session that is about to
