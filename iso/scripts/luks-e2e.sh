@@ -1083,6 +1083,27 @@ if [[ -n "${UTAH_E2E_PAYLOAD_CHECK-x}" ]]; then
     [[ "${booted_image}" == "${PAYLOAD_IMAGE}" ]] \
         || fail "installed system booted '${booted_image:-<unreadable>}', not the offline payload '${PAYLOAD_IMAGE}'"
     echo "  booted image: ${booted_image}"
+    # A composefs install boots a re-serialized manifest: fisherman runs
+    # `skopeo copy containers-storage:<payload> oci:<scratch>` and bootc
+    # installs that copy, so bootc reports the copy's manifest digest, not the
+    # receipt's (run 44688721139). The config digest survives the copy. The
+    # install pulls one image into bootc's composefs repository, whose streams
+    # are named by digest: its one manifest must be the booted one, and its
+    # one config the receipt's. CI compares that config with the payload's.
+    if [[ "${RECIPE_COMPOSEFS_BACKEND}" == true ]]; then
+        payload_config="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["configDigest"])' "${WORK}/media-input.json")" \
+            || fail "the receipt in ${WORK}/media-input.json has no configDigest"
+        booted_digest="$(ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' bootc status --json" \
+            | python3 -c 'import json, sys; print(json.load(sys.stdin)["status"]["booted"]["image"]["imageDigest"])')" \
+            || fail "could not read the booted image digest from bootc status"
+        cfs_streams="$(ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' ls /sysroot/composefs/streams")" \
+            || fail "could not list bootc's composefs repository (/sysroot/composefs/streams) on the installed system"
+        [[ "$(grep '^oci-manifest-' <<<"${cfs_streams}" || true)" == "oci-manifest-${booted_digest}" \
+           && "$(grep '^oci-config-' <<<"${cfs_streams}" || true)" == "oci-config-${payload_config}" ]] \
+            || fail "bootc's composefs repository does not hold just the booted manifest ${booted_digest} and the receipt's config ${payload_config}: ${cfs_streams//$'\n'/ }"
+        printf '%s\n' "${payload_config}" > "${WORK}/booted-config-digest"
+        echo "  booted manifest ${booted_digest} (composefs copy) has the receipt's config ${payload_config}"
+    fi
 fi
 
 # An optional review matrix must prove the requested flavor actually booted.
@@ -1160,7 +1181,9 @@ echo "=== Phase 7/7: log in and prove the desktop starts ==="
 ssh_target 'systemctl is-active gdm.service' 2>/dev/null | grep -qx active \
     || fail "gdm is not running on the installed system"
 echo "  gdm.service: active"
-shot installed-greeter "${MONITOR_INSTALLED}"
+# gdm.service is active before the greeter has drawn: nvidia-gaming's shot at
+# that moment was flat black (run 44688721139) and failed the end-of-run gate.
+shot_until_drawn installed-greeter "${MONITOR_INSTALLED}"
 
 # Arrange for a terminal to open as part of the session that is about to
 # start. Launching a GTK application over SSH does not work and cannot be made
