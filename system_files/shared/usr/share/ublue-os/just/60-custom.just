@@ -97,16 +97,10 @@ manage-virtualization: (_virtualization "virtualization")
 setup-virtualization: (_virtualization "setup")
 
 # Dakota's recipes (files/just-overrides/system.just) run its devmode helper
-# directly. Utah ships QEMU but not libvirt yet, which the helper drives, so
-# say so instead of letting it refuse on units it cannot find (#1232).
+# directly; it drives the libvirt the image ships, off by preset (#1232).
 _virtualization action:
     #!/usr/bin/bash
     set -euo pipefail
-    if [[ ! -e "${LIBVIRT_SOCKET_UNIT:-/usr/lib/systemd/system/virtqemud.socket}" ]]; then
-        echo 'libvirt is not in this image yet (projectbluefin/utah-packages#1021).' >&2
-        echo 'QEMU/KVM, toolbox and the VM guest agents are installed.' >&2
-        exit 1
-    fi
     exec "${DAKOTA_DEVMODE:-/usr/libexec/dakota-devmode}" "{{ action }}"
 
 # Turn the Bluefin CLI terminal experience on or off for your shell

@@ -137,21 +137,19 @@ directories with the RPM's modes, and systemd-tmpfiles is allowed to.
 
 ### Virtualization (#1232)
 
-Toolbox, systemd-container and the guest agents (qemu-guest-agent,
-spice-vdagent, open-vm-tools, hyperv-daemons) are installed, as on Dakota.
-Dakota's presets need no file of their own here: `80-libvirt.preset`'s
-disables are in `98-utah-enable-default.preset`, and the enables in its
-`80-open-vm-tools.preset` and `80-hyperv-daemons.preset` (`vmtoolsd`,
-`hypervfcopyd`) follow from `enable *`; each agent is gated on its hypervisor.
+Toolbox, systemd-container, the guest agents (qemu-guest-agent,
+spice-vdagent, open-vm-tools, hyperv-daemons), qemu-kvm, virtiofsd and libvirt
+(`libvirt-daemon-kvm`, `libvirt-daemon-config-network`, `libvirt-client`) are
+installed, as on Dakota; QEMU, virtiofsd and libvirt come from the factory
+(utah-packages#1021). Dakota's presets need no file of their own here:
+`80-libvirt.preset`'s disables are in `98-utah-enable-default.preset`, so
+libvirt stays off, and the enables in its `80-open-vm-tools.preset` and
+`80-hyperv-daemons.preset` (`vmtoolsd`, `hypervfcopyd`) follow from
+`enable *`; each agent is gated on its hypervisor.
 `ujust setup-virtualization` and `manage-virtualization` (`60-custom.just`)
 run Dakota's `files/just-overrides/devmode.py`, shipped verbatim as
-`/usr/libexec/dakota-devmode`. virtiofsd, libvirt-client and
-libvirt-daemon-config-network are installed from the factory, as on Dakota.
-qemu-kvm and libvirt-daemon-kvm wait on the factory (`[unavailable]`,
-utah-packages#1021: qemu 11.1.3-2's qemu-system-x86-core needs the xen, daxctl,
-xdp, qatzip and igvm libraries, and libvirt 12.9.0-2's iSCSI-direct storage
-driver needs libiscsi); until the kvm daemon set lands the recipes say
-so and exit. containerd and runc are excluded: podman runs on crun.
+`/usr/libexec/dakota-devmode`, which turns the modular virt*d sockets on.
+containerd and runc are excluded: podman runs on crun.
 
 ### Key remapping (#1222)
 

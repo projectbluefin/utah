@@ -1,4 +1,4 @@
-"""Dakota's virtualization set, as Utah can ship it today (#1232)."""
+"""Dakota's virtualization set (#1232)."""
 import os
 import tomllib
 import unittest
@@ -17,15 +17,17 @@ class VirtualizationTests(unittest.TestCase):
     def test_published_pieces_are_installed(self):
         parity = manifest("utah.toml")["parity"]["packages"]
         for name in ("qemu-guest-agent", "spice-vdagent", "open-vm-tools",
-                     "hyperv-daemons", "toolbox", "systemd-container", "virtiofsd",
-                     "libvirt-client", "libvirt-daemon-config-network"):
+                     "hyperv-daemons", "toolbox", "systemd-container", "virtiofsd"):
             self.assertIn(name, parity)
 
-    def test_pending_factory_pieces_are_tracked_as_unavailable(self):
-        unavailable = manifest("utah.toml")["unavailable"]["packages"]
-        for name in ("qemu-kvm", "libvirt-daemon-kvm"):
-            self.assertIn(name, unavailable)
-        self.assertIn("utah-packages#1021", (ROOT / "packages/utah.toml").read_text())
+    def test_qemu_and_libvirt_come_from_the_factory(self):
+        utah = manifest("utah.toml")
+        for name in ("qemu-kvm", "libvirt-daemon-kvm", "libvirt-daemon-config-network",
+                     "libvirt-client", "virtiofsd"):
+            with self.subTest(name=name):
+                self.assertIn(name, utah["parity"]["packages"])
+                self.assertIn(name, utah["factory"]["parity"])
+                self.assertNotIn(name, utah["unavailable"]["packages"])
 
     def test_containerd_and_runc_are_gone(self):
         base = manifest("base.toml")
