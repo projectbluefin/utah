@@ -103,6 +103,10 @@ files = [
   "/usr/share/glib-2.0/schemas/io.projectbluefin.chairlift.livery.gschema.xml",
   "/usr/share/glib-2.0/schemas/io.projectbluefin.chairlift.updates.gschema.xml",
   "/usr/share/glib-2.0/schemas/io.projectbluefin.chairlift.firstrun.gschema.xml",
+  # Bling's Sync Folder toggle, Utah's only Syncthing toggle as on Dakota
+  # (#1357), with its schema installed globally by build-gnome-extensions.sh.
+  "/usr/share/gnome-shell/extensions/syncthing-toggle@projectbluefin.io/metadata.json",
+  "/usr/share/glib-2.0/schemas/org.gnome.shell.extensions.syncthing-toggle.gschema.xml",
   # dconf reads distro keyfiles only when the user profile names
   # system-db:distro. The factory dconf RPM ships that profile (with local
   # and site layers); Utah asserts it but must not overlay its own copy.

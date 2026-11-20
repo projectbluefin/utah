@@ -9,12 +9,11 @@ Paths below are in the Dakota repository.
 in Dakota's order (`elements/bluefin/shell-extensions/disable-ext-validator.bst`):
 Caffeine, AppIndicator, Bazaar integration, Blur my Shell, Dash to Dock, Fuzzy
 App Search, Gradia, GSConnect, Custom Command List, BudsLink-Companion and
-Tiling Shell. The audio-device hider and renamer, Tailscale QS, both Syncthing
-toggles, Power Status Color and Bluefin Light Style stay installed but opt-in.
-Utah installs two extensions Dakota lacks: Bluefin Light Style (kept by owner
-decision, #1235) and the rehhouari Syncthing toggle (#1357). A user who has
-changed their extension list keeps it; an untouched profile follows the
-default.
+Tiling Shell. The audio-device hider and renamer, Tailscale QS, the Sync
+Folder toggle, Power Status Color and Bluefin Light Style stay installed but
+opt-in. Utah installs one extension Dakota lacks: Bluefin Light Style (kept by
+owner decision, #1235). A user who has changed their extension list keeps it;
+an untouched profile follows the default.
 
 `[gsettings.values]` in `contracts/bluefin-desktop.toml` pins the exact list
 `gsettings get org.gnome.shell enabled-extensions` prints in the image.
@@ -28,7 +27,11 @@ The installed set follows Dakota's `elements/bluefin/gnome-shell-extensions.bst`
 is pinned to Dakota's `elements/bluefin/shell-extensions/power-status-color.bst`
 ref, and the build installs every bling member: power-status-color and
 `syncthing-toggle@projectbluefin.io` as Dakota does, plus
-`light-style@projectbluefin.io`, a deliberate Utah addition. Bling discovery is
+`light-style@projectbluefin.io`, a deliberate Utah addition. Bling's Sync
+Folder toggle is Utah's only Syncthing toggle, as on Dakota: the
+`syncthing-toggle@rehhouari.github.com` submodule Utah used to carry next to it
+was dropped (#1357), and the contract asserts bling's
+`org.gnome.shell.extensions.syncthing-toggle` schema. Bling discovery is
 automatic, so a new bling member ships unless the build excludes it; check it
 against Dakota when bumping the pin. `baselines/triage.toml` records only Dakota
 items Utah lacks, so Utah-only extensions carry no entry there.
