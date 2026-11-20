@@ -145,10 +145,12 @@ disables are in `98-utah-enable-default.preset`, and the enables in its
 `hypervfcopyd`) follow from `enable *`; each agent is gated on its hypervisor.
 `ujust setup-virtualization` and `manage-virtualization` (`60-custom.just`)
 run Dakota's `files/just-overrides/devmode.py`, shipped verbatim as
-`/usr/libexec/dakota-devmode`. qemu-kvm, virtiofsd and libvirt wait on the
-factory (`[unavailable]`, utah-packages#1021: ipxe-roms-qemu and SDL2_image are
-missing, libvirt is unpublished); until libvirt lands the recipes say so and
-exit. containerd and runc are excluded: podman runs on crun.
+`/usr/libexec/dakota-devmode`. virtiofsd is installed from the factory, as on
+Dakota. qemu-kvm and libvirt wait on the factory (`[unavailable]`,
+utah-packages#1021: qemu-system-x86-core needs the xen, daxctl, xdp, qatzip and
+igvm libraries, and libvirt 12.9.0-1 needs libwsman, libnbd, numad, lzop and
+swtpm-tools); until libvirt lands the recipes say so and exit. containerd and
+runc are excluded: podman runs on crun.
 
 ### Key remapping (#1222)
 

@@ -402,6 +402,7 @@
         "v4l-utils",
         "veritysetup",
         "vim-enhanced",
+        "virtiofsd",
         "vpnc",
         "vpnc-script",
         "wget2",
@@ -469,8 +470,8 @@
     }
   ],
   "totals": {
-    "installed": 412,
-    "unavailable": 9
+    "installed": 413,
+    "unavailable": 8
   },
   "unavailable": [
     {
@@ -512,10 +513,6 @@
         83
       ],
       "name": "slitherer"
-    },
-    {
-      "issues": [],
-      "name": "virtiofsd"
     }
   ]
 }
