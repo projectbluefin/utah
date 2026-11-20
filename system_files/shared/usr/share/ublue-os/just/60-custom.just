@@ -118,10 +118,6 @@ bluefin-cli:
     # bluefin-cli replaces Common's ublue-bling and bling.sh/bling.fish. It
     # writes one marked line into the rc file and removes bling's lines.
     # uwelcome stays the greeting; bluefin-cli's init greets through it.
-    if ! command -v bluefin-cli >/dev/null; then
-        echo 'error: bluefin-cli is not installed on this image.' >&2
-        exit 1
-    fi
     shell="${SHELL##*/}"
     case "$shell" in
         bash) rc="${HOME}/.bashrc" ;;
