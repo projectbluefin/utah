@@ -753,6 +753,11 @@ echo "  receipt: ${PAYLOAD_IMAGE} ${MEDIA_DIGEST} from ${MEDIA_STORE} (read-only
 # The user block is what phase 6 logs in as. Without it the installed system
 # has no account at all and the greeter has nobody to offer.
 #
+# No flatpaks key, like the GUI's recipe for Utah's catalog entry: since
+# fisherman 58eaf29e an absent key copies the live system's Flatpaks and []
+# copies none, which left the installed system without Ghostty or any
+# default Flatpak (#1129).
+#
 # Deliberately no scratch disk mounted at /var/lib/containers: Bluefin's ISO
 # pulls the payload from a registry and needs real space for it; Utah's ISO
 # carries the image in the squashfs.
@@ -779,8 +784,7 @@ cat > "${WORK}/recipe.json" <<EOF
     "fullname": "Utah End To End",
     "password": "${TEST_PASSWORD}",
     "groups": ["wheel"]
-  },
-  "flatpaks": []
+  }
 }
 EOF
 scp_live "${WORK}/recipe.json" liveuser@127.0.0.1:/tmp/luks-recipe.json

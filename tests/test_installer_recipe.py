@@ -81,6 +81,15 @@ class InstallerFlatpakPathTests(unittest.TestCase):
                 self.assertFalse(path.rstrip("/").endswith("lib/flatpak"),
                                  f"{path!r} is the flatpak dir; fisherman appends lib/flatpak itself")
 
+    def test_recipes_leave_flatpaks_out(self):
+        # Since fisherman 58eaf29e, "flatpaks": [] copies no Flatpak and an
+        # absent key copies the live system's. The e2e sent [], and its
+        # composefs installs had no Ghostty to show fastfetch in (#1129).
+        self.assertNotIn("flatpaks", json.loads(RECIPE.read_text()))
+        for image in json.loads(IMAGES.read_text())["images"]:
+            self.assertNotIn("flatpaks", image)
+        self.assertNotIn('"flatpaks"', LUKS_E2E.read_text())
+
 
 class InstallerBackendTests(unittest.TestCase):
     """The ISO installs with the ostree backend until composefs installs pass

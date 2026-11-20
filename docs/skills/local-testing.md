@@ -291,6 +291,11 @@ that ostree installs did not:
   fisherman#396).
 - **The catalog entry's `extras`.** The same bump made fisherman's desktop
   steps opt-in; see above. Older fisherman ran all four for every install.
+- **No `flatpaks` key in a recipe.** The same bump gave the key a new
+  meaning: absent copies the live system's Flatpaks, `[]` copies none. The
+  e2e recipe sent `[]`, so its installs had no Ghostty and no default
+  Flatpak ("Flatpaks: skipped, the recipe's flatpaks list is empty" in the
+  install log). The GUI leaves the key out for a catalog entry without one.
 - **The OGC kernel needs `CGROUP_BPF`.** crun's cgroup-v2 device filter for
   that container fails without it ("crun: bpf create: Invalid argument"). See
   [kernel-cache.md](kernel-cache.md).
