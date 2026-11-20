@@ -31,6 +31,9 @@ post-build verification workflows, not the complete workflow inventory:
   job runs the shared download-pinning gate in fail mode, including on merge
   groups and dispatches. Its documented substring exceptions live in
   `.github/pinned-fetches-allowlist.txt`; review them when their fetches change.
+  The contract checkout fetches extension submodules in a separate
+  five-attempt, serialized retry step because external hosts can transiently
+  return 5xx responses.
   A merge group also runs `contract`, but `kernel_cache`, `build_main` and
   `build_kernel` skip it because they push and sign (see `merge-queue.yml`
   below). A dispatch

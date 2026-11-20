@@ -109,9 +109,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
-          submodules: recursive
+          # Fetches from extension hosts can transiently return 5xx. Keep the
+          # repository checkout independent from those hosts so the retry
+          # policy below can recover without restarting the whole job.
+          submodules: false
           # The dispatch guard requires this to equal the publisher's github.sha.
           ref: ${{ inputs.sha || github.sha }}
+      - name: Checkout submodules with retry
+        run: bash .github/scripts/update-submodules-with-retry.sh
       - name: Install just
         uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3
       - name: Install host test dependencies
