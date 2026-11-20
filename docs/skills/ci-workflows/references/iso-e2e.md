@@ -310,6 +310,39 @@ you do. The script finds its issue through the REST issues listing (label
 `area/ci` plus a body marker), not issue search. Dispatch the workflow with
 another `max_age_hours` to try a different threshold.
 
+### Infra re-run
+
+One red leg skips `promote-to-testing`, so a transient fault wastes the whole
+run. In run 44538634534 every LUKS, lifecycle and production-ISO job passed,
+and two testsuite legs failed on a GHCR `fetching blob: received unexpected
+HTTP status: 500`. `rerun-e2e-infra-failures.yml` fires when a Post-Testing
+E2E run completes with `failure` on `run_attempt` 1. `scripts/e2e-infra-rerun.py`
+downloads every failed, timed-out or cancelled job's log and judges only the
+step that printed the first `##[error]`, so a fault an earlier step recovered
+from cannot excuse a later product failure. The signatures, each tied to the
+run that showed it, live in `SIGNATURES` in the script: runner shutdown or
+lost communication, a job with no log at all (HTTP 404/410), a registry 5xx,
+a Sigstore 5xx, `All mirrors were tried` / `Librepo error: Curl error`,
+`Could not resolve host: codeberg.org`, and `libpod_lock`. Add one only with a
+run that shows it, and a fixture under `tests/fixtures/e2e-infra/`.
+
+When every failed job matches, the `rerun` job runs `gh run rerun --failed`
+once. One unexplained failure leaves the run red, and nothing re-runs an
+attempt 2. After the wait, the job re-checks that the run is still on attempt 1
+and is still the newest Post-Testing E2E run; a newer run supersedes it and
+would otherwise lose its pending place in the `utah-iso-e2e` group. Classified
+against the 26 failed runs between 2026-11-15 and 11-19 (215 failed jobs),
+only 44538634534 would have been re-run.
+
+The delay is the wait timer of the `e2e-infra-retry-wait` environment, not a
+`sleep`, so the waiting job holds no runner. The environment must have a
+20-minute wait timer (Settings -> Environments, or
+`gh api -X PUT repos/projectbluefin/utah/environments/e2e-infra-retry-wait -F wait_timer=20`).
+Without it, Actions creates the environment with no rules on first use and the
+re-run starts at once; the classify job prints a `no re-run delay` warning
+while that is so. Dispatch the workflow with a `run_id` to classify any run
+without re-running it.
+
 ## Testsuite reporting (exact-digest VM suites)
 
 `post-testing-e2e.yml` runs the `testsuite` job asynchronously against each

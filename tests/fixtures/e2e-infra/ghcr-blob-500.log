@@ -1,0 +1,15 @@
+2026-11-19T13:58:25.0516704Z Current runner version: '2.338.2'
+2026-11-19T13:58:25.0536599Z ##[group]Runner Image Provisioner
+2026-11-19T13:58:25.0537233Z Hosted Compute Agent
+2026-11-19T14:01:15.2898220Z ##[group]Run # The composed run-scoped image may be a private GHCR package
+2026-11-19T14:01:15.2898532Z [36;1m# The composed run-scoped image may be a private GHCR package[0m
+2026-11-19T14:01:15.2898810Z [36;1m# (fresh packages default to private) — authenticate before pulling.[0m
+2026-11-19T14:02:25.0257723Z Copying blob sha256:9c37e8cdde321a84d9b628de3e676659f8ec333ad69c7bcd84b74651a3b800c2
+2026-11-19T14:02:25.2638236Z Copying blob sha256:6148f822831ec6019251415036f8adb4193b7ef24631efe2bdbc334153a1334e
+2026-11-19T14:02:25.7025878Z Error: copying system image from manifest list: reading blob sha256:184e0422c92988b33ba267051f042cf21169a92943949efd8a92d234bd82f845: fetching blob: received unexpected HTTP status: 500 Internal Server Error
+2026-11-19T14:02:25.7757328Z Copying blob sha256:db92b077d1923829f1bea793cb78e67da1c96b622917228b10248d23a3fe5d64
+2026-11-19T14:02:26.1981123Z Copying blob sha256:2a0fa90bca544b70e50a3ab153e47de981863a59508fd8b5ff3ffef7c915734f
+2026-11-19T14:03:17.8861704Z Writing manifest to image destination
+2026-11-19T14:03:18.5231646Z f08555206b73a120424551d1df5c4388dc7b3c6638f6ec802a69805daad550e6
+2026-11-19T14:03:18.5347027Z ##[error]Process completed with exit code 125.
+2026-11-19T14:03:18.5388191Z ##[group]Run echo "=== VM serial console output ==="

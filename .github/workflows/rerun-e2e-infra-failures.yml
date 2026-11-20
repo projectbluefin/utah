@@ -1,0 +1,100 @@
+name: Re-run E2E infra failures
+
+# One red Post-Testing E2E leg skips promote-to-testing and wastes the whole
+# run (45 jobs, over an hour). Run 44538634534 lost promotion to two GHCR
+# blob 500s in testsuite legs while every LUKS, lifecycle and production-ISO
+# job passed. This re-runs a failed first attempt once, after a delay, and
+# only when scripts/e2e-infra-rerun.py explains every failed job with a known
+# infra signature. Anything unexplained leaves the run red.
+on:
+  # Runs from the default branch and never checks out the triggering run's code.
+  workflow_run:
+    workflows: [Post-Testing E2E]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Post-Testing E2E run ID to classify (classification only; never re-runs)
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: rerun-e2e-infra-${{ github.event.workflow_run.id || inputs.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  classify:
+    # run_attempt 1 only: one recovery attempt, never a loop.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'failure' &&
+       github.event.workflow_run.run_attempt == 1 &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      infra: ${{ steps.classify.outputs.infra }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Classify the failed jobs
+        id: classify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id || inputs.run_id }}
+        run: python3 scripts/e2e-infra-rerun.py "$RUN_ID"
+      - name: Report whether the re-run will wait
+        if: steps.classify.outputs.infra == 'true' && github.event_name == 'workflow_run'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          wait=$(gh api "repos/$REPOSITORY/environments/e2e-infra-retry-wait" \
+            --jq '[.protection_rules[]? | select(.type == "wait_timer") | .wait_timer] | first // 0' \
+            2>/dev/null) || wait=0
+          if [ "$wait" -gt 0 ]; then
+            echo "The re-run waits ${wait} minutes on the e2e-infra-retry-wait environment." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning title=no re-run delay::environment e2e-infra-retry-wait has no wait timer; the re-run starts at once (docs/skills/ci-workflows/references/iso-e2e.md)."
+          fi
+
+  rerun:
+    needs: classify
+    if: github.event_name == 'workflow_run' && needs.classify.outputs.infra == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    # The delay is the environment's wait timer, not a sleep: a job waiting on
+    # an environment holds no runner. Without the environment configured,
+    # Actions creates it with no rules and the re-run starts at once.
+    environment: e2e-infra-retry-wait
+    permissions:
+      actions: write
+    steps:
+      - name: Re-run the failed jobs once
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          # Re-check after the wait: someone may have re-run it by hand, and a
+          # newer E2E run supersedes this one (re-running it would only take
+          # that run's place in the utah-iso-e2e concurrency group).
+          state=$(gh api "repos/$REPOSITORY/actions/runs/$RUN_ID" --jq '"\(.status) \(.run_attempt)"')
+          newest=$(gh api "repos/$REPOSITORY/actions/workflows/post-testing-e2e.yml/runs?per_page=1" \
+            --jq '.workflow_runs[0].id')
+          if [ "$state" != "completed 1" ]; then
+            echo "::notice::run $RUN_ID is now '$state' (status, attempt); not re-running."
+          elif [ "$newest" != "$RUN_ID" ]; then
+            echo "::notice::a newer Post-Testing E2E run ($newest) supersedes $RUN_ID; not re-running."
+          else
+            gh run rerun "$RUN_ID" --failed --repo "$REPOSITORY"
+            echo "Re-ran the failed jobs of run $RUN_ID." >> "$GITHUB_STEP_SUMMARY"
+          fi
