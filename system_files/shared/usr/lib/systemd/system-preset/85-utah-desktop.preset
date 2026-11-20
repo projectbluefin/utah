@@ -23,7 +23,7 @@ disable chronyd.service
 # 80-lm-sensors.preset.
 disable multipathd.service
 disable lm_sensors.service
-# Dakota's 50-iscsi.preset. Hummingbird's 90-default.preset enables the
+# Dakota's 50-iscsi.preset (#1360). Hummingbird's 90-default.preset enables the
 # initiator sockets, so the disables have to come before it.
 disable iscsi-init.service
 disable iscsi.service
@@ -33,6 +33,11 @@ disable iscsiuio.service
 disable iscsiuio.socket
 disable isnsd.service
 disable isnsd.socket
+# Fedora-only iSCSI units Dakota's open-iscsi does not have; Hummingbird's
+# 90-default.preset enables both. iscsi-starter would start iscsi.service on
+# any machine with recorded nodes, iscsi-onboot marks firmware-booted sessions.
+disable iscsi-starter.service
+disable iscsi-onboot.service
 # GNOME OS's openssh.preset; Hummingbird's 90-default.preset enables sshd.
 # configure-services.sh flips this line for an ENABLE_SSHD=1 debug build.
 disable sshd.service

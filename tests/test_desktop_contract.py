@@ -598,9 +598,47 @@ class ServiceMaskParityTests(unittest.TestCase):
             "lm_sensors.service",
             "iscsid.socket",
             "iscsiuio.socket",
+            "iscsi-starter.service",
+            "iscsi-onboot.service",
         ):
             with self.subTest(unit=unit):
                 self.assertEqual(preset_verdict(unit), ("disable", "85-utah-desktop.preset"))
+
+    def test_iscsi_units_ship_disabled(self):
+        # iscsi-initiator-utils and isns-utils are installed as on Dakota, with
+        # every unit they ship off (#1360): Dakota's 50-iscsi.preset plus the
+        # Fedora-only starter and onboot units Hummingbird enables.
+        packages = tomllib.loads((ROOT / "packages/utah.toml").read_text())
+        installed = packages["parity"]["packages"]
+        disabled = self.contract_services()["disabled"]
+        for package in ("iscsi-initiator-utils", "isns-utils"):
+            with self.subTest(package=package):
+                self.assertIn(package, installed)
+        for unit in (
+            "iscsi-init.service",
+            "iscsi.service",
+            "iscsi-starter.service",
+            "iscsi-onboot.service",
+            "iscsid.service",
+            "iscsid.socket",
+            "iscsiuio.service",
+            "iscsiuio.socket",
+            "isnsd.service",
+        ):
+            with self.subTest(unit=unit):
+                self.assertEqual(preset_verdict(unit), ("disable", "85-utah-desktop.preset"))
+                # iscsi.service's [Install] holds only Also=iscsi-starter.service,
+                # so `systemctl is-enabled` reports "indirect" and the verifier
+                # cannot assert it; iscsi-starter.service starts it at boot.
+                if unit == "iscsi.service":
+                    self.assertNotIn(unit, disabled)
+                else:
+                    self.assertIn(unit, disabled)
+        # clean-stage strips /var; tmpfiles recreates the node database.
+        tmpfiles = (ROOT / "system_files/shared/usr/lib/tmpfiles.d/utah-iscsi.conf").read_text()
+        for path in ("/var/lib/iscsi/nodes", "/var/lib/iscsi/send_targets", "/var/lib/isns"):
+            with self.subTest(path=path):
+                self.assertRegex(tmpfiles, rf"(?m)^d {path} 07\d\d root root -$")
 
     def test_first_boot_cannot_reset_build_time_state(self):
         # authselect-first-boot.service re-selects @system-default on first

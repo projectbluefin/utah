@@ -253,6 +253,8 @@
         "ipp-usb",
         "iproute-tc",
         "iptables-nft",
+        "iscsi-initiator-utils",
+        "isns-utils",
         "iw",
         "kanata",
         "keyutils",
@@ -300,6 +302,7 @@
         "nfs-utils",
         "nfsv3-client-utils",
         "nfsv4-client-utils",
+        "nicstat",
         "numactl",
         "nvme-cli",
         "nvtop",
@@ -465,7 +468,7 @@
     }
   ],
   "totals": {
-    "installed": 408,
+    "installed": 411,
     "unavailable": 9
   },
   "unavailable": [

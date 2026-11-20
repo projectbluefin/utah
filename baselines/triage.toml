@@ -106,11 +106,10 @@ NetworkManager = { status = "planned", area = "networking", issue = "#1360", rea
 newt = { status = "planned", area = "cli-tools", issue = "#1360", reason = "whiptail, installed in [parity]" }
 lzip = { status = "planned", area = "cli-tools", issue = "#1360", reason = "Installed in [parity]" }
 libsmbios = { status = "planned", area = "hardware-power", issue = "#1360", reason = "Dell smbios-* tools (smbios-utils-bin, smbios-utils-python), installed in [parity]" }
-open-iscsi = { status = "planned", area = "network-fs", issue = "#1360", reason = "iscsi-initiator-utils resolves; its units need a service-policy decision first" }
-open-isns = { status = "planned", area = "network-fs", issue = "#1360", reason = "isns-utils resolves; decided with the iSCSI initiator" }
-umotd = { status = "planned", area = "desktop-defaults", issue = "#1360", reason = "Resolves; decided alongside uwelcome and the MOTD-off default (#1252)" }
-erofs-utils = { status = "planned", area = "files-devices", issue = "#1360", reason = "The factory builds it, but it needs libqpl.so.1, which nothing publishes" }
-nicstat = { status = "planned", area = "cli-tools", issue = "#1360", reason = "Not published by the factory" }
+open-iscsi = { status = "planned", area = "network-fs", issue = "#1360", reason = "iscsi-initiator-utils, installed in [parity] with every unit off, as Dakota's 50-iscsi.preset" }
+open-isns = { status = "planned", area = "network-fs", issue = "#1360", reason = "isns-utils, installed in [parity]; isnsd stays off, as Dakota's 50-iscsi.preset" }
+erofs-utils = { status = "planned", area = "files-devices", issue = "projectbluefin/utah-packages#1238", reason = "The factory builds it, but it needs libqpl.so.1, which nothing publishes" }
+nicstat = { status = "planned", area = "cli-tools", issue = "#1360", reason = "Installed in [parity]" }
 
 # Native app or Flatpak: decided on #1361 under Flatpak-first (#1270).
 sysprof = { status = "planned", area = "desktop-apps", issue = "#1361", reason = "The Flathub app needs sysprofd on the host" }
@@ -125,6 +124,7 @@ ghostty = { status = "waived", reason = "Flatpak-first: Utah ships com.mitchellh
 sushi = { status = "waived", reason = "Flatpak-first: Utah ships org.gnome.NautilusPreviewer from Flathub (#1015)" }
 "/usr/share/applications/org.gnome.NautilusPreviewer.desktop" = { status = "waived", reason = "Flatpak-first: Utah ships org.gnome.NautilusPreviewer from Flathub (#1015)" }
 vim = { status = "waived", reason = "Flatpak-first: gvim stays out; vim-enhanced is installed" }
+umotd = { status = "waived", reason = "uwelcome is Utah's terminal greeting, and bluefin-cli works through it (#1370); decided on #1360" }
 freerdp = { status = "waived", reason = "FreeRDP client, proxy and shadow-server tools; gnome-remote-desktop uses the installed freerdp-libs, and RDP clients are Flatpaks (Flatpak-first)" }
 yelp = { status = "waived", reason = "packages/base.toml [excluded] removes the yelp viewer; Utah keeps yelp-libs and yelp-xsl for help content" }
 snapd = { status = "waived", reason = "Flatpak-first: Utah's app channels are Flatpak and Homebrew" }
