@@ -1132,6 +1132,30 @@ class SupplyChainTests(unittest.TestCase):
         errors = self.module.verify_parity_origin(sorted(media), installed, factory_parity)
         self.assertEqual(len(errors), len(media))
 
+    def test_shipped_ffmpeg_runtime_is_installed_and_factory_verified(self) -> None:
+        """Assert the whole published runtime, not just incidental dependencies."""
+        overlay = ROOT / "packages" / "utah.toml"
+        runtime = {
+            "ffmpeg-free", "libavcodec-free", "libavdevice-free",
+            "libavfilter-free", "libavformat-free", "libavutil-free",
+            "libswresample-free", "libswscale-free",
+        }
+        parity = set(self.module.section(overlay, "parity"))
+        factory_parity = set(self.module.section(overlay, "factory", "parity"))
+        self.assertLessEqual(runtime, parity)
+        self.assertLessEqual(runtime, factory_parity)
+        for release in ("9.0.1-2.hum1", "9.0.1-2.fc44"):
+            with self.subTest(release=release):
+                installed = {pkg: {"release": release} for pkg in runtime}
+                errors = self.module.verify_parity_origin(
+                    sorted(runtime), installed, factory_parity
+                )
+                self.assertEqual(len(errors), len(runtime))
+        installed = {pkg: {"release": "9.0.1-2.hum1.bfin"} for pkg in runtime}
+        self.assertEqual(
+            self.module.verify_parity_origin(sorted(runtime), installed, factory_parity), []
+        )
+
     def test_shipped_gnome_versions_cover_the_gnome_release_packages(self) -> None:
         """nautilus and gnome-initial-setup track GNOME, so they are asserted too."""
         overlay = ROOT / "packages" / "utah.toml"
