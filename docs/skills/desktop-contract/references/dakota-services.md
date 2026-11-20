@@ -12,7 +12,7 @@ order of their names; the first line that matches a unit wins.
 |---|---|---|
 | `00-`…`03-*.preset` | brew, uupd, common | vendor enables |
 | `80-hummingbird.preset` | Hummingbird | `disable dnf-makecache.timer`, `enable bootloader-update.service` |
-| `85-utah-desktop.preset` | Utah | overrides the base's 80/90 files: `enable systemd-boot-update.service`; `disable` sshd, multipathd, lm_sensors, Dakota's iSCSI set, the serial getty, rpm-ostree and bootc-fetch-apply-updates |
+| `85-utah-desktop.preset` | Utah | overrides the base's 80/90 files: `enable systemd-boot-update.service`; `disable` sshd, multipathd, lm_sensors, Dakota's iSCSI set, the serial getty, `getty@` (kmscon owns the VTs), rpm-ostree and bootc-fetch-apply-updates |
 | `90-default.preset`, `90-systemd.preset` | Hummingbird | Fedora's server enables and disables, upstream systemd's list |
 | `98-utah-enable-default.preset` | Utah | GNOME OS's and Dakota's disables, Utah's own disables, then `enable *` |
 | `99-default-disable.preset` | Hummingbird | `disable *`; never reached |
@@ -33,7 +33,8 @@ are never enabled by a preset.
   and wait-online, the sshd socket and key helpers, the `wpa_supplicant@` templates.
 - Dakota's element presets: `50-sysupdate` (plus `systemd-sysupdate.*`; Utah
   updates through bootc and uupd), `80-kanata`, `80-kmscon` (the service; its
-  `getty@.service` line ships with kmscon), `80-libvirt`, `80-nethogs`,
+  `getty@.service` line is in 85, which outranks Hummingbird's 90-systemd),
+  `80-libvirt`, `80-nethogs`,
   `80-nfs-client` (server side), `80-pam-pkcs11`, `80-pcrlock` (verbatim
   order: machine-id and Secure Boot authority locked), `80-rpcbind`,
   `80-sysstat` (sar/iostat on demand; `systemctl enable --now sysstat.service`).
@@ -160,6 +161,21 @@ gone. The factory's `kanata` ships Dakota's `kanata.service` (DynamicUser,
 and running `systemctl enable --now kanata`. `ydotool` brings Dakota's
 `80-ydotool.rules` (uinput to `input`, uaccess) and the `uinput` modules-load
 drop-in (utah-packages#1134).
+
+### Console (#1237)
+
+The VT consoles are kmscon, as on GNOME OS and Dakota, set up as
+gnome-build-meta `gnomeos-deps/kmscon.bst` does. The factory's `kmscon` ships
+no preset, so `98-utah-enable-default.preset` disables `kmscon.service` and
+`85-utah-desktop.preset` disables `getty@.service` ahead of Hummingbird's
+`90-systemd.preset`. `kmsconvt@.service` is on through enable-by-default: it
+has `DefaultInstance=tty1` and `Alias=autovt@.service`, so logind spawns it on
+every VT, and its `OnFailure=getty@%i.service` keeps a login if kmscon fails.
+`/etc/kmscon/kmscon.conf` sets `font-name=Adwaita Mono` (drawn by
+`kmscon-pango`), and `gdm.service.d/kmscon.conf` sets
+`Conflicts=`/`After=kmsconvt@tty1.service` so GDM takes tty1 over. The
+serial `serial-getty@ttyS0` mask is unchanged. The contract asserts the files,
+`kmsconvt@.service` enabled, and `getty@`/`kmscon.service` disabled.
 
 ### User units
 

@@ -41,6 +41,14 @@ disable sshd.service
 # instantiate the serial login on a desktop box. configure-services.sh masks
 # the unit as well. See #103.
 disable serial-getty@ttyS0.service
+# kmscon draws the VT consoles, as on GNOME OS and Dakota (#1237):
+# gnome-build-meta files/kmscon/80-kmscon.preset disables kmscon.service and
+# getty@.service. The factory's kmscon ships no preset, and Hummingbird's
+# 90-systemd.preset enables getty@, so this file turns it off (98 handles
+# kmscon.service); kmsconvt@ is on through enable-by-default.
+# kmsconvt@.service has DefaultInstance=tty1 and Alias=autovt@.service, so
+# logind spawns it on every VT; it falls back to getty@ if kmscon fails.
+disable getty@.service
 # Image updates go through uupd and bootc; configure-services.sh masks the
 # bootc timer too.
 disable rpm-ostree.service

@@ -460,6 +460,12 @@ packages = [
     "pam_oo7",
     "oo7-portal",
     "oo7-cli",
+    # kmscon on the VTs, as gnome-build-meta gnomeos-deps/kmscon.bst builds
+    # it (#1237): the pango renderer draws kmscon.conf's Adwaita Mono, which
+    # base.toml's adwaita-fonts-all supplies. Units: 85-utah-desktop.preset;
+    # kmscon.conf and the gdm drop-in: system_files.
+    "kmscon",
+    "kmscon-pango",
     # Network file systems and Windows domain clients (the NFS family follows
     # in the second-wave block below).
     "cifs-utils",
@@ -1047,6 +1053,8 @@ parity = [
     "pam_oo7",
     "oo7-portal",
     "oo7-cli",
+    "kmscon",
+    "kmscon-pango",
     "cifs-utils",
     "rpcbind",
     "autofs",
