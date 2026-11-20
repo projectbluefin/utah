@@ -377,6 +377,7 @@
         "sqlite",
         "stix-fonts",
         "stoken-libs",
+        "syncthing",
         "sysstat",
         "system-config-printer-libs",
         "system-config-printer-udev",
@@ -468,7 +469,7 @@
     }
   ],
   "totals": {
-    "installed": 411,
+    "installed": 412,
     "unavailable": 9
   },
   "unavailable": [

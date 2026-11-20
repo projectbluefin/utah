@@ -189,6 +189,11 @@ rm -f /usr/share/ublue-os/bling/env.sh \
 rm -f /usr/share/applications/system-update.desktop \
     /usr/share/applications/discourse.desktop \
     /usr/share/applications/documentation.desktop
+# The syncthing RPM's "Start Syncthing" and "Syncthing Web UI" launchers:
+# Dakota's syncthing ships the daemon without them (#1361). Starting the daemon
+# from the app grid bypasses syncthing.service and the Sync Folder toggle.
+rm -f /usr/share/applications/syncthing-start.desktop \
+    /usr/share/applications/syncthing-ui.desktop
 
 # Bluefin's Brewfile and Bazaar preinstall hook need the Flathub remote before
 # first boot. Keep this as a .flatpakrepo descriptor so the remote is available
