@@ -658,6 +658,35 @@ class ServiceMaskParityTests(unittest.TestCase):
                 self.assertIn(path, files)
                 self.assertIn(path, file_contains)
 
+    def test_bluefin_cli_shims_are_shipped_and_required(self):
+        # bluefin-cli replaces Common's bling (uwelcome stays the greeting).
+        # Every pinned string must be in the file Utah overlays, or the image
+        # gate fails.
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        files = contract["configuration"]["files"]
+        file_contains = contract["configuration"]["file_contains"]
+        for path in (
+            "/usr/share/ublue-os/bling/bling.sh",
+            "/usr/share/ublue-os/bling/bling.fish",
+            "/usr/bin/ublue-bling",
+        ):
+            with self.subTest(path=path):
+                self.assertIn(path, files)
+                shipped = (ROOT / "system_files/shared" / path.lstrip("/")).read_text()
+                for needle in file_contains[path]:
+                    self.assertIn(needle, shipped)
+
+    def test_bling_helpers_only_common_bling_read_are_removed(self):
+        services = (ROOT / "scripts/configure-services.sh").read_text()
+        for path in (
+            "/usr/share/ublue-os/bling/env.sh",
+            "/usr/share/ublue-os/bling/bash-preexec-rearm.sh",
+        ):
+            with self.subTest(path=path):
+                self.assertRegex(services, rf"rm -f [^\n]*(\\\n[^\n]*)*{path}")
+        # uwelcome stays the terminal greeting.
+        self.assertNotIn("/usr/bin/uwelcome", services)
+
     def test_dakota_uupd_files_come_from_the_factory_and_are_required(self):
         # Dakota's elements/bluefin/uupd.bst ships these beside the binary;
         # dakota-config-uupd packages them (#1265), so Utah keeps no copy.

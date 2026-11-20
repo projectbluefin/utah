@@ -178,6 +178,11 @@ esac' "${UWELCOME_SH}"
         exit 1
     fi
 fi
+# Utah's bling.sh, bling.fish and ublue-bling are bluefin-cli shims
+# (projectbluefin/common#1719). Only Common's versions read these helpers;
+# bluefin-cli's init script keeps bash-preexec armed itself.
+rm -f /usr/share/ublue-os/bling/env.sh \
+    /usr/share/ublue-os/bling/bash-preexec-rearm.sh
 # Common's System Update, Community and Documentation launchers duplicate
 # Control Center (updates, the Community link, docs); Dakota drops all three
 # (projectbluefin/dakota elements/bluefin/common.bst). `ujust update` stays.
