@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-16",
+  "generated_at": "2026-11-20",
   "generator": "scripts/generate-site-data.py",
   "groups": [
     {
@@ -43,8 +43,6 @@
         "libblockdev-mpath",
         "libcamera-gstreamer",
         "libcamera-tools",
-        "libgda",
-        "libgda-sqlite",
         "libratbag-ratbagd",
         "libva-utils",
         "libxcrypt-compat",
@@ -386,7 +384,7 @@
     }
   ],
   "totals": {
-    "installed": 329,
+    "installed": 327,
     "unavailable": 6
   },
   "unavailable": [
