@@ -456,7 +456,10 @@ fi
 # domain transition matches C sudo's; fail the build if that ever changes.
 test -u /usr/bin/sudo-rs
 ln -f /usr/bin/sudo-rs /usr/bin/sudo
-[ /usr/bin/sudo -ef /usr/bin/sudo-rs ]
+# Not `-ef`: overlayfs, which container builds run on, reports a different
+# inode for each name of a hard link to a lower-layer file.
+test -u /usr/bin/sudo
+cmp -s /usr/bin/sudo /usr/bin/sudo-rs
 [ "$(readlink /usr/bin/sudoedit)" = sudo ]
 for path in /usr/bin/sudo /usr/bin/sudo-rs; do
     [ "$(matchpathcon -n "${path}")" = system_u:object_r:sudo_exec_t:s0 ]
