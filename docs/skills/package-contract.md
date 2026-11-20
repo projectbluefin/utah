@@ -66,6 +66,14 @@ payloads need an inline drop condition in `packages/utah.toml`; the factory
 follows the same rule when importing recipes. Dakota parity installs `wget2`
 and `wget2-wget` (the `wget` link); the desktop file contract checks both commands.
 
+Utah requests available Dakota input packages in `[parity]` (#1256).
+Dakota's Anthy library is packaged as `anthy-unicode`; it can ship independently
+of the `ibus-anthy` engine. `fcitx5-gtk` supplies GTK integration without
+installing the Fcitx daemon. Keep the base manifest's Mozc and Unikey.
+Do not treat a published engine RPM as installable on its own: `ibus-anthy`
+needs Kasumi, `ibus-typing-booster` needs `cldr-emoji-annotation`, and
+`ibus-rime` needs `brise` and the OpenCC library through `librime`.
+
 ## Wi-Fi documentation currency
 
 Wi-Fi needs both `[hardware]` firmware and the `[parity]` userspace stack:
@@ -344,10 +352,11 @@ is its own item. Details and the refresh flow: `baselines/README.md`.
 
 Every item needs an entry in `baselines/triage.toml` (`just check` runs
 `image-baseline.py check`): `planned` with an issue (#1236 is the epic; its
-children #1222-#1235 track the structural moves such as kanata, native
-Ghostty, systemd-boot, AppArmor, oo7, sudo-rs, virtualization and service
-policy), `waived` with a reason (GNOME OS or BuildStream internals,
-Flatpak-first apps), `unavailable` for names in `[unavailable]`, or
+children #1222-#1235 track the structural moves such as kanata,
+systemd-boot, AppArmor, oo7, sudo-rs, virtualization and service policy),
+`waived` with a reason (GNOME OS or BuildStream internals, Flatpak-first apps
+such as Ghostty, baobab, Papers and sushi: #1270 keeps user apps as Flatpaks
+even where Dakota builds them natively), `unavailable` for names in `[unavailable]`, or
 `untriaged` with an `area`. Closing a gap means shipping the files Utah lacks,
 usually by adding the Fedora package to `base.toml` or `utah.toml`, then
 re-measuring and dropping the entry `check` reports as no longer a gap.
@@ -357,10 +366,11 @@ describe the same image as its `surface.tsv`; after a refresh,
 [remove resolved triage entries](package-contract/references/factory-consumption.md#closing-baseline-gaps).
 
 Current counts, per the README "Parity with Dakota" section: 60 base manifest
-packages installed, 283 Utah additions (GNOME 51, base-image parity, device
-firmware, desktop services), 6 genuinely unavailable. `scripts/check-doc-counts.py` (part of
-`just check`) recomputes these from the manifests and fails if either
-document drifts from `site/data/packages.json`.
+packages installed, 291 Utah additions (GNOME 51, base-image parity, device
+firmware, desktop services), 6 genuinely unavailable. After changing a manifest,
+run `python3 scripts/generate-site-data.py`, then
+`python3 scripts/check-doc-counts.py --write` to refresh both documents.
+`just check` validates the inventory and both sets of counts.
 
 ## A section nobody reads installs nothing
 

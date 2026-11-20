@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-18",
+  "generated_at": "2026-11-20",
   "generator": "scripts/generate-site-data.py",
   "groups": [
     {
@@ -124,6 +124,7 @@
         "acl",
         "alsa-ucm",
         "alsa-utils",
+        "anthy-unicode",
         "argyllcms",
         "attr",
         "autofs",
@@ -176,6 +177,7 @@
         "ethtool",
         "exfatprogs",
         "f2fs-tools",
+        "fcitx5-gtk",
         "ffmpegthumbnailer",
         "file",
         "foo2zjs",
@@ -221,6 +223,8 @@
         "hplip-libs",
         "htop",
         "ibus-gtk4",
+        "ibus-hangul",
+        "ibus-libpinyin",
         "intel-gmmlib",
         "intel-mediasdk",
         "intel-vpl-gpu-rt",
@@ -234,10 +238,12 @@
         "langpacks-fonts-en",
         "lcms",
         "less",
+        "libhangul",
         "libieee1284",
         "libimobiledevice-utils",
         "libnma",
         "libpcap",
+        "libpinyin",
         "libsane-airscan",
         "libsane-hpaio",
         "libuser",
@@ -247,6 +253,8 @@
         "lm_sensors",
         "lshw",
         "lsof",
+        "m17n-db",
+        "m17n-lib",
         "m4",
         "man-db",
         "man-pages",
@@ -400,7 +408,7 @@
     }
   ],
   "totals": {
-    "installed": 343,
+    "installed": 351,
     "unavailable": 6
   },
   "unavailable": [

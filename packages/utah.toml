@@ -196,6 +196,17 @@ packages = [
     # Locale and fonts
     "langpacks-en",
     "langpacks-fonts-en",
+    # Input methods also shipped by Dakota (#1256). Keep the base manifest's
+    # Mozc and Unikey engines: removing them would drop existing language support.
+    # Anthy, Typing Booster and Rime still need runtime dependencies (#1256).
+    "anthy-unicode",
+    "fcitx5-gtk",
+    "ibus-hangul",
+    "ibus-libpinyin",
+    "libhangul",
+    "libpinyin",
+    "m17n-db",
+    "m17n-lib",
     "abattis-cantarell-fonts",
     "default-fonts-core-emoji",
     "default-fonts-core-sans",

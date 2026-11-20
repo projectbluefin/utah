@@ -65,6 +65,11 @@ class HomeRootTests(unittest.TestCase):
         self.assertIn("utah-clean-stage", run_block)
         self.assertIn("mkdir -p /var/home", run_block)
         self.assertIn("bootc container lint", run_block)
+        self.assertIn(
+            "mkdir -p /var/home /efi",
+            run_block,
+            "/efi must exist in the image for systemd's EFI automount (#1326)",
+        )
 
 
 if __name__ == "__main__":

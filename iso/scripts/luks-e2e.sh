@@ -967,6 +967,15 @@ for i in $(seq 1 60); do
 done
 echo "  ssh: logged in as ${TEST_USER}"
 
+# Set UTAH_E2E_EFI_CHECK="" to skip: lifecycle-e2e.sh does for the baseline
+# install, an earlier :testing that may predate /efi (#1330, #1343), and runs
+# the same check on the upgraded candidate instead.
+if [[ -n "${UTAH_E2E_EFI_CHECK-x}" ]]; then
+    echo "Verifying the installed EFI mountpoint and units..."
+    ssh_target 'test -d /efi && for unit in efi.automount efi.mount; do load=$(systemctl show "$unit" -p LoadState --value) && state=$(systemctl show "$unit" -p ActiveState --value) && echo "  $unit: load=$load active=$state" && test "$state" != failed || exit 1; done' \
+        || fail "EFI mountpoint is missing or an EFI mount unit failed on the installed system"
+fi
+
 echo "Verifying the installed system booted the offline embedded payload..."
 # bootc's own view of what is booted is the ground truth for "the offline
 # payload survived the install": fisherman's recipe named targetImgref

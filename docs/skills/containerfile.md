@@ -257,6 +257,12 @@ earlier; placing it before lint keeps lint proving the directory is covered
 by the `utah-home.conf` tmpfiles entry. A tmpfiles `d` line alone is not
 enough -- it only runs at boot, never in the installer chroot.
 
+The image also ships an empty `/efi` directory: GRUB can report the EFI system
+partition to systemd, whose generator selects `/efi` when `/boot` is occupied.
+An immutable root cannot create that mountpoint on boot. The installed-system
+ISO test checks the directory and that `efi.automount` has not failed; a GRUB
+`bootc install to-disk` VM should also be checked when changing this behavior.
+
 ## `just` override and the 1.56 floor
 
 Utah's `00-entry.just` imports Common's renamed entry (`00-common.just`) plus

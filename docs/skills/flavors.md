@@ -80,7 +80,11 @@ two calls carry different names, and the required check is named after
 - `suites` -- each flavor's image with its configured testsuite suites,
   read from the `suites` map in `config/flavors.json` (the `testsuite` matrix
   in `post-testing-e2e.yml`). A flavor with no `suites` entry is a hard error,
-  so a new flavor needs its suites declared alongside it.
+  so a new flavor needs its suites declared alongside it. These suites run in
+  a GPU-less CI VM, so list only suites that can pass there. Hardware-only
+  suites such as `nvidia` are left out: every scenario is `@hardware_blocked`
+  and the testsuite fails the leg as blocked (projectbluefin/testsuite#706,
+  projectbluefin/lab#1182, #1329). Add them back once the lab has hardware.
 - `needs-kernel` -- `true` whenever any flavor is active, since every flavor
   builds on the kernel cache.
 - `images` / `releases` -- the same set shaped for the promote and release

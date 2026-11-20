@@ -17,7 +17,6 @@
 # --- Structural differences, one epic child each ---------------------------
 
 kanata = { status = "planned", area = "accessibility-input", issue = "#1222", reason = "Installed from the factory in place of input-remapper; gap closes on the next baseline" }
-ghostty = { status = "planned", area = "desktop-apps", issue = "#1223", reason = "Dakota builds Ghostty natively; Utah installs the tuna-os Flatpak" }
 "/usr/lib/systemd/system/dakota-secure-boot-update.service" = { status = "planned", area = "boot", issue = "#1225" }
 "/usr/lib/systemd/system/ublue-boot-timeout.service" = { status = "planned", area = "boot", issue = "#1225", reason = "Runs bootctl set-timeout; only meaningful on systemd-boot" }
 genpeimg = { status = "planned", area = "boot", issue = "#1225", reason = "PE image tooling for the signed systemd-boot chain" }
@@ -74,6 +73,7 @@ uresourced = { status = "planned", area = "system-daemons", issue = "#1236" }
 
 baobab = { status = "waived", reason = "Flatpak-first: Utah ships org.gnome.baobab from Flathub (contracts/bluefin-desktop.toml)" }
 papers = { status = "waived", reason = "Flatpak-first: Utah ships org.gnome.Papers from Flathub; papers-libs, papers-thumbnailer and papers-nautilus are installed on the host" }
+ghostty = { status = "waived", reason = "Flatpak-first: Utah ships com.mitchellh.ghostty from the TunaOS Flatpak remote; Dakota builds it natively (#1270)" }
 sushi = { status = "waived", reason = "Flatpak-first: Utah ships org.gnome.NautilusPreviewer from Flathub (#1015)" }
 "/usr/share/applications/org.gnome.NautilusPreviewer.desktop" = { status = "waived", reason = "Flatpak-first: Utah ships org.gnome.NautilusPreviewer from Flathub (#1015)" }
 yelp = { status = "waived", reason = "packages/base.toml [excluded] removes the yelp viewer; Utah keeps yelp-libs and yelp-xsl for help content" }

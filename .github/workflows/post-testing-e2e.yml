@@ -111,8 +111,9 @@ jobs:
   # forged under this identity -- is rejected before those privileged jobs
   # touch it. Gate luks, lifecycle and tacklebox-iso on it so the check must
   # pass first.
-  # (testsuite pulls the same digests without waiting on this job by design; it
-  # only surfaces results and never gates :testing promotion.)
+  # (testsuite pulls the same digests without waiting on this job by design;
+  # it runs unprivileged in its own VM. It still gates :testing promotion:
+  # promote-to-testing needs it, #1329.)
   verify-provenance:
     needs: resolve
     runs-on: ubuntu-26.04
@@ -476,9 +477,10 @@ jobs:
             output/utah-live.iso
             output/utah-live.iso.sha256
 
-  # Run the testsuite against each exact built digest asynchronously.
-  # This surfaces scenario results and desktop screenshots for every flavor
-  # directly in the workflow run without blocking :testing promotion.
+  # Run the testsuite against each exact built digest, in parallel with the
+  # ISO jobs. It surfaces scenario results and desktop screenshots for every
+  # flavor, and it gates promotion: promote-to-testing needs it, so a red leg
+  # leaves :testing where it is and records no E2E evidence (#1329).
   testsuite:
     needs: resolve
     permissions:
@@ -489,7 +491,7 @@ jobs:
       fail-fast: false
       matrix:
         include: ${{ fromJSON(needs.resolve.outputs.suites) }}
-    uses: projectbluefin/testsuite/.github/workflows/e2e.yml@ab5e9e15e121fede870a75bd7ab20ec92a66186b # v1
+    uses: projectbluefin/testsuite/.github/workflows/e2e.yml@570922fe9181e3fa7b97cfcf2545dc681ddddb9e # v1
     with:
       image: ${{ fromJSON(needs.resolve.outputs.digests)[matrix.image] }}
       compose_image: false
@@ -497,7 +499,7 @@ jobs:
       test_repository: projectbluefin/testsuite
       # The tests checked out must be the commit the e2e.yml above comes from,
       # or workflow and tests drift apart (#946). Renovate bumps both together.
-      test_ref: ab5e9e15e121fede870a75bd7ab20ec92a66186b # v1
+      test_ref: 570922fe9181e3fa7b97cfcf2545dc681ddddb9e # v1
 
   # :testing is a ratchet over commits, not a mirror of the branch tip. The
   # tested digests become :testing when their commit is the promoted commit or
@@ -513,16 +515,22 @@ jobs:
   # statuses recorded here, and a dispatch from another ref runs another
   # branch's copy of this file. Such a run still tests; it just cannot publish
   # evidence or move a tag.
+  #
+  # Every E2E job must pass first, the testsuite matrix included (#1329): a red
+  # or skipped leg skips this job, so no evidence is recorded and no tag moves.
+  # There is no override; fix or scope the failing scenario upstream instead.
   promote-to-testing:
-    needs: [resolve, luks, production-iso, lifecycle]
+    needs: [resolve, luks, production-iso, lifecycle, testsuite]
     # The lifecycle job may only be absent when resolve skipped it on purpose
     # (:testing already serves the candidate, or does not exist yet); a
-    # failed, cancelled or upstream-skipped lifecycle blocks this job.
+    # failed, cancelled or upstream-skipped lifecycle blocks this job. The
+    # testsuite matrix must pass in full (#1329).
     if: >-
       ${{ !cancelled()
       && needs.resolve.result == 'success'
       && needs.luks.result == 'success'
       && needs.production-iso.result == 'success'
+      && needs.testsuite.result == 'success'
       && (needs.lifecycle.result == 'success'
       || (needs.lifecycle.result == 'skipped' && needs.resolve.outputs.lifecycle == 'skip')) }}
     runs-on: ubuntu-26.04
@@ -548,8 +556,8 @@ jobs:
           command -v skopeo >/dev/null || { sudo apt-get update && sudo apt-get install -y skopeo; }
           echo "$GH_TOKEN" | skopeo login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
       # Recorded before the ratchet decides, because it is true whatever the
-      # ratchet says: this exact digest passed LUKS and production-ISO. The
-      # release gate reads it back per digest and per commit.
+      # ratchet says: this exact digest passed LUKS, production-ISO and the
+      # testsuite. The release gate reads it back per digest and per commit.
       - name: Record E2E evidence for the tested digests
         if: github.ref == 'refs/heads/main'
         env:
