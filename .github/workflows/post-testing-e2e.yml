@@ -151,6 +151,13 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
     steps:
+      # The harness fails with its evidence (exit 75) 10 minutes before
+      # timeout-minutes would kill the job with nothing uploaded.
+      # TIMEOUT_MINUTES must equal this job's timeout-minutes.
+      - name: Set the job deadline
+        env:
+          TIMEOUT_MINUTES: "180"
+        run: echo "E2E_WALL_CLOCK_DEADLINE=$(( $(date +%s) + (TIMEOUT_MINUTES - 10) * 60 ))" >> "$GITHUB_ENV"
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         timeout-minutes: 10
         with:
@@ -265,6 +272,11 @@ jobs:
           - image: utah
             backend: ostree
     steps:
+      # See the luks job: the harness fails with evidence before the timeout.
+      - name: Set the job deadline
+        env:
+          TIMEOUT_MINUTES: "240"
+        run: echo "E2E_WALL_CLOCK_DEADLINE=$(( $(date +%s) + (TIMEOUT_MINUTES - 10) * 60 ))" >> "$GITHUB_ENV"
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         timeout-minutes: 10
         with:
