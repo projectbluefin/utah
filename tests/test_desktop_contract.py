@@ -443,6 +443,22 @@ class GnomeExtensionTests(unittest.TestCase):
             with self.subTest(uuid=uuid):
                 self.assertIn(uuid, extensions.SOURCE_EXTENSIONS)
 
+    def test_bling_sync_folder_is_the_only_syncthing_toggle(self):
+        # Dakota ships only bling's syncthing-toggle@projectbluefin.io (#1357);
+        # it keeps its own schema, which the contract asserts in the image.
+        self.assertNotIn("rehhouari", (ROOT / ".gitmodules").read_text())
+        self.assertEqual(
+            [uuid for uuid in extensions.SOURCE_EXTENSIONS if uuid.startswith("syncthing-toggle@")],
+            ["syncthing-toggle@projectbluefin.io"],
+        )
+        self.assertNotIn("rehhouari", (ROOT / "scripts/build-gnome-extensions.sh").read_text())
+        schema = "org.gnome.shell.extensions.syncthing-toggle.gschema.xml"
+        bling = ROOT / "system_files/shared/usr/share/gnome-shell/extensions/tmp/bluefin-bling/extensions/syncthing-toggle"
+        self.assertTrue((bling / "schemas" / schema).is_file())
+        files = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())["configuration"]["files"]
+        self.assertIn(f"/usr/share/glib-2.0/schemas/{schema}", files)
+        self.assertIn("/usr/share/gnome-shell/extensions/syncthing-toggle@projectbluefin.io/metadata.json", files)
+
 
 SYSTEM_PRESETS = ROOT / "system_files/shared/usr/lib/systemd/system-preset"
 
