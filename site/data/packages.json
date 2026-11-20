@@ -458,7 +458,7 @@
   ],
   "totals": {
     "installed": 400,
-    "unavailable": 9
+    "unavailable": 10
   },
   "unavailable": [
     {
@@ -466,6 +466,10 @@
         83
       ],
       "name": "anaconda-live"
+    },
+    {
+      "issues": [],
+      "name": "bluefin-cli"
     },
     {
       "issues": [

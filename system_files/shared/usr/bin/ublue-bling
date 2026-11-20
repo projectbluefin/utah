@@ -1,0 +1,4 @@
+#!/usr/bin/bash
+# Compatibility shim: on Utah, bluefin-cli replaces Universal Blue's
+# ublue-bling. The old command still turns the terminal experience on or off.
+exec ujust bluefin-cli

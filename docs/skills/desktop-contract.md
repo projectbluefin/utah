@@ -93,7 +93,7 @@ The TOML's sections are the contract's table of contents:
   `/usr/libexec/ublue-booted-image` falls back to.
   `configure-services.sh` applies [Dakota's edits to Common](desktop-contract/references/dakota-common-edits.md)
   (month units, weekly stats, Ghostty theme, logos; #1266),
-  patches `uwelcome.sh` (non-interactive shells skip the greeting), checks image-info ([bootc compatibility](desktop-contract/references/image-info.md)), and applies [Dakota's desktop defaults](desktop-contract/references/dakota-desktop-defaults.md).
+  patches `uwelcome.sh` (non-interactive shells skip the greeting), removes the bling helpers bluefin-cli replaces ([terminal experience](desktop-contract/references/bluefin-cli.md)), checks image-info ([bootc compatibility](desktop-contract/references/image-info.md)), and applies [Dakota's desktop defaults](desktop-contract/references/dakota-desktop-defaults.md).
 
   bootc applies presets on first boot, so a unit's state comes from the
   presets, never from a build-time `systemctl enable` (#98: `flatpak-preinstall`

@@ -284,6 +284,42 @@ class UjustOverridesTests(unittest.TestCase):
         self.assertIn("utah(-nvidia)?(-gaming)?", body)
         self.assertNotIn("dakota", body.lower())
 
+    def setup_bluefin_cli(self):
+        self.mock("bluefin-cli", 'echo "bluefin-cli $*" >> "$CALLS"')
+        self.home = self.root / "home"
+        self.home.mkdir()
+        self.env.update(HOME=str(self.home), SHELL="/usr/bin/bash")
+
+    def test_bluefin_cli_turns_the_shell_on_and_installs_the_cli_bundle(self):
+        self.setup_bluefin_cli()
+        result = self.run_recipe("bluefin-cli")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.calls(), "bluefin-cli shell bash on\nbluefin-cli install cli\n")
+
+    def test_bluefin_cli_turns_a_managed_shell_off(self):
+        self.setup_bluefin_cli()
+        self.env["SHELL"] = "/usr/bin/fish"
+        rc = self.home / ".config/fish/config.fish"
+        rc.parent.mkdir(parents=True)
+        rc.write_text("bluefin-cli init fish | source # bluefin-cli shell-config\n")
+        result = self.run_recipe("bluefin-cli")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.calls(), "bluefin-cli shell fish off\n")
+
+    def test_bluefin_cli_refuses_an_unsupported_shell(self):
+        self.setup_bluefin_cli()
+        self.env["SHELL"] = "/usr/bin/tcsh"
+        result = self.run_recipe("bluefin-cli")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("unsupported shell: tcsh", result.stderr)
+        self.assertEqual(self.calls(), "")
+
+    def test_bluefin_cli_explains_a_missing_binary(self):
+        result = self.run_recipe("bluefin-cli")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("bluefin-cli is not installed", result.stderr)
+        self.assertEqual(self.calls(), "")
+
     def setup_debug_tools(self, uid=0, bootc_exit=0):
         self.mock("id", f'echo {uid}')
         self.mock("sudo", 'echo "sudo" >> "$CALLS"')

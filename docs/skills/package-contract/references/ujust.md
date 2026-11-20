@@ -27,6 +27,14 @@ Problem app, which resolves the target repository from the booted image's
 `IMAGE_ID` itself (the app's routing includes `projectbluefin/utah`). Do not
 re-add a local `report` recipe to redirect reports.
 
+`bluefin-cli` drives bluefin-cli instead of Common's `ublue-bling`
+([terminal experience](../../desktop-contract/references/bluefin-cli.md)). It
+toggles on the marker line bluefin-cli writes into the shell's rc file
+(`# bluefin-cli shell-config`), installs the `cli` bundle when it turns the
+shell on, and fails with a message, not a `command not found`, when the image
+lacks bluefin-cli. `toggle-user-motd` stays Common's: uwelcome is the
+greeting.
+
 For #920, `install-debug-tools` is the on-demand path for diagnosing shell
 hangs, chosen over shipping `gdb-headless`, `elfutils` and `sysprof-cli` in the
 base image (about 23 MB for every user) or adding a debug flavor. It runs

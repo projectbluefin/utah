@@ -186,6 +186,11 @@ files = [
   "/usr/lib/systemd/system/gdm.service.d/kmscon.conf",
   # Dakota's shell defaults (projectbluefin/dakota elements/bluefin/common.bst).
   "/etc/profile.d/bluefin-shell-defaults.sh",
+  # bluefin-cli shims in place of Common's bling (projectbluefin/common#1719):
+  # rc files and muscle memory that still call bling get bluefin-cli.
+  "/usr/share/ublue-os/bling/bling.sh",
+  "/usr/share/ublue-os/bling/bling.fish",
+  "/usr/bin/ublue-bling",
   # Common's Red Hat signature policy uses the unsuffixed key path. The pinned
   # Hummingbird base carries that key; Utah also stages its repository copy.
   "/etc/containers/policy.json",
@@ -331,6 +336,15 @@ files = [
 "/etc/profile.d/bluefin-shell-defaults.sh" = [
   ": \"${BLUEFIN_SHELL_ENABLE_MOTD:=0}\"",
   "export BLUEFIN_SHELL_ENABLE_MOTD",
+]
+"/usr/share/ublue-os/bling/bling.sh" = [
+  "bluefin-cli init",
+]
+"/usr/share/ublue-os/bling/bling.fish" = [
+  "bluefin-cli init fish",
+]
+"/usr/bin/ublue-bling" = [
+  "ujust bluefin-cli",
 ]
 "/etc/dconf/profile/user" = [
   "user-db:user",

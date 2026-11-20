@@ -843,6 +843,16 @@ packages = [
 #   it (it is Bluefin parity). Returns when utah-packages#238 publishes a grub2
 #   built with efi_vendor=fedora. Tracked by #253.
 #
+# bluefin-cli
+#   Utah's shell experience and CLI bundles (`ujust bluefin-cli` and the
+#   bling.sh/bling.fish/ublue-bling shims), in place of Common's ublue-bling;
+#   uwelcome stays the terminal greeting and bluefin-cli works through it
+#   (projectbluefin/common#1719). The factory recipe is new; until it
+#   publishes, the shims do nothing, `ujust bluefin-cli` says it is missing,
+#   and `brew install tuna-os/tap/bluefin-cli` works in the meantime. Once the
+#   pinned factory carries it, it moves to [parity] and [factory].parity.
+#   Tracked by utah-packages#1235.
+#
 # pipewire-libs-extra is supplied by the pinned September 10 factory candidate
 # and returns to the install contract (#35).
 #
@@ -857,6 +867,7 @@ packages = [
 #   published. Tracked by utah-packages#1021. Move them into [parity] once
 #   `just check-repos` reports them stale.
 packages = [
+    "bluefin-cli",
     "grub2-efi-x64-cdboot",
     "anaconda-live",
     "firefox",
