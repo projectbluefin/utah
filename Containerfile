@@ -8,7 +8,7 @@ ARG PACKAGE_IMAGE_SHA=sha256:744c4632cca27c059905779911b4db3269ff069825372c1ba6c
 # in containers-storage, where no registry digest is available.
 ARG PACKAGE_IMAGE_REF=${PACKAGE_IMAGE}@${PACKAGE_IMAGE_SHA}
 ARG COMMON_IMAGE=ghcr.io/projectbluefin/common
-ARG COMMON_IMAGE_SHA=sha256:0391d804e58ab11a90df41846967fcaa9841f662a07a4b05c584e1a7c796e074
+ARG COMMON_IMAGE_SHA=sha256:0c4ecafc2a0ce20f63b0d0d38d30620acd980955a3fe58137bacc01f24e6bd51
 ARG BREW_IMAGE=ghcr.io/ublue-os/brew
 ARG BREW_IMAGE_SHA=sha256:9e0492dbc471258657564c94dae18b58dd96ddb998a06f2b15e8209efb48042b
 # Bluefin wallpapers, taken straight from the artwork repository's own image
@@ -16,7 +16,7 @@ ARG BREW_IMAGE_SHA=sha256:9e0492dbc471258657564c94dae18b58dd96ddb998a06f2b15e820
 # wait on a Common release. It is the multi-arch index digest: the contents are
 # architecture-independent. Renovate keeps it current like the pins above.
 ARG WALLPAPERS_IMAGE=ghcr.io/projectbluefin/bluefin-wallpapers-gnome
-ARG WALLPAPERS_IMAGE_SHA=sha256:460fcdf3e73e99fe63bce326a0cf694fb54fdcb8fe2d3c83dc0b1948b3dd3c0b
+ARG WALLPAPERS_IMAGE_SHA=sha256:9ae13ae790bcc82d31ab9d7c9444a34edd4bbf6324f615dc8ed106fd69ff0566
 
 FROM ${COMMON_IMAGE}@${COMMON_IMAGE_SHA} AS common
 FROM ${BREW_IMAGE}@${BREW_IMAGE_SHA} AS brew
