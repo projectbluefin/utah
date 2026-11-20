@@ -398,7 +398,9 @@ the terminal autostart release via a trigger file so `installed-desktop.png`
 captures a clean desktop state before `installed-fastfetch.png` captures the
 terminal overlay, preventing duplicate verification evidence (#240). CI sets
 `UTAH_E2E_REQUIRE_FASTFETCH=1` to require OCR of its completion marker and
-kernel output, and `UTAH_E2E_REQUIRE_SCREENSHOTS=1` to reject missing PNGs and
+one field only fastfetch prints (kernel, desktop, window manager, terminal,
+shell or package count; `iso/scripts/fastfetch-ocr-match.sh`), since
+tesseract regularly drops the kernel line, and `UTAH_E2E_REQUIRE_SCREENSHOTS=1` to reject missing PNGs and
 blank or flat-colour frames: a solid-black or frozen screen would otherwise pass
 the non-empty check and be published as proof a session started (#786). GDM
 blanks the greeter while a slow boot unit holds `graphical.target`, so the
