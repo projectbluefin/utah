@@ -648,6 +648,14 @@ packages = [
     "bindfs",
     "malcontent-tools",
     "nfs-python-utils",
+    # DLNA/UPnP media sharing (GNOME Settings > Sharing > Media Sharing), as
+    # Dakota ships it (#1258). The rygel package carries /etc/rygel.conf and
+    # the rygel.service user unit Settings starts; gupnp-av's factory recipe
+    # was added in utah-packages#1147.
+    "rygel",
+    "gupnp-av",
+    "gupnp-dlna",
+    "gst-editing-services",
     #
     # Left out (resolved against sha256:d3b5bac2):
     #   tuned, tuned-ppd            Dakota runs power-profiles-daemon, which is
@@ -1163,4 +1171,9 @@ parity = [
     "nfs-python-utils",
     "google-noto-serif-cjk-vf-fonts",
     "nerd-fonts-symbols",
+    # DLNA/UPnP media sharing (#1258).
+    "rygel",
+    "gupnp-av",
+    "gupnp-dlna",
+    "gst-editing-services",
 ]

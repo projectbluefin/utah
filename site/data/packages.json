@@ -216,6 +216,7 @@
         "google-noto-serif-cjk-vf-fonts",
         "google-noto-serif-vf-fonts",
         "gssproxy",
+        "gst-editing-services",
         "gst-thumbnailers",
         "gstreamer1-plugin-dav1d",
         "gstreamer1-plugin-libav",
@@ -224,6 +225,8 @@
         "gstreamer1-plugins-bad-free-libs",
         "gstreamer1-plugins-base-tools",
         "gstreamer1-plugins-ugly-free",
+        "gupnp-av",
+        "gupnp-dlna",
         "gutenprint",
         "gutenprint-cups",
         "gutenprint-libs",
@@ -342,6 +345,7 @@
         "rc-tools",
         "rpcbind",
         "rsync",
+        "rygel",
         "samba",
         "samba-client",
         "samba-common-tools",
@@ -453,7 +457,7 @@
     }
   ],
   "totals": {
-    "installed": 396,
+    "installed": 400,
     "unavailable": 9
   },
   "unavailable": [
