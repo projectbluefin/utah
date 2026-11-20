@@ -8,7 +8,7 @@ ARG PACKAGE_IMAGE_SHA=sha256:780ecbdf4e22253399c0aab021d682b8f2b27d5fd7fea7d152b
 # in containers-storage, where no registry digest is available.
 ARG PACKAGE_IMAGE_REF=${PACKAGE_IMAGE}@${PACKAGE_IMAGE_SHA}
 ARG COMMON_IMAGE=ghcr.io/projectbluefin/common
-ARG COMMON_IMAGE_SHA=sha256:656edc6692f4729e4e4f6c5b3da553424ee4c1aa3f1f8fb3885ef4a189563338
+ARG COMMON_IMAGE_SHA=sha256:248607e4c18370b586363a87290e73428dff0c0cd1a2fb2cad3191acd27b8776
 ARG BREW_IMAGE=ghcr.io/ublue-os/brew
 ARG BREW_IMAGE_SHA=sha256:9e0492dbc471258657564c94dae18b58dd96ddb998a06f2b15e8209efb48042b
 # Bluefin wallpapers, taken straight from the artwork repository's own image
@@ -359,7 +359,8 @@ ARG UUPD_SHA256=d8d420a153de11589abad3292eef2131a75ac3487414065a2661a558ef0d027c
 # lists them under [selinux]: the module store is under read-only /usr once
 # booted (#551), so the build is the only place to change it. -n: no reload,
 # the build has no selinuxfs. utah_bootc_probe dontaudits bootc's expected
-# mac_admin probe from plain services (#1198; the .cil says why not allow).
+# mac_admin probe from plain services (#1198; the .cil says why not allow), and
+# systemd_nsresourced_t's dac_read_search on its own domain (#1329).
 RUN --mount=type=bind,from=artwork,source=/out/branding,target=/tmp/utah-artwork-branding,ro \
     --mount=type=bind,from=common,source=/system_files/bluefin/usr/share/plymouth,target=/tmp/utah-common-plymouth,ro \
     mkdir -p /tmp/uupd && \

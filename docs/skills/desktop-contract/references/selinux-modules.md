@@ -43,7 +43,13 @@ v2026.11.16 writes one such unit into every install:
 on the first boot. Every flavor of review run 44663789174 failed the gate on it
 (#1129).
 
-The module is two rules, one per domain:
+The module also carries a third rule for #1329:
+`(dontaudit systemd_nsresourced_t self (capability (dac_read_search)))`.
+systemd-nsresourced logs `{ dac_read_search } comm=systemd-nsresou` at boot,
+carries on without the capability, and the gate counted it and failed the utah and
+utah-nvidia flavors of Post-Testing E2E run 44791358885 (the gaming flavors passed). The two rules below are the bootc probe.
+
+The module is two rules for the probe, one per domain:
 `(dontaudit unconfined_service_t self (capability2 (mac_admin)))` and
 `(dontaudit initrc_t self (capability2 (mac_admin)))`.
 
