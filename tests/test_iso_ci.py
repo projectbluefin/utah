@@ -7,6 +7,7 @@ import re
 import subprocess
 from pathlib import Path
 import tempfile
+import time
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -1457,3 +1458,100 @@ class IsoBakeParserTests(unittest.TestCase):
                          "the live-only installed path does not exist on bootc deployments")
         self.assertNotIn('"utah-verify-desktop-contract --flatpaks', text,
                          "bare parser name is not on the guest PATH")
+
+
+class TackleboxBootGateTests(unittest.TestCase):
+    """iso/scripts/tacklebox-boot-gate.sh against a stub QEMU."""
+
+    GATE = ROOT / "iso/scripts/tacklebox-boot-gate.sh"
+    # A stand-in for qemu-system-x86_64 -daemonize: it leaves a "VM" process
+    # behind, records its pid in -pidfile, and writes STUB_SERIAL_TEXT to the
+    # -serial file after STUB_SERIAL_DELAY seconds. STUB_VM_EXITS makes the
+    # "VM" die at once, as a QEMU crash would.
+    STUB = r"""#!/usr/bin/env bash
+serial="" pidfile=""
+while (($#)); do
+  case "$1" in
+    -serial) serial="${2#file:}"; shift ;;
+    -pidfile) pidfile="$2"; shift ;;
+  esac
+  shift
+done
+if [[ -n "${STUB_VM_EXITS:-}" ]]; then
+  true & echo $! > "$pidfile"; wait
+  exit 0
+fi
+( sleep "${STUB_SERIAL_DELAY:-0}"; printf '%s\n' "${STUB_SERIAL_TEXT:-}" >> "$serial"; exec sleep 300 ) \
+  </dev/null >/dev/null 2>&1 &
+echo $! > "$pidfile"
+"""
+
+    def run_gate(self, timeout=60, **stub_env):
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(subprocess.run, ["rm", "-rf", str(tmp)])
+        bindir = tmp / "bin"
+        bindir.mkdir()
+        qemu = bindir / "qemu-system-x86_64"
+        qemu.write_text(self.STUB)
+        qemu.chmod(0o755)
+        for name in ("code.fd", "vars.fd", "live.iso"):
+            (tmp / name).write_bytes(b"")
+        env = dict(os.environ, PATH=f"{bindir}:{os.environ['PATH']}",
+                   UTAH_ISO_BOOT_WORK=str(tmp / "work"),
+                   UTAH_ISO_BOOT_OVMF_CODE=str(tmp / "code.fd"),
+                   UTAH_ISO_BOOT_OVMF_VARS=str(tmp / "vars.fd"),
+                   UTAH_ISO_BOOT_TIMEOUT=str(timeout),
+                   UTAH_ISO_BOOT_POLL="1", **stub_env)
+        start = time.monotonic()
+        result = subprocess.run(["bash", str(self.GATE), str(tmp / "live.iso")],
+                                capture_output=True, text=True, env=env, timeout=timeout + 30)
+        elapsed = time.monotonic() - start
+        pid = (tmp / "work/boot.pid").read_text().strip()
+        return result, elapsed, pid
+
+    def assert_vm_stopped(self, pid):
+        for _ in range(50):
+            if subprocess.run(["kill", "-0", pid], capture_output=True).returncode != 0:
+                return
+            time.sleep(0.1)
+        subprocess.run(["kill", pid])
+        self.fail(f"the gate left the VM (pid {pid}) running")
+
+    def test_returns_as_soon_as_the_marker_reaches_serial(self):
+        # Runs 44538634534 and 44604822618 waited the full 1800 s timeout
+        # although the marker was there: the loop only left on a systemd
+        # "Reached target" line that never reached serial.
+        result, elapsed, pid = self.run_gate(timeout=60, STUB_SERIAL_DELAY="2",
+                                             STUB_SERIAL_TEXT="UTAH_LIVE_READY")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("PASS:", result.stdout)
+        self.assertLess(elapsed, 20, "the gate waited out its timeout after the marker appeared")
+        self.assert_vm_stopped(pid)
+
+    def test_a_vm_that_exits_fails_without_waiting_out_the_timeout(self):
+        result, elapsed, pid = self.run_gate(timeout=60, STUB_VM_EXITS="1")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("QEMU exited", result.stderr)
+        self.assertLess(elapsed, 20)
+
+    def test_kernel_panic_fails_fast(self):
+        result, elapsed, pid = self.run_gate(timeout=60, STUB_SERIAL_TEXT="Kernel panic - not syncing")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("kernel panic", result.stderr)
+        self.assertLess(elapsed, 20)
+        self.assert_vm_stopped(pid)
+
+    def test_a_missing_marker_still_fails_at_the_timeout(self):
+        result, elapsed, pid = self.run_gate(timeout=3, STUB_SERIAL_TEXT="Reached target graphical.target")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("never appeared", result.stderr)
+        self.assert_vm_stopped(pid)
+
+    def test_every_qemu_job_grants_kvm_before_booting(self):
+        # tacklebox-iso lacked the grant and its boot ran under TCG.
+        import yaml
+        jobs = yaml.safe_load((ROOT / ".github/workflows/post-testing-e2e.yml").read_text())["jobs"]
+        for name in ("luks", "lifecycle", "tacklebox-iso"):
+            prepare = next(s for s in jobs[name]["steps"] if s.get("name") == "Prepare ISO and QEMU host")
+            self.assertIn("sudo chmod a+rw /dev/kvm", prepare["run"], name)
+            self.assertIn("test -r /dev/kvm && test -w /dev/kvm", prepare["run"], name)
