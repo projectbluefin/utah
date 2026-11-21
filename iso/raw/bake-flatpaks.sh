@@ -4,9 +4,11 @@
 # Usage (root): bake-flatpaks.sh IMAGE RAW
 #
 # The published image stays Flatpak-free (docs/adr/0001, decision 6). The
-# Flatpaks go into the medium's stateful /var instead: the stateroot's
-# var/lib/flatpak on the raw image's root filesystem, which `bootc install`
-# has just created. ostree/bootc never touch /var after the first deployment,
+# Flatpaks go into the medium's stateful /var instead: the shared /var's
+# lib/flatpak on the raw image's root filesystem (ostree: the stateroot's
+# ostree/deploy/<stateroot>/var; composefs: state/os/default/var, which every
+# state/deploy/<digest>/var links to), which `bootc install` has just created.
+# bootc never touches /var after the first deployment,
 # so a bootc update can neither re-add nor overwrite them, and an app the user
 # removes stays removed. OS-Installer's block copy carries that /var to the
 # installed disk, so first boot starts with them offline.
@@ -50,7 +52,10 @@ for p in "${loop}"p*; do
 done
 [[ -n "${root}" ]] || { echo "no btrfs root on ${RAW}" >&2; exit 1; }
 mount "${root}" "${mnt}"
-mapfile -t stateroots < <(find "${mnt}/ostree/deploy" -mindepth 1 -maxdepth 1 -type d)
+# The directory holding the shared var/: one ostree stateroot, or composefs's
+# state/os/default.
+mapfile -t stateroots < <(find "${mnt}/ostree/deploy" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)
+[[ -d "${mnt}/state/os/default/var" ]] && stateroots+=("${mnt}/state/os/default")
 [[ ${#stateroots[@]} -eq 1 ]] || { echo "expected one stateroot, found ${#stateroots[@]}" >&2; exit 1; }
 stateroot="${stateroots[0]}"
 install -d "${stateroot}/var/lib/flatpak"
