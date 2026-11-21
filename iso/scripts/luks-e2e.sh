@@ -42,6 +42,7 @@ VM_CPUS="${UTAH_E2E_CPUS:-4}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "${ROOT}/iso/scripts/extension-state.sh"
 source "${ROOT}/iso/scripts/e2e-exit.sh"
+source "${ROOT}/iso/scripts/e2e-services.sh"
 
 # The account the installer creates, and the one phase 6 logs in as.
 TEST_USER="${UTAH_E2E_USER:-utahtest}"
@@ -96,12 +97,13 @@ VNC_INSTALLED="${UTAH_E2E_VNC_INSTALLED:-3}"
 # UTAH_E2E_BASELINE=1: the installed image is the lifecycle's baseline, the
 # previous :testing, which lifecycle-e2e.sh installs before upgrading it.
 # Content gates -- checks that hold the image to a rule from this checkout,
-# such as a mountpoint or a policy rule a later commit added -- are skipped:
-# the baseline predates the rule, failing it blocks the promotion that would
-# replace it, and the baseline never gets the fix (#1343, #1346). The
-# lifecycle runs each skipped gate on the upgraded candidate instead, and the
-# luks job runs them on every candidate it installs. Install, boot, unlock,
-# login and checks against the image's own installed contract still run.
+# such as a mountpoint, a policy rule or the contract-service check a later
+# commit added -- are skipped: the baseline predates the rule, failing it
+# blocks the promotion that would replace it, and the baseline never gets the
+# fix (#1343, #1346). The lifecycle runs each skipped gate on the upgraded
+# candidate instead, and the luks job runs them on every candidate it
+# installs. Install, boot, unlock, login, the desktop and the default Flatpak
+# set still run.
 BASELINE_INSTALL="${UTAH_E2E_BASELINE:-0}"
 VARS="${WORK}/ovmf-vars.fd"
 
@@ -402,114 +404,6 @@ deadline_reached() {
     e2e_exit "${E2E_EXIT_DEADLINE}" "E2E_WALL_CLOCK_DEADLINE reached (exit code for the phase in progress: ${E2E_PHASE_EXIT}); failing now so the evidence uploads before the job is killed"
 }
 e2e_deadline_start deadline_reached
-
-check_system_unit_state() {
-    local unit="$1" required_enabled="${2:-false}" required_run="${3:-false}" boot_pass="${4:-first}"
-    local state load_state="" active_state="" result="" start_time="" key value
-    state="$(ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' systemctl show --property=LoadState --property=ActiveState --property=Result --property=ExecMainStartTimestamp '${unit}'" 2>/dev/null || true)"
-    while IFS='=' read -r key value; do
-        case "${key}" in
-            LoadState) load_state="${value}" ;;
-            ActiveState) active_state="${value}" ;;
-            Result) result="${value}" ;;
-            ExecMainStartTimestamp) start_time="${value}" ;;
-        esac
-    done <<< "${state}"
-    [[ "${load_state}" == loaded ]] || fail "required system unit ${unit} is ${load_state:-unavailable}"
-    # Result= is success/exit-code/signal/timeout/...; it is never "failed".
-    [[ "${active_state}" != failed && "${result}" == success ]] \
-        || fail "system unit ${unit} failed during ${boot_pass} boot (ActiveState=${active_state:-unknown} Result=${result:-unknown})"
-    if [[ "${required_run}" == true && ( -z "${start_time}" || "${start_time}" == "n/a" ) ]]; then
-        fail "required system unit ${unit} did not execute during ${boot_pass} boot"
-    fi
-    if [[ "${required_enabled}" == true ]]; then
-        state="$(ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' systemctl is-enabled '${unit}'" 2>/dev/null || true)"
-        [[ "${state}" == enabled ]] || fail "required system unit ${unit} is ${state:-not enabled}"
-    fi
-    echo "  ${unit}: ${result:-unknown}"
-}
-
-check_user_unit_state() {
-    local unit="$1" required_run="${2:-false}" boot_pass="${3:-first}" offline_failure_ok="${4:-false}"
-    local state load_state="" active_state="" result="" start_time="" enabled="" key value
-    state="$(ssh_target "systemctl --user show --property=LoadState --property=ActiveState --property=Result --property=ExecMainStartTimestamp '${unit}'" 2>/dev/null || true)"
-    while IFS='=' read -r key value; do
-        case "${key}" in
-            LoadState) load_state="${value}" ;;
-            ActiveState) active_state="${value}" ;;
-            Result) result="${value}" ;;
-            ExecMainStartTimestamp) start_time="${value}" ;;
-        esac
-    done <<< "${state}"
-    [[ "${load_state}" == loaded ]] || fail "user unit ${unit} is ${load_state:-unavailable}"
-    # Result= is success/exit-code/signal/timeout/...; it is never "failed".
-    if [[ "${offline_failure_ok}" != true ]]; then
-        [[ "${active_state}" != failed && "${result}" == success ]] \
-            || fail "user unit ${unit} failed during ${boot_pass} boot (ActiveState=${active_state:-unknown} Result=${result:-unknown})"
-    fi
-    if [[ "${required_run}" == true && ( -z "${start_time}" || "${start_time}" == "n/a" ) ]]; then
-        fail "user unit ${unit} did not execute during ${boot_pass} boot"
-    fi
-    enabled="$(ssh_target "systemctl --user is-enabled '${unit}'" 2>/dev/null || true)"
-    [[ "${enabled}" == enabled ]] || fail "user unit ${unit} is ${enabled:-not enabled}"
-    echo "  ${unit}: ${result:-unknown}; enabled"
-}
-
-# Print one [services] list (enabled or user_enabled) of the contract the
-# installed image ships, so the runtime check follows the image under test
-# rather than a list copied into this script. The parser is the repo's
-# verifier, copied over because /usr/local/libexec does not survive into a
-# bootc deployment.
-contract_units() {
-    local kind="$1" units
-    scp_target "${ROOT}/scripts/verify-desktop-contract.py" \
-        "${TEST_USER}@127.0.0.1:/tmp/utah-e2e-verify-desktop-contract.py" >/dev/null \
-        || fail "could not copy the contract parser to the installed system"
-    units="$(ssh_target "python3 /tmp/utah-e2e-verify-desktop-contract.py --services '${kind}' /usr/share/utah/bluefin-desktop.toml" 2>/dev/null)" \
-        || fail "could not read [services].${kind} from the installed contract"
-    [[ -n "${units}" ]] || fail "the installed contract lists no [services].${kind} units"
-    printf '%s\n' "${units}"
-}
-
-verify_setup_state() {
-    local boot_pass="${1:-first}" listed unit
-    local -a units
-    echo "Checking ${boot_pass}-boot setup units and desktop enablement..."
-    # These two do their work on every boot, so they must have run, not only
-    # be enabled.
-    check_system_unit_state flatpak-preinstall.service true true "${boot_pass}"
-    check_system_unit_state ublue-system-setup.service true true "${boot_pass}"
-    check_user_unit_state ublue-user-setup.service true "${boot_pass}"
-    # Every unit the installed contract requires enabled must still be enabled
-    # after first-boot presets ran, and must not have failed. Units whose
-    # conditions skip them in a VM (thermald, intel_lpmd) end inactive with
-    # Result=success and pass. Timers are checked, not the network jobs they
-    # trigger, because this VM has no network.
-    # The lists are read into arrays first: ssh_target reads stdin, so a
-    # `while read ... <<< "${units}"` loop lost every unit after the first.
-    # Command substitution, not process substitution, so a contract_units
-    # failure still stops the script.
-    listed="$(contract_units enabled)"
-    mapfile -t units <<< "${listed}"
-    for unit in "${units[@]}"; do
-        [[ -n "${unit}" ]] || continue
-        check_system_unit_state "${unit}" true false "${boot_pass}"
-    done
-    listed="$(contract_units user_enabled)"
-    mapfile -t units <<< "${listed}"
-    for unit in "${units[@]}"; do
-        [[ -n "${unit}" ]] || continue
-        case "${unit}" in
-            # Installs Homebrew packages from the network, so it fails in this
-            # offline VM by design; its enablement is still asserted.
-            brew-preinstall.service) check_user_unit_state "${unit}" false "${boot_pass}" true ;;
-            *) check_user_unit_state "${unit}" false "${boot_pass}" ;;
-        esac
-    done
-    # kanata replaced input-remapper (#1222): installed and loaded, opt-in, so
-    # neither enablement nor a run is required.
-    check_system_unit_state kanata.service false false "${boot_pass}"
-}
 
 verify_flathub_remote() {
     local remotes
@@ -1577,9 +1471,16 @@ if [[ -n "${UTAH_E2E_FLATPAKS-x}" ]]; then
 fi
 
 # First-boot service state is checked on every run, so the post-testing E2E
-# proves it for each candidate (#19). The review VM adds the graceful second
-# boot that proves first-boot work is idempotent.
-verify_setup_state first
+# proves it for each candidate (#19). A content gate: the lifecycle's baseline
+# (UTAH_E2E_BASELINE=1) is an earlier :testing built before this check
+# (#1282), whose contract may list a unit a later commit fixed, so the
+# lifecycle checks the upgraded candidate. The review VM adds the graceful
+# second boot that proves first-boot work is idempotent.
+if [[ "${BASELINE_INSTALL}" == 0 ]]; then
+    verify_setup_state first
+else
+    echo "  contract service gate: skipped on the lifecycle baseline; the upgraded candidate is checked"
+fi
 if [[ -n "${UTAH_E2E_EXPECT_FLAVOR:-}" ]]; then
     verify_flathub_remote
     repeat_installed_boot

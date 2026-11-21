@@ -379,7 +379,10 @@ read falls back to `sudo` when `bootc status --json` returns nothing to the
 unprivileged test user. A failure exits 10 + the failing phase number
 ([exit codes](lifecycle-e2e.md#exit-codes)).
 
-Every run then checks first-boot service state (#19). It reads the installed
+Every run then checks first-boot service state (#19), except the lifecycle's
+baseline install (`UTAH_E2E_BASELINE=1`), whose upgraded candidate is checked
+instead ([lifecycle-e2e.md](lifecycle-e2e.md)). The check lives in
+`iso/scripts/e2e-services.sh`. It reads the installed
 image's own `/usr/share/utah/bluefin-desktop.toml` through
 `verify-desktop-contract.py --services enabled|user_enabled` and requires each
 listed unit to be loaded, still enabled after first-boot presets, and not
