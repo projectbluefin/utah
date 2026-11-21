@@ -211,7 +211,6 @@
         "gnome-os-config-systemd-presets",
         "gnome-os-config-uinput",
         "gnome-os-config-wpa-supplicant-config",
-        "gnu-env",
         "gnupg2-scdaemon",
         "gnupg2-smime",
         "gnupg2-utils",
@@ -416,7 +415,6 @@
         "usermode",
         "util-linux-script",
         "uutils-coreutils",
-        "uutils-coreutils-replace",
         "v4l-utils",
         "veritysetup",
         "vim-enhanced",
@@ -488,7 +486,7 @@
     }
   ],
   "totals": {
-    "installed": 431,
+    "installed": 429,
     "unavailable": 4
   },
   "unavailable": [

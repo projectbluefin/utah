@@ -206,14 +206,11 @@ files = [
   "/usr/lib64/kmscon/mod-pango.so",
   "/etc/kmscon/kmscon.conf",
   "/usr/lib/systemd/system/gdm.service.d/kmscon.conf",
-  # uutils is coreutils and sudo-rs is sudo, as on Dakota (#1229).
-  # uutils-coreutils-replace links the GNU names (and Dakota's uutils-<prog>
-  # names) to uutils; gnu-env keeps /usr/bin/env. sudo-rs is /usr/bin/sudo and
-  # reads C sudo's PAM stacks (sudo, and sudo-i for `sudo -i`) and sudoers.
+  # sudo-rs is sudo, as on Dakota (#1229), and reads C sudo's PAM stacks
+  # (sudo, and sudo-i for `sudo -i`) and sudoers. uutils sits beside GNU
+  # coreutils, whose cp bootupd needs on the ESP (#1431).
   # configure-services.sh fails the build if a link or label is wrong.
   "/usr/bin/uutils-coreutils",
-  "/usr/bin/uutils-ls",
-  "/usr/bin/uu_ls",
   "/usr/bin/env",
   "/usr/bin/sudo-rs",
   "/etc/pam.d/sudo",

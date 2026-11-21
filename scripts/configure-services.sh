@@ -360,14 +360,16 @@ if [ -f "${PASSWD_PAM}" ]; then
     fi
 fi
 
-# uutils is coreutils and sudo-rs is sudo, as on Dakota (#1229;
+# sudo-rs is sudo, as on Dakota (#1229;
 # docs/skills/desktop-contract/references/sudo-rs-uutils.md).
 #
-# uutils-coreutils-replace replaced coreutils-single in the package
-# transaction ([swap] in packages/utah.toml): the GNU names link to uutils,
-# except env, which gnu-env keeps GNU's for pkexec (Dakota's reason).
-[ "$(readlink /usr/bin/ls)" = uutils-coreutils ]
-[ "$(rpm -qf --queryformat '%{NAME}' /usr/bin/env)" = gnu-env ]
+# cp stays GNU's. bootupd installs GRUB with `cp -a` onto the vfat ESP; GNU
+# cp skips the xattrs vfat cannot hold, uutils cp fails with EOPNOTSUPP, and
+# every bootc install of the image then fails (#1431).
+if [ "$(readlink /usr/bin/cp)" = uutils-coreutils ]; then
+    echo "ERROR: /usr/bin/cp is uutils; bootupd cannot copy GRUB to the ESP with it (#1431)" >&2
+    exit 1
+fi
 
 # sudo-rs needs C sudo's /etc/pam.d/sudo and sudo-i, /etc/sudoers and
 # sudoers.d, so C sudo stays installed (sudo-rs Requires it), as Dakota
