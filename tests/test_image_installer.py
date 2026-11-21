@@ -697,10 +697,12 @@ class GnomeSetupTests(unittest.TestCase):
 
     workflow = yaml.safe_load(WORKFLOW.read_text())
 
-    def test_the_installer_is_a_dispatch_input_defaulting_to_os_installer(self):
+    def test_the_installer_is_a_dispatch_input_defaulting_to_gnome_setup(self):
         inputs = self.workflow[True]["workflow_dispatch"]["inputs"]
-        self.assertEqual(inputs["installer"]["options"], ["os-installer", "gnome-setup"])
-        self.assertEqual(inputs["installer"]["default"], "os-installer")
+        self.assertEqual(inputs["installer"]["options"], ["gnome-setup", "os-installer"])
+        self.assertEqual(inputs["installer"]["default"], "gnome-setup")
+        self.assertIn("INSTALLER: ${{ inputs.installer || 'gnome-setup' }}", WORKFLOW.read_text())
+        self.assertIn('INSTALLER="${UTAH_RAW_INSTALLER:-gnome-setup}"', (RAW / "build-raw-image.sh").read_text())
         text = WORKFLOW.read_text()
         self.assertIn('UTAH_RAW_INSTALLER="$INSTALLER"', text)
         self.assertIn('--installer "$INSTALLER"', text)
@@ -728,6 +730,17 @@ class GnomeSetupTests(unittest.TestCase):
         containerfile = (RAW / "Containerfile").read_text()
         self.assertIn("ln -s /run/utah-live/repart.d /out/usr/lib/gnome-setup/definitions", containerfile)
         self.assertIn("/usr/share/utah/gnome-setup/pages.conf /usr/lib/gnome-setup/pages.conf", containerfile)
+
+    def test_without_a_tpm_the_user_picks_a_passphrase_next_to_the_recovery_key(self):
+        pages = (RAW / "src/usr/share/utah/gnome-setup/pages.conf").read_text()
+        flow = next(line for line in pages.splitlines() if line.startswith("live-initial-setup="))
+        steps = flow.split("=", 1)[1].split(";")
+        self.assertLess(steps.index("installer"), steps.index("disk-passphrase"))
+        self.assertLess(steps.index("disk-passphrase"), steps.index("recovery-key"))
+        inputs = self.workflow[True]["workflow_dispatch"]["inputs"]
+        self.assertEqual(inputs["tpm"]["type"], "boolean")
+        self.assertTrue(inputs["tpm"]["default"])
+        self.assertIn('[[ "$INSTALLER" != gnome-setup || "$TPM" != true ]] || tpm=(--tpm)', WORKFLOW.read_text())
 
     def test_installed_systems_do_not_offer_gnome_setup(self):
         containerfile = (RAW / "Containerfile").read_text()

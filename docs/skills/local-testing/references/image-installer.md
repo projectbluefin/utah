@@ -48,12 +48,22 @@ installed under `/usr/libexec/utah-sysinstall` next to the system's systemd.
 | Varlink sockets on the standard paths, live + gnome-setup only; sysinstall with the kernel and boot loader steps off (the copied ESP carries shim and GRUB) | `src/usr/lib/systemd/system/utah-{sysinstall,cryptenroll}.socket`, `@.service` |
 | repart.d written at boot: every medium partition but BIOS boot by PARTUUID with `CopyBlocks=`, root into LUKS2 (`key-file+tpm2`, `TPM2PCRs=7` with a TPM 2.0, else `key-file`); gnome-setup's definitions dir links to it | `src/usr/libexec/utah-live-definitions` |
 | install.sh's post-copy fixups, started by gnome-setup after sysinstall (`[page:installer] post-install-unit=`) and before its recovery key page wipes the empty passphrase | `src/usr/libexec/utah-sysinstall-post`, `utah-sysinstall-post@.service` |
-| Pages (language, keyboard, try-or-install, disk, recovery key, done), live user's polkit grants | `src/usr/share/utah/gnome-setup/pages.conf`, `src/usr/share/polkit-1/rules.d/50-utah-live-gnome-setup.rules` |
+| Pages (language, keyboard, try-or-install, disk, disk passphrase without a TPM, recovery key, done), live user's polkit grants | `src/usr/share/utah/gnome-setup/pages.conf`, `src/usr/share/polkit-1/rules.d/50-utah-live-gnome-setup.rules` |
 
-The E2E (`--installer gnome-setup --tpm`) runs the VMs with swtpm: the first
-boot and the rollback boot must unlock through the TPM2 with no prompt, and
-the bootc switch boot runs without the TPM and is unlocked with the recovery
-key read from gnome-setup's recovery key page.
+Keys on the installed root: with a TPM 2.0, the TPM (PCR 7) plus the
+recovery key. Without one, gnome-setup's disk passphrase page (shown only
+then) enrolls the passphrase the user picks, and the recovery key is a second
+slot; the recovery key is never the only boot key.
+
+The E2E (`--installer gnome-setup --tpm`, workflow input `tpm`, default on)
+runs the VMs with swtpm: the first boot and the rollback boot must unlock
+through the TPM2 with no prompt, and the bootc switch boot runs without the
+TPM and is unlocked with the recovery key read from gnome-setup's recovery
+key page. Without `--tpm` (`tpm: false`) the harness fills the disk
+passphrase page, checks the slots are exactly password + recovery (the
+passphrase opens the root, the empty one no longer does), unlocks the first
+boot and the rollback boot with the passphrase and the bootc switch boot with
+the recovery key.
 
 ### composefs backend
 

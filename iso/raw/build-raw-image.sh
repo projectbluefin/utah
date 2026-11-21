@@ -31,9 +31,9 @@
 #                            deployment, so it survives `bootc switch`
 #   UTAH_RAW_EVIDENCE        directory for partition table, entries and sizes
 #   UTAH_RAW_BACKEND         auto (default), composefs or ostree
-#   UTAH_RAW_INSTALLER       installer the live session offers: os-installer
-#                            (default) or gnome-setup (utah.live.installer=gnome-setup
-#                            on the live entry; utah-live-setup reads it)
+#   UTAH_RAW_INSTALLER       installer the live session offers: gnome-setup
+#                            (default; utah.live.installer=gnome-setup on the
+#                            live entry, which utah-live-setup reads) or os-installer
 #
 # The root is written uncompressed: shrink-raw-image.sh compresses it after
 # the Flatpaks are baked (UTAH_RAW_BTRFS_COMPRESS), so they are covered too.
@@ -46,7 +46,7 @@ SIZE="${UTAH_RAW_SIZE:-24G}"
 LIVE_KARGS="${UTAH_RAW_LIVE_KARGS:-}"
 EVIDENCE="${UTAH_RAW_EVIDENCE:-$(dirname "${OUT}")/raw-evidence}"
 REQUESTED_BACKEND="${UTAH_RAW_BACKEND:-auto}"
-INSTALLER="${UTAH_RAW_INSTALLER:-os-installer}"
+INSTALLER="${UTAH_RAW_INSTALLER:-gnome-setup}"
 case "${INSTALLER}" in
     os-installer) ;;
     gnome-setup) LIVE_KARGS="${LIVE_KARGS:+${LIVE_KARGS} }utah.live.installer=gnome-setup" ;;

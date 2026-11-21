@@ -17,7 +17,8 @@
 #     else Encrypt=key-file. No key file is passed, so systemd-repart
 #     enrolls an empty passphrase: utah-sysinstall-post unlocks with it, and
 #     gnome-setup's recovery key page then enrolls a recovery key and wipes
-#     it. Without a TPM the recovery key is the only key.
+#     it. Without a TPM gnome-setup's disk passphrase page first enrolls the
+#     passphrase the user picks, so the recovery key is the second key.
 set -euo pipefail
 
 out=/run/utah-live/repart.d

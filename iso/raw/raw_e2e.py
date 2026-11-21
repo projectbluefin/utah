@@ -18,7 +18,10 @@ Stages (every screenshot is listed in DIR/screenshots/manifest.json):
      systemd-sysinstall Run, utah-sysinstall-post@ and a recovery key
      enrollment over SSH. With a TPM (--tpm, swtpm) the root is bound to it:
      every boot with the TPM must unlock without a prompt, and the bootc switch
-     boot runs without the TPM and unlocks with the recovery key.
+     boot runs without the TPM and unlocks with the recovery key. Without one,
+     gnome-setup's disk passphrase page sets a passphrase next to the recovery
+     key: first boot and rollback unlock with the passphrase, the bootc switch
+     boot with the recovery key.
   3. Boot the installed disk alone: Plymouth LUKS prompt, unlock,
      gnome-initial-setup (user creation), GNOME desktop, a terminal with
      `bootc status`.
@@ -809,13 +812,13 @@ class Harness:
         self.shot("06-setup-confirm", "Confirmation before systemd-sysinstall writes the disk")
         start = time.time()
         self.press(r, app, "Install", lambda n: has_text(n, "Installing"), "install page")
-        progress = self.poll(r, app, lambda n: has_text(n, "Copying Partition") or has_text(n, "Back Up Recovery Key")
-                             or has_text(n, "Installation Failed"), 300)
+        result_page = lambda n: (has_text(n, "Back Up Recovery Key") or has_text(n, "Choose a Disk Passphrase")  # noqa: E731
+                                 or has_text(n, "Installation Failed"))
+        progress = self.poll(r, app, lambda n: has_text(n, "Copying Partition") or result_page(n), 300)
         if progress is not None and has_text(progress, "Copying Partition"):
             time.sleep(5)
             self.shot("07-setup-progress", "systemd-sysinstall's progress: systemd-repart block-copies the medium into LUKS2")
-        nodes = self.wait_for(r, app, lambda n: has_text(n, "Back Up Recovery Key") or has_text(n, "Installation Failed"),
-                              "install result", 3600)
+        nodes = self.wait_for(r, app, result_page, "install result", 3600)
         self.timings["gui-install-seconds-after-confirm"] = int(time.time() - start)
         self.grab_install_log()
         self.grab_sysinstall_journal()
@@ -823,6 +826,11 @@ class Harness:
             self.shot("08-setup-failed", "FAILURE: gnome-setup reported an install error")
             raise Fail("gnome-setup: installation failed (evidence/sysinstall-journal.txt)")
         log(f"  install finished {self.timings['gui-install-seconds-after-confirm']}s after confirmation")
+        if self.tpm:
+            if has_text(nodes, "Choose a Disk Passphrase"):
+                raise Fail("gnome-setup asked for a disk passphrase although the VM has a TPM")
+        else:
+            self.disk_passphrase(r, app, nodes)
         nodes = self.wait_for(r, app, lambda n: len(self.recovery_key_text(n)) > 40, "recovery key", 120)
         self.recovery_key = self.recovery_key_text(nodes)
         self.save("recovery-key.txt", self.recovery_key + "\n")
@@ -842,6 +850,24 @@ class Harness:
         node = named(nodes, "Recovery Key")
         return (node["text"] or "").strip() if node else ""
 
+    def disk_passphrase(self, r, app, nodes):
+        """No TPM: gnome-setup's disk passphrase page, both entries filled with PIN."""
+        if not has_text(nodes, "Choose a Disk Passphrase"):
+            self.shot("08-setup-no-passphrase-page", "FAILURE: no disk passphrase page without a TPM")
+            raise Fail("gnome-setup showed no disk passphrase page although the VM has no TPM")
+        self.save("atspi-gs-passphrase.json", json.dumps(nodes, indent=1))
+        self.shot("08-setup-passphrase", "No TPM: gnome-setup asks for a disk passphrase (the recovery key stays a second key)")
+        for label in ("Passphrase", "Confirm Passphrase"):
+            nodes = self.snapshot(r, app)
+            node = named(nodes, label, sensitive=True)
+            if node is None:
+                self.save("atspi-passphrase-missing.json", json.dumps(nodes, indent=1))
+                raise Fail(f"no sensitive {label!r} entry")
+            self.fill(r, app, node, PIN)
+        self.wait_for(r, app, lambda n: has_name(n, "Next", sensitive=True), "passphrases match", 30)
+        self.shot("08-setup-passphrase-filled", "Disk passphrase entered twice; Next is enabled once both match")
+        self.press(r, app, "Next", lambda n: has_text(n, "Back Up Recovery Key"), "recovery key page")
+
     def grab_sysinstall_journal(self):
         out = self.ssh("liveuser", "sudo journalctl -b --no-pager -o short-monotonic -u 'utah-sysinstall@*' "
                        "-u 'utah-sysinstall-post@*' -u 'utah-cryptenroll@*'; cat /run/utah-live/repart.d/*.conf",
@@ -849,30 +875,45 @@ class Harness:
         self.save("sysinstall-journal.txt", out)
 
     def check_slots(self):
-        """The target's LUKS2 keyslots: a recovery key, TPM2 when there is one, no passphrase left."""
+        """The target's LUKS2 keyslots: a recovery key, TPM2 when there is one, else the user's passphrase.
+
+        The empty passphrase systemd-repart enrolled must be gone: with a TPM no password slot
+        is left, without one exactly one (the passphrase from the disk passphrase page)."""
         out = self.ssh("liveuser", f"dev=$(lsblk -rnpo NAME,FSTYPE {TARGET_DISK} | awk '$2 == \"crypto_LUKS\" {{print $1}}'); "
                        "echo \"$dev\"; sudo /usr/libexec/utah-sysinstall/systemd-cryptenroll \"$dev\"",
                        password="live", check=False)
         self.save("luks-slots.txt", out)
-        types = {line.split()[1] for line in out.splitlines()[1:] if len(line.split()) >= 2 and line.split()[0].isdigit()}
+        types = [line.split()[1] for line in out.splitlines()[1:] if len(line.split()) >= 2 and line.split()[0].isdigit()]
         self.results.encryption["slots"] = sorted(types)
         log(f"  LUKS2 slots on the target: {sorted(types)}")
-        want = {"recovery"} | ({"tpm2"} if self.tpm else set())
-        if not want <= types or "password" in types:
-            raise Fail(f"target keyslots are {sorted(types)}, expected {sorted(want)} and no password (evidence/luks-slots.txt)")
+        want = ["recovery", "tpm2"] if self.tpm else ["password", "recovery"]
+        if sorted(types) != want:
+            raise Fail(f"target keyslots are {sorted(types)}, expected {want} (evidence/luks-slots.txt)")
+        if not self.tpm:
+            # The password slot is the user's passphrase, not the empty one systemd-repart enrolled.
+            test = self.ssh("liveuser", f"dev=$(lsblk -rnpo NAME,FSTYPE {TARGET_DISK} | awk '$2 == \"crypto_LUKS\" {{print $1}}'); "
+                            f"printf %s {PIN} | sudo cryptsetup open --test-passphrase --key-file=- \"$dev\" && echo PASSPHRASE-OK; "
+                            "printf '' | sudo cryptsetup open --test-passphrase --key-file=- \"$dev\" && echo EMPTY-OK",
+                            password="live", check=False)
+            self.save("luks-passphrase-test.txt", test)
+            if "PASSPHRASE-OK" not in test or "EMPTY-OK" in test:
+                raise Fail("the password slot is not the chosen passphrase, or the empty one survived (evidence/luks-passphrase-test.txt)")
 
     def gnome_setup_script_install(self):
-        """What gnome-setup does, over SSH: sysinstall Run, the post-install unit, a recovery key."""
+        """What gnome-setup does, over SSH: sysinstall Run, the post-install unit, a passphrase
+        when there is no TPM, a recovery key (wiping the empty passphrase systemd-repart enrolled)."""
         log("=== Stage 2 (script): systemd-sysinstall + utah-sysinstall-post over SSH ===")
         self.results.begin("install")
         start = time.time()
         call = json.dumps({"node": TARGET_DISK, "definitions": ["/run/utah-live/repart.d"], "erase": True})
         unit = "utah-sysinstall-post@" + TARGET_DISK.strip("/").replace("/", "-") + ".service"
+        cryptenroll = "/usr/libexec/utah-sysinstall/systemd-cryptenroll"
+        passphrase = "" if self.tpm else f"sudo NEWPASSWORD={PIN} {cryptenroll} --unlock-key-file=/dev/null --password \"$dev\" && "
         out = self.ssh("liveuser", f"sudo varlinkctl call --more /run/systemd/io.systemd.SysInstall io.systemd.SysInstall.Run "
                        f"{shlex.quote(call)} && sudo systemctl start {unit} && "
                        f"dev=$(lsblk -rnpo NAME,FSTYPE {TARGET_DISK} | awk '$2 == \"crypto_LUKS\" {{print $1}}') && "
-                       "sudo /usr/libexec/utah-sysinstall/systemd-cryptenroll --unlock-key-file=/dev/null "
-                       "--recovery-key --wipe-slot=password \"$dev\" 2>&1",
+                       f"empty=$(sudo {cryptenroll} \"$dev\" | awk '$2 == \"password\" {{print $1}}') && {passphrase}"
+                       f"sudo {cryptenroll} --unlock-key-file=/dev/null --recovery-key --wipe-slot=\"$empty\" \"$dev\" 2>&1",
                        password="live", timeout=3600, check=False)
         self.timings["script-install-seconds"] = int(time.time() - start)
         self.save("script-install.log", out)
@@ -1119,7 +1160,8 @@ class Harness:
                     "tr ' ' '\\n' </proc/cmdline | grep rd.luks; echo '== unlock'; "
                     "sudo journalctl -b -o cat -u 'systemd-cryptsetup@*' | tail -n 8")
             self.terminal_shot(prefix, "luks", "LUKS2 root", luks,
-                               f"{phase}: the root's LUKS2 keyslots (recovery key{', TPM2' if self.tpm else ''}, no passphrase) and how it was unlocked")
+                               f"{phase}: the root's LUKS2 keyslots (recovery key and "
+                               f"{'TPM2, no passphrase' if self.tpm else 'the chosen passphrase'}) and how it was unlocked")
         try:
             return json.loads(status_json)["status"]["booted"]["image"]["imageDigest"]
         except (KeyError, TypeError, json.JSONDecodeError):
@@ -1192,12 +1234,11 @@ class Harness:
              "device": "virtio-blk-pci,drive=target,bootindex=1"},
         ]
         self.start_vm("installed", self.installed_drives, self.vars_installed, self.args.ssh_port + 1, tpm=self.tpm)
-        if not self.gnome_setup:
-            self.installed_boot("first boot", "12-first-boot-luks-prompt")
-        elif self.tpm:
+        if self.gnome_setup and self.tpm:
             self.installed_boot("first boot", "12-first-boot-tpm2-unlock", unlock="tpm")
         else:
-            self.installed_boot("first boot", "12-first-boot-recovery-key-prompt", unlock="recovery")
+            # OS-Installer's passphrase, or the one gnome-setup's disk passphrase page set.
+            self.installed_boot("first boot", "12-first-boot-luks-prompt")
         self.results.begin("initial setup")
         self.initial_setup()
         self.results.begin("first boot desktop")
@@ -1218,7 +1259,7 @@ class Harness:
         if not staged_digest:
             raise Fail("bootc switch staged nothing (evidence/bootc-switch.log)")
         if self.gnome_setup:
-            # Without the TPM the root asks for a key: the recovery key gnome-setup showed.
+            # Without the TPM, the recovery key gnome-setup showed (the second key when there is no TPM).
             self.restart_installed("installed-switch", tpm=False)
             self.installed_boot("after bootc switch", "20-switch-recovery-key-prompt", unlock="recovery")
         else:
@@ -1238,7 +1279,7 @@ class Harness:
             if self.tpm:
                 self.installed_boot("after bootc rollback", "30-rollback-tpm2-unlock", unlock="tpm")
             else:
-                self.installed_boot("after bootc rollback", "30-rollback-recovery-key-prompt", unlock="recovery")
+                self.installed_boot("after bootc rollback", "30-rollback-luks-prompt")
         else:
             self.reboot()
             self.installed_boot("after bootc rollback", "30-rollback-luks-prompt")
@@ -1346,10 +1387,11 @@ def main():
     ap.add_argument("--cpus", type=int, default=4)
     ap.add_argument("--target-size", default="48G")
     ap.add_argument("--install", choices=("gui", "script"), default="gui")
-    ap.add_argument("--installer", choices=("os-installer", "gnome-setup"), default="os-installer",
+    ap.add_argument("--installer", choices=("gnome-setup", "os-installer"), default="gnome-setup",
                     help="installer the medium's live session offers (build-raw-image.sh installer.txt)")
     ap.add_argument("--tpm", action="store_true",
-                    help="give the VMs a software TPM 2.0 (swtpm) that persists across them")
+                    help="give the VMs a software TPM 2.0 (swtpm) that persists across them "
+                         "(gnome-setup: without it, the disk passphrase page is filled and used)")
     ap.add_argument("--backend", choices=("composefs", "ostree"), default="composefs",
                     help="bootc backend the medium was built with (build-raw-image.sh backend.json)")
     ap.add_argument("--backend-decision",

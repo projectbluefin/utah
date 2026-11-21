@@ -8,15 +8,16 @@ name: Image-based installer (experimental)
 #
 # Per flavor:
 #   1. build a live-capable layer on the exact :testing digest (iso/raw/Containerfile:
-#      OS-Installer from a pinned hanthor/os-installer commit, gnome-setup and
-#      systemd-sysinstall from pinned hanthor/gnome-setup and hanthor/systemd
-#      commits, utah.live units);
+#      gnome-setup and systemd-sysinstall from pinned hanthor/gnome-setup and
+#      hanthor/systemd commits, OS-Installer from a pinned hanthor/os-installer
+#      commit, utah.live units);
 #   2. `bootc install to-filesystem` it once into a raw disk image
 #      (iso/raw/build-raw-image.sh; `installer` picks what its live session
-#      offers), then shrink that medium to its content
+#      offers, gnome-setup by default), then shrink that medium to its content
 #      (iso/raw/shrink-raw-image.sh);
-#   3. iso/raw/raw_e2e.py: live boot -> GUI install into LUKS2 (OS-Installer, or
-#      gnome-setup with a recovery key and a software TPM) -> unlock ->
+#   3. iso/raw/raw_e2e.py: live boot -> GUI install into LUKS2 (gnome-setup
+#      with a recovery key and a software TPM, or without a TPM a disk
+#      passphrase; or OS-Installer) -> unlock ->
 #      gnome-initial-setup -> desktop + bootc status ->
 #      bootc switch -> bootc rollback, with a screenshot of every stage;
 #   4. measure the medium (raw, allocated, compressed, time to pack/unpack;
@@ -42,10 +43,14 @@ on:
         options: [gui, script]
         default: gui
       installer:
-        description: Installer the live medium offers (gnome-setup = systemd-sysinstall, recovery key, TPM2 via swtpm)
+        description: Installer the live medium offers (gnome-setup = systemd-sysinstall, recovery key, TPM2 via swtpm; os-installer = OS-Installer + install.sh)
         type: choice
-        options: [os-installer, gnome-setup]
-        default: os-installer
+        options: [gnome-setup, os-installer]
+        default: gnome-setup
+      tpm:
+        description: gnome-setup only - give the VMs a software TPM 2.0 (off = no TPM; gnome-setup asks for a disk passphrase)
+        type: boolean
+        default: true
       backend:
         description: bootc backend of the medium (auto = composefs if the image's kernel has the btrfs fs-verity fix, else ostree; composefs fails on an unfixed kernel)
         type: choice
@@ -144,7 +149,7 @@ jobs:
     env:
       WORK: /mnt/image-installer
       INSTALL: ${{ inputs.install || 'gui' }}
-      INSTALLER: ${{ inputs.installer || 'os-installer' }}
+      INSTALLER: ${{ inputs.installer || 'gnome-setup' }}
       # Scheduled and PR runs pick the backend from the image's kernel (auto:
       # composefs only with the btrfs fs-verity fix, scripts/kernel_verity.py),
       # compress the root and bake the Flatpaks; a dispatch can force a backend
@@ -153,6 +158,7 @@ jobs:
       BTRFS_COMPRESS: ${{ github.event_name != 'workflow_dispatch' && 'zstd:3' || inputs.btrfs_compress }}
       FLATPAKS: ${{ github.event_name != 'workflow_dispatch' || inputs.flatpaks }}
       FORMATS: ${{ inputs.formats || 'zstd-3,zstd-19-long' }}
+      TPM: ${{ github.event_name != 'workflow_dispatch' || inputs.tpm }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         timeout-minutes: 10
@@ -239,9 +245,10 @@ jobs:
           set -euo pipefail
           baked=()
           [[ "$FLATPAKS" != true ]] || baked=(--flatpaks "$WORK/raw-evidence/flatpak-apps.txt")
-          # gnome-setup enrolls the root with a TPM2 when there is one: give the VMs swtpm.
+          # gnome-setup binds the root to a TPM2 when there is one: give the VMs swtpm
+          # unless the dispatch turned it off (the no-TPM disk passphrase path).
           tpm=()
-          [[ "$INSTALLER" != gnome-setup ]] || tpm=(--tpm)
+          [[ "$INSTALLER" != gnome-setup || "$TPM" != true ]] || tpm=(--tpm)
           python3 iso/raw/raw_e2e.py --raw "$WORK/medium.raw" --work "$WORK/e2e" --install "$INSTALL" \
             --installer "$INSTALLER" "${tpm[@]}" \
             --candidate "$CANDIDATE" --ssh-key "$WORK/id_ed25519" --backend "$MEDIUM_BACKEND" \
