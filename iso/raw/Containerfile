@@ -43,9 +43,13 @@ COPY src/usr/ /usr/
 # Then rebuild the initramfs with the utah.live root overlay unit and its
 # ordering before the ostree and the composefs (bootc-root-setup) root setup
 # (dracut.conf.d/60-utah-live.conf), using the same dracut invocation as
-# scripts/regenerate-initramfs.sh. /boot stays empty: bootc's composefs
-# backend refuses an image with Type #1 entries there.
+# scripts/regenerate-initramfs.sh. /boot ends up empty: bootc's composefs
+# backend refuses an image with Type #1 entries there ("Found Type1 entries
+# in /boot"). scripts/clean-stage.sh empties it in images built since #1131;
+# older digests (the comparison's 1c7956e2 among them) still carry
+# kernel-install's entry, and the ostree backend never reads the image's /boot.
 RUN set -euxo pipefail; \
+    find /boot -mindepth 1 -delete; \
     dnf5 install -y --setopt=install_weak_deps=False python3-pyyaml; \
     dnf5 clean all; rm -rf /var/cache/dnf /var/cache/libdnf5 /var/log/dnf5.log*; \
     glib-compile-schemas /usr/share/glib-2.0/schemas; \
