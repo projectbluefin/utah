@@ -48,11 +48,10 @@ class FlathubDescriptorIntegrityTests(unittest.TestCase):
         uupd = self.root / "tmp/uupd"
         uupd.mkdir(parents=True)
         (uupd / "uupd").write_text("#!/bin/sh\nexit 0\n")
-        # uutils sits beside GNU coreutils, whose cp bootupd needs (#1431);
-        # sudo-rs and C sudo's sudoedit link arrive with their packages (#1229).
+        # coreutils stay GNU's, whose cp bootupd needs (#1431, #1433); sudo-rs
+        # and C sudo's sudoedit link arrive with their packages (#1229).
         bindir = self.root / "usr/bin"
         bindir.mkdir(parents=True)
-        (bindir / "uutils-coreutils").write_text("#!/bin/sh\n")
         (bindir / "cp").write_text("GNU cp\n")
         (bindir / "sudo").write_text("C sudo\n")
         (bindir / "sudoedit").symlink_to("sudo")
