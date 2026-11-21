@@ -830,6 +830,47 @@ class EvidenceTests(unittest.TestCase):
                 self.assertIn("kmsconvt@.service has a failed instance during first boot: "
                               "kmsconvt@tty2.service", failed.stderr)
 
+    def test_setup_state_judges_resultless_units_by_active_state(self):
+        # A target has no Result= property, so `systemctl show` omits it and
+        # nfs-client.target failed the lifecycle candidate as
+        # "ActiveState=active Result=unknown" (run 44926686288). A target is
+        # judged by ActiveState alone; a service still needs Result=success.
+        script = (ROOT / "iso/scripts/e2e-services.sh").read_text()
+        start = script.index("check_system_unit_state() {")
+        end = script.index("\nverify_setup_state() {", start)
+        block = script[start:end]
+
+        def run(call, active, result):
+            harness = (
+                "fail() { echo \"FAIL: $*\" >&2; exit 1; }\n"
+                "ssh_target() {\n"
+                "  case \"$1\" in\n"
+                "    *is-enabled*) echo enabled ;;\n"
+                "    *) printf 'LoadState=loaded\\nActiveState=%s\\n' \"$ACTIVE\"\n"
+                "       [ -z \"$RESULT\" ] || printf 'Result=%s\\n' \"$RESULT\"\n"
+                "       printf 'ExecMainStartTimestamp=\\n' ;;\n"
+                "  esac\n"
+                "}\n"
+                + block + "\n" + call + "\n"
+            )
+            env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+                   "TEST_PASSWORD": "pw", "ACTIVE": active, "RESULT": result}
+            return subprocess.run(["bash", "-eu", "-c", harness],
+                                  capture_output=True, text=True, env=env)
+
+        for call in ("check_system_unit_state nfs-client.target true false upgraded",
+                     "check_user_unit_state default.target false upgraded"):
+            with self.subTest(call=call):
+                ok = run(call, "active", "")
+                self.assertEqual(ok.returncode, 0, ok.stderr)
+                self.assertIn(".target: active", ok.stdout)
+                bad = run(call, "failed", "")
+                self.assertNotEqual(bad.returncode, 0)
+                self.assertIn("failed during upgraded boot (ActiveState=failed", bad.stderr)
+        missing = run("check_system_unit_state gdm.service true false upgraded", "active", "")
+        self.assertNotEqual(missing.returncode, 0)
+        self.assertIn("gdm.service failed during upgraded boot", missing.stderr)
+
     def test_failure_diagnostics_run_from_the_exit_trap_not_only_fail(self):
         script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
         self.assertIn("preserve_failed_disk_diagnostics", script)
