@@ -23,7 +23,11 @@ medium's GPT with `CopyBlocks=`, LUKS2 via `Encrypt=key-file`, new filesystem
 UUIDs and their references, drop the live entry, `rd.luks.uuid` + crypttab,
 grow root; deployments under `ostree/deploy` or composefs's `state/deploy`)
 lives in the os-installer fork. Bump it by moving `OSI_REF` in
-`iso/raw/Containerfile` to a full commit of the fork's `utah` branch.
+`iso/raw/Containerfile` to a full commit of the fork's `utah` branch. Since
+`2006418` the same `install.sh` also installs Dakota media
+(`dakota_config/`: the live karg names the distribution, `root=LABEL=`,
+Type #1 entries on the ESP), and the disk page skips LVM2 when libudisks2
+lacks its types.
 
 ### composefs backend
 
