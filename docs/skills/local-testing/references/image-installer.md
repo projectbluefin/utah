@@ -146,18 +146,63 @@ evidence, raw-evidence and `comparison.json`. The medium and the disks are
 never uploaded: CI media carry a root SSH key, `utah.live.debug` (live user
 password `live`, sshd) and the test passphrase.
 
-Locally, with a published digest and root (KVM, podman, qemu, OVMF, zstd, xz):
+Locally, with a published digest and root (KVM, podman, qemu, OVMF, zstd, xz).
+The build takes about 10-15 minutes; `bake-flatpaks.sh` is optional (about
+5 GB more raw, needs Flathub; without it the installed system preinstalls
+them online on first boot):
 
 ```bash
-sudo podman build -t localhost/utah-raw:ci --build-arg SOURCE_IMAGE=ghcr.io/projectbluefin/utah@sha256:... -f iso/raw/Containerfile iso/raw
-sudo bash iso/raw/build-raw-image.sh localhost/utah-raw:ci output/medium.raw ghcr.io/projectbluefin/utah:testing
-sudo bash iso/raw/bake-flatpaks.sh localhost/utah-raw:ci output/medium.raw   # needs Flathub
-sudo bash iso/raw/shrink-raw-image.sh localhost/utah-raw:ci output/medium.raw
+sudo podman pull ghcr.io/projectbluefin/utah:testing
+sudo podman build --layers=false -t localhost/utah-raw:local \
+  --build-arg SOURCE_IMAGE=ghcr.io/projectbluefin/utah:testing \
+  -f iso/raw/Containerfile iso/raw
+sudo bash iso/raw/build-raw-image.sh localhost/utah-raw:local \
+  output/medium.raw ghcr.io/projectbluefin/utah:testing
+sudo bash iso/raw/bake-flatpaks.sh localhost/utah-raw:local output/medium.raw   # optional
+sudo env UTAH_RAW_BTRFS_COMPRESS=zstd:3 \
+  bash iso/raw/shrink-raw-image.sh localhost/utah-raw:local output/medium.raw
+sudo chown "$USER" output/medium.raw
 ```
 
 `dd` the shrunk `medium.raw` to a USB stick (UEFI only; no El Torito yet,
 #1404). Without `UTAH_RAW_LIVE_KARGS=utah.live.debug` the live user has no
 password and there is no sshd.
+
+### Try it in a VM
+
+Boot the medium read-only next to a blank target disk of at least 48 GB
+(OS-Installer greys out smaller disks). This needs a graphical session for
+`-display gtk`; use `-display vnc=:1` over SSH. The firmware paths are
+Homebrew's QEMU (`brew install qemu`, the usual one on Bluefin/Utah hosts);
+on Fedora use `/usr/share/edk2/ovmf/OVMF_CODE.fd` and `OVMF_VARS.fd`:
+
+```bash
+cd output
+Q=/home/linuxbrew/.linuxbrew/share/qemu
+cp $Q/edk2-i386-vars.fd vars.fd
+qemu-img create -f qcow2 target.qcow2 64G
+qemu-system-x86_64 -enable-kvm -machine q35 -cpu host -smp 4 -m 8192 \
+  -drive if=pflash,format=raw,readonly=on,file=$Q/edk2-x86_64-code.fd \
+  -drive if=pflash,format=raw,file=vars.fd \
+  -drive file=medium.raw,format=raw,if=virtio,readonly=on \
+  -drive file=target.qcow2,format=qcow2,if=virtio \
+  -device virtio-vga-gl -display gtk,gl=on \
+  -nic user,model=virtio-net-pci
+```
+
+1. GRUB boots "Utah Live (try or install)" by default; the live session
+   autologs in and OS-Installer starts.
+2. Pick the 64 GB disk, turn encryption on, install. "Installation Complete"
+   appears in about one to two minutes.
+3. Power off, then run the same command without the `medium.raw` line. The
+   installed disk boots through the "Utah" firmware entry the installer
+   wrote (no GRUB menu): branded passphrase prompt, gnome-initial-setup,
+   desktop. `bootc status` shows it tracking `ghcr.io/projectbluefin/utah:testing`;
+   `sudo bootc upgrade`, `bootc switch` and `bootc rollback` work as on any
+   installed Utah.
+
+Keep `vars.fd` between boots: the installer's firmware entry lives there.
+Recreate `target.qcow2` (and copy a fresh `vars.fd`) to install again.
 
 ## What the comparison measures
 
