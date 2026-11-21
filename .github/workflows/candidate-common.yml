@@ -7,10 +7,6 @@ on:
         description: Exact projectbluefin/common source commit
         required: true
         type: string
-      testsuite_sha:
-        description: Exact pinned testsuite workflow and test commit
-        required: true
-        type: string
 
 permissions: {}
 
@@ -19,7 +15,7 @@ jobs:
     if: github.repository == 'projectbluefin/utah' && github.ref == 'refs/heads/main'
     permissions:
       contents: read
-    uses: projectbluefin/actions/.github/workflows/reusable-pinned-fetches.yml@3adf1194c894fe7b1ae54e583c56306c6a2382ee # v1
+    uses: projectbluefin/actions/.github/workflows/reusable-pinned-fetches.yml@75348afb3a34c6006a3d3da51e51c9a3818b2616 # v1
     with:
       mode: fail
 
@@ -30,20 +26,18 @@ jobs:
     outputs:
       consumer_sha: ${{ steps.source.outputs.consumer_sha }}
       matrix: ${{ steps.source.outputs.matrix }}
+      testsuite_sha: ${{ steps.source.outputs.testsuite_sha }}
       common_layer_digest: ${{ steps.common.outputs.digest }}
     steps:
       - name: Reject untrusted workflow refs and invalid source inputs
         env:
           COMMON_SHA: ${{ inputs.common_sha }}
-          TESTSUITE_SHA: ${{ inputs.testsuite_sha }}
         run: |
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = projectbluefin/utah
           test "$GITHUB_REF" = refs/heads/main
           test "$GITHUB_RUN_ATTEMPT" = 1
           [[ "$COMMON_SHA" =~ ^[a-f0-9]{40}$ ]]
-          [[ "$TESTSUITE_SHA" =~ ^[a-f0-9]{40}$ ]]
-          test "$TESTSUITE_SHA" = 948274b7bd76db65f1c69e4b5aab2bec0d63e8eb
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ github.sha }}
@@ -54,6 +48,15 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           echo "consumer_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           jq -c '{include: [.flavors[] as $f | {flavor:$f,suites:.suites[$f]}]}' config/flavors.json | sed 's/^/matrix=/' >> "$GITHUB_OUTPUT"
+          # The testsuite job below holds packages: write, so it runs only the
+          # reviewed testsuite commit Renovate tracks as v1 (the pin
+          # post-testing-e2e.yml uses). The manifest records that pin, read
+          # from this exact workflow file, never a dispatch input.
+          workflow=.github/workflows/candidate-common.yml
+          uses_sha=$(sed -n 's|^    uses: projectbluefin/testsuite/\.github/workflows/e2e\.yml@\([0-9a-f]\{40\}\) # v1$|\1|p' "$workflow")
+          ref_sha=$(sed -n 's|^      test_ref: \([0-9a-f]\{40\}\) # v1$|\1|p' "$workflow")
+          [[ "$uses_sha" =~ ^[a-f0-9]{40}$ && "$ref_sha" == "$uses_sha" ]]
+          echo "testsuite_sha=$uses_sha" >> "$GITHUB_OUTPUT"
       - name: Prepare source-only Common builder
         run: |
           sudo apt-get update
@@ -69,8 +72,15 @@ jobs:
           chmod 0700 "$work/runtime"
           env -i PATH="$PATH" HOME="$work/home" git init "$work/repo"
           env -i PATH="$PATH" HOME="$work/home" git -C "$work/repo" remote add origin https://github.com/projectbluefin/common.git
-          env -i PATH="$PATH" HOME="$work/home" git -C "$work/repo" fetch --depth=1 origin "$COMMON_SHA"
-          env -i PATH="$PATH" HOME="$work/home" git -C "$work/repo" checkout --detach FETCH_HEAD
+          # Owner decision on #1214: candidates are built only from Common
+          # commits on main. Unreviewed Common code never reaches a job that
+          # holds packages: write.
+          env -i PATH="$PATH" HOME="$work/home" git -C "$work/repo" fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          if ! env -i PATH="$PATH" HOME="$work/home" git -C "$work/repo" merge-base --is-ancestor "$COMMON_SHA" refs/remotes/origin/main; then
+            echo "::error::common_sha $COMMON_SHA is not a commit on projectbluefin/common main; candidates are built only from merged Common commits."
+            exit 1
+          fi
+          env -i PATH="$PATH" HOME="$work/home" git -C "$work/repo" checkout --detach "$COMMON_SHA"
           test "$(git -C "$work/repo" rev-parse 'HEAD^{commit}')" = "$COMMON_SHA"
           env -i PATH="$PATH" HOME="$work/home" git -C "$work/repo" submodule update --init --recursive
           env -i PATH="$PATH" HOME="$work/home" XDG_RUNTIME_DIR="$work/runtime" REGISTRY_AUTH_FILE="$work/auth/config.json" DOCKER_CONFIG="$work/auth" \
@@ -136,7 +146,11 @@ jobs:
       - name: Build native image on verified kernel cache
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          # COMMON_IMAGE/COMMON_IMAGE_SHA go with the override so provenance.json
+          # records the candidate's Common layer digest, not the pinned one.
           COMMON_IMAGE_REF: localhost/common:candidate
+          COMMON_IMAGE: localhost/common
+          COMMON_IMAGE_SHA: ${{ needs.source.outputs.common_layer_digest }}
           REGISTRY_CACHE_WRITE: "0"
           ENABLE_SSHD: "0"
           FLAVOR: ${{ matrix.flavor }}
@@ -272,7 +286,7 @@ jobs:
         env:
           COMMON_SHA: ${{ inputs.common_sha }}
           CONSUMER_SHA: ${{ needs.source.outputs.consumer_sha }}
-          TESTSUITE_SHA: ${{ inputs.testsuite_sha }}
+          TESTSUITE_SHA: ${{ needs.source.outputs.testsuite_sha }}
           COMMON_LAYER_DIGEST: ${{ needs.source.outputs.common_layer_digest }}
           FLAVORS: ${{ needs.source.outputs.matrix }}
         run: |
@@ -297,10 +311,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.manifest.outputs.matrix) }}
-    uses: projectbluefin/testsuite/.github/workflows/e2e.yml@948274b7bd76db65f1c69e4b5aab2bec0d63e8eb # candidate
+    # The reviewed testsuite v1 commit, the one post-testing-e2e.yml runs: this
+    # job holds packages: write, so it must never call unmerged testsuite code.
+    # Renovate moves the uses: digest and test_ref together.
+    uses: projectbluefin/testsuite/.github/workflows/e2e.yml@171ae3df98622f7b17906ca8b69535606e09b1d9 # v1
     with:
       image: ${{ matrix.ref }}
       compose_image: false
       suites: ${{ matrix.suites }}
       test_repository: projectbluefin/testsuite
-      test_ref: 948274b7bd76db65f1c69e4b5aab2bec0d63e8eb # candidate
+      test_ref: 171ae3df98622f7b17906ca8b69535606e09b1d9 # v1

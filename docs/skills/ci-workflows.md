@@ -25,10 +25,16 @@ This overview covers the build, promotion, branch-sync, parity-sync, and
 post-build verification workflows, not the complete workflow inventory:
 
 - `.github/workflows/candidate-common.yml` -- manual dispatch from trusted
-  `main` only, with full Common and testsuite commit IDs. Common is built once
+  `main` only, with one full Common commit ID. That commit must be on Common
+  `main` (`git merge-base --is-ancestor`; owner decision on #1214), so
+  unreviewed Common code never reaches a job holding `packages: write`.
+  Common is built once
   from its actual source in an isolated runner-temp checkout without inherited
   credentials or environment. Native flavors consume its local layer through
-  `COMMON_IMAGE_REF`; ordinary builds retain the existing pin. Each job uses
+  `COMMON_IMAGE_REF`, with `COMMON_IMAGE`/`COMMON_IMAGE_SHA` naming that
+  layer's digest so `provenance.json` records the candidate, not the pin
+  (`just build-ghcr` refuses an override without them); ordinary builds
+  retain the existing pin. Each job uses
   the verified kernel cache, canonicalizes gzip layer bytes before booting its
   real local candidate through the unchanged offline LUKS/desktop harness,
   and compares its installed manifest with that exact local manifest
@@ -37,7 +43,9 @@ post-build verification workflows, not the complete workflow inventory:
   these gates and rejects digest changes or existing candidate tags. The
   `candidate-manifest/candidate-manifest.json` artifact binds source commits,
   Common layer and native image digests; full configured testsuite suites use
-  those digests with matching fixed workflow/test pins. No promotion tags or
+  those digests. The testsuite call is pinned to the reviewed `# v1` commit
+  post-testing-e2e.yml runs (Renovate moves `uses:` and `test_ref` together),
+  and the manifest's `testsuite_sha` is read from that pin. No promotion tags or
   statuses move. Feature-branch dispatches fail closed: reviewed workflow code
   must land on main before proof. Same-job local ISO execution does not broaden
   the external-image provenance verifier. DEBUG=0 media keeps the existing
