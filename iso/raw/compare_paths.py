@@ -179,6 +179,7 @@ def image_metrics(evidence, raw_evidence, sizes, image_build_seconds):
     medium = read_json(Path(raw_evidence) / "medium.json") or {}
     shrink = read_json(Path(raw_evidence) / "shrink.json") or {}
     flatpaks = read_json(Path(raw_evidence) / "flatpaks.json") or {}
+    backend = read_json(Path(raw_evidence) / "backend.json") or results.get("backend")
     log_path = Path(evidence) / "utah-install.log"
     log_text = log_path.read_text(errors="replace") if log_path.exists() else ""
     installed = INSTALLED_RE.search(log_text)
@@ -188,6 +189,7 @@ def image_metrics(evidence, raw_evidence, sizes, image_build_seconds):
         "result": results.get("result", "not run"),
         "error": results.get("error"),
         "install": results.get("install"),
+        "backend": backend,
         "sizes": [s for s in (read_json(p) for p in sizes) if s],
         "shrink": shrink or None,
         "image_build_seconds": image_build_seconds,
@@ -210,6 +212,15 @@ def secs(n):
     if n is None:
         return "n/a"
     return f"{n // 60} min {n % 60:02d} s" if n >= 60 else f"{n} s"
+
+
+def backend_cell(decision):
+    if not decision:
+        return "n/a"
+    text = f"**{decision.get('backend')}**"
+    if decision.get("requested"):
+        text += f" (requested {decision['requested']}; kernel {decision.get('kernel')}: {decision.get('reason')})"
+    return text
 
 
 def flatpak_cell(flatpaks):
@@ -240,6 +251,7 @@ def render(comparison):
     iso_text = f"{fm.get('iso_size') or 'n/a'} (production ISO artifact {gib(iso)})"
     lines += [
         f"| Result | {img['result']} | {fm.get('conclusion') or 'n/a'} |",
+        f"| bootc backend | {backend_cell(img.get('backend'))} | ostree (composefs is opt-in, #1129) |",
         f"| Medium, raw | {gib(final.get('apparent_bytes'))} (allocated {gib(final.get('allocated_bytes'))}) | {iso_text} |",
         f"| Medium, zstd -3 | {gib(zstd3)} | ISO is already compressed |",
         f"| Build time | image layer {secs(img['image_build_seconds'])} + bootc install {secs(img['bootc_install_seconds'])} | ISO compose {secs(fm.get('iso_build_seconds'))} |",

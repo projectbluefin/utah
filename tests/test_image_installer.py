@@ -8,7 +8,9 @@ anything: image-installer.yml is not a required check, not in
 promote-to-testing's needs, and publishes nothing.
 """
 
+import contextlib
 import importlib.util
+import io
 import json
 import re
 import shutil
@@ -36,6 +38,7 @@ medium = load("raw_medium", RAW / "medium.py")
 raw_e2e = load("raw_e2e", RAW / "raw_e2e.py")
 measure_medium = load("measure_medium", RAW / "measure_medium.py")
 compare = load("compare_paths", RAW / "compare_paths.py")
+kernel_verity = load("kernel_verity", ROOT / "scripts/kernel_verity.py")
 
 ENTRY = """title Fedora Linux 44 (Utah) (ostree:0)
 version 1
@@ -474,7 +477,7 @@ initrd /bootc_composefs-{DIGEST}/initrd
 
 
 class ComposefsTests(unittest.TestCase):
-    """The composefs backend: the medium's default, with ostree as the fallback."""
+    """The composefs backend: the medium's default on a kernel with the btrfs fs-verity fix, ostree otherwise."""
 
     def test_the_live_entry_keeps_fs_verity_strict(self):
         live = medium.live_entry(COMPOSEFS_ENTRY)
@@ -502,9 +505,11 @@ class ComposefsTests(unittest.TestCase):
         results.composefs_boot("first boot", good, [])
         self.assertNotIn("cmdline", results.as_dict()["composefs"]["first boot"])
 
-    def test_the_medium_is_built_with_either_backend(self):
+    def test_the_medium_is_built_with_the_selected_backend(self):
         build = (RAW / "build-raw-image.sh").read_text()
-        self.assertIn('BACKEND="${UTAH_RAW_BACKEND:-composefs}"', build)
+        self.assertIn('REQUESTED_BACKEND="${UTAH_RAW_BACKEND:-auto}"', build)
+        self.assertIn('- select --backend "${REQUESTED_BACKEND}"', build)
+        self.assertIn('"${EVIDENCE}/backend.json"', build)
         self.assertIn("install_args+=(--composefs-backend)", build)
         self.assertIn('"${mnt}"/root/state/deploy/*', build)
         self.assertIn("composefs-verity.json", build)
@@ -512,12 +517,30 @@ class ComposefsTests(unittest.TestCase):
         self.assertIn('"${mnt}/state/os/default"', bake)
         workflow = yaml.safe_load(WORKFLOW.read_text())
         backend = workflow[True]["workflow_dispatch"]["inputs"]["backend"]
-        self.assertEqual((backend["options"], backend["default"]), (["composefs", "ostree"], "composefs"))
+        self.assertEqual((backend["options"], backend["default"]), (["auto", "composefs", "ostree"], "auto"))
+        self.assertIn("scripts/kernel_verity.py", workflow[True]["pull_request"]["paths"])
         env = workflow["jobs"]["e2e"]["env"]
-        self.assertEqual(env["BACKEND"], "${{ github.event_name != 'workflow_dispatch' && 'composefs' || inputs.backend }}")
+        self.assertEqual(env["BACKEND"], "${{ inputs.backend || 'auto' }}")
         steps = {s.get("name", ""): s.get("run", "") for s in workflow["jobs"]["e2e"]["steps"]}
-        self.assertIn('UTAH_RAW_BACKEND="$BACKEND"', steps["Build the raw medium (bootc install to-filesystem, once)"])
-        self.assertIn('--backend "$BACKEND"', steps["End-to-end with screenshots"])
+        built = steps["Build the raw medium (bootc install to-filesystem, once)"]
+        self.assertIn('UTAH_RAW_BACKEND="$BACKEND"', built)
+        self.assertIn('MEDIUM_BACKEND=$(jq -r .backend "$WORK/raw-evidence/backend.json")', built)
+        e2e = steps["End-to-end with screenshots"]
+        self.assertIn('--backend "$MEDIUM_BACKEND"', e2e)
+        self.assertIn('--backend-decision "$WORK/raw-evidence/backend.json"', e2e)
+
+    def test_the_backend_decision_reaches_results_and_the_summary(self):
+        decision = {"requested": "auto", "backend": "ostree", "kernel": "7.3.5-200.fc44.x86_64", "fixed": False,
+                    "reason": "7.3.5-200.fc44.x86_64 is 7.2 or 7.3 without 254e15591ee4 in its changelog"}
+        results = raw_e2e.Results("gui")
+        results.backend = {"backend": "ostree", **decision}
+        self.assertEqual(results.as_dict()["backend"]["kernel"], "7.3.5-200.fc44.x86_64")
+        cell = compare.backend_cell(decision)
+        self.assertIn("**ostree** (requested auto; kernel 7.3.5-200.fc44.x86_64", cell)
+        self.assertEqual(compare.backend_cell(None), "n/a")
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "backend.json").write_text(json.dumps(decision))
+            self.assertEqual(compare.image_metrics(d, d, [], 0)["backend"], decision)
 
     def test_the_live_overlay_sits_under_both_root_setups(self):
         units = RAW / "src/usr/lib/systemd/system"
@@ -545,6 +568,81 @@ class ComposefsTests(unittest.TestCase):
         self.assertIn("FILE CORRUPTED", checker)
         harness = (RAW / "raw_e2e.py").read_text()
         self.assertIn('self.check_composefs(phase, read=phase == "first boot")', harness)
+
+
+class KernelVeritySelectorTests(unittest.TestCase):
+    """scripts/kernel_verity.py: composefs only on a kernel with the btrfs fs-verity fix."""
+
+    def decide(self, release, changelog="", config=""):
+        return kernel_verity.decide(release, changelog, config)[0]
+
+    def test_fixed_kernels(self):
+        self.assertTrue(self.decide("7.3.3-200.1.utah1.fc44.x86_64"))  # Utah's rebuild (main, nvidia)
+        self.assertTrue(self.decide("7.1.8-ogc1"))  # gaming: before large data folios
+        self.assertTrue(self.decide("7.3.9-200.fc44.x86_64", "- btrfs: fix the fsverity callback where "
+                                    "unexpected range is verified (Qu Wenruo)"))
+        self.assertTrue(self.decide("7.3.9-200.fc44.x86_64", "- Backport 254e15591ee4"))
+        self.assertTrue(self.decide("7.4.0-0.rc2.24.fc45.x86_64"))
+        self.assertTrue(self.decide("7.4.1-100.fc45.x86_64"))
+        self.assertTrue(self.decide("7.5.0-1.fc45.x86_64"))
+
+    def test_unfixed_kernels(self):
+        self.assertFalse(self.decide("7.3.3-200.fc44.x86_64"))  # Fedora's signed kernel today (#1379)
+        self.assertFalse(self.decide("7.2.15-200.fc44.x86_64", "- btrfs: something else"))
+        self.assertFalse(self.decide("7.4.0-0.rc1.20261012git1.fc45.x86_64"))
+        self.assertFalse(self.decide("7.4.0-rc1"))
+        self.assertFalse(self.decide("7.1.8-ogc1", config="CONFIG_BTRFS_FS=m\nCONFIG_BTRFS_EXPERIMENTAL=y\n"))
+        self.assertFalse(self.decide("weird"))
+
+    def test_auto_picks_composefs_only_on_a_fixed_kernel(self):
+        fixed = kernel_verity.select("auto", "7.3.3-200.1.utah1.fc44.x86_64", True, "patched")
+        self.assertEqual((fixed["backend"], fixed["requested"]), ("composefs", "auto"))
+        unfixed = kernel_verity.select("auto", "7.3.3-200.fc44.x86_64", False, "unpatched")
+        self.assertEqual(unfixed["backend"], "ostree")
+        self.assertEqual(kernel_verity.select("ostree", "7.3.3-200.1.utah1.fc44.x86_64", True, "")["backend"], "ostree")
+        self.assertEqual(kernel_verity.select("composefs", "7.1.8-ogc1", True, "")["backend"], "composefs")
+        with self.assertRaises(kernel_verity.Unfixed):
+            kernel_verity.select("composefs", "7.3.3-200.fc44.x86_64", False, "unpatched")
+
+    def image_root(self, d, release, config=None, ogc=False):
+        tree = Path(d) / "usr/lib/modules" / release
+        tree.mkdir(parents=True)
+        (tree / "vmlinuz").write_bytes(b"\0")
+        if config is not None:
+            target = Path(d) / "usr/lib/utah/ogc-kernel.config" if ogc else tree / "config"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(config)
+        if ogc:
+            (Path(d) / "usr/lib/utah").mkdir(parents=True, exist_ok=True)
+            (Path(d) / "usr/lib/utah/ogc-kernel-release").write_text(release + "\n")
+        return d
+
+    def run_select(self, root, backend):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            code = kernel_verity.main(["select", "--backend", backend, "--root", root])
+        return code, json.loads(out.getvalue()) if out.getvalue() else None
+
+    def test_the_cli_reads_the_image_kernel_and_config(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = self.image_root(d, "7.1.8-ogc1", "CONFIG_BTRFS_EXPERIMENTAL=y\n", ogc=True)
+            self.assertEqual(self.run_select(root, "auto")[1]["backend"], "ostree")
+            self.assertEqual(self.run_select(root, "composefs"), (kernel_verity.EXIT_UNFIXED, None))
+        with tempfile.TemporaryDirectory() as d:
+            root = self.image_root(d, "7.3.3-200.1.utah1.fc44.x86_64", "CONFIG_BTRFS_FS=y\n")
+            code, decision = self.run_select(root, "auto")
+            self.assertEqual((code, decision["backend"], decision["fixed"]), (0, "composefs", True))
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "usr/lib/modules/7.3.3-200.fc44.x86_64").mkdir(parents=True)
+            self.image_root(d, "7.1.8-ogc1", ogc=True)
+            # Only the tree with a vmlinuz is the kernel bootc deploys.
+            self.assertEqual(kernel_verity.booted_kernel(Path(d)), "7.1.8-ogc1")
+
+    def test_both_install_paths_consult_it(self):
+        luks = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
+        self.assertIn('ssh_live "python3 - select --backend composefs" <"${ROOT}/scripts/kernel_verity.py"', luks)
+        build = (RAW / "build-raw-image.sh").read_text()
+        self.assertIn('<"${HERE}/../../scripts/kernel_verity.py"', build)
 
 
 if __name__ == "__main__":

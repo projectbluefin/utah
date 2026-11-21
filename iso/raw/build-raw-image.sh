@@ -10,9 +10,12 @@
 #      an unencrypted /boot (it cannot unlock systemd-repart's LUKS2/argon2id;
 #      `bootc install to-disk --filesystem btrfs` puts /boot inside the root).
 #      This is what fisherman does at install time today, done once at build
-#      time. UTAH_RAW_BACKEND picks bootc's backend: composefs (default;
-#      `--composefs-backend`: repository in /composefs, deployment state in
-#      /state, fs-verity on every object) or ostree (/ostree).
+#      time. UTAH_RAW_BACKEND picks bootc's backend: auto (default) takes
+#      composefs (`--composefs-backend`: repository in /composefs, deployment
+#      state in /state, fs-verity on every object) when the image's kernel has
+#      the btrfs fs-verity fix and ostree (/ostree) otherwise
+#      (scripts/kernel_verity.py, decision in backend.json); composefs on an
+#      unfixed kernel fails the build.
 #   2. Add a "Utah Live" BLS entry: the deployment's own entry with `ro
 #      utah.live` instead of `rw` (utah-live-root.service overlays the root),
 #      made the GRUB default through grubenv (medium.py). OS-Installer's Utah
@@ -27,7 +30,7 @@
 #   UTAH_RAW_DEBUG_SSHD=1    CI only: enable sshd as a local /etc change of the
 #                            deployment, so it survives `bootc switch`
 #   UTAH_RAW_EVIDENCE        directory for partition table, entries and sizes
-#   UTAH_RAW_BACKEND         composefs (default) or ostree
+#   UTAH_RAW_BACKEND         auto (default), composefs or ostree
 #
 # The root is written uncompressed: shrink-raw-image.sh compresses it after
 # the Flatpaks are baked (UTAH_RAW_BTRFS_COMPRESS), so they are covered too.
@@ -39,14 +42,19 @@ TARGET_IMGREF="${3:-ghcr.io/projectbluefin/utah:testing}"
 SIZE="${UTAH_RAW_SIZE:-24G}"
 LIVE_KARGS="${UTAH_RAW_LIVE_KARGS:-}"
 EVIDENCE="${UTAH_RAW_EVIDENCE:-$(dirname "${OUT}")/raw-evidence}"
-BACKEND="${UTAH_RAW_BACKEND:-composefs}"
+REQUESTED_BACKEND="${UTAH_RAW_BACKEND:-auto}"
 ESP_TYPE=c12a7328-f81f-11d2-ba4b-00a0c93ec93b
 LIVE_ENTRY=utah-live
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 [[ ${EUID} -eq 0 ]] || { echo "run as root (bootc install, loop devices)" >&2; exit 1; }
-[[ "${BACKEND}" == composefs || "${BACKEND}" == ostree ]] || { echo "UTAH_RAW_BACKEND must be composefs or ostree" >&2; exit 1; }
 mkdir -p "$(dirname "${OUT}")" "${EVIDENCE}"
+# Decided by the image's own kernel and rpm database, inside the image.
+decision="$(podman run --rm -i --entrypoint python3 "${IMAGE}" - select --backend "${REQUESTED_BACKEND}" \
+    <"${HERE}/../../scripts/kernel_verity.py")" \
+    || { echo "backend selection for ${REQUESTED_BACKEND} failed (scripts/kernel_verity.py, above)" >&2; exit 1; }
+printf '%s\n' "${decision}" | tee "${EVIDENCE}/backend.json"
+BACKEND="$(python3 -c 'import json, sys; print(json.load(sys.stdin)["backend"])' <<<"${decision}")"
 OUT="$(realpath -m "${OUT}")"
 data="$(dirname "${OUT}")"
 

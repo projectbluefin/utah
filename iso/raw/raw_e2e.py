@@ -96,6 +96,7 @@ class Results:
         self.boots = {}
         self.flatpaks = {}
         self.composefs = {}
+        self.backend = None
         self.current = None
         self.started = None
         self.error = None
@@ -131,8 +132,8 @@ class Results:
         stages = [{"stage": s, **self.stages.get(s, {"status": "not run", "seconds": None})} for s in STAGES]
         passed = self.error is None and all(s["status"] == "pass" for s in stages)
         return {"result": "pass" if passed else "fail", "error": self.error, "install": self.install,
-                "stages": stages, "boots": self.boots, "flatpaks": self.flatpaks, "composefs": self.composefs,
-                "timings": dict(timings or {})}
+                "backend": self.backend, "stages": stages, "boots": self.boots, "flatpaks": self.flatpaks,
+                "composefs": self.composefs, "timings": dict(timings or {})}
 
 
 def flatpak_problems(baked, installed, removed=None):
@@ -225,6 +226,10 @@ class Harness:
         self.candidate_digest = args.candidate.split("@", 1)[1] if "@" in args.candidate else None
         self.timings = {}
         self.results = Results(args.install)
+        decision = json.loads(Path(args.backend_decision).read_text()) if args.backend_decision else {}
+        if decision and decision.get("backend") != args.backend:
+            raise SystemExit(f"--backend {args.backend} contradicts {args.backend_decision}: {decision}")
+        self.results.backend = {"backend": args.backend, **decision}
 
     # ---- QEMU ---------------------------------------------------------------
     def start_vm(self, name, drives, vars_file, ssh_port):
@@ -1096,7 +1101,9 @@ def main():
     ap.add_argument("--target-size", default="48G")
     ap.add_argument("--install", choices=("gui", "script"), default="gui")
     ap.add_argument("--backend", choices=("composefs", "ostree"), default="composefs",
-                    help="bootc backend the medium was built with (build-raw-image.sh UTAH_RAW_BACKEND)")
+                    help="bootc backend the medium was built with (build-raw-image.sh backend.json)")
+    ap.add_argument("--backend-decision",
+                    help="build-raw-image.sh's backend.json (scripts/kernel_verity.py), recorded in results.json")
     ap.add_argument("--flatpaks", help="apps baked into the medium (bake-flatpaks.sh flatpak-apps.txt)")
     ap.add_argument("--remove-flatpak", default="org.gnome.Calculator",
                     help="baked app to remove after first boot (default: first baked app if absent)")
