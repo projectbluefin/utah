@@ -346,6 +346,9 @@ class Harness:
         r, app = self.live_runner, INSTALLER_APP
         nodes = self.wait_for(r, app, lambda n: has_text(n, "English"), "language page", 240)
         self.save("atspi-language.json", json.dumps(nodes, indent=1))
+        # GNOME Shell starts in the overview; Escape gives the installer window keyboard focus.
+        self.key("esc")
+        time.sleep(3)
         self.shot("02-installer-language", "OS-Installer autostarted in the live session: language page")
         self.row(r, app, "English")
         self.wait_for(r, app, lambda n: has_text(n, "copying this live system"), "welcome page", 120)
