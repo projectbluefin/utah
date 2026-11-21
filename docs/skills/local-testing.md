@@ -371,8 +371,14 @@ read falls back to `sudo` when `bootc status --json` returns nothing to the
 unprivileged test user. A failure exits 10 + the failing phase number
 ([exit codes](lifecycle-e2e.md#exit-codes)).
 
-When `UTAH_E2E_EXPECT_FLAVOR` is set (the `review_vm` workflow), the harness
-also checks first-boot service policy and status plus the Flathub remote, then
+Every run then checks first-boot service state (#19). It reads the installed
+image's own `/usr/share/utah/bluefin-desktop.toml` through
+`verify-desktop-contract.py --services enabled|user_enabled` and requires each
+listed unit to be loaded, still enabled after first-boot presets, and not
+failed. `flatpak-preinstall`, `ublue-system-setup` and `ublue-user-setup` must
+also have run. `brew-preinstall.service` needs the network, so the offline VM
+only checks that it is enabled. When `UTAH_E2E_EXPECT_FLAVOR` is set (the
+`review_vm` workflow), the harness also checks the Flathub remote, then
 performs a graceful second boot, unlocks the same LUKS disk, and rechecks
 services, Flathub, and the default Flatpaks. This is the repeat-boot
 idempotence gate; plain `just luks-test` remains a single boot.

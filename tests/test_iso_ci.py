@@ -712,7 +712,7 @@ class EvidenceTests(unittest.TestCase):
                                    capture_output=True, text=True, env=env)
 
         for call in ("check_system_unit_state ublue-system-setup.service true true first",
-                     "check_user_setup_unit second"):
+                     "check_user_unit_state ublue-user-setup.service true second"):
             ok = run(call, "inactive", "success")
             self.assertEqual(ok.returncode, 0, ok.stderr)
             for active, result in (("inactive", "exit-code"), ("failed", "exit-code"),
@@ -720,6 +720,57 @@ class EvidenceTests(unittest.TestCase):
                 bad = run(call, active, result)
                 self.assertNotEqual(bad.returncode, 0, (call, active, result))
                 self.assertIn(f"Result={result}", bad.stderr)
+
+    def test_setup_state_checks_every_unit_in_the_installed_contract(self):
+        # #19: the runtime check follows the installed image's own contract,
+        # not a list copied into the script, and a failed contract unit fails
+        # the gate. brew-preinstall.service needs the network, so in the
+        # offline VM only its enablement counts.
+        script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
+        start = script.index("check_system_unit_state() {")
+        end = script.index("\nverify_flathub_remote() {", start)
+        block = script[start:end]
+
+        def run(failed_unit):
+            harness = (
+                "fail() { echo \"FAIL: $*\" >&2; exit 1; }\n"
+                "scp_target() { :; }\n"
+                # Real ssh reads stdin; so does the stub, so a loop feeding
+                # units on stdin would stop after the first one.
+                "ssh_target() {\n"
+                "  cat >/dev/null\n"
+                "  case \"$1\" in\n"
+                "    *\"--services 'enabled'\"*) printf 'gdm.service\\nuupd.timer\\n' ;;\n"
+                "    *\"--services 'user_enabled'\"*) "
+                "printf 'brew-preinstall.service\\npipewire.socket\\n' ;;\n"
+                "    *is-enabled*) echo enabled ;;\n"
+                "    *\"'$FAILED_UNIT'\"*) printf 'LoadState=loaded\\nActiveState=failed\\n"
+                "Result=exit-code\\nExecMainStartTimestamp=n/a\\n' ;;\n"
+                "    *) printf 'LoadState=loaded\\nActiveState=active\\nResult=success\\n"
+                "ExecMainStartTimestamp=Tue 2026-10-13 10:00:00 UTC\\n' ;;\n"
+                "  esac\n"
+                "}\n"
+                + block + "\nverify_setup_state first\n"
+            )
+            env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "ROOT": str(ROOT),
+                   "TEST_USER": "u", "TEST_PASSWORD": "pw", "FAILED_UNIT": failed_unit}
+            return subprocess.run(["bash", "-eu", "-c", harness],
+                                  capture_output=True, text=True, env=env,
+                                  # The stub drains stdin; never wait on a terminal.
+                                  stdin=subprocess.DEVNULL)
+
+        ok = run("none")
+        self.assertEqual(ok.returncode, 0, ok.stderr)
+        # Every unit is reported, not only the first of each list.
+        for unit in ("gdm.service", "uupd.timer", "pipewire.socket",
+                     "brew-preinstall.service"):
+            self.assertIn(f"  {unit}: ", ok.stdout)
+        offline = run("brew-preinstall.service")
+        self.assertEqual(offline.returncode, 0, offline.stderr)
+        for unit in ("gdm.service", "pipewire.socket"):
+            bad = run(unit)
+            self.assertNotEqual(bad.returncode, 0, unit)
+            self.assertIn(f"{unit} failed during first boot", bad.stderr)
 
     def test_failure_diagnostics_run_from_the_exit_trap_not_only_fail(self):
         script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()

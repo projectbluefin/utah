@@ -267,6 +267,11 @@ def main() -> int:
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--check", action="store_true", help="validate contract syntax only")
     modes.add_argument("--flatpaks", type=Path, metavar="BREWFILE", help="print declared Flatpak IDs")
+    modes.add_argument(
+        "--services",
+        choices=("enabled", "user_enabled"),
+        help="print one [services] list of the contract, one unit per line",
+    )
     parser.add_argument("contract", type=Path, nargs="?")
     args = parser.parse_args()
     if args.flatpaks is not None:
@@ -284,6 +289,10 @@ def main() -> int:
         parser.error("contract is required unless --flatpaks is given")
 
     contract = tomllib.loads(args.contract.read_text())
+    if args.services is not None:
+        for unit in contract.get("services", {}).get(args.services, []):
+            print(unit)
+        return 0
     errors = validate_contract(contract)
     if args.check:
         for error in errors:
