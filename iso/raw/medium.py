@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """Boot configuration and layout of the image-based installer's live medium.
 
-build-raw-image.sh calls this after `bootc install to-filesystem` has written
-the deployment's BLS entry and GRUB environment:
+build-raw-image.sh partitions the medium and runs `bootc install` with:
+
+  medium.py layout                               the sfdisk script (LAYOUT)
+  medium.py install-kargs                        the deployment's kargs, one per line
+
+and, after `bootc install to-filesystem` has written the deployment's BLS
+entry and GRUB environment:
 
   medium.py live-entry ENTRY OUT [EXTRA_KARGS]   write the "Utah Live" entry
   medium.py grubenv GRUBENV ENTRY_ID             make ENTRY_ID GRUB's default
@@ -33,6 +38,36 @@ GRUBENV_HEADER = "# GRUB Environment Block\n"
 ALIGN_BYTES = 1024 * 1024
 # Room after the last partition for the backup GPT (33 sectors), aligned.
 GPT_TAIL_BYTES = ALIGN_BYTES
+
+# The medium's GPT, in order: (name, partition type, size; None = the rest).
+# - BIOS-BOOT only because bootupd installs its BIOS component when it finds
+#   one; install.sh drops it (UEFI-only target).
+# - A separate ext4 /boot: install.sh encrypts only the root, and GRUB cannot
+#   unlock systemd-repart's LUKS2 (argon2id), so /boot must stay outside it.
+#   `bootc install to-disk --filesystem btrfs` would put /boot inside the root.
+# - The root comes last: install.sh gives it the rest of the target disk and
+#   shrink-raw-image.sh cuts the medium right after it.
+# build-raw-image.sh formats partitions 2, 3 and 4 as vfat, ext4 and btrfs.
+LAYOUT = (
+    ("BIOS-BOOT", "21686148-6449-6E6F-744E-656564454649", "1MiB"),
+    ("EFI-SYSTEM", "C12A7328-F81F-11D2-BA4B-00A0C93EC93B", "512MiB"),
+    ("boot", "0FC63DAF-8483-4772-8E79-3D69D8477DE4", "1GiB"),
+    ("root", "4F68BCE3-E8CD-4DB1-96E7-FBCAF984B709", None),
+)
+# rhgb quiet: the graphical, branded Plymouth splash and LUKS prompt on the
+# installed disk. Neither the image's kargs.d nor `bootc install` sets them;
+# fisherman adds them with bootSplash
+# (docs/skills/desktop-contract/references/boot-splash.md). Without them the
+# installed disk asked for the passphrase in Plymouth's text mode (spike run
+# 44864314405). Install-time kargs carry over bootc upgrades.
+INSTALL_KARGS = ("rhgb", "quiet")
+
+
+def sfdisk_script(layout=LAYOUT) -> str:
+    lines = ["label: gpt"]
+    for name, ptype, size in layout:
+        lines.append(", ".join(([f"size={size}"] if size else []) + [f"type={ptype}", f'name="{name}"']))
+    return "\n".join(lines) + "\n"
 
 
 def live_entry(entry: str, extra_kargs: list[str] | None = None) -> str:
@@ -143,6 +178,12 @@ def main(argv: list[str]) -> int:
     if len(argv) == 4 and argv[1] == "shrink-plan":
         table = json.loads(Path(argv[2]).read_text())
         print(*shrink_plan(table, int(argv[3])))
+        return 0
+    if len(argv) == 2 and argv[1] == "layout":
+        sys.stdout.write(sfdisk_script())
+        return 0
+    if len(argv) == 2 and argv[1] == "install-kargs":
+        print("\n".join(INSTALL_KARGS))
         return 0
     print(__doc__, file=sys.stderr)
     return 2

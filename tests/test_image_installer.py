@@ -84,6 +84,53 @@ TABLE = {"partitiontable": {"label": "gpt", "sectorsize": 512, "partitions": [
 ]}}
 
 
+ESP_TYPE = "C12A7328-F81F-11D2-BA4B-00A0C93EC93B"
+LINUX_FS_TYPE = "0FC63DAF-8483-4772-8E79-3D69D8477DE4"
+ROOT_X86_64_TYPE = "4F68BCE3-E8CD-4DB1-96E7-FBCAF984B709"
+
+
+class MediumContractTests(unittest.TestCase):
+    """The medium layout and kargs an encrypted, graphical install needs."""
+
+    def test_esp_then_a_separate_boot_then_root_last(self):
+        names = [name for name, _, _ in medium.LAYOUT]
+        types = {name: ptype for name, ptype, _ in medium.LAYOUT}
+        sizes = {name: size for name, _, size in medium.LAYOUT}
+        # build-raw-image.sh formats p2, p3 and p4 as vfat, ext4 and btrfs.
+        self.assertEqual(names.index("EFI-SYSTEM"), 1)
+        self.assertEqual(names.index("boot"), 2)
+        self.assertEqual(names[-1], "root")
+        self.assertEqual(types["EFI-SYSTEM"], ESP_TYPE)
+        self.assertEqual(sizes["EFI-SYSTEM"], "512MiB")
+        # GRUB reads /boot unencrypted; install.sh encrypts only the root.
+        self.assertEqual(types["boot"], LINUX_FS_TYPE)
+        self.assertEqual(sizes["boot"], "1GiB")
+        # Root takes the rest, so the installer can grow it and shrinking can cut after it.
+        self.assertEqual(types["root"], ROOT_X86_64_TYPE)
+        self.assertIsNone(sizes["root"])
+
+    def test_the_sfdisk_script_is_the_layout(self):
+        script = medium.sfdisk_script().splitlines()
+        self.assertEqual(script[0], "label: gpt")
+        self.assertEqual(script[2], f'size=512MiB, type={ESP_TYPE}, name="EFI-SYSTEM"')
+        self.assertEqual(script[-1], f'type={ROOT_X86_64_TYPE}, name="root"')
+
+    def test_the_deployment_boots_into_the_graphical_splash(self):
+        self.assertIn("rhgb", medium.INSTALL_KARGS)
+        self.assertIn("quiet", medium.INSTALL_KARGS)
+        self.assertNotIn("utah.live", medium.INSTALL_KARGS)
+
+    def test_the_build_script_takes_both_from_medium_py(self):
+        build = (RAW / "build-raw-image.sh").read_text()
+        self.assertIn('medium.py" layout | sfdisk', build)
+        self.assertIn('medium.py" install-kargs', build)
+        self.assertNotIn("label: gpt", build)
+        self.assertNotIn("--karg rhgb", build)
+        self.assertIn('mkfs.fat -F 32 -n EFI-SYSTEM "${LOOP}p2"', build)
+        self.assertIn('mkfs.ext4 -q -L boot "${LOOP}p3"', build)
+        self.assertIn('mkfs.btrfs -q -L root "${LOOP}p4"', build)
+
+
 class ShrinkPlanTests(unittest.TestCase):
     def test_root_is_cut_to_the_filesystem_rounded_to_a_mebibyte(self):
         number, sectors, image = medium.shrink_plan(TABLE, 7 * 2**30 + 1)

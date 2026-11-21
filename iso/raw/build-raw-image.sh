@@ -48,15 +48,10 @@ data="$(dirname "${OUT}")"
 
 rm -f "${OUT}"
 truncate -s "${SIZE}" "${OUT}"
-# BIOS-BOOT only because bootupd installs its BIOS component when it finds one;
-# the installer drops it (UEFI-only target).
-sfdisk --quiet "${OUT}" <<'EOF'
-label: gpt
-size=1MiB, type=21686148-6449-6E6F-744E-656564454649, name="BIOS-BOOT"
-size=512MiB, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B, name="EFI-SYSTEM"
-size=1GiB, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name="boot"
-type=4F68BCE3-E8CD-4DB1-96E7-FBCAF984B709, name="root"
-EOF
+# The medium's partition table and the deployment's install-time kargs are
+# the contract in medium.py (LAYOUT, INSTALL_KARGS), held by
+# tests/test_image_installer.py.
+python3 "${HERE}/medium.py" layout | sfdisk --quiet "${OUT}"
 loop="$(losetup --find --show --partscan "${OUT}")"
 mnt="$(mktemp -d)"
 cleanup() {
@@ -68,11 +63,10 @@ cleanup() {
 trap cleanup EXIT
 udevadm settle
 
-# rhgb quiet: the graphical, branded Plymouth splash (and LUKS prompt). The
-# image's kargs.d does not set them; fisherman adds them with bootSplash
-# (docs/skills/desktop-contract/references/boot-splash.md). Install-time kargs
-# carry over bootc upgrades.
-install_args=(--generic-image --target-imgref "${TARGET_IMGREF}" --karg rhgb --karg quiet)
+install_args=(--generic-image --target-imgref "${TARGET_IMGREF}")
+mapfile -t kargs < <(python3 "${HERE}/medium.py" install-kargs)
+[[ ${#kargs[@]} -gt 0 ]] || { echo "medium.py install-kargs printed nothing" >&2; exit 1; }
+for karg in "${kargs[@]}"; do install_args+=(--karg "${karg}"); done
 volumes=(-v /dev:/dev -v /var/lib/containers:/var/lib/containers -v "${data}:/data")
 if [[ -n "${UTAH_RAW_SSH_PUBKEY:-}" ]]; then
     install -m 0644 "${UTAH_RAW_SSH_PUBKEY}" "${data}/root-key.pub"
