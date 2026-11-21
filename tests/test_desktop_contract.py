@@ -7,6 +7,7 @@ contract -- but neither had any unit coverage, so a gate that silently stopped
 rejecting anything would still report success.
 """
 
+import fnmatch
 import importlib.util
 import json
 import tomllib
@@ -60,11 +61,13 @@ class ValidateContractTests(unittest.TestCase):
         data = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
         self.assertEqual(desktop.validate_contract(data), [])
 
-    def test_shipped_contract_enables_input_remapper(self):
+    def test_shipped_contract_keeps_kanata_opt_in_without_input_remapper(self):
         import tomllib
 
         data = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
-        self.assertIn("input-remapper.service", data.get("services", {}).get("enabled", []))
+        services = data.get("services", {})
+        self.assertIn("kanata.service", services.get("disabled", []))
+        self.assertNotIn("input-remapper.service", services.get("enabled", []))
 
     def test_every_missing_section_is_named(self):
         errors = desktop.validate_contract({})
@@ -341,6 +344,38 @@ class FlatpaksModeTests(unittest.TestCase):
             self.assertEqual(cm.exception.code, 2)
 
 
+class ServicesModeTests(unittest.TestCase):
+    """`--services LIST CONTRACT` prints one [services] list, one unit per line.
+
+    luks-e2e.sh reads the installed contract this way to check every listed
+    unit on the booted system (#19). It must not run the image checks.
+    """
+
+    def run_services(self, kind):
+        contract = ROOT / "contracts/bluefin-desktop.toml"
+        with patch.object(desktop.sys, "argv", ["verify", "--services", kind, str(contract)]), \
+                patch.object(desktop, "unit_enabled") as unit, \
+                patch("sys.stdout", new_callable=__import__("io").StringIO) as out:
+            rc = desktop.main()
+        unit.assert_not_called()
+        return rc, out.getvalue().splitlines()
+
+    def test_prints_each_list_from_the_contract(self):
+        services = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())["services"]
+        for kind in ("enabled", "user_enabled"):
+            rc, units = self.run_services(kind)
+            self.assertEqual(rc, 0)
+            self.assertEqual(units, services[kind])
+            self.assertTrue(units, kind)
+
+    def test_rejects_other_lists(self):
+        with patch.object(desktop.sys, "argv", ["verify", "--services", "masked", "x.toml"]), \
+                patch.object(desktop.sys, "stderr"):
+            with self.assertRaises(SystemExit) as cm:
+                desktop.main()
+        self.assertEqual(cm.exception.code, 2)
+
+
 class GnomeExtensionTests(unittest.TestCase):
     def shipped_tree(self, tmp, versions="51", uuids=None):
         # Modes as the build leaves them, independent of the caller's umask.
@@ -440,43 +475,114 @@ class GnomeExtensionTests(unittest.TestCase):
             with self.subTest(uuid=uuid):
                 self.assertIn(uuid, extensions.SOURCE_EXTENSIONS)
 
+    def test_bling_sync_folder_is_the_only_syncthing_toggle(self):
+        # Dakota ships only bling's syncthing-toggle@projectbluefin.io (#1357);
+        # it keeps its own schema, which the contract asserts in the image.
+        self.assertNotIn("rehhouari", (ROOT / ".gitmodules").read_text())
+        self.assertEqual(
+            [uuid for uuid in extensions.SOURCE_EXTENSIONS if uuid.startswith("syncthing-toggle@")],
+            ["syncthing-toggle@projectbluefin.io"],
+        )
+        self.assertNotIn("rehhouari", (ROOT / "scripts/build-gnome-extensions.sh").read_text())
+        schema = "org.gnome.shell.extensions.syncthing-toggle.gschema.xml"
+        bling = ROOT / "system_files/shared/usr/share/gnome-shell/extensions/tmp/bluefin-bling/extensions/syncthing-toggle"
+        self.assertTrue((bling / "schemas" / schema).is_file())
+        files = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())["configuration"]["files"]
+        self.assertIn(f"/usr/share/glib-2.0/schemas/{schema}", files)
+        self.assertIn("/usr/share/gnome-shell/extensions/syncthing-toggle@projectbluefin.io/metadata.json", files)
+
+
+SYSTEM_PRESETS = ROOT / "system_files/shared/usr/lib/systemd/system-preset"
+
+
+def preset_verdict(unit):
+    """The first preset line matching `unit` across Utah's system presets.
+
+    systemd reads preset files in lexical order of their names and the first
+    matching line wins. Hummingbird's own 80-/90- files are not in the tree;
+    85-utah-desktop.preset sorts before them for the units they name.
+    """
+    for path in sorted(SYSTEM_PRESETS.glob("*.preset"), key=lambda p: p.name):
+        for line in path.read_text().splitlines():
+            words = line.split()
+            if len(words) >= 2 and words[0] in ("enable", "disable") and fnmatch.fnmatchcase(unit, words[1]):
+                return words[0], path.name
+    return None, None
+
 
 class ServiceMaskParityTests(unittest.TestCase):
-    def test_stats_refresh_timer_enabled_in_contract_preset_and_script(self):
-        contract = (ROOT / "contracts/bluefin-desktop.toml").read_text()
-        preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset").read_text()
-        services = (ROOT / "scripts/configure-services.sh").read_text()
-        self.assertIn('"bluefin-stats-refresh.timer"', contract)
-        self.assertIn("enable bluefin-stats-refresh.timer", preset)
-        self.assertIn("enable_unit bluefin-stats-refresh.timer", services)
+    """Utah's services follow its presets, enabled by default as on Dakota (#1233)."""
 
-    def test_dakota_parity_units_enabled_in_contract_preset_and_script(self):
-        contract = (ROOT / "contracts/bluefin-desktop.toml").read_text()
-        preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset").read_text()
+    def contract_services(self):
+        return tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())["services"]
+
+    def test_enable_by_default_outranks_hummingbirds_catch_all_disable(self):
+        # Hummingbird ships 99-default-disable.preset ("disable *"); a line
+        # that matches first in a lower-sorting file wins, so 98 must be the
+        # last Utah file and must end on the catch-all.
+        names = sorted(p.name for p in SYSTEM_PRESETS.glob("*.preset"))
+        self.assertEqual(names[-1], "98-utah-enable-default.preset")
+        self.assertLess(names[-1], "99-default-disable.preset")
+        lines = [
+            line for line in (SYSTEM_PRESETS / names[-1]).read_text().splitlines()
+            if line.strip() and not line.startswith("#")
+        ]
+        self.assertEqual(lines[-1], "enable *")
+        self.assertEqual([line for line in lines if line.split()[-1] == "*"], ["enable *"])
+
+    def test_contract_enabled_units_resolve_to_enabled(self):
+        for unit in self.contract_services()["enabled"]:
+            with self.subTest(unit=unit):
+                self.assertEqual(preset_verdict(unit)[0], "enable")
+
+    def test_contract_disabled_and_masked_units_resolve_to_disabled(self):
+        services = self.contract_services()
+        for unit in services["disabled"] + services["masked"]:
+            with self.subTest(unit=unit):
+                self.assertEqual(preset_verdict(unit)[0], "disable")
+
+    def test_configure_services_applies_the_presets(self):
+        # The build applies the same presets first boot would, instead of a
+        # per-unit enable list that can drift from them (#98, #1233).
         services = (ROOT / "scripts/configure-services.sh").read_text()
+        self.assertRegex(services, r"(?m)^systemctl preset-all$")
+        self.assertNotRegex(services, r"(?m)^\s*systemctl (enable|disable) ")
+        self.assertNotIn("enable_unit", services)
+        uupd = services.index("mv -f /etc/uupd/config.json.rpmnew /etc/uupd/config.json")
+        self.assertLess(uupd, services.index("\nsystemctl preset-all\n"))
+
+    def test_the_reported_desktop_units_are_enabled(self):
+        # projectbluefin/utah#99: an installed unit that never started. #19: the
+        # first-boot Flatpak, setup, update and Tailscale units need an
+        # enablement policy too. #675, #1265: Dakota's first-boot date and
+        # booted-image units. #1266: Dakota's monthly-wallpaper units.
+        enabled = self.contract_services()["enabled"]
         for unit in (
-            "ublue-firstboot-date.service",
+            "gdm.service",
+            "ublue-wallpaper-month.service",
+            "flatpak-preinstall.service",
+            "ublue-system-setup.service",
+            "bluefin-wallpaper-month.service",
+            "projectbluefin-countme.timer",
+            "uupd.timer",
+            "accounts-daemon.service",
+            "ublue-firstboot-date.path",
             "ublue-booted-image.service",
+            "bluefin-remove-installer.service",
         ):
             with self.subTest(unit=unit):
-                self.assertIn(f'"{unit}"', contract)
-                self.assertIn(f"enable {unit}", preset)
-                self.assertIn(f"enable_unit {unit}", services)
-                self.assertTrue((ROOT / "system_files/shared/usr/lib/systemd/system" / unit).is_file())
-
-    def test_dakota_gnome_system_units_enabled_in_contract_preset_and_script(self):
-        # Dakota inherits these from gnome-build-meta's 80-gnome.preset.
-        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
-        preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset").read_text()
-        services = (ROOT / "scripts/configure-services.sh").read_text()
-        for unit in ("colord.service", "accounts-daemon.service"):
-            with self.subTest(unit=unit):
-                self.assertIn(f"enable {unit}\n", preset)
-                self.assertIn(f"enable_unit {unit}\n", services)
-        # colord has no [Install] section in the factory build, so the image
-        # contract cannot require it to be enabled.
-        self.assertNotIn("colord.service", contract["services"]["enabled"])
-        self.assertIn("accounts-daemon.service", contract["services"]["enabled"])
+                self.assertIn(unit, enabled)
+                self.assertEqual(preset_verdict(unit)[0], "enable")
+        # colord.service has no [Install] section in the factory build, so
+        # the contract cannot require it enabled; the preset still turns it on.
+        self.assertNotIn("colord.service", enabled)
+        self.assertEqual(preset_verdict("colord.service")[0], "enable")
+        # dakota-config-firstboot-date ships these units (#1265); Utah keeps no copy.
+        parity = tomllib.loads((ROOT / "packages/utah.toml").read_text())["parity"]["packages"]
+        self.assertIn("dakota-config-firstboot-date", parity)
+        for unit in ("ublue-firstboot-date.path", "ublue-booted-image.service",
+                     "bluefin-remove-installer.service"):
+            self.assertFalse((ROOT / "system_files/shared/usr/lib/systemd/system" / unit).exists())
 
     def test_dakota_gnome_user_units_enabled_in_contract_preset_and_script(self):
         # Dakota inherits these from gnome-build-meta's user presets.
@@ -490,24 +596,176 @@ class ServiceMaskParityTests(unittest.TestCase):
                 self.assertIn(f"enable {unit}\n", preset)
                 self.assertIn(unit, user_loop)
 
-    def test_sysstat_collection_is_opt_in_like_dakota(self):
-        # Dakota's elements/bluefin/sysstat.bst presets all four units off.
-        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
-        preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset").read_text()
-        services = (ROOT / "scripts/configure-services.sh").read_text()
-        for unit in (
-            "sysstat.service",
-            "sysstat-collect.timer",
-            "sysstat-summary.timer",
-            "sysstat-rotate.timer",
+    def test_dakota_and_gnome_os_disables_are_carried(self):
+        # GNOME OS's openssh/wpa-supplicant/80-network presets and Dakota's
+        # 50-*/80-* presets (sysstat, libvirt, rpcbind, pcrlock, ...).
+        for unit, verdict in (
+            ("sshd.service", "disable"),
+            ("systemd-networkd.service", "disable"),
+            ("wpa_supplicant@.service", "disable"),
+            ("iscsid.socket", "disable"),
+            ("libvirtd.socket", "disable"),
+            ("virtqemud.service", "disable"),
+            ("nfs-server.service", "disable"),
+            ("rpcbind.socket", "disable"),
+            ("lm_sensors.service", "disable"),
+            ("kanata.service", "disable"),
+            ("kmscon.service", "disable"),
+            ("systemd-pcrlock-firmware-code.service", "disable"),
+            ("systemd-pcrlock-machine-id.service", "enable"),
+            ("sysstat.service", "disable"),
+            ("sysstat-collect.timer", "disable"),
+            ("sysstat-summary.timer", "disable"),
+            ("sysstat-rotate.timer", "disable"),
         ):
             with self.subTest(unit=unit):
-                self.assertIn(unit, contract["services"]["disabled"])
-                self.assertNotIn(unit, contract["services"]["enabled"])
-                self.assertIn(f"disable {unit}\n", preset)
-                self.assertNotIn(f"enable {unit}\n", preset)
-                self.assertIn(f"disable_unit {unit}\n", services)
-                self.assertNotIn(f"enable_unit {unit}\n", services)
+                self.assertEqual(preset_verdict(unit)[0], verdict)
+
+    def test_units_hummingbird_enables_are_disabled_before_its_presets(self):
+        # Hummingbird's 90-default.preset enables these; only a line in a file
+        # sorting before it can turn them off.
+        for unit in (
+            "sshd.service",
+            "multipathd.service",
+            "lm_sensors.service",
+            "iscsid.socket",
+            "iscsiuio.socket",
+            "iscsi-starter.service",
+            "iscsi-onboot.service",
+        ):
+            with self.subTest(unit=unit):
+                self.assertEqual(preset_verdict(unit), ("disable", "85-utah-desktop.preset"))
+
+    def test_iscsi_units_ship_disabled(self):
+        # iscsi-initiator-utils and isns-utils are installed as on Dakota, with
+        # every unit they ship off (#1360): Dakota's 50-iscsi.preset plus the
+        # Fedora-only starter and onboot units Hummingbird enables.
+        packages = tomllib.loads((ROOT / "packages/utah.toml").read_text())
+        installed = packages["parity"]["packages"]
+        disabled = self.contract_services()["disabled"]
+        for package in ("iscsi-initiator-utils", "isns-utils"):
+            with self.subTest(package=package):
+                self.assertIn(package, installed)
+        for unit in (
+            "iscsi-init.service",
+            "iscsi.service",
+            "iscsi-starter.service",
+            "iscsi-onboot.service",
+            "iscsid.service",
+            "iscsid.socket",
+            "iscsiuio.service",
+            "iscsiuio.socket",
+            "isnsd.service",
+        ):
+            with self.subTest(unit=unit):
+                self.assertEqual(preset_verdict(unit), ("disable", "85-utah-desktop.preset"))
+                # iscsi.service's [Install] holds only Also=iscsi-starter.service,
+                # so `systemctl is-enabled` reports "indirect" and the verifier
+                # cannot assert it; iscsi-starter.service starts it at boot.
+                if unit == "iscsi.service":
+                    self.assertNotIn(unit, disabled)
+                else:
+                    self.assertIn(unit, disabled)
+        # clean-stage strips /var; tmpfiles recreates the node database.
+        tmpfiles = (ROOT / "system_files/shared/usr/lib/tmpfiles.d/utah-iscsi.conf").read_text()
+        for path in ("/var/lib/iscsi/nodes", "/var/lib/iscsi/send_targets", "/var/lib/isns"):
+            with self.subTest(path=path):
+                self.assertRegex(tmpfiles, rf"(?m)^d {path} 07\d\d root root -$")
+
+    def test_syncthing_ships_opt_in(self):
+        # Native syncthing as on Dakota (#1361): installed, its user unit never
+        # enabled for everyone, and the RPM's app-grid launchers removed.
+        packages = tomllib.loads((ROOT / "packages/utah.toml").read_text())
+        self.assertIn("syncthing", packages["parity"]["packages"])
+        self.assertIn("syncthing.service", self.contract_services()["user_disabled"])
+        user_preset = (ROOT / "system_files/shared/usr/lib/systemd/user-preset/85-utah-desktop.preset").read_text()
+        self.assertNotIn("syncthing", user_preset)
+        services = (ROOT / "scripts/configure-services.sh").read_text()
+        self.assertNotIn("enable syncthing", services)
+        self.assertIn(
+            "rm -f /usr/share/applications/syncthing-start.desktop \\\n"
+            "    /usr/share/applications/syncthing-ui.desktop\n",
+            services,
+        )
+
+    def test_sysprofd_and_erofs_utils_ship_native(self):
+        # Dakota ships Sysprof's host daemon and erofs-utils (#1361, #1360).
+        # sysprof3.service has no [Install] section: D-Bus activates it when
+        # the Flathub app asks, so no preset list may name it.
+        packages = tomllib.loads((ROOT / "packages/utah.toml").read_text())
+        installed = packages["parity"]["packages"]
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        files = contract["configuration"]["files"]
+        for package, path in (
+            ("sysprof-cli", "/usr/libexec/sysprofd"),
+            ("sysprof-cli", "/usr/lib/systemd/system/sysprof3.service"),
+            ("sysprof-cli", "/usr/share/dbus-1/system-services/org.gnome.Sysprof3.service"),
+            ("erofs-utils", "/usr/bin/mkfs.erofs"),
+        ):
+            with self.subTest(path=path):
+                self.assertIn(package, installed)
+                self.assertIn(path, files)
+        for listing, units in self.contract_services().items():
+            with self.subTest(listing=listing):
+                self.assertNotIn("sysprof3.service", units)
+
+    def test_first_boot_cannot_reset_build_time_state(self):
+        # authselect-first-boot.service re-selects @system-default on first
+        # boot, dropping the features configure-services.sh enables; livesys
+        # is live-media setup; dbus-daemon would take dbus-broker's alias.
+        for unit in ("authselect-first-boot.service", "livesys.service", "dbus-daemon.service"):
+            with self.subTest(unit=unit):
+                self.assertEqual(preset_verdict(unit)[0], "disable")
+
+    def test_dakota_upstream_preset_units_enabled_in_contract_and_presets(self):
+        # Units upstream presets enable that a booted Dakota runs (#1271,
+        # #1272); enable-by-default turns them on and the contract asserts it.
+        enabled = self.contract_services()["enabled"]
+        for unit in (
+            "nvmf-autoconnect.service",
+            "nvmefc-boot-connections.service",
+            "systemd-imdsd.socket",
+            "speech-dispatcherd.service",
+            "podman.service",
+            "netavark-dhcp-proxy.socket",
+            "netavark-dhcp-proxy.service",
+            "netavark-firewalld-reload.service",
+            "netavark-nftables-reload.service",
+        ):
+            with self.subTest(unit=unit):
+                self.assertIn(unit, enabled)
+                self.assertEqual(preset_verdict(unit)[0], "enable")
+
+    def test_mdadm_timers_stay_off_beside_raid_check(self):
+        # raid-check.timer is the scrub scheduler (#1268); mdadm's own timers
+        # would scrub the same arrays again (#1271).
+        disabled = self.contract_services()["disabled"]
+        for unit in ("mdcheck_start.timer", "mdcheck_continue.timer", "mdmonitor-oneshot.timer"):
+            with self.subTest(unit=unit):
+                self.assertIn(unit, disabled)
+                self.assertEqual(preset_verdict(unit), ("disable", "98-utah-enable-default.preset"))
+
+    def test_nfs_client_target_enabled_with_gssproxy_state_dirs(self):
+        # Dakota enables nfs-client.target; on Utah it pulls in gssproxy, whose
+        # StateDirectory= systemd cannot create under SELinux on the stripped
+        # /var, so tmpfiles must ship the RPM's directories (#1269).
+        # Hummingbird's 90-default.preset enables the target; no Utah preset
+        # may turn it off first.
+        self.assertIn("nfs-client.target", self.contract_services()["enabled"])
+        self.assertEqual(preset_verdict("nfs-client.target"), ("enable", "98-utah-enable-default.preset"))
+        tmpfiles = [
+            line.split()
+            for line in (ROOT / "system_files/shared/usr/lib/tmpfiles.d/utah-gssproxy.conf").read_text().splitlines()
+            if line.strip() and not line.startswith("#")
+        ]
+        self.assertEqual(
+            tmpfiles,
+            [
+                ["d", "/var/lib/gssproxy", "0755", "root", "root", "-"],
+                ["d", "/var/lib/gssproxy/clients", "0700", "root", "root", "-"],
+                ["d", "/var/lib/gssproxy/rcache", "0700", "root", "root", "-"],
+            ],
+        )
 
     def test_dakota_parity_patch_targets_are_required_files(self):
         contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
@@ -523,11 +781,43 @@ class ServiceMaskParityTests(unittest.TestCase):
                 self.assertIn(path, files)
                 self.assertIn(path, file_contains)
 
-    def test_dakota_uupd_files_shipped_and_required(self):
-        # Dakota's elements/bluefin/uupd.bst ships these beside the binary.
+    def test_bluefin_cli_shims_are_shipped_and_required(self):
+        # bluefin-cli replaces Common's bling (uwelcome stays the greeting).
+        # Every pinned string must be in the file Utah overlays, or the image
+        # gate fails.
         contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
         files = contract["configuration"]["files"]
         file_contains = contract["configuration"]["file_contains"]
+        for path in (
+            "/usr/share/ublue-os/bling/bling.sh",
+            "/usr/share/ublue-os/bling/bling.fish",
+            "/usr/bin/ublue-bling",
+        ):
+            with self.subTest(path=path):
+                self.assertIn(path, files)
+                shipped = (ROOT / "system_files/shared" / path.lstrip("/")).read_text()
+                for needle in file_contains[path]:
+                    self.assertIn(needle, shipped)
+
+    def test_bling_helpers_only_common_bling_read_are_removed(self):
+        services = (ROOT / "scripts/configure-services.sh").read_text()
+        for path in (
+            "/usr/share/ublue-os/bling/env.sh",
+            "/usr/share/ublue-os/bling/bash-preexec-rearm.sh",
+        ):
+            with self.subTest(path=path):
+                self.assertRegex(services, rf"rm -f [^\n]*(\\\n[^\n]*)*{path}")
+        # uwelcome stays the terminal greeting.
+        self.assertNotIn("/usr/bin/uwelcome", services)
+
+    def test_dakota_uupd_files_come_from_the_factory_and_are_required(self):
+        # Dakota's elements/bluefin/uupd.bst ships these beside the binary;
+        # dakota-config-uupd packages them (#1265), so Utah keeps no copy.
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        files = contract["configuration"]["files"]
+        file_contains = contract["configuration"]["file_contains"]
+        manifest = tomllib.loads((ROOT / "packages/utah.toml").read_text())["parity"]["packages"]
+        self.assertIn("dakota-config-uupd", manifest)
         for path in (
             "/usr/lib/systemd/system/uupd-manual.service",
             "/etc/polkit-1/rules.d/uupd.rules",
@@ -535,14 +825,13 @@ class ServiceMaskParityTests(unittest.TestCase):
         ):
             with self.subTest(path=path):
                 self.assertIn(path, files)
-                self.assertTrue((ROOT / "system_files/shared" / path.lstrip("/")).is_file())
-        # The downloaded units land after Common's copy; pin which one ships.
-        for path in ("/usr/lib/systemd/system/uupd.timer", "/usr/lib/systemd/system/uupd.service"):
+                self.assertFalse((ROOT / "system_files/shared" / path.lstrip("/")).exists())
+        # The package's units replace Common's copies; pin which one ships.
+        for path in ("/usr/lib/systemd/system/uupd.timer", "/usr/lib/systemd/system/uupd.service",
+                     "/etc/uupd/config.json"):
             with self.subTest(path=path):
                 self.assertIn(path, files)
                 self.assertIn(path, file_contains)
-        config = json.loads((ROOT / "system_files/shared/etc/uupd/config.json").read_text())
-        self.assertTrue(config["checks"]["hardware"]["enable"])
 
     def test_bootc_fetch_apply_updates_masked_and_disabled(self):
         preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset").read_text()
@@ -945,96 +1234,135 @@ class FwupdRefreshDropInTests(unittest.TestCase):
             )
 
 
-class StatsRefreshCacheTests(unittest.TestCase):
-    """fastfetch must be able to read what bluefin-stats-refresh.service fetched.
+class DakotaCommonEditTests(unittest.TestCase):
+    """Dakota's edits to common's files, applied by configure-services.sh (#1266).
 
-    The unit used DynamicUser=yes, which always puts CacheDirectory= under
-    /var/cache/private (mode 0700), and Common's fastfetch.jsonc only read
-    the read-only /usr/share/ublue-os placeholders, so the banner showed the
-    placeholder forever (#860).
+    Each edit must be idempotent and fail the build when common's file no
+    longer has the shape it was written against.
     """
 
-    UNIT = ROOT / "system_files/shared/usr/lib/systemd/system/bluefin-stats-refresh.service"
-    SYSUSERS = ROOT / "system_files/shared/usr/lib/sysusers.d/utah-bluefin-stats.conf"
-    SCRIPT = ROOT / "system_files/shared/usr/libexec/bluefin-refresh-stats"
-    CACHE = "/var/cache/bluefin-stats"
-    STATS = ("fastfetch-user-count", "bazaar-install-count")
+    SERVICES = (ROOT / "scripts/configure-services.sh").read_text()
+    COMMON_STATS = """    "break",
+    {
+      "type": "command",
+      "text": "cat /usr/share/ublue-os/fastfetch-user-count",
+      "format": "Murder Chickens: {1} (weekly)"
+    },
+    {
+      "type": "command",
+      "text": "cat /usr/share/ublue-os/bazaar-install-count",
+      "format": "Bazaar Installs: {1} (weekly)"
+    },
+    "break",
+    {
+      "type": "host"
+    }
+"""
+    DAKOTA_STATS = """    "break",
+    {
+      "type": "host"
+    }
+"""
 
-    @staticmethod
-    def directives(path):
-        return [
-            line.strip() for line in path.read_text().splitlines()
-            if line.strip() and not line.lstrip().startswith("#")
-        ]
-
-    def test_unit_cache_is_public_and_owned_by_a_static_user(self):
-        lines = self.directives(self.UNIT)
-        for required in (
-            "DynamicUser=no",
-            "User=bluefin-stats",
-            "Group=bluefin-stats",
-            "CacheDirectory=bluefin-stats",
-            "CacheDirectoryMode=0755",
-            # Implied by DynamicUser=yes, not by DynamicUser=no.
-            "NoNewPrivileges=yes",
-            "PrivateTmp=yes",
-            "RemoveIPC=yes",
-            "RestrictSUIDSGID=yes",
-            "ProtectSystem=strict",
-        ):
-            with self.subTest(directive=required):
-                self.assertIn(required, lines)
-        self.assertNotIn("DynamicUser=yes", lines)
-        # Reusing "bluefin" would make systemd rename the existing
-        # /var/cache/private/bluefin back on upgraded machines.
-        self.assertNotIn("CacheDirectory=bluefin", lines)
-
-    def test_sysusers_allocates_the_unit_user(self):
-        active = self.directives(self.SYSUSERS)
-        self.assertEqual(len(active), 1)
-        fields = active[0].split(None, 3)
-        self.assertEqual(fields[:3], ["u", "bluefin-stats", "-"])
-
-    def test_script_writes_where_fastfetch_reads(self):
-        script = self.SCRIPT.read_text()
-        self.assertIn(f"${{CACHE_DIRECTORY:-{self.CACHE}}}", script)
-        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
-        wanted = contract["configuration"]["file_contains"]["/usr/share/ublue-os/fastfetch.jsonc"]
-        for stat in self.STATS:
-            with self.subTest(stat=stat):
-                self.assertIn(f"write_stat {stat} ", script)
-                self.assertIn(
-                    f"cat {self.CACHE}/{stat} 2>/dev/null || cat /usr/share/ublue-os/{stat}",
-                    wanted,
-                )
-
-    def test_fastfetch_patch_rewrites_common_lines_once(self):
+    def block(self, start):
         import re
+
+        return re.search(rf"^{re.escape(start)}.*?^fi$", self.SERVICES, re.S | re.M).group(0)
+
+    def run_block(self, block, env_line):
         import subprocess
 
-        services = (ROOT / "scripts/configure-services.sh").read_text()
-        block = re.search(r"^STATS_CACHE=.*?^fi$", services, re.S | re.M).group(0)
-        common = "\n".join(
-            f'      "text": "cat /usr/share/ublue-os/{stat}",' for stat in self.STATS
-        ) + "\n"
+        return subprocess.run(
+            ["bash", "-euo", "pipefail", "-c", f"{env_line}\n{block}\n"],
+            capture_output=True, text=True,
+        )
+
+    def test_weekly_stats_drop_matches_dakota_patch_once(self):
+        block = self.block("# Weekly community stats")
         with tempfile.TemporaryDirectory() as tmp:
             jsonc = Path(tmp) / "fastfetch.jsonc"
-            jsonc.write_text(common)
-            script = f"FASTFETCH_JSONC={jsonc}\n{block}\n"
+            jsonc.write_text(self.COMMON_STATS)
             for _ in range(2):
-                subprocess.run(["bash", "-euo", "pipefail", "-c", script], check=True)
-            patched = jsonc.read_text()
-            for stat in self.STATS:
-                with self.subTest(stat=stat):
-                    self.assertEqual(
-                        patched.count(f"cat {self.CACHE}/{stat} 2>/dev/null || cat /usr/share/ublue-os/{stat}"),
-                        1,
-                    )
+                result = self.run_block(block, f"FASTFETCH_JSONC={jsonc}")
+                self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(jsonc.read_text(), self.DAKOTA_STATS)
 
-            jsonc.write_text('      "text": "cat /somewhere/else",\n')
-            result = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+            jsonc.write_text('      "text": "cat /usr/share/ublue-os/fastfetch-user-count",\n')
+            result = self.run_block(block, f"FASTFETCH_JSONC={jsonc}")
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("re-fit the community-stats patch", result.stderr)
+            self.assertIn("re-fit Dakota's weekly-stats drop", result.stderr)
+
+    def test_ghostty_skel_follows_light_and_dark_once(self):
+        block = self.block("GHOSTTY_SKEL=")
+        with tempfile.TemporaryDirectory() as tmp:
+            skel = Path(tmp) / "config.ghostty"
+            block = block.replace("/etc/skel/.config/ghostty/config.ghostty", str(skel))
+            skel.write_text("# comment\ntheme = Catppuccin Mocha\nwindow-theme = ghostty\n")
+            for _ in range(2):
+                result = self.run_block(block, "")
+                self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                skel.read_text(),
+                "# comment\ntheme = light:Catppuccin Latte,dark:Catppuccin Mocha\nwindow-theme = ghostty\n",
+            )
+
+            skel.write_text("theme = Dracula\n")
+            result = self.run_block(block, "")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("re-fit Dakota's dual-theme patch", result.stderr)
+
+    def test_zz0_check_fails_when_dakotas_repoint_would_apply(self):
+        block = self.block("ZZ0_OVERRIDE=")
+        with tempfile.TemporaryDirectory() as tmp:
+            override = Path(tmp) / "zz0.override"
+            block = block.replace(
+                "/usr/share/glib-2.0/schemas/zz0-bluefin-modifications.gschema.override", str(override)
+            )
+            uri = "picture-uri='file:///usr/share/backgrounds/bluefin/{}-bluefin.xml'\n"
+            override.write_text(uri.format("06"))
+            self.assertEqual(self.run_block(block, "").returncode, 0)
+            override.write_text(uri.format("12"))
+            result = self.run_block(block, "")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("projectbluefin/dakota#1902", result.stderr)
+            override.write_text("picture-uri='file:///var/lib/ublue-os/current-bluefin.xml'\n")
+            self.assertNotEqual(self.run_block(block, "").returncode, 0)
+
+    def test_month_units_ship_as_dakota_and_are_enabled(self):
+        import os
+
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        for unit in ("ublue-wallpaper-month.service", "bluefin-wallpaper-month.service"):
+            with self.subTest(unit=unit):
+                self.assertTrue((ROOT / "system_files/shared/usr/lib/systemd/system" / unit).is_file())
+                self.assertIn(unit, contract["services"]["enabled"])
+                self.assertEqual(preset_verdict(unit)[0], "enable")
+        sync = ROOT / "system_files/shared/usr/libexec/bluefin-wallpaper-month-sync"
+        self.assertTrue(os.access(sync, os.X_OK))
+
+    def test_passwd_stack_switches_keyring_hook_to_pam_oo7_once(self):
+        # Hummingbird's shadow-utils /etc/pam.d/passwd; Dakota's
+        # bluefin/oo7-passwd-pam.bst adds the same hook after the substack (#1227).
+        block = self.block("PASSWD_PAM=")
+        hummingbird = (
+            "#%PAM-1.0\n# This tool only uses the password stack.\n"
+            "password   substack\tsystem-auth\n"
+            "-password   optional\tpam_gnome_keyring.so use_authtok\n"
+            "password   substack\tpostlogin\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            passwd = Path(tmp) / "passwd"
+            block = block.replace("/etc/pam.d/passwd", str(passwd))
+            passwd.write_text(hummingbird)
+            for _ in range(2):
+                result = self.run_block(block, "")
+                self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(passwd.read_text(), hummingbird.replace("pam_gnome_keyring", "pam_oo7"))
+
+            passwd.write_text("password include system-auth\n")
+            result = self.run_block(block, "")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("re-fit the pam_oo7 password hook", result.stderr)
 
 
 if __name__ == "__main__":

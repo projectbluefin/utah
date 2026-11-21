@@ -303,6 +303,35 @@ class PackageResolutionTests(unittest.TestCase):
                     installer.main()
                 self.assertIn("public-hummingbird-x86_64-rpms", str(ctx.exception))
 
+    def test_check_rejects_a_swap_outside_the_install_set(self):
+        # #1229: [swap] names the base package a contract package replaces;
+        # the replacement must be in the contract and the removed one must not.
+        with tempfile.TemporaryDirectory() as tmp:
+            dirpath = Path(tmp)
+            base = dirpath / "base.toml"
+            overlay = dirpath / "utah.toml"
+            base.write_text('[fedora]\npackages=["base"]\n')
+            repos_dir = dirpath / "repos"
+            repos_dir.mkdir()
+            (repos_dir / "u.repo").write_text(
+                "[utah-packages]\n# utah-install: true\npriority=1\n"
+                "[public-hummingbird-x86_64-rpms]\n# utah-install: true\npriority=10\n")
+            argv = ["install", "--check", "--repos-dir", str(repos_dir), str(base), str(overlay)]
+            for parity, message in (
+                ('[]', "replacement uutils-coreutils-replace is not in the install set"),
+                ('["uutils-coreutils-replace", "coreutils-single"]',
+                 "removes coreutils-single, which is in the install set"),
+            ):
+                overlay.write_text(f'[parity]\npackages={parity}\n'
+                                   '[swap]\ncoreutils-single = "uutils-coreutils-replace"\n')
+                with patch("sys.argv", argv), self.assertRaises(ValueError) as ctx:
+                    installer.main()
+                self.assertIn(message, str(ctx.exception))
+            overlay.write_text('[parity]\npackages=["uutils-coreutils-replace"]\n'
+                               '[swap]\ncoreutils-single = "uutils-coreutils-replace"\n')
+            with patch("sys.argv", argv), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(installer.main(), 0)
+
 
 class ResolveOneTests(unittest.TestCase):
     """--resolve-one is the single-name probe the unavailable-entry gate loops over."""
@@ -399,10 +428,12 @@ class UnavailableContractTests(unittest.TestCase):
             block.append(line)
         return "\n".join([lines[starts[0]], *block])
 
-    def test_fish_stays_excluded(self):
-        self.assertIn("fish", self.names(),
-                      "Bluefin classic shipping every shell was a mistake Utah "
-                      "does not repeat (bare-metal audit #382)")
+    def test_fish_ships_and_zsh_does_not(self):
+        # Dakota ships fish from GNOME OS and no zsh (#1230).
+        self.assertNotIn("fish", self.names())
+        base = tomllib.loads((ROOT / "packages/base.toml").read_text())
+        self.assertIn("fish", base["fedora"]["packages"])
+        self.assertNotIn("zsh", base["fedora"]["packages"])
 
     def test_firefox_rpm_stays_excluded(self):
         self.assertIn("firefox", self.names(),
@@ -439,6 +470,16 @@ class UnavailableContractTests(unittest.TestCase):
 class ParityContractTests(unittest.TestCase):
     MANIFEST = ROOT / "packages/base.toml"
     OVERLAY = ROOT / "packages/utah.toml"
+
+    def test_input_methods_remain_in_the_install_contract(self):
+        contract = set(installer.contract(self.MANIFEST, self.OVERLAY, "44"))
+        expected = {
+            "anthy-unicode", "fcitx5-gtk",
+            "ibus-hangul", "ibus-libpinyin",
+            "libhangul", "libpinyin", "m17n-db", "m17n-lib",
+            "ibus-mozc", "ibus-unikey",
+        }
+        self.assertFalse(expected - contract, f"missing input methods: {expected - contract}")
 
     def test_parity_section_reaches_the_install_set(self):
         contract = installer.contract(ROOT / "packages/base.toml", self.OVERLAY, "44")
@@ -576,19 +617,17 @@ class ImageSizeTests(unittest.TestCase):
 
 
 class DesktopUnitEnablementTests(unittest.TestCase):
-    """A build-time enablement with no preset line behind it does not survive.
+    """Units Hummingbird's own presets turn off need a line that outranks them.
 
-    bootc applies systemd presets on first boot, so `systemctl enable` at
-    build time is undone unless 85-utah-desktop.preset agrees. That trap is
-    documented in configure-services.sh's sshd branch and was confirmed from
-    the other side by projectbluefin/utah#98 and #99. Hold the two files in
-    agreement so units enabled at build time cannot silently omit the preset.
+    Utah enables every unit no preset disables (98-utah-enable-default.preset,
+    #1233), but Hummingbird's 90-default.preset sorts earlier and disables a
+    few units Utah runs. Only 85-utah-desktop.preset can turn those back on.
+    ServiceMaskParityTests in test_desktop_contract.py covers the rest.
     """
 
     PRESET = ROOT / (
         "system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset"
     )
-    SERVICES = ROOT / "scripts/configure-services.sh"
 
     def preset_directives(self, verb):
         return {
@@ -597,63 +636,6 @@ class DesktopUnitEnablementTests(unittest.TestCase):
             if line.startswith(f"{verb} ")
         }
 
-    def script_units(self, function):
-        # Leading whitespace matters: sshd is enabled inside a conditional
-        # block, so an anchored pattern misses it and the allowlist below
-        # would look stale when it is not.
-        return set(
-            re.findall(rf"^[ \t]*{function} (\S+)$", self.SERVICES.read_text(), re.M)
-        )
-
-    # sshd is deliberately excluded: configure-services.sh rewrites the preset
-    # in place for the opt-in debug build rather than shipping it enabled,
-    # which is the one case where the two files may legitimately disagree.
-    #
-    # brew-setup.service carries its own vendor preset, 01-homebrew.preset from
-    # the brew image, verified on a booted image (`systemctl is-enabled` reports
-    # enabled after first-boot preset application). flatpak-preinstall and
-    # flatpak-nuke-fedora were allowlisted here unverified; the same check found
-    # them disabled -- no preset behind them, the #98 bug -- so they moved into
-    # the preset and out of this list.
-    WITHOUT_PRESET = {
-        "sshd.service",
-        "brew-setup.service",
-    }
-
-    def test_no_new_unit_is_enabled_without_a_preset_entry(self):
-        enabled = self.script_units("enable_unit") - self.WITHOUT_PRESET
-        missing = sorted(enabled - self.preset_directives("enable"))
-        self.assertEqual(
-            missing,
-            [],
-            "enabled at build time with no preset entry, so bootc's first-boot "
-            f"preset application will undo it: {missing}",
-        )
-
-    def test_the_exception_list_does_not_cover_absent_units(self):
-        # A stale allowlist silently widens the hole above. Every name in it
-        # must still be a unit configure-services.sh actually enables.
-        enabled = self.script_units("enable_unit")
-        stale = sorted(self.WITHOUT_PRESET - enabled)
-        self.assertEqual(stale, [], f"allowlisted but no longer enabled: {stale}")
-
-    def test_the_reported_desktop_units_are_enabled(self):
-        # projectbluefin/utah#99: input-remapper package was installed and its
-        # unit never started. Name them so a refactor cannot drop one.
-        # projectbluefin/utah#19: the first-boot Flatpak, setup, statistics,
-        # update and Tailscale units have an explicit enablement policy too.
-        for unit in (
-            "input-remapper.service",
-            "flatpak-preinstall.service",
-            "ublue-system-setup.service",
-            "bluefin-stats-refresh.timer",
-            "projectbluefin-countme.timer",
-            "uupd.timer",
-            "tailscaled.service",
-        ):
-            with self.subTest(unit=unit):
-                self.assertIn(unit, self.script_units("enable_unit"))
-                self.assertIn(unit, self.preset_directives("enable"))
 
     def test_systemd_boot_update_enabled_and_gated_on_the_loader(self):
         # projectbluefin/utah#363: on systemd-boot systems bootupd stands down
@@ -664,7 +646,6 @@ class DesktopUnitEnablementTests(unittest.TestCase):
         # update is a harmless no-op. Secure Boot systems must be excluded
         # outright, or the unsigned build would overwrite a signed sd-boot and
         # the firmware would reject the next boot.
-        self.assertIn("systemd-boot-update.service", self.script_units("enable_unit"))
         self.assertIn("systemd-boot-update.service", self.preset_directives("enable"))
 
         dropin = ROOT / (
@@ -759,10 +740,14 @@ class FlathubCollectionIdTests(unittest.TestCase):
         self.assertIn("basic.target", parser["Unit"]["After"].split())
         self.assertIn("shutdown.target", parser["Unit"]["Conflicts"].split())
 
-    def test_preinstall_service_is_in_the_preset(self):
-        preset = (ROOT / "system_files/shared/usr/lib/systemd/system-preset/"
-                  "85-utah-desktop.preset").read_text()
-        self.assertIn("enable flatpak-preinstall.service", preset.splitlines())
+    def test_preinstall_service_is_not_disabled_by_a_preset(self):
+        # Enable-by-default (#1233) turns it on unless a preset disables it;
+        # the desktop contract asserts the result in the image.
+        presets = ROOT / "system_files/shared/usr/lib/systemd/system-preset"
+        for path in presets.glob("*.preset"):
+            self.assertNotIn("disable flatpak-preinstall.service", path.read_text().splitlines())
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        self.assertIn("flatpak-preinstall.service", contract["services"]["enabled"])
 
 if __name__ == "__main__":
     unittest.main()

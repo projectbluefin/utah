@@ -1,7 +1,7 @@
 ---
 name: lifecycle-e2e
 version: "1.0"
-last_updated: "2026-11-17"
+last_updated: "2026-11-20"
 id: lifecycle-e2e
 one_line_purpose: Run the QEMU lifecycle harness and validate bootc upgrade, rollback, and BLS boot files.
 entry_point: docs/skills/lifecycle-e2e.md
@@ -107,6 +107,25 @@ policy comparison so a mismatch retains its finalization diagnostics.
 Keep #551 held until booted update/rollback evidence exists on the new head;
 host fixtures do not prove either backend's update behavior.
 
+Image-content gates belong to the candidate, never the baseline. The baseline
+is the previous `:testing`, so a rule that lands with the candidate (the
+`/efi` mountpoint from #1330; the `initrc_t` bootc-probe rule the installer's
+boot receipt needs, #1131; the contract-service check from #1282) is one the
+baseline cannot meet; failing it there failed every run, and because promotion
+needs the lifecycle, `:testing` could never advance (#1343, and again from run
+44799050676). The ISO install of the baseline runs `luks-e2e.sh` with
+`UTAH_E2E_BASELINE=1`, which skips every content gate, and the upgraded
+candidate runs each one: `verify_efi_mount` (`evidence/efi-upgraded.txt`),
+`verify_bootc_probe`, which reads only the candidate boot's AVCs because
+`audit.log` keeps the baseline's (`evidence/avc-upgraded.log`), and
+`verify_setup_state` from `iso/scripts/e2e-services.sh`, which both harnesses
+source: every unit in the candidate contract's `[services]` lists is loaded,
+enabled and not failed. A new gate in `luks-e2e.sh` that holds the image to a
+rule from this checkout -- including a check that reads the image's own
+contract but is newer than the baseline -- goes behind `BASELINE_INSTALL == 0`
+with a `verify_* upgraded` twin here. `tests/test_lifecycle_content_gates.py`
+pins both halves.
+
 The baseline image (default `ghcr.io/projectbluefin/utah:testing`, the target
 ref `just iso testing` builds with) is the ref a live ISO installs its offline
 payload under, and phase 1 fails unless the booted deployment tracks it. The
@@ -180,3 +199,34 @@ just boot-iso    # success: live session renders; serial shows UTAH_LIVE_READY
 
 See the [disposable ISO review matrix](local-testing/references/iso-review.md)
 for read-only, all-flavor offline installation tests on KVM runners.
+
+## Exit codes
+
+`luks-e2e.sh` and `lifecycle-e2e.sh` share `iso/scripts/e2e-exit.sh`. The exit
+code names the phase that failed, whether a check called `fail` or a bare
+command tripped `set -e`; read it before the log.
+
+| Code | Meaning |
+|---|---|
+| 0 | passed |
+| 1 | usage error, or a failure before the first phase |
+| 11-17 | `luks-e2e.sh` phase 1-7 failed (10 + phase): 11 live boot, 12 live desktop, 13 install, 14 installed boot, 15 Plymouth prompt and unlock, 16 graphical target and offline payload, 17 login, desktop and Flatpaks |
+| 20 | `lifecycle-e2e.sh` failed preparing or booting the installed disk |
+| 21-25 | `lifecycle-e2e.sh` phase 1-5 failed (20 + phase): 21 baseline, 22 staging, 23 upgraded boot, 24 rollback, 25 summary |
+| 75 | `E2E_WALL_CLOCK_DEADLINE` passed; the harness failed early so its evidence uploads |
+| 77 | QEMU or OVMF is missing on the host |
+
+`lifecycle-e2e.sh` keeps `luks-e2e.sh`'s code when its ISO install fails, so
+a lifecycle job that exits 13 failed installing the baseline.
+
+**Wall-clock deadline.** A job killed by `timeout-minutes` is cancelled with
+nothing uploaded. The `luks` and `lifecycle` jobs therefore start with a "Set
+the job deadline" step that exports `E2E_WALL_CLOCK_DEADLINE` (epoch seconds)
+as job start + `timeout-minutes` - 10 minutes; its `TIMEOUT_MINUTES` must equal
+the job's `timeout-minutes` (`tests/test_e2e_exit.py` checks). When the
+deadline passes, a watcher signals the harness, which takes a screenshot of
+any running VM and exits 75 through its normal EXIT trap (disk metadata kept,
+QEMU stopped). Bash runs the handler only once the foreground command returns,
+so after `E2E_DEADLINE_GRACE` seconds (default 30) the watcher terminates the
+harness's child processes to unblock it. Locally the variable is unset and no
+watcher starts.

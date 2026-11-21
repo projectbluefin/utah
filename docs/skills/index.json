@@ -15,8 +15,8 @@
         "promotion"
       ],
       "description": "Build and contract jobs, promotion, branch sync, parity and extension update workflows, reusable actions and Renovate pins. Use when editing GitHub Actions or debugging CI.",
-      "version": "1.3",
-      "last_updated": "2026-10-31",
+      "version": "1.4",
+      "last_updated": "2026-11-21",
       "doc_type": "reference"
     },
     {
@@ -34,7 +34,7 @@
       ],
       "description": "Layer discipline: COPY folding, late per-image ARGs, script staging, clean+lint in one layer. Use when modifying the Containerfile, adding a script, or investigating build time.",
       "version": "1.0",
-      "last_updated": "2026-10-13",
+      "last_updated": "2026-11-19",
       "doc_type": "policy"
     },
     {
@@ -122,11 +122,12 @@
         "ogc",
         "cache",
         "btrfs",
-        "fsverity"
+        "fsverity",
+        "secure-boot"
       ],
-      "description": "The kernel cache image, its content-hash tag, and unpack-or-compile behavior. Use when touching install-fedora-kernel.sh, kernel-patches, install-ogc-kernel.sh, install-nvidia.sh, Containerfile.kernel, or debugging flavored builds.",
+      "description": "The kernel cache image, its content-hash tag, and unpack-or-compile behavior. Use when touching install-fedora-kernel.sh, kernel-patches, install-ogc-kernel.sh, install-nvidia.sh, Containerfile.kernel, flavored builds, or Secure Boot status.",
       "version": "1.0",
-      "last_updated": "2026-11-07",
+      "last_updated": "2026-11-20",
       "doc_type": "reference"
     },
     {
@@ -145,7 +146,7 @@
       ],
       "description": "Atomic bootc lifecycle transitions between two immutable Utah digests in QEMU: baseline, staging, reboot, and rollback. BLS boot-file and boot-manager checks, verify-boot-files.sh, uupd versus bootc staging, and the e2e harness.",
       "version": "1.0",
-      "last_updated": "2026-11-17",
+      "last_updated": "2026-11-20",
       "doc_type": "runbook"
     },
     {
@@ -164,7 +165,7 @@
       ],
       "description": "Local validation loop: build-ghcr, bootc install to-disk, QEMU/noVNC boot, live ISO boot paths, and Secure Boot strategy. Use when validating changes end-to-end or debugging boot, GDM, or live-session failures.",
       "version": "1.0",
-      "last_updated": "2026-10-29",
+      "last_updated": "2026-11-21",
       "doc_type": "runbook"
     },
     {
@@ -182,7 +183,7 @@
       ],
       "description": "Package contract: Utah-owned base.toml, utah.toml overlay, device firmware, [unavailable] rules, repository policy, Dakota gap triage (baselines/GAP.md). Use when adding, removing, or debugging packages or parity/check-repos failures.",
       "version": "2.0",
-      "last_updated": "2026-11-14",
+      "last_updated": "2026-11-20",
       "doc_type": "policy"
     },
     {

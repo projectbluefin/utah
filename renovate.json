@@ -32,7 +32,7 @@
     {
       "customType": "regex",
       "managerFilePatterns": [
-        "/^\\.github/workflows/(post-testing-e2e|execute-release)\\.yml$/"
+        "/^\\.github/workflows/(post-testing-e2e|execute-release|candidate-common)\\.yml$/"
       ],
       "matchStrings": [
         "\\s(?:gate_)?test_ref: (?<currentDigest>[0-9a-f]{40}) # (?<currentValue>v1)\\s"

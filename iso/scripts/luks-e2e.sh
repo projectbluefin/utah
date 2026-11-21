@@ -14,7 +14,12 @@
 # A trailing check, after phase 7's desktop and fastfetch evidence, confirms
 # the Brewfile's default Flatpak set is also present offline -- deferred
 # because it deploys asynchronously on first boot and checking right after
-# login undercounts it.
+# login undercounts it. Then every unit the installed contract's [services]
+# lists as enabled is checked: still enabled after first boot, and not failed.
+#
+# A failure in phase N exits 10 + N; E2E_WALL_CLOCK_DEADLINE (epoch seconds)
+# makes the harness fail with exit 75 and its evidence once it passes, and a
+# missing QEMU or OVMF exits 77 (iso/scripts/e2e-exit.sh).
 #
 # Phases 2 and 7 are the point. An image can install perfectly, unlock
 # perfectly, and still be useless if the desktop never starts -- and a boot
@@ -36,6 +41,8 @@ VM_RAM="${UTAH_E2E_RAM:-8192}"
 VM_CPUS="${UTAH_E2E_CPUS:-4}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "${ROOT}/iso/scripts/extension-state.sh"
+source "${ROOT}/iso/scripts/e2e-exit.sh"
+source "${ROOT}/iso/scripts/e2e-services.sh"
 
 # The account the installer creates, and the one phase 6 logs in as.
 TEST_USER="${UTAH_E2E_USER:-utahtest}"
@@ -87,10 +94,21 @@ SSH_PORT_INSTALLED=$((SSH_PORT + 1))
 # turns "it hung somewhere in phase 5" into something you can just look at.
 VNC_LIVE="${UTAH_E2E_VNC_LIVE:-2}"
 VNC_INSTALLED="${UTAH_E2E_VNC_INSTALLED:-3}"
+# UTAH_E2E_BASELINE=1: the installed image is the lifecycle's baseline, the
+# previous :testing, which lifecycle-e2e.sh installs before upgrading it.
+# Content gates -- checks that hold the image to a rule from this checkout,
+# such as a mountpoint, a policy rule or the contract-service check a later
+# commit added -- are skipped: the baseline predates the rule, failing it
+# blocks the promotion that would replace it, and the baseline never gets the
+# fix (#1343, #1346). The lifecycle runs each skipped gate on the upgraded
+# candidate instead, and the luks job runs them on every candidate it
+# installs. Install, boot, unlock, login, the desktop and the default Flatpak
+# set still run.
+BASELINE_INSTALL="${UTAH_E2E_BASELINE:-0}"
 VARS="${WORK}/ovmf-vars.fd"
 
 QEMU="$(command -v qemu-system-x86_64 /usr/libexec/qemu-kvm 2>/dev/null | head -1)"
-[[ -n "${QEMU}" ]] || { echo "qemu-system-x86_64 not found" >&2; exit 1; }
+[[ -n "${QEMU}" ]] || e2e_exit "${E2E_EXIT_DEPENDENCY}" "qemu-system-x86_64 not found"
 
 OVMF_CODE=""
 for f in /usr/share/edk2/ovmf/OVMF_CODE.fd /usr/share/OVMF/OVMF_CODE_4M.fd \
@@ -98,14 +116,14 @@ for f in /usr/share/edk2/ovmf/OVMF_CODE.fd /usr/share/OVMF/OVMF_CODE_4M.fd \
          /home/linuxbrew/.linuxbrew/share/qemu/edk2-x86_64-code.fd; do
     [[ -f "$f" ]] && { OVMF_CODE="$f"; break; }
 done
-[[ -n "${OVMF_CODE}" ]] || { echo "OVMF firmware not found" >&2; exit 1; }
+[[ -n "${OVMF_CODE}" ]] || e2e_exit "${E2E_EXIT_DEPENDENCY}" "OVMF firmware not found"
 OVMF_VARS_SRC=""
 for f in /usr/share/edk2/ovmf/OVMF_VARS.fd /usr/share/OVMF/OVMF_VARS_4M.fd \
          /usr/share/OVMF/OVMF_VARS.fd \
          /home/linuxbrew/.linuxbrew/share/qemu/edk2-i386-vars.fd; do
     [[ -f "$f" ]] && { OVMF_VARS_SRC="$f"; break; }
 done
-[[ -n "${OVMF_VARS_SRC}" ]] || { echo "OVMF variable store not found" >&2; exit 1; }
+[[ -n "${OVMF_VARS_SRC}" ]] || e2e_exit "${E2E_EXIT_DEPENDENCY}" "OVMF variable store not found"
 
 ACCEL="-accel kvm"
 test -r /dev/kvm || { echo "No /dev/kvm; falling back to TCG (much slower)"; ACCEL="-accel tcg,thread=multi"; }
@@ -353,12 +371,14 @@ preserve_failed_disk_diagnostics() {
 
 cleanup() {
     # $? must be read before anything else runs in this function, or it
-    # stops reflecting the exit that triggered the trap. `fail()` funnels
-    # every deliberate failure through `exit 1`, but a bare command failing
-    # under `set -e` (the installer step in phase 3, for one) aborts here
-    # directly without ever calling `fail()` -- so diagnostics belong in the
-    # trap that always runs, not only in the helper that sometimes does.
+    # stops reflecting the exit that triggered the trap. A bare command
+    # failing under `set -e` (the installer step in phase 3, for one) aborts
+    # here directly without ever calling `fail()` -- so diagnostics belong in
+    # the trap that always runs, not only in the helper that sometimes does.
+    # The same holds for the exit status: e2e_status reports the phase's code
+    # for either kind of failure (iso/scripts/e2e-exit.sh).
     local status=$?
+    trap '' USR1
     (( status != 0 )) && preserve_failed_disk_diagnostics
     if [[ -n "${serial_follow_pid}" ]]; then
         kill "${serial_follow_pid}" 2>/dev/null || true
@@ -367,74 +387,23 @@ cleanup() {
     for pid in "${qemu_pids[@]:-}"; do
         [[ -n "${pid}" ]] && kill "${pid}" 2>/dev/null || true
     done
+    exit "$(e2e_status "${status}")"
 }
 trap cleanup EXIT
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
-check_system_unit_state() {
-    local unit="$1" required_enabled="${2:-false}" required_run="${3:-false}" boot_pass="${4:-first}"
-    local state load_state="" active_state="" result="" start_time="" key value
-    state="$(ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' systemctl show --property=LoadState --property=ActiveState --property=Result --property=ExecMainStartTimestamp '${unit}'" 2>/dev/null || true)"
-    while IFS='=' read -r key value; do
-        case "${key}" in
-            LoadState) load_state="${value}" ;;
-            ActiveState) active_state="${value}" ;;
-            Result) result="${value}" ;;
-            ExecMainStartTimestamp) start_time="${value}" ;;
-        esac
-    done <<< "${state}"
-    [[ "${load_state}" == loaded ]] || fail "required system unit ${unit} is ${load_state:-unavailable}"
-    # Result= is success/exit-code/signal/timeout/...; it is never "failed".
-    [[ "${active_state}" != failed && "${result}" == success ]] \
-        || fail "system unit ${unit} failed during ${boot_pass} boot (ActiveState=${active_state:-unknown} Result=${result:-unknown})"
-    if [[ "${required_run}" == true && ( -z "${start_time}" || "${start_time}" == "n/a" ) ]]; then
-        fail "required system unit ${unit} did not execute during ${boot_pass} boot"
-    fi
-    if [[ "${required_enabled}" == true ]]; then
-        state="$(ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' systemctl is-enabled '${unit}'" 2>/dev/null || true)"
-        [[ "${state}" == enabled ]] || fail "required system unit ${unit} is ${state:-not enabled}"
-    fi
-    echo "  ${unit}: ${result:-unknown}"
-}
-
-check_user_setup_unit() {
-    local boot_pass="${1:-first}"
-    local unit="ublue-user-setup.service" state load_state="" active_state="" result="" start_time="" enabled="" key value
-    state="$(ssh_target "systemctl --user show --property=LoadState --property=ActiveState --property=Result --property=ExecMainStartTimestamp '${unit}'" 2>/dev/null || true)"
-    while IFS='=' read -r key value; do
-        case "${key}" in
-            LoadState) load_state="${value}" ;;
-            ActiveState) active_state="${value}" ;;
-            Result) result="${value}" ;;
-            ExecMainStartTimestamp) start_time="${value}" ;;
-        esac
-    done <<< "${state}"
-    [[ "${load_state}" == loaded ]] || fail "user unit ${unit} is ${load_state:-unavailable}"
-    # Result= is success/exit-code/signal/timeout/...; it is never "failed".
-    [[ "${active_state}" != failed && "${result}" == success ]] \
-        || fail "user unit ${unit} failed during ${boot_pass} boot (ActiveState=${active_state:-unknown} Result=${result:-unknown})"
-    [[ -n "${start_time}" && "${start_time}" != "n/a" ]] \
-        || fail "user unit ${unit} did not execute during ${boot_pass} boot"
-    enabled="$(ssh_target "systemctl --user is-enabled '${unit}'" 2>/dev/null || true)"
-    [[ "${enabled}" == enabled ]] || fail "user unit ${unit} is ${enabled:-not enabled}"
-    echo "  ${unit}: ${result:-unknown}; enabled"
-}
-
-verify_setup_state() {
-    local boot_pass="${1:-first}"
-    echo "Checking ${boot_pass}-boot setup units and desktop enablement..."
-    # Exclude network-bound update jobs and optional Tailscale: this VM has no
-    # network, so neither boot's setup checks should fail on those units.
-    check_system_unit_state flatpak-nuke-fedora.service true false "${boot_pass}"
-    check_system_unit_state flatpak-preinstall.service true true "${boot_pass}"
-    check_system_unit_state ublue-system-setup.service true true "${boot_pass}"
-    check_system_unit_state brew-setup.service true false "${boot_pass}"
-    for unit in input-remapper.service bluefin-stats-refresh.timer uupd.timer; do
-        check_system_unit_state "${unit}" true false "${boot_pass}"
+# Fail before CI's timeout-minutes kills the job, so the diagnostics upload.
+# The EXIT trap above still runs: it keeps the disk metadata and stops QEMU.
+deadline_reached() {
+    E2E_EXIT_CODE="${E2E_EXIT_DEADLINE}"
+    local sock
+    for sock in "${MONITOR_INSTALLED}" "${MONITOR_LIVE}"; do
+        [[ -S "${sock}" ]] && { shot "deadline-$(basename "${sock}" .sock)" "${sock}" || true; }
     done
-    check_user_setup_unit "${boot_pass}"
+    e2e_exit "${E2E_EXIT_DEADLINE}" "E2E_WALL_CLOCK_DEADLINE reached (exit code for the phase in progress: ${E2E_PHASE_EXIT}); failing now so the evidence uploads before the job is killed"
 }
+e2e_deadline_start deadline_reached
 
 verify_flathub_remote() {
     local remotes
@@ -612,6 +581,7 @@ if [[ -f "${WORK}/try.pid" ]] && kill -0 "$(cat "${WORK}/try.pid" 2>/dev/null)" 
     fail "a VM from 'just try-installed' is running on this work directory (pid $(cat "${WORK}/try.pid")); stop it first: kill \$(cat ${WORK}/try.pid)"
 fi
 
+E2E_PHASE_EXIT=11
 echo "=== Phase 1/7: boot the live ISO ==="
 rm -f "${INSTALL_DISK}" "${MONITOR_LIVE}" "${MONITOR_INSTALLED}" \
       "${SERIAL_LIVE}" "${SERIAL_INSTALLED}"
@@ -657,6 +627,7 @@ for i in $(seq 1 90); do
     sleep 5
 done
 
+E2E_PHASE_EXIT=12
 echo "=== Phase 2/7: prove the live session reached a desktop ==="
 # The live ISO autologins liveuser into GNOME. If that silently degraded to a
 # text console the installer would still be reachable over SSH and every other
@@ -706,24 +677,64 @@ live_session_type="$(ssh_live "loginctl show-session \$(loginctl show-user liveu
 echo "  live session type: ${live_session_type:-unknown}"
 shot_until_drawn live-desktop "${MONITOR_LIVE}"
 
+E2E_PHASE_EXIT=13
 echo "=== Phase 3/7: install onto an encrypted disk ==="
+# The live media binds the installer to its embedded payload: an unpacked
+# containers-storage graphroot in the squashfs, bind-mounted read-only at
+# /var/lib/containers/storage and named by /etc/bootc-installer/media-input.json
+# (iso/scripts/embed-store-payload.sh). Fisherman refuses to install on live
+# media without that receipt, and refuses any image other than the one it
+# names. Check the binding first, so a broken one fails here with its cause
+# rather than as local_source_unavailable inside the installer.
+echo "Checking the live media's install-source receipt..."
+ssh_live 'cat /etc/bootc-installer/media-input.json' > "${WORK}/media-input.json" \
+    || fail "the live media has no /etc/bootc-installer/media-input.json: fisherman refuses to install without it"
+MEDIA_BINDING="$(python3 - "${WORK}/media-input.json" "${PAYLOAD_IMAGE}" <<'PY'
+import json
+import sys
+
+receipt = json.load(open(sys.argv[1]))
+payload = sys.argv[2]
+for key in ("image", "targetImgref"):
+    if receipt.get(key) != payload:
+        sys.exit(f"media-input.json {key} is {receipt.get(key)!r}, not the payload {payload!r}")
+store = receipt.get("containersStoragePath", "")
+if receipt.get("schemaVersion") != 1 or store != "/var/lib/containers/storage" or receipt.get("ociLayoutPath"):
+    sys.exit(f"media-input.json is not a v1 receipt for the store at /var/lib/containers/storage: {receipt}")
+print(store, receipt["platformManifestDigest"])
+PY
+)" || fail "the live media's install-source receipt does not bind the payload ${PAYLOAD_IMAGE}"
+read -r MEDIA_STORE MEDIA_DIGEST <<<"${MEDIA_BINDING}"
+ssh_live "findmnt -no OPTIONS -T '${MEDIA_STORE}'" | grep -Eq '^ro(,|$)' \
+    || fail "the embedded payload store ${MEDIA_STORE} is not on a read-only mount: fisherman refuses it"
+# The same lookup fisherman's store gate makes.
+stored_digest="$(ssh_live "sudo skopeo inspect --format '{{.Digest}}' 'containers-storage:${PAYLOAD_IMAGE}'")" \
+    || fail "the live system cannot resolve containers-storage:${PAYLOAD_IMAGE} from the embedded store"
+[[ "${stored_digest}" == "${MEDIA_DIGEST}" ]] \
+    || fail "the embedded store reports ${stored_digest} for ${PAYLOAD_IMAGE}, but the receipt binds ${MEDIA_DIGEST}"
+echo "  receipt: ${PAYLOAD_IMAGE} ${MEDIA_DIGEST} from ${MEDIA_STORE} (read-only)"
+
 # The ISO installs with the ostree backend (#1129): an empty "image" with a
-# "targetImgref" is the offline ostree shape, installing from
-# containers-storage without pulling.
+# "targetImgref" selects the source the receipt binds.
 #
-# UTAH_E2E_COMPOSEFS_BACKEND=1 opts in to the composefs backend. Fisherman then
-# needs an explicit source reference (containers-storage:...) to export an OCI
-# layout before running bootc install; targetImgref is kept for day-2 updates.
-# It is not the default until it passes for every flavor (#1129).
+# UTAH_E2E_COMPOSEFS_BACKEND=1 opts in to the composefs backend, naming the
+# receipt's image as the GUI installer does; fisherman installs it from the
+# embedded store either way. It is not the default until it passes for
+# every flavor (#1129).
 #
 # The user block is what phase 6 logs in as. Without it the installed system
 # has no account at all and the greeter has nobody to offer.
 #
+# No flatpaks key, like the GUI's recipe for Utah's catalog entry: since
+# fisherman 58eaf29e an absent key copies the live system's Flatpaks and []
+# copies none, which left the installed system without Ghostty or any
+# default Flatpak (#1129).
+#
 # Deliberately no scratch disk mounted at /var/lib/containers: Bluefin's ISO
 # pulls the payload from a registry and needs real space for it; Utah's ISO
-# carries the image in the squashfs, and mounting over that path hides it.
+# carries the image in the squashfs.
 if [[ "${UTAH_E2E_COMPOSEFS_BACKEND:-0}" == 1 ]]; then
-    RECIPE_IMAGE="containers-storage:${PAYLOAD_IMAGE}"
+    RECIPE_IMAGE="${PAYLOAD_IMAGE}"
     RECIPE_COMPOSEFS_BACKEND=true
 else
     RECIPE_IMAGE=""
@@ -745,8 +756,7 @@ cat > "${WORK}/recipe.json" <<EOF
     "fullname": "Utah End To End",
     "password": "${TEST_PASSWORD}",
     "groups": ["wheel"]
-  },
-  "flatpaks": []
+  }
 }
 EOF
 scp_live "${WORK}/recipe.json" liveuser@127.0.0.1:/tmp/luks-recipe.json
@@ -783,7 +793,7 @@ ssh_live 'theme=$(plymouth-set-default-theme) &&
 scp_live liveuser@127.0.0.1:/tmp/utah-plymouth-theme "${PLYMOUTH_THEME_FILE}"
 scp_live liveuser@127.0.0.1:/tmp/utah-plymouth-watermark.png "${PLYMOUTH_WATERMARK}"
 
-echo "Running the installer from the ISO's embedded store..."
+echo "Running the installer from the ISO's embedded payload store..."
 ssh_live 'sudo /usr/local/bin/fisherman /tmp/luks-recipe.json'
 
 # The installed system already boots with console=ttyS0, but also with
@@ -795,17 +805,28 @@ ssh_live 'sudo /usr/local/bin/fisherman /tmp/luks-recipe.json'
 # serial log, so the graphical-target check below also asks systemd over SSH.
 # Dakota patches the same entries; it only has to add the console because its
 # entries lack one.
+#
+# fisherman writes "rhgb quiet" only when extras.bootSplash is on, and for an
+# image in a catalog it takes extras from that entry alone: an entry without
+# them turned the splash off (#1129, "Desktop extras: none (the catalog entry
+# Utah sets none)"). An entry without rhgb fails here, before the boot, with
+# that cause rather than as a missing watermark in phase 5.
 echo "Making the installed system boot verbosely on the serial console..."
+bls_status=0
 ssh_live 'sudo bash -euc "
     tmp=\$(mktemp -d)
     trap \"umount \$tmp 2>/dev/null || true; rmdir \$tmp\" EXIT
-    seen=0
+    seen=0 splashless=0
     for part in /dev/vda2 /dev/vda1; do
         mount \$part \$tmp 2>/dev/null || continue
         for entry in \$tmp/loader/entries/*.conf \$tmp/EFI/*/loader/entries/*.conf; do
             [ -f \"\$entry\" ] || continue
             grep -q \"^options \" \"\$entry\" || continue
             seen=\$((seen+1))
+            if ! grep \"^options \" \"\$entry\" | grep -qw rhgb; then
+                splashless=\$((splashless+1))
+                echo \"  \$(basename \$entry) has no rhgb: \$(grep \"^options \" \"\$entry\")\" >&2
+            fi
             sed -i \"s/ quiet//\" \"\$entry\"
             grep -q \"console=ttyS0\" \"\$entry\" || \
                 sed -i \"s|^options .*|& console=tty0 console=ttyS0|\" \"\$entry\"
@@ -835,8 +856,14 @@ ssh_live 'sudo bash -euc "
     blockdev --flushbufs /dev/vda2 2>/dev/null || true
     blockdev --flushbufs /dev/vda 2>/dev/null || true
     echo \"boot entries seen: \$seen\"
-    [ \$seen -gt 0 ]
-"' || fail "found no boot entry to make verbose -- the install may not have written one"
+    [ \$seen -gt 0 ] || exit 1
+    [ \$splashless -eq 0 ] || exit 3
+"' || bls_status=$?
+case "${bls_status}" in
+    0) ;;
+    3) fail "the installer wrote a boot entry without rhgb, so Plymouth will draw its text prompt: does the catalog entry in iso/live/src/etc/bootc-installer/images.json turn extras.bootSplash on (and does the install log say so under \"Desktop extras\")?" ;;
+    *) fail "found no boot entry to make verbose -- the install may not have written one" ;;
+esac
 
 echo "Install complete. Powering the live VM down..."
 # Wait for it to actually exit, rather than assuming a few seconds is enough.
@@ -879,6 +906,7 @@ kill -0 "${live_pid}" 2>/dev/null && fail "the live VM would not exit; refusing 
 echo "  live VM exited cleanly"
 sync
 
+E2E_PHASE_EXIT=14
 echo "=== Phase 4/7: boot the installed disk ==="
 # Carry the live VM's firmware variables over rather than starting from a
 # pristine copy. The installer writes an NVRAM boot entry pointing at
@@ -906,6 +934,7 @@ qemu_pids+=("$(cat "${WORK}/installed.pid")")
 echo "  watch the installed VM: vnc://127.0.0.1:$((5900 + VNC_INSTALLED))"
 sleep 5
 
+E2E_PHASE_EXIT=15
 echo "=== Phase 5/7: see Plymouth's branded passphrase prompt and answer it ==="
 verify_plymouth_prompt installed-luks-prompt "${SERIAL_INSTALLED}"
 status=0
@@ -920,6 +949,7 @@ if [[ ${status} -ne 0 ]]; then
     fail "LUKS unlock or post-unlock boot failed (exit ${status})"
 fi
 
+E2E_PHASE_EXIT=16
 echo "=== Phase 6/7: reach the graphical target and verify the offline payload ==="
 echo "Waiting for the installed system to reach the graphical target..."
 emergency_seen=""
@@ -964,10 +994,19 @@ for i in $(seq 1 60); do
 done
 echo "  ssh: logged in as ${TEST_USER}"
 
+# A content gate: skipped on the lifecycle's baseline (UTAH_E2E_BASELINE=1),
+# an earlier :testing that may predate /efi (#1330, #1343); the lifecycle
+# checks the upgraded candidate instead.
+if [[ "${BASELINE_INSTALL}" == 0 ]]; then
+    echo "Verifying the installed EFI mountpoint and units..."
+    ssh_target 'test -d /efi && for unit in efi.automount efi.mount; do load=$(systemctl show "$unit" -p LoadState --value) && state=$(systemctl show "$unit" -p ActiveState --value) && echo "  $unit: load=$load active=$state" && test "$state" != failed || exit 1; done' \
+        || fail "EFI mountpoint is missing or an EFI mount unit failed on the installed system"
+fi
+
 echo "Verifying the installed system booted the offline embedded payload..."
 # bootc's own view of what is booted is the ground truth for "the offline
 # payload survived the install": fisherman's recipe named targetImgref
-# exactly ${PAYLOAD_IMAGE}, formatted from the ISO's embedded
+# exactly ${PAYLOAD_IMAGE}, installed from the ISO's embedded read-only
 # containers-storage with no network (phase 3), so the booted image
 # reference matching it proves that payload -- not a substitute, and not one
 # reached over a network this guest does not have -- is what is running.
@@ -993,6 +1032,51 @@ if [[ -n "${UTAH_E2E_PAYLOAD_CHECK-x}" ]]; then
     [[ "${booted_image}" == "${PAYLOAD_IMAGE}" ]] \
         || fail "installed system booted '${booted_image:-<unreadable>}', not the offline payload '${PAYLOAD_IMAGE}'"
     echo "  booted image: ${booted_image}"
+    # Both backends boot a re-serialized manifest: fisherman runs `skopeo copy
+    # containers-storage:<payload> oci:<scratch>` and bootc installs that copy,
+    # so bootc reports the copy's manifest digest, not the receipt's (composefs
+    # run 44688721139, ostree run 44697806988). The config digest survives the
+    # copy, so tie the booted manifest to the receipt's config through what
+    # bootc stored at install. CI compares that config with the payload's.
+    payload_config="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["configDigest"])' "${WORK}/media-input.json")" \
+        || fail "the receipt in ${WORK}/media-input.json has no configDigest"
+    booted_status="$(ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' bootc status --json")" \
+        || fail "could not read bootc status on the installed system"
+    booted_digest="$(python3 -c 'import json, sys; print(json.load(sys.stdin)["status"]["booted"]["image"]["imageDigest"])' <<<"${booted_status}")" \
+        || fail "could not read the booted image digest from bootc status"
+    if [[ "${RECIPE_COMPOSEFS_BACKEND}" == true ]]; then
+        # The install pulls one image into bootc's composefs repository, whose
+        # streams are named by digest: its one manifest must be the booted
+        # one, and its one config the receipt's.
+        cfs_streams="$(ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' ls /sysroot/composefs/streams")" \
+            || fail "could not list bootc's composefs repository (/sysroot/composefs/streams) on the installed system"
+        [[ "$(grep '^oci-manifest-' <<<"${cfs_streams}" || true)" == "oci-manifest-${booted_digest}" \
+           && "$(grep '^oci-config-' <<<"${cfs_streams}" || true)" == "oci-config-${payload_config}" ]] \
+            || fail "bootc's composefs repository does not hold just the booted manifest ${booted_digest} and the receipt's config ${payload_config}: ${cfs_streams//$'\n'/ }"
+    else
+        # ostree-ext records the manifest it imported, and that manifest's
+        # digest, on the merge commit it deploys (`ostree.manifest-digest`,
+        # `ostree.manifest`). `ostree show` prints each as a GVariant string.
+        booted_commit="$(python3 -c 'import json, sys; print(json.load(sys.stdin)["status"]["booted"]["ostree"]["checksum"])' <<<"${booted_status}")" \
+            || fail "bootc status names no booted ostree commit"
+        commit_meta="$(ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' sh -c 'for key in ostree.manifest-digest ostree.manifest; do ostree show --repo=/sysroot/ostree/repo --print-metadata-key=\$key ${booted_commit} || exit; done'")" \
+            || fail "could not read the manifest recorded on the booted ostree commit ${booted_commit}"
+        python3 - "${booted_digest}" "${payload_config}" "${commit_meta}" <<'PY' \
+            || fail "the booted ostree commit ${booted_commit} is not the booted manifest with the receipt's config"
+import ast
+import json
+import sys
+
+booted_digest, payload_config, meta = sys.argv[1:]
+digest, manifest = (ast.literal_eval(line) for line in meta.splitlines())
+config = json.loads(manifest)["config"]["digest"]
+if digest != booted_digest or config != payload_config:
+    sys.exit(f"commit records manifest {digest} with config {config}; "
+             f"expected manifest {booted_digest} with config {payload_config}")
+PY
+    fi
+    printf '%s\n' "${payload_config}" > "${WORK}/booted-config-digest"
+    echo "  booted manifest ${booted_digest} (fisherman's copy) has the receipt's config ${payload_config}"
 fi
 
 # An optional review matrix must prove the requested flavor actually booted.
@@ -1029,22 +1113,60 @@ ssh_target "
 echo "  logrotate.service: succeeded with a nonempty state file"
 
 # bootc's mac_admin probe (a chcon to an undefined label) is denied whenever a
-# plain service runs bootc, such as common's projectbluefin-countme. The
-# utah_bootc_probe policy module dontaudits it; any such AVC on the installed
-# system means the module is not loaded (#1198; check from #1220).
-echo "Verifying bootc's SELinux probe logs no AVC denials..."
-ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' sh -c 'grep -hF avc: /var/log/audit/audit.log 2>/dev/null; journalctl -b --no-pager -o cat 2>/dev/null | grep -F avc:; true'" \
-    > "${WORK}/avc.log" || fail "could not read the installed system's AVC records"
-if grep -E 'denied .*comm="(chcon|bootc)"' "${WORK}/avc.log" >&2; then
-    fail "chcon was denied mac_admin during boot (#1198): utah_bootc_probe is not in effect"
+# plain service runs bootc: common's projectbluefin-countme (unconfined_service_t)
+# or the installer's first-boot fisherman-boot-receipt.service, which runs its
+# script with /bin/sh (initrc_t). The utah_bootc_probe policy module dontaudits
+# both; any such AVC on the installed system means the module is not loaded or
+# a caller runs bootc from a domain it does not cover (#1198, #1129; check
+# from #1220). A content gate: the lifecycle's baseline (UTAH_E2E_BASELINE=1)
+# may predate a rule the installer's boot needs -- :testing from before #1131
+# has no initrc_t rule -- so the lifecycle checks the upgraded candidate.
+if [[ "${BASELINE_INSTALL}" == 0 ]]; then
+    echo "Verifying bootc's SELinux probe logs no AVC denials..."
+    ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' sh -c 'grep -hF avc: /var/log/audit/audit.log 2>/dev/null; journalctl -b --no-pager -o cat 2>/dev/null | grep -F avc:; true'" \
+        > "${WORK}/avc.log" || fail "could not read the installed system's AVC records"
+    if grep -E 'denied .*comm="(chcon|bootc)"' "${WORK}/avc.log" >&2; then
+        # The AVC names only the probe's domain. Keep what identifies the caller:
+        # the probe's SYSCALL records (ppid, exe), the services whose main PID
+        # precedes it, and the labels and mounts the transition depends on.
+        cat > "${WORK}/bootc-probe-diag.sh" <<'DIAG'
+echo "## SYSCALL records of chcon/bootc"
+grep -E 'type=SYSCALL.*comm="(chcon|bootc)"' /var/log/audit/audit.log
+echo "## pid 1"
+ps -o pid,label,args -p 1
+echo "## labels"
+ls -Z /usr/bin/bootc /usr/bin/chcon /usr/bin/bash /usr/bin/unshare \
+    /usr/bin/ublue-booted-image-sync /usr/libexec/projectbluefin-countme 2>&1
+echo "## mounts"
+findmnt -o TARGET,SOURCE,FSTYPE,OPTIONS / /usr /etc /var /sysroot 2>&1
+echo "## services by main PID"
+systemctl show --type=service --all -p Id -p ExecMainPID -p ExecMainStartTimestampMonotonic '*' \
+    | awk -F= '/^Id=/{id=$2} /^ExecMainPID=/{pid=$2} /^ExecMainStartTimestampMonotonic=/{if (pid > 0) print pid, $2, id}' \
+    | sort -n
+DIAG
+        scp_target "${WORK}/bootc-probe-diag.sh" "${TEST_USER}@127.0.0.1:/tmp/utah-bootc-probe-diag.sh" >/dev/null \
+            && ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' sh /tmp/utah-bootc-probe-diag.sh" \
+                > "${WORK}/bootc-probe-diag.log" 2>&1 || true
+        cat "${WORK}/bootc-probe-diag.log" >&2 || true
+        fail "chcon was denied mac_admin during boot (#1198): utah_bootc_probe is not in effect (callers: bootc-probe-diag.log)"
+    fi
+    echo "  bootc chcon AVC denials: none"
+else
+    echo "  bootc probe AVC gate: skipped on the lifecycle baseline; the upgraded candidate is checked"
 fi
-echo "  bootc chcon AVC denials: none"
 
+E2E_PHASE_EXIT=17
 echo "=== Phase 7/7: log in and prove the desktop starts ==="
 ssh_target 'systemctl is-active gdm.service' 2>/dev/null | grep -qx active \
     || fail "gdm is not running on the installed system"
 echo "  gdm.service: active"
-shot installed-greeter "${MONITOR_INSTALLED}"
+# The greeter starts long before graphical.target when a boot unit is slow
+# (flatpak-appstream-refresh held it for five minutes offline in run
+# 44715273054), and GDM blanks an idle screen: the shot was flat black on
+# nvidia and nvidia-gaming (runs 44688721139, 44715273054). Press Shift, which
+# types nothing, to wake it, then retake until the greeter has drawn.
+monitor "${MONITOR_INSTALLED}" "sendkey shift" || true
+shot_until_drawn installed-greeter "${MONITOR_INSTALLED}"
 
 # Arrange for a terminal to open as part of the session that is about to
 # start. Launching a GTK application over SSH does not work and cannot be made
@@ -1348,9 +1470,19 @@ if [[ -n "${UTAH_E2E_FLATPAKS-x}" ]]; then
     echo "  default Flatpaks present offline: ${expected_flatpaks//$'\n'/, }"
 fi
 
+# First-boot service state is checked on every run, so the post-testing E2E
+# proves it for each candidate (#19). A content gate: the lifecycle's baseline
+# (UTAH_E2E_BASELINE=1) is an earlier :testing built before this check
+# (#1282), whose contract may list a unit a later commit fixed, so the
+# lifecycle checks the upgraded candidate. The review VM adds the graceful
+# second boot that proves first-boot work is idempotent.
+if [[ "${BASELINE_INSTALL}" == 0 ]]; then
+    verify_setup_state first
+else
+    echo "  contract service gate: skipped on the lifecycle baseline; the upgraded candidate is checked"
+fi
 if [[ -n "${UTAH_E2E_EXPECT_FLAVOR:-}" ]]; then
     verify_flathub_remote
-    verify_setup_state first
     repeat_installed_boot
     verify_setup_state repeat
     verify_flathub_remote
@@ -1404,7 +1536,7 @@ the check beside it passed.
    \`gdm.service\` active and \`gnome-shell\` running — not a text console
    that merely answers SSH.
 2. The installer creates a LUKS2 volume and installs from the ISO's embedded
-   container store, with no network.
+   read-only payload store, bound by its media-input.json receipt, with no network.
 3. The installed disk boots on its own, with no ISO attached.
 4. Plymouth draws its graphical passphrase prompt with the theme's watermark
    in place (not the text fallback), and the passphrase typed there opens the
@@ -1416,6 +1548,10 @@ the check beside it passed.
 7. The user logs in at the GDM greeter and gets a GNOME session.
 8. Every default Flatpak in the Brewfile contract is present and listed by
    \`flatpak\` on the installed, network-isolated system.
+9. Every unit in the installed contract's \`[services]\` \`enabled\` and
+   \`user_enabled\` lists is still enabled after first boot and has not
+   failed (\`brew-preinstall.service\` needs the network, so only its
+   enablement is checked).
 
 ## Screenshots
 

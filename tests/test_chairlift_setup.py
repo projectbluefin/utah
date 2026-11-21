@@ -119,7 +119,7 @@ class ChairLiftContractAlignmentTests(unittest.TestCase):
         # knobs the GNOME shell reads; losing any of them silently disables
         # settings persistence in the Control Center.
         files = self._files("configuration")
-        schemas = [p for p in files if p.endswith(".gschema.xml")]
+        schemas = [p for p in files if p.endswith(".gschema.xml") and "/io.projectbluefin.chairlift." in p]
         names = sorted(Path(p).name for p in schemas)
         self.assertEqual(
             names,

@@ -32,7 +32,7 @@ target is read over SSH as well as from serial.
 
 Only after the entire LUKS matrix succeeds, `production-iso` composes a fresh
 `DEBUG=0` x86_64 UEFI ISO from each same digest, writes its SHA-256 checksum,
-and retains both as a 30-day Actions artifact. It is deliberately an artifact,
+and retains both as a 3-day Actions artifact. It is deliberately an artifact,
 not a release: destination, flavor policy, naming, signing, and Secure Boot
 are product decisions tracked by #186. Production-ISO composition is a
 promotion prerequisite, so a failed production build cannot advance testing
@@ -46,17 +46,26 @@ hard-codes `enforcing=0 console=ttyS0,115200n8` on the boot entry for every
 `DEBUG` value (the documented Issue #22 exception: rootless `podman unshare`
 cannot write `security.selinux` xattrs into the squashfs root), so this ISO
 boots SELinux-permissive with a serial console.
-That was unremarkable while ISOs were disposable; retaining them for
-30 days under the name "production" makes it worth stating plainly. Running
+That was unremarkable while ISOs were disposable; retaining them under the
+name "production" makes it worth stating plainly. Running
 the live environment permissive is a product decision, and it belongs to #186
 along with signing and Secure Boot — it must be settled there before any of
 these ISOs reach users. Do not treat a green `production-iso` job as evidence
 that the media is release-ready.
 
-Each retained ISO is multi-GB (the size budget in `iso/scripts/build-iso.sh`
-is the ceiling, not the measured size), per flavor, per dispatch, at 30-day
-retention. That is real Actions storage; if the matrix widens, revisit the
-retention window before the flavor count.
+Each retained ISO is multi-GB (5.5 GB on average; the size budget in
+`iso/scripts/build-iso.sh` is the ceiling), per flavor, per dispatch. At 30-day
+retention that was 617 artifacts and 3.38 TB on 2026-11-20, nearly all
+superseded by newer runs; the last three days alone held 88 (497 GB), which is
+the steady state at `retention-days: 3`. Download an ISO you need within three
+days, and if the matrix widens, revisit the window before the flavor count.
+
+Every network step in the workflow (checkout, apt, GHCR login and pulls)
+carries its own `timeout-minutes`, so a wedged mirror or registry fails as a
+named step instead of holding the job to its 180-240 minute timeout. apt has
+taken up to 31 minutes on these runners and still succeeded (job
+135107979619), so apt steps get 40; checkout gets 10 and pulls 20.
+`tests/test_e2e_workflow_limits.py` fails a network step without one.
 
 Screenshot evidence identifies the tested image, not necessarily the E2E
 workflow checkout. Validate `source_sha` against `build_run` and the published
@@ -70,8 +79,9 @@ failure still blocks that acceptance and tag promotion.
 Every matrix job preserves build/test logs, serial logs, and screenshots,
 including on failure. Only passing jobs upload `docs/verification` with the
 source commit, original build run, E2E run, image digest and ISO checksum.
-The promotion job depends on the LUKS and production-ISO matrices, then runs
-the ratchet described next.
+The promotion job depends on the LUKS, production-ISO and testsuite matrices
+(#1329): a red or skipped leg skips it, so nothing is recorded and no tag
+moves. Then it runs the ratchet described next.
 
 **`:testing` is the latest E2E-green commit, not the branch tip.** Main takes
 a merge about every hour (people, Renovate, the hive bot), and a
@@ -80,8 +90,9 @@ the time a run finishes. Promotion therefore never compares against the branch
 tip. `promote-to-testing` runs `scripts/promotion-ratchet.py`, in order:
 
 1. **`record`** posts one commit status per tested digest on the tested commit:
-   context `e2e/post-testing/<image>`, state `success`, description = the exact
-   `sha256:` digest, plus the aggregate `e2e/post-testing`. A status is
+   contexts `e2e/post-testing/<image>` and `e2e/testsuite/<image>`, state
+   `success`, description = the exact `sha256:` digest, plus the aggregate
+   `e2e/post-testing`. A status is
    per commit and per digest, so a later run, a rebuild, or a newer commit never
    hides it ("last status wins" cannot happen). It is posted before the
    decision because it is true whatever the ratchet decides.
@@ -178,8 +189,10 @@ with a notice, and only that deliberate skip lets promotion go ahead; a failed,
 cancelled or upstream-skipped lifecycle job blocks it.
 
 **What the release checks.** See `release-cadence.md`: `execute-release.yml`
-requires the `e2e/post-testing/<image>` status for the digest `:testing` points
-at, on the commit that digest was built from.
+requires both the `e2e/post-testing/<image>` and `e2e/testsuite/<image>`
+statuses for the digest `:testing` points at, on the commit that digest was
+built from. Digests promoted before the testsuite gated promotion have only the
+first, so they fail closed until a green run moves `:testing`.
 
 A separate least-privilege job publishes the main desktop's record to a
 `verification` branch and proposes a documentation PR that relinks the README
@@ -194,9 +207,12 @@ replaced by the branch. The README links to the whole run, which also holds the
 independent testsuite legs; those do not gate the record and may still be
 running or red, so the README says so without predicting either outcome. The
 evidence update requires the LUKS and production-ISO jobs to pass.
-The repository must allow Actions to create pull requests; a denied write fails
-this job visibly, without deleting test artifacts. It does not auto-merge
-the evidence PR or imply a fresh pass for a different commit.
+The job token only pushes the `verification` branch. Trusted `main` alone
+mints a repository-scoped Mergeraptor App token (contents and pull-request
+write) to open the PR, so its normal pull_request checks run and Hive's
+review can land it like other bot proposals. A missing App secret or
+installation fails this job visibly, without deleting test artifacts. The job
+does not arm native auto-merge or imply a fresh pass for a different commit.
 
 For a deliberate rerun, dispatch Post-Testing E2E with `build_run_id` from a
 successful testing build containing the current harness. Do not pass a PR
@@ -266,6 +282,27 @@ Fulcio identity pinned to the tacklebox `release-image.yml` workflow on
 an unsigned image or one attested by any other workflow or repository is
 rejected before each Renovate-driven digest bump can run privileged.
 
+### Tacklebox live-boot gate
+
+`tacklebox-iso` boots its ISO with `iso/scripts/tacklebox-boot-gate.sh` and
+passes when `UTAH_LIVE_READY` reaches the serial log. The gate polls for the
+marker itself and returns as soon as it appears; a kernel panic or a QEMU
+process that exited fails at once, and only a boot showing neither waits out
+`UTAH_ISO_BOOT_TIMEOUT` (600 s in CI). It stops the VM on every exit path,
+and the job uploads `serial.log` with the diagnostics.
+
+Two mistakes made every run cost 30 minutes. The gate left its loop only on a
+systemd `Reached target` line and checked for the marker afterwards; in runs
+44538634534 and 44604822618 that line never ended the loop, so the step ran
+the whole 1800 s timeout (30m03s each) and then passed. The job also never
+granted `/dev/kvm`: GitHub-hosted runners do not make it readable by the job
+user, so the gate logged `No /dev/kvm; falling back to TCG` and booted
+emulated. Every job that runs
+QEMU (`luks`, `lifecycle`, `tacklebox-iso`) runs `sudo chmod a+rw /dev/kvm`
+in its "Prepare ISO and QEMU host" step, and `tests/test_iso_ci.py` asserts
+that. Under KVM the `luks` job's live boot reaches the marker in about
+35 seconds.
+
 ### Utah image provenance
 
 Before `luks` and `tacklebox-iso` pull the new image, `verify-provenance`
@@ -306,6 +343,39 @@ you do. The script finds its issue through the REST issues listing (label
 `area/ci` plus a body marker), not issue search. Dispatch the workflow with
 another `max_age_hours` to try a different threshold.
 
+### Infra re-run
+
+One red leg skips `promote-to-testing`, so a transient fault wastes the whole
+run. In run 44538634534 every LUKS, lifecycle and production-ISO job passed,
+and two testsuite legs failed on a GHCR `fetching blob: received unexpected
+HTTP status: 500`. `rerun-e2e-infra-failures.yml` fires when a Post-Testing
+E2E run completes with `failure` on `run_attempt` 1. `scripts/e2e-infra-rerun.py`
+downloads every failed, timed-out or cancelled job's log and judges only the
+step that printed the first `##[error]`, so a fault an earlier step recovered
+from cannot excuse a later product failure. The signatures, each tied to the
+run that showed it, live in `SIGNATURES` in the script: runner shutdown or
+lost communication, a job with no log at all (HTTP 404/410), a registry 5xx,
+a Sigstore 5xx, `All mirrors were tried` / `Librepo error: Curl error`,
+`Could not resolve host: codeberg.org`, and `libpod_lock`. Add one only with a
+run that shows it, and a fixture under `tests/fixtures/e2e-infra/`.
+
+When every failed job matches, the `rerun` job runs `gh run rerun --failed`
+once. One unexplained failure leaves the run red, and nothing re-runs an
+attempt 2. After the wait, the job re-checks that the run is still on attempt 1
+and is still the newest Post-Testing E2E run; a newer run supersedes it and
+would otherwise lose its pending place in the `utah-iso-e2e` group. Classified
+against the 26 failed runs between 2026-11-15 and 11-19 (215 failed jobs),
+only 44538634534 would have been re-run.
+
+The delay is the wait timer of the `e2e-infra-retry-wait` environment, not a
+`sleep`, so the waiting job holds no runner. The environment must have a
+20-minute wait timer (Settings -> Environments, or
+`gh api -X PUT repos/projectbluefin/utah/environments/e2e-infra-retry-wait -F wait_timer=20`).
+Without it, Actions creates the environment with no rules on first use and the
+re-run starts at once; the classify job prints a `no re-run delay` warning
+while that is so. Dispatch the workflow with a `run_id` to classify any run
+without re-running it.
+
 ## Testsuite reporting (exact-digest VM suites)
 
 `post-testing-e2e.yml` runs the `testsuite` job asynchronously against each
@@ -314,8 +384,8 @@ come from `needs.resolve.outputs.digests` and the suite mappings from
 `scripts/flavors.py suites`.
 
 This job surfaces scenario results, fastfetch OCR logs, and screenshots directly
-in GitHub Actions without gating `:testing` tag promotion, keeping deployments
-unblocked while maintaining visible QA signal across flavors.
+in GitHub Actions, and gates `:testing` promotion: `promote-to-testing` needs it
+(#1329).
 
 ## Extension startup states
 

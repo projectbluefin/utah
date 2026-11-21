@@ -1,0 +1,13 @@
+2026-11-19T05:51:15.7404449Z Current runner version: '2.338.2'
+2026-11-19T05:51:15.7423500Z ##[group]Runner Image Provisioner
+2026-11-19T05:51:15.7424082Z Hosted Compute Agent
+2026-11-19T06:17:58.9735421Z ##[group]Run set -euo pipefail
+2026-11-19T06:17:58.9735656Z [36;1mset -euo pipefail[0m
+2026-11-19T06:26:26.2310073Z   serial: reached the graphical target
+2026-11-19T06:26:26.2310757Z Waiting for sshd on the installed system...
+2026-11-19T06:26:26.7035514Z   ssh: logged in as utahtest
+2026-11-19T06:26:26.7035841Z Verifying the installed EFI mountpoint and units...
+2026-11-19T06:26:26.9341250Z FAIL: EFI mountpoint is missing or an EFI mount unit failed on the installed system
+2026-11-19T06:26:26.9490293Z   disk diagnostics kept (metadata only, never the disk itself): /home/runner/work/_temp/utah-lifecycle-e2e/install/failed-disk-info-20261119-062626.log
+2026-11-19T06:26:26.9525131Z ##[error]Process completed with exit code 1.
+2026-11-19T06:26:26.9626914Z ##[group]Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9

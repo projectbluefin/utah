@@ -16,7 +16,8 @@
 # disables flatpak-add-fedora-repos.service and clears a dnf5 versionlock,
 # neither of which exists here.
 #
-# The three lint checks this satisfies, all seen failing on a real build:
+# The four lint checks this satisfies, each seen failing on a real build (the
+# last one was skipped until #1129):
 #
 #   nonempty-run-tmp  /run/cockpit, /run/dnf and friends. /run is a tmpfs at
 #                     runtime, so anything baked into the image is junk.
@@ -24,6 +25,9 @@
 #                     install step itself.
 #   var-tmpfiles      /var/cache/ibus, ldconfig, libX11, swcatalog and ~40 more
 #                     directories with no systemd tmpfiles.d entry.
+#   nonempty-boot     /boot/loader/entries/<id>-<kver>.conf plus vmlinuz,
+#                     initramfs, System.map, config and symvers copies, and the
+#                     OGC kernel's /boot/vmlinuz-<release> (see below).
 
 set -eoux pipefail
 
@@ -78,6 +82,26 @@ clear_dir() {
 }
 clear_dir "${CLEAN_ROOT:?}/run"
 clear_dir "${CLEAN_ROOT:?}/tmp"
+
+# /boot must ship empty: bootc deploys the kernel and initramfs from
+# /usr/lib/modules/<kver>/, and the installed system writes its own boot
+# entries. Two steps fill it. The kernel cache's `rpm -U` of the patched Fedora
+# kernel runs kernel-core's %posttrans `kernel-install add`, whose
+# 20-grub.install (grub2-common) copies the kernel files into /boot and writes
+# a BLS Type #1 entry, /boot/loader/entries/<machine-id>-<kver>.conf, with the
+# build runner's own /proc/cmdline as its options. The OGC installer adds
+# /boot/vmlinuz-<release> and a /boot/vmlinuz link; regenerate-initramfs.sh
+# has already hardlinked that kernel into /usr/lib/modules/<release>/vmlinuz,
+# so removing the /boot name loses nothing.
+#
+# The ostree backend masks the image's /boot, so an ostree install never saw
+# this. The composefs backend does not: composefs-boot reads
+# /boot/loader/entries/*.conf from the image as Type #1 boot entries, and bootc
+# refuses them on a BLS install -- `bootc install to-filesystem
+# --composefs-backend` failed with "Setting up BLS boot: Found Type1 entries in
+# /boot" (#1129). The Containerfile's `bootc container lint` runs without
+# --skip nonempty-boot, so anything left here fails the build.
+clear_dir "${CLEAN_ROOT:?}/boot"
 
 # The prebuilt kernel and NVIDIA archives the cache image supplies as its base
 # layer. They are build input, not image content, and they are large -- three of

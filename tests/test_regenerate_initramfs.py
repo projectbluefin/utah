@@ -222,6 +222,37 @@ class RegenerateInitramfsTests(unittest.TestCase):
         self.assertFalse(any(c.startswith("lsinitrd") for c in self.called()), self.called())
         self.assertNotIn("present", result.stdout)
 
+    # zswap.compressor=zstd needs the zstd crypto module in the initramfs when
+    # the kernel builds it as a module, as Hummingbird's does (#1224).
+    ZSTD = f"usr/lib/modules/{KVER}/kernel/crypto/zstd.ko.xz"
+
+    def set_zstd_module(self):
+        ko = self.sysroot / self.ZSTD
+        ko.parent.mkdir(parents=True, exist_ok=True)
+        ko.write_bytes(b"")
+
+    def test_modular_zstd_must_be_in_the_initramfs(self):
+        self.set_zstd_module()
+        result = self.run_script()
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("lacks the zstd module that zswap.compressor=zstd needs", result.stderr)
+
+    def test_modular_zstd_in_the_initramfs_passes(self):
+        self.set_zstd_module()
+        self.set_lsinitrd(files=listing() + entry(self.ZSTD) + "\n")
+        result = self.run_script()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"{IMAGE}: zstd module for zswap present", result.stdout)
+
+    def test_kernel_without_a_zstd_module_has_nothing_to_carry(self):
+        result = self.run_script()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("zstd", result.stdout)
+
+    def test_dracut_config_adds_zstd(self):
+        conf = ROOT / "system_files/shared/usr/lib/dracut/dracut.conf.d/50-utah-zswap-zstd.conf"
+        self.assertIn('add_drivers+=" zstd "', conf.read_text())
+
 
 if __name__ == "__main__":
     unittest.main()

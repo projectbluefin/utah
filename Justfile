@@ -52,8 +52,10 @@ check:
     test -f packages/utah-packages.repo
     test -f system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
     test -f system_files/shared/usr/lib/systemd/system/bootc-unified-storage.service.d/10-utah-local-test.conf
-    grep -q 'enable gdm.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
-    grep -q 'enable ublue-system-setup.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
+    # Enable-by-default as on Dakota (#1233): the catch-all that outranks
+    # Hummingbird's 99-default-disable, applied at build time.
+    grep -qx 'enable \*' system_files/shared/usr/lib/systemd/system-preset/98-utah-enable-default.preset
+    grep -qx 'systemctl preset-all' scripts/configure-services.sh
     grep -q 'disable bootc-fetch-apply-updates.timer' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
     grep -q 'disable bootc-fetch-apply-updates.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
     grep -q 'bootc-fetch-apply-updates.timer' scripts/configure-services.sh
@@ -91,7 +93,7 @@ check:
     # Every Dakota item Utah lacks must be triaged (baselines/triage.toml).
     python3 scripts/image-baseline.py check
     grep -q '/system_files/bluefin' Containerfile
-    grep -q 'flatpak-preinstall.service' scripts/configure-services.sh
+    grep -q '"flatpak-preinstall.service"' contracts/bluefin-desktop.toml
     grep -q 'flathub.flatpakrepo' scripts/configure-services.sh
     test -f iso/live/Containerfile
     test -f iso/live/src/configure-live.sh
@@ -112,7 +114,8 @@ check:
     python3 -m json.tool iso/live/src/etc/bootc-installer/images.json >/dev/null
     python3 -m json.tool iso/live/src/etc/bootc-installer/recipe.json >/dev/null
     grep -q 'org.bootcinstaller.Installer' iso/live/src/install-flatpaks.sh
-    grep -q 'containers-storage' iso/scripts/build-iso.sh
+    grep -q 'iso/scripts/embed-store-payload.sh' iso/scripts/build-iso.sh
+    bash -n iso/scripts/embed-store-payload.sh
     grep -q 'UTAH_LIVE' iso/scripts/build-iso.sh
     grep -q 'Documented exception (Issue #22)' iso/scripts/build-iso.sh
     if grep -q 'rd.utah.isofile' iso/scripts/build-iso.sh; then echo "rd.utah.isofile found in build-iso.sh" >&2; exit 1; fi
@@ -399,11 +402,26 @@ build-ghcr base_name stream flavor kernel_pin="":
     source_date_epoch="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct -- Containerfile packages system_files scripts config .gitmodules docs/agent)}"
     mapfile -t epoch_args < <(scripts/podman-epoch-args.sh "${source_date_epoch}" rewrite)
     gnome_extension_provenance="$(python3 scripts/verify-gnome-extensions.py --print-provenance)"
+    common_args=()
+    if [ -n "${COMMON_IMAGE_REF:-}" ]; then
+      # A Common override must name the digest it builds from, so the image's
+      # provenance.json records the candidate layer, not the pinned default.
+      if [ -z "${COMMON_IMAGE:-}" ] || [[ ! "${COMMON_IMAGE_SHA:-}" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+        echo "error: COMMON_IMAGE_REF needs COMMON_IMAGE and COMMON_IMAGE_SHA (sha256:<64 hex>) for provenance" >&2
+        exit 1
+      fi
+      common_args+=(
+        --build-arg COMMON_IMAGE="$COMMON_IMAGE"
+        --build-arg COMMON_IMAGE_SHA="$COMMON_IMAGE_SHA"
+        --build-arg COMMON_IMAGE_REF="$COMMON_IMAGE_REF"
+      )
+    fi
     podman build \
       "${epoch_args[@]}" \
       --build-arg SOURCE_DATE_EPOCH="${source_date_epoch}" \
       --build-arg UTAH_REWRITE_TIMESTAMPS=1 \
       "${base_args[@]}" \
+      "${common_args[@]}" \
       "${layer_cache_args[@]}" \
       --build-arg HUMMINGBIRD_REPO_DAY="$hb_revision" \
       --build-arg IMAGE_NAME="$image_name" \

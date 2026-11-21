@@ -45,13 +45,23 @@ BUNDLE=org.bootcinstaller.Installer.flatpak
 # Pin the installer release so ISO composition is reproducible rather than
 # resolving a mutable `latest` during the build. Override with
 # UTAH_INSTALLER_VERSION when validating a newer installer.
-INSTALLER_VERSION="${UTAH_INSTALLER_VERSION:-v2026.09.25-51f8cfe6}"
+#
+# v2026.11.16 bundles fisherman 58eaf29e. The previous pin (v2026.09.25,
+# fisherman 60f672ff) could not install with the composefs backend (#1129):
+# - podman staged the OCI blobs it imports for the containerized bootc
+#   install in the live system's RAM-backed /var/tmp. A review candidate with
+#   a 5 GiB uncompressed layer stalled the 6 GiB review VM for 2.5 hours
+#   (run 42261086830). fisherman#345 stages them on the target disk.
+# - chpasswd --root into the composefs deploy directory ran PAM, which is
+#   not there (fisherman#396), and useradd could still create a home
+#   directory in it from login.defs CREATE_HOME (fisherman#484).
+INSTALLER_VERSION="${UTAH_INSTALLER_VERSION:-v2026.11.16-f6b9ba0d}"
 # The bundle is installed system-wide with --no-gpg-verify below, so the
 # version pin alone is the whole trust story. Pin its SHA-256 the same way
 # the Containerfile pins UUPD_SHA256, and verify before import. Version and
 # digest move together; override with UTAH_INSTALLER_SHA256 when validating
 # a newer installer.
-INSTALLER_SHA256="${UTAH_INSTALLER_SHA256:-a303514765c3ba8c33e71e5361f36cf4bad906d46d473818286527891c40c5b5}"
+INSTALLER_SHA256="${UTAH_INSTALLER_SHA256:-65e5cda8b7e981ce4400dbb72a6fa54fd8ff7482946cf27d3b9fd3ee0436a941}"
 
 mkdir -p "${FLATPAK_CACHE}/tmp" /run/dbus
 export TMPDIR="${FLATPAK_CACHE}/tmp"

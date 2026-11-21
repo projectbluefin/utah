@@ -7,6 +7,7 @@ import re
 import subprocess
 from pathlib import Path
 import tempfile
+import time
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -111,11 +112,18 @@ class EvidenceTests(unittest.TestCase):
                         script.index("sudo /usr/local/bin/fisherman"))
 
     def test_offline_payload_preserves_manifest_digest(self):
-        script = (ROOT / "iso/scripts/build-iso.sh").read_text()
+        build = (ROOT / "iso/scripts/build-iso.sh").read_text()
+        self.assertIn('bash iso/scripts/embed-store-payload.sh "${PAYLOAD_IMAGE}" '
+                      '"${PUBLISHED_IMAGE}" "${SQUASHFS_ROOT}" "${WORK}" "${LIVE_IMAGE}"', build)
+        script = (ROOT / "iso/scripts/embed-store-payload.sh").read_text()
         self.assertNotIn("oci-archive:", script)
+        self.assertNotIn("--dest-compress", script)
+        # An OCI layout's tar blobs cannot share squashfs blocks with the live
+        # root: run 43870670314's ISOs were 9.6-11.8 GiB with one.
+        self.assertNotIn('"oci:', script)
         self.assertEqual(script.count("--preserve-digests"), 2)
         self.assertIn('"dir:${PAYLOAD_EXPORT}"', script)
-        self.assertIn('dir:/payload "containers-storage:$1"', script)
+        self.assertIn('skopeo copy --preserve-digests dir:/payload "containers-storage:$1"', script)
 
     def test_iso_compression_level_reaches_unshare_assembly(self):
         script = (ROOT / "iso/scripts/build-iso.sh").read_text()
@@ -232,10 +240,18 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(job["with"]["test_ref"], workflow_sha)
         manager = next(m for m in json.loads((ROOT / "renovate.json").read_text())["customManagers"]
                        if m.get("depNameTemplate") == "projectbluefin/testsuite")
-        for name in ["post-testing-e2e", "execute-release"]:
+        for name in ["post-testing-e2e", "execute-release", "candidate-common"]:
             text = (ROOT / f".github/workflows/{name}.yml").read_text()
             pattern = re.sub(r"\(\?<(\w+)>", "(?P<\\1>", manager["matchStrings"][0])
             self.assertEqual(re.search(pattern, text)["currentDigest"], workflow_sha, name)
+            self.assertTrue(any(re.search(p.strip("/"), f".github/workflows/{name}.yml")
+                                for p in manager["managerFilePatterns"]), name)
+        # The candidate workflow's testsuite job holds packages: write, so it
+        # calls the same reviewed testsuite commit, never an unmerged one (#1214).
+        candidate = yaml.safe_load((ROOT / ".github/workflows/candidate-common.yml").read_text())
+        job = candidate["jobs"]["testsuite"]
+        self.assertEqual(job["uses"].rpartition("@")[2], workflow_sha)
+        self.assertEqual(job["with"]["test_ref"], workflow_sha)
 
     def test_build_explicitly_dispatches_iso_after_both_image_jobs(self):
         import yaml
@@ -287,6 +303,23 @@ class EvidenceTests(unittest.TestCase):
         for name in ["promote-to-testing", "documentation"]:
             self.assertIn("production-iso", jobs[name]["needs"])
             self.assertIn("needs.production-iso.result == 'success'", jobs[name]["if"])
+
+    def test_the_iso_record_pr_is_opened_as_mergeraptor(self):
+        # A PR opened with the workflow token gets no pull_request checks and
+        # an untrusted author, so it waits for a hand merge. The App token
+        # opens it instead; the workflow token keeps only the record push.
+        import yaml
+        job = yaml.safe_load((ROOT / ".github/workflows/post-testing-e2e.yml").read_text())["jobs"]["documentation"]
+        self.assertNotIn("pull-requests", job["permissions"])
+        steps = {step.get("name"): step for step in job["steps"]}
+        self.assertIn("actions/create-github-app-token@", steps["Get repository-scoped mergeraptor token"]["uses"])
+        self.assertEqual(
+            steps["Propose updated verification link"]["with"]["token"],
+            "${{ steps.app-token.outputs.token }}",
+        )
+        guard = "github.repository_owner == 'projectbluefin' && github.ref == 'refs/heads/main'"
+        for name in ["Get repository-scoped mergeraptor token", "Propose updated verification link"]:
+            self.assertEqual(steps[name].get("if"), guard, name)
 
     def test_debug_images_and_test_disks_are_not_uploaded(self):
         import yaml
@@ -664,7 +697,7 @@ class EvidenceTests(unittest.TestCase):
         # systemd's Result= is success/exit-code/signal/timeout/...; it is never
         # "failed" (that is an ActiveState). A setup unit that exited non-zero
         # must fail the gate on both the system and user helper.
-        script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
+        script = (ROOT / "iso/scripts/e2e-services.sh").read_text()
         start = script.index("check_system_unit_state() {")
         end = script.index("\nverify_setup_state() {", start)
         block = script[start:end]
@@ -687,7 +720,7 @@ class EvidenceTests(unittest.TestCase):
                                    capture_output=True, text=True, env=env)
 
         for call in ("check_system_unit_state ublue-system-setup.service true true first",
-                     "check_user_setup_unit second"):
+                     "check_user_unit_state ublue-user-setup.service true second"):
             ok = run(call, "inactive", "success")
             self.assertEqual(ok.returncode, 0, ok.stderr)
             for active, result in (("inactive", "exit-code"), ("failed", "exit-code"),
@@ -695,6 +728,107 @@ class EvidenceTests(unittest.TestCase):
                 bad = run(call, active, result)
                 self.assertNotEqual(bad.returncode, 0, (call, active, result))
                 self.assertIn(f"Result={result}", bad.stderr)
+
+    def test_setup_state_checks_every_unit_in_the_installed_contract(self):
+        # #19: the runtime check follows the installed image's own contract,
+        # not a list copied into the script, and a failed contract unit fails
+        # the gate. brew-preinstall.service needs the network, so in the
+        # offline VM only its enablement counts.
+        script = (ROOT / "iso/scripts/e2e-services.sh").read_text()
+        block = script[script.index("check_system_unit_state() {"):]
+
+        def run(failed_unit):
+            harness = (
+                "fail() { echo \"FAIL: $*\" >&2; exit 1; }\n"
+                "scp_target() { :; }\n"
+                # Real ssh reads stdin; so does the stub, so a loop feeding
+                # units on stdin would stop after the first one.
+                "ssh_target() {\n"
+                "  cat >/dev/null\n"
+                "  case \"$1\" in\n"
+                "    *\"--services 'enabled'\"*) printf 'gdm.service\\nuupd.timer\\n' ;;\n"
+                "    *\"--services 'user_enabled'\"*) "
+                "printf 'brew-preinstall.service\\npipewire.socket\\n' ;;\n"
+                "    *is-enabled*) echo enabled ;;\n"
+                "    *\"'$FAILED_UNIT'\"*) printf 'LoadState=loaded\\nActiveState=failed\\n"
+                "Result=exit-code\\nExecMainStartTimestamp=n/a\\n' ;;\n"
+                "    *) printf 'LoadState=loaded\\nActiveState=active\\nResult=success\\n"
+                "ExecMainStartTimestamp=Tue 2026-10-13 10:00:00 UTC\\n' ;;\n"
+                "  esac\n"
+                "}\n"
+                + block + "\nverify_setup_state first\n"
+            )
+            env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "ROOT": str(ROOT),
+                   "TEST_USER": "u", "TEST_PASSWORD": "pw", "FAILED_UNIT": failed_unit}
+            return subprocess.run(["bash", "-eu", "-c", harness],
+                                  capture_output=True, text=True, env=env,
+                                  # The stub drains stdin; never wait on a terminal.
+                                  stdin=subprocess.DEVNULL)
+
+        ok = run("none")
+        self.assertEqual(ok.returncode, 0, ok.stderr)
+        # Every unit is reported, not only the first of each list.
+        for unit in ("gdm.service", "uupd.timer", "pipewire.socket",
+                     "brew-preinstall.service"):
+            self.assertIn(f"  {unit}: ", ok.stdout)
+        offline = run("brew-preinstall.service")
+        self.assertEqual(offline.returncode, 0, offline.stderr)
+        for unit in ("gdm.service", "pipewire.socket"):
+            bad = run(unit)
+            self.assertNotEqual(bad.returncode, 0, unit)
+            self.assertIn(f"{unit} failed during first boot", bad.stderr)
+
+    def test_setup_state_checks_template_units_by_enablement_and_instances(self):
+        # kmsconvt@.service (#1237) is a template: `systemctl show` reports
+        # nothing for it, which read as "unavailable" and failed the lifecycle
+        # candidate (run 44895186825). It must be enabled, and no instance may
+        # have failed.
+        script = (ROOT / "iso/scripts/e2e-services.sh").read_text()
+        block = script[script.index("check_system_unit_state() {"):]
+
+        def run(enabled, failed_instance, scope):
+            system, user = (("kmsconvt@.service", "pipewire.socket") if scope == "system"
+                            else ("gdm.service", "kmsconvt@.service"))
+            harness = (
+                "fail() { echo \"FAIL: $*\" >&2; exit 1; }\n"
+                "scp_target() { :; }\n"
+                "ssh_target() {\n"
+                "  cat >/dev/null\n"
+                "  case \"$1\" in\n"
+                f"    *\"--services 'enabled'\"*) echo {system} ;;\n"
+                f"    *\"--services 'user_enabled'\"*) echo {user} ;;\n"
+                "    *\"is-enabled 'kmsconvt@.service'\"*) echo \"$ENABLED\" ;;\n"
+                "    *is-enabled*) echo enabled ;;\n"
+                "    *\"list-units --state=failed\"*\"'kmsconvt@*.service'\"*) "
+                "[ -z \"$FAILED_INSTANCE\" ] || echo \"$FAILED_INSTANCE loaded failed failed\" ;;\n"
+                # Like systemd: a template has no runtime state to show.
+                "    *kmsconvt@.service*) ;;\n"
+                "    *) printf 'LoadState=loaded\\nActiveState=active\\nResult=success\\n"
+                "ExecMainStartTimestamp=Sat 2026-11-21 10:00:00 UTC\\n' ;;\n"
+                "  esac\n"
+                "}\n"
+                + block + "\nverify_setup_state first\n"
+            )
+            env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "ROOT": str(ROOT),
+                   "TEST_USER": "u", "TEST_PASSWORD": "pw", "ENABLED": enabled,
+                   "FAILED_INSTANCE": failed_instance}
+            return subprocess.run(["bash", "-eu", "-c", harness],
+                                  capture_output=True, text=True, env=env,
+                                  stdin=subprocess.DEVNULL)
+
+        for scope in ("system", "user"):
+            with self.subTest(scope=scope):
+                ok = run("enabled", "", scope)
+                self.assertEqual(ok.returncode, 0, ok.stderr)
+                self.assertIn("  kmsconvt@.service: enabled; no failed instance", ok.stdout)
+                disabled = run("disabled", "", scope)
+                self.assertNotEqual(disabled.returncode, 0)
+                self.assertIn(f"required {scope} unit kmsconvt@.service is disabled",
+                              disabled.stderr)
+                failed = run("enabled", "kmsconvt@tty2.service", scope)
+                self.assertNotEqual(failed.returncode, 0)
+                self.assertIn("kmsconvt@.service has a failed instance during first boot: "
+                              "kmsconvt@tty2.service", failed.stderr)
 
     def test_failure_diagnostics_run_from_the_exit_trap_not_only_fail(self):
         script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
@@ -1028,6 +1162,43 @@ GNOME 51.0
 Mutter (Wayland)
 """
 
+    # Verbatim excerpt from fastfetch-ocr.txt in the iso-diagnostics-utah-nvidia
+    # artifact of run 44741850768: the kernel line came back garbled. The
+    # screenshot showed all of fastfetch.
+    GARBLED_KERNEL_TRANSCRIPT = """ujust bluefin-c
+brey
+ujust
++ DReport an issue
++ B Documentation h
+UTAH-E2E-FASTFETCH
+[utahtest@utah-luk
+FriNov 20 1:52PM
+Q Typeto search
+utahtest@utah-luks-test:~
+» Bluefin (Version:
+> Linu 200.1.utah1.fc4:
+Forged on Nov 20 2026
+KVM/QEMU Standard PC (Q35 + ICH9
+» GNOME 51.1
+» Mutter (Wa
+» bash
+» ghostty 1.3.2-HEAD-+ef7edc4
+"""
+
+    # Verbatim excerpt from fastfetch-ocr.txt in the
+    # iso-diagnostics-utah-nvidia-gaming artifact of run 44719832822: no
+    # kernel line at all, on a screenshot that showed "Linux 7.1.8-ogc1".
+    MISSING_KERNEL_TRANSCRIPT = """UTAH-E2E-FASTFETCH
+[utahtest@utah-luks-test ~
+Forged on Nov
+KVM/QEMU
+AMD EPYC 7763 64-Core (2) @ 2.
+» GNOME 51.1
+» Mutter (Wa
+» ghostty 1.
+» 44 (Flatpa
+"""
+
     def matches(self, transcript):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "fastfetch-ocr.txt"
@@ -1051,6 +1222,12 @@ Mutter (Wayland)
 
     def test_accepts_transcript_with_substituted_sentinel_fragment(self):
         self.assertTrue(self.matches(self.SUBSTITUTED_TRANSCRIPT))
+
+    def test_accepts_the_sentinel_with_a_garbled_kernel_line(self):
+        self.assertTrue(self.matches(self.GARBLED_KERNEL_TRANSCRIPT))
+
+    def test_accepts_the_sentinel_with_no_kernel_line(self):
+        self.assertTrue(self.matches(self.MISSING_KERNEL_TRANSCRIPT))
 
     def test_rejects_suffix_with_kernel_but_no_second_body_token(self):
         self.assertFalse(self.matches(
@@ -1211,16 +1388,18 @@ class OgcKernelConfigGateTests(unittest.TestCase):
         self.assertRegex(
             self.SCRIPT.read_text(), r"--module INPUT_UINPUT(?:\s|$)")
 
-    def test_zram_is_required_so_boot_does_not_wait_for_zram0(self):
-        # zram-generator asks for /dev/zram0; without CONFIG_ZRAM systemd waits
-        # 50s for it and geoclue times out on the gaming flavors (#741).
+    def test_zswap_and_zstd_are_required_for_the_zswap_kargs(self):
+        # kargs.d/20-zswap.toml ships on every image (#1224); without these the
+        # gaming kernel ignores zswap.* and the swapfile runs uncompressed.
         symbols = self.required_symbols()
-        self.assertIn("ZRAM", symbols)
-        body = "".join(f"CONFIG_{s}=y\n" for s in symbols if s != "ZRAM")
-        result = self.gate(body)
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("missing CONFIG_ZRAM", result.stderr)
-        self.assertRegex(self.SCRIPT.read_text(), r"--module ZRAM(?:\s|$)")
+        for symbol in ("ZSWAP", "CRYPTO_ZSTD"):
+            with self.subTest(symbol=symbol):
+                self.assertIn(symbol, symbols)
+                body = "".join(f"CONFIG_{s}=y\n" for s in symbols if s != symbol)
+                result = self.gate(body)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(f"missing CONFIG_{symbol}", result.stderr)
+        self.assertIn("--enable ZSWAP --enable CRYPTO_ZSTD", self.SCRIPT.read_text())
 
     def test_a_config_missing_btrfs_is_rejected_by_name(self):
         body = "".join(f"CONFIG_{s}=y\n" for s in self.required_symbols()
@@ -1336,6 +1515,26 @@ class ReviewIsoBudgetMeasurementTests(unittest.TestCase):
         self.assertIn("dracut --no-hostonly --reproducible --zstd", regen)
         live = (ROOT / "iso/live/Containerfile").read_text()
         self.assertIn("dracut --force --reproducible --zstd --no-hostonly", live)
+
+
+class ReviewComposefsBackendTests(unittest.TestCase):
+    """The review VM can install with the composefs backend (#1129)."""
+
+    def test_input_selects_the_e2e_backend(self):
+        import yaml
+        build = yaml.safe_load((ROOT / ".github/workflows/build.yml").read_text())
+        inputs = build[True]["workflow_dispatch"]["inputs"]
+        self.assertEqual(inputs["review_composefs_backend"]["type"], "boolean")
+        self.assertIs(inputs["review_composefs_backend"]["default"], False)
+        step = next(
+            step for step in build["jobs"]["review_vm"]["steps"]
+            if "luks-e2e.sh" in step.get("run", "")
+        )
+        self.assertEqual(
+            step["env"]["UTAH_E2E_COMPOSEFS_BACKEND"],
+            "${{ inputs.review_composefs_backend && '1' || '0' }}",
+        )
+
 
 
 class ConcurrencyTests(unittest.TestCase):
@@ -1457,3 +1656,302 @@ class IsoBakeParserTests(unittest.TestCase):
                          "the live-only installed path does not exist on bootc deployments")
         self.assertNotIn('"utah-verify-desktop-contract --flatpaks', text,
                          "bare parser name is not on the guest PATH")
+
+
+class EmbedStorePayloadTests(unittest.TestCase):
+    """Live media must carry the receipt fisherman requires (PR #1131).
+
+    Fisherman 58eaf29e refuses to install on live media (the live-iso-mode
+    marker) unless /etc/bootc-installer/media-input.json binds a verified
+    read-only payload: review VM run 43815907502 failed every flavor with
+    local_source_unavailable. The OCI-layout form of that receipt broke the
+    ISO budget (run 43870670314: 9.6-11.8 GiB), so the payload is an unpacked
+    containers-storage graphroot, bound with containersStoragePath. The
+    builder runs here with skopeo and podman stubbed, and the receipt is
+    checked against fisherman's v1 schema (internal/mediainput,
+    PreflightBoundStoreMediaInput).
+    """
+
+    SCRIPT = ROOT / "iso/scripts/embed-store-payload.sh"
+    LIVE_IMAGE = "localhost/utah-live:testing"
+
+    FAKE_SKOPEO = r"""#!/usr/bin/env python3
+import hashlib, json, os, sys
+from pathlib import Path
+with open(os.environ["SKOPEO_LOG"], "a") as log:
+    log.write(" ".join(sys.argv[1:]) + "\n")
+src, dest = sys.argv[-2:]
+assert dest.startswith("dir:"), dest
+export = Path(dest[4:])
+export.mkdir(parents=True)
+config = json.dumps({"os": "linux", "architecture": "amd64"}).encode()
+config_digest = hashlib.sha256(config).hexdigest()
+(export / config_digest).write_bytes(config)
+layer = b"layer"
+layer_digest = hashlib.sha256(layer).hexdigest()
+(export / layer_digest).write_bytes(layer)
+(export / "manifest.json").write_text(json.dumps({
+    "schemaVersion": 2,
+    "mediaType": "application/vnd.oci.image.manifest.v1+json",
+    "config": {"digest": "sha256:" + config_digest, "size": len(config)},
+    "layers": [{"digest": "sha256:" + layer_digest, "size": len(layer)}],
+}))
+"""
+
+    # Stands in for `podman run <live image> sh -c 'skopeo copy ...; skopeo
+    # inspect ...'`: fills the mounted store and reports the store's digest,
+    # which is the exported manifest's unless STORE_DIGEST overrides it.
+    FAKE_PODMAN = r"""#!/usr/bin/env python3
+import hashlib, json, os, sys
+from pathlib import Path
+with open(os.environ["PODMAN_LOG"], "a") as log:
+    log.write(json.dumps(sys.argv[1:]) + "\n")
+args = sys.argv[1:]
+mounts = {}
+for flag, value in zip(args, args[1:]):
+    if flag == "-v":
+        host, guest = value.split(":")[:2]
+        mounts[guest] = Path(host)
+store = mounts["/payload-store"] / "overlay" / "abc" / "diff"
+store.mkdir(parents=True)
+(store / "file").write_text("payload")
+manifest = (mounts["/payload"] / "manifest.json").read_bytes()
+digest = os.environ.get("STORE_DIGEST") or "sha256:" + hashlib.sha256(manifest).hexdigest()
+(mounts["/payload-meta"] / "inspect.json").write_text(json.dumps({"Digest": digest}))
+Path(os.environ["PODMAN_LOG"] + ".manifest").write_bytes(manifest)
+"""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(subprocess.run, ["rm", "-rf", str(self.tmp)])
+        bin_dir = self.tmp / "bin"
+        bin_dir.mkdir()
+        for name, body in (("skopeo", self.FAKE_SKOPEO), ("podman", self.FAKE_PODMAN)):
+            tool = bin_dir / name
+            tool.write_text(body)
+            tool.chmod(0o755)
+        self.root = self.tmp / "root"
+        self.work = self.tmp / "work"
+        self.work.mkdir()
+        self.log = self.tmp / "skopeo.log"
+        self.podman_log = self.tmp / "podman.log"
+        self.env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}",
+                    "SKOPEO_LOG": str(self.log), "PODMAN_LOG": str(self.podman_log)}
+
+    def _live_root(self, ref):
+        etc = self.root / "etc/bootc-installer"
+        etc.mkdir(parents=True)
+        (etc / "recipe.json").write_text(json.dumps(
+            {"imgref": ref, "targetImgref": ref, "image": "", "composeFsBackend": False}))
+        (etc / "images.json").write_text(json.dumps(
+            {"default_image": ref, "images": [{"imgref": ref}]}))
+
+    def _run(self, payload, published, **env):
+        return subprocess.run(
+            ["bash", str(self.SCRIPT), payload, published, str(self.root), str(self.work),
+             self.LIVE_IMAGE],
+            capture_output=True, text=True, env={**self.env, **env})
+
+    def test_receipt_binds_the_read_only_store(self):
+        ref = "ghcr.io/projectbluefin/utah:review-vm-abc"
+        self._live_root(ref)
+        result = self._run("localhost/utah:testing", ref)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        receipt = json.loads((self.root / "etc/bootc-installer/media-input.json").read_text())
+        podman = json.loads(self.podman_log.read_text().splitlines()[0])
+        self.assertIn(self.LIVE_IMAGE, podman)
+        self.assertEqual(podman[-1], ref)
+        manifest_bytes = Path(f"{self.podman_log}.manifest").read_bytes()
+        manifest = json.loads(manifest_bytes)
+        self.assertEqual(receipt, {
+            "schemaVersion": 1,
+            "kind": "utah-live",
+            "image": ref,
+            "platformManifestDigest": "sha256:" + hashlib.sha256(manifest_bytes).hexdigest(),
+            "configDigest": manifest["config"]["digest"],
+            "containersStoragePath": "/var/lib/containers/storage",
+            "targetImgref": ref,
+            "platform": "linux/amd64",
+        })
+        for digest in (receipt["platformManifestDigest"], receipt["configDigest"]):
+            self.assertRegex(digest, r"^sha256:[0-9a-f]{64}$")
+        # The unpacked store lands where the live system bind-mounts it from.
+        self.assertEqual(
+            (self.root / "usr/lib/containers/storage/overlay/abc/diff/file").read_text(), "payload")
+        # Local candidates export their own containers-storage; the store
+        # keeps those manifest bytes.
+        calls = self.log.read_text().splitlines()
+        self.assertEqual(calls[0].split()[-2], "containers-storage:localhost/utah:testing")
+        self.assertNotIn("--preserve-digests", calls[0])
+        for scratch in ("utah-payload", "payload-store", "payload-meta", "payload-storage.conf"):
+            self.assertFalse((self.work / scratch).exists(), scratch)
+
+    def _containers_common_skeleton(self):
+        # containers-common's empty additional image store; the review run
+        # failed with "already exists" on it.
+        store = self.root / "usr/lib/containers/storage"
+        for sub, lock in (("overlay-images", "images.lock"), ("overlay-layers", "layers.lock")):
+            (store / sub).mkdir(parents=True)
+            (store / sub / lock).touch()
+        return store
+
+    def test_containers_common_empty_store_is_replaced(self):
+        ref = "ghcr.io/projectbluefin/utah:review-vm-abc"
+        self._live_root(ref)
+        self._containers_common_skeleton()
+        result = self._run("localhost/utah:testing", ref)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            (self.root / "usr/lib/containers/storage/overlay/abc/diff/file").read_text(), "payload")
+        self.assertTrue((self.root / "etc/bootc-installer/media-input.json").exists())
+
+    def test_a_populated_store_directory_fails_the_build(self):
+        ref = "ghcr.io/projectbluefin/utah:review-vm-abc"
+        self._live_root(ref)
+        store = self._containers_common_skeleton()
+        (store / "overlay-images/images.json").write_text("[]")
+        result = self._run("localhost/utah:testing", ref)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("holds more than containers-common's empty store", result.stderr)
+        self.assertFalse((self.root / "etc/bootc-installer/media-input.json").exists())
+
+    def test_store_digest_must_match_the_exported_manifest(self):
+        # Fisherman compares `skopeo inspect containers-storage:<image>` with
+        # the receipt; a store that rewrote the manifest would fail there.
+        ref = "ghcr.io/projectbluefin/utah:review-vm-abc"
+        self._live_root(ref)
+        result = self._run("localhost/utah:testing", ref, STORE_DIGEST="sha256:" + "b" * 64)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("the embedded store reports digest", result.stderr)
+        self.assertFalse((self.root / "etc/bootc-installer/media-input.json").exists())
+
+    def test_pinned_payload_copies_registry_blobs(self):
+        ref = "ghcr.io/projectbluefin/utah@sha256:" + "a" * 64
+        self._live_root(ref)
+        result = self._run(ref, ref)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        first = self.log.read_text().splitlines()[0]
+        self.assertIn("--preserve-digests", first)
+        self.assertEqual(first.split()[-2], f"docker://{ref}")
+
+    def test_pinned_payload_must_match_the_live_image(self):
+        ref = "ghcr.io/projectbluefin/utah@sha256:" + "a" * 64
+        self._live_root(ref)
+        result = self._run("localhost/utah:testing", ref)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("must match", result.stderr)
+
+    def test_recipe_naming_another_image_fails_the_build(self):
+        # Fisherman refuses a request naming another image than the receipt's.
+        self._live_root("ghcr.io/projectbluefin/utah:testing")
+        result = self._run("localhost/utah:testing", "ghcr.io/projectbluefin/utah:review-vm-abc")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("recipe.json imgref", result.stderr)
+        self.assertFalse((self.root / "etc/bootc-installer/media-input.json").exists())
+
+    def test_live_system_binds_the_store_read_only(self):
+        script = (ROOT / "iso/live/src/configure-live.sh").read_text()
+        for line in ("What=/run/rootfsbase/usr/lib/containers/storage",
+                     "Where=/var/lib/containers/storage",
+                     "Options=bind,ro",
+                     "systemctl enable var-lib-containers-storage.mount",
+                     'graphroot = "/var/lib/containers/live-storage"',
+                     'additionalimagestores = ["/var/lib/containers/storage"]'):
+            self.assertIn(line, script)
+
+
+class TackleboxBootGateTests(unittest.TestCase):
+    """iso/scripts/tacklebox-boot-gate.sh against a stub QEMU."""
+
+    GATE = ROOT / "iso/scripts/tacklebox-boot-gate.sh"
+    # A stand-in for qemu-system-x86_64 -daemonize: it leaves a "VM" process
+    # behind, records its pid in -pidfile, and writes STUB_SERIAL_TEXT to the
+    # -serial file after STUB_SERIAL_DELAY seconds. STUB_VM_EXITS makes the
+    # "VM" die at once, as a QEMU crash would.
+    STUB = r"""#!/usr/bin/env bash
+serial="" pidfile=""
+while (($#)); do
+  case "$1" in
+    -serial) serial="${2#file:}"; shift ;;
+    -pidfile) pidfile="$2"; shift ;;
+  esac
+  shift
+done
+if [[ -n "${STUB_VM_EXITS:-}" ]]; then
+  true & echo $! > "$pidfile"; wait
+  exit 0
+fi
+( sleep "${STUB_SERIAL_DELAY:-0}"; printf '%s\n' "${STUB_SERIAL_TEXT:-}" >> "$serial"; exec sleep 300 ) \
+  </dev/null >/dev/null 2>&1 &
+echo $! > "$pidfile"
+"""
+
+    def run_gate(self, timeout=60, **stub_env):
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(subprocess.run, ["rm", "-rf", str(tmp)])
+        bindir = tmp / "bin"
+        bindir.mkdir()
+        qemu = bindir / "qemu-system-x86_64"
+        qemu.write_text(self.STUB)
+        qemu.chmod(0o755)
+        for name in ("code.fd", "vars.fd", "live.iso"):
+            (tmp / name).write_bytes(b"")
+        env = dict(os.environ, PATH=f"{bindir}:{os.environ['PATH']}",
+                   UTAH_ISO_BOOT_WORK=str(tmp / "work"),
+                   UTAH_ISO_BOOT_OVMF_CODE=str(tmp / "code.fd"),
+                   UTAH_ISO_BOOT_OVMF_VARS=str(tmp / "vars.fd"),
+                   UTAH_ISO_BOOT_TIMEOUT=str(timeout),
+                   UTAH_ISO_BOOT_POLL="1", **stub_env)
+        start = time.monotonic()
+        result = subprocess.run(["bash", str(self.GATE), str(tmp / "live.iso")],
+                                capture_output=True, text=True, env=env, timeout=timeout + 30)
+        elapsed = time.monotonic() - start
+        pid = (tmp / "work/boot.pid").read_text().strip()
+        return result, elapsed, pid
+
+    def assert_vm_stopped(self, pid):
+        for _ in range(50):
+            if subprocess.run(["kill", "-0", pid], capture_output=True).returncode != 0:
+                return
+            time.sleep(0.1)
+        subprocess.run(["kill", pid])
+        self.fail(f"the gate left the VM (pid {pid}) running")
+
+    def test_returns_as_soon_as_the_marker_reaches_serial(self):
+        # Runs 44538634534 and 44604822618 waited the full 1800 s timeout
+        # although the marker was there: the loop only left on a systemd
+        # "Reached target" line that never reached serial.
+        result, elapsed, pid = self.run_gate(timeout=60, STUB_SERIAL_DELAY="2",
+                                             STUB_SERIAL_TEXT="UTAH_LIVE_READY")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("PASS:", result.stdout)
+        self.assertLess(elapsed, 20, "the gate waited out its timeout after the marker appeared")
+        self.assert_vm_stopped(pid)
+
+    def test_a_vm_that_exits_fails_without_waiting_out_the_timeout(self):
+        result, elapsed, pid = self.run_gate(timeout=60, STUB_VM_EXITS="1")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("QEMU exited", result.stderr)
+        self.assertLess(elapsed, 20)
+
+    def test_kernel_panic_fails_fast(self):
+        result, elapsed, pid = self.run_gate(timeout=60, STUB_SERIAL_TEXT="Kernel panic - not syncing")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("kernel panic", result.stderr)
+        self.assertLess(elapsed, 20)
+        self.assert_vm_stopped(pid)
+
+    def test_a_missing_marker_still_fails_at_the_timeout(self):
+        result, elapsed, pid = self.run_gate(timeout=3, STUB_SERIAL_TEXT="Reached target graphical.target")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("never appeared", result.stderr)
+        self.assert_vm_stopped(pid)
+
+    def test_every_qemu_job_grants_kvm_before_booting(self):
+        # tacklebox-iso lacked the grant and its boot ran under TCG.
+        import yaml
+        jobs = yaml.safe_load((ROOT / ".github/workflows/post-testing-e2e.yml").read_text())["jobs"]
+        for name in ("luks", "lifecycle", "tacklebox-iso"):
+            prepare = next(s for s in jobs[name]["steps"] if s.get("name") == "Prepare ISO and QEMU host")
+            self.assertIn("sudo chmod a+rw /dev/kvm", prepare["run"], name)
+            self.assertIn("test -r /dev/kvm && test -w /dev/kvm", prepare["run"], name)

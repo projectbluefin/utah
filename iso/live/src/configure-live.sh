@@ -12,15 +12,19 @@ TARGET_IMAGE="${TARGET_IMAGE:-ghcr.io/projectbluefin/utah:testing}"
 systemctl mask bootc-unified-storage.service bootc-unified-storage.timer || true
 
 # The image's useradd default is HOME=/home (scripts/fix-home-labels.sh), and
-# /home is a symlink to var/home, which does not exist yet at build time, so
-# `useradd -m` under /home fails (#281). Name the real path.
+# /home is an empty bind-mount point that home.mount covers with /var/home at
+# boot (#1234). A build has no mounts, so `useradd -m` would write into the
+# image's /home, hidden at runtime (#281). Create the home in /var/home, then
+# point the passwd field at /home/liveuser, the path the booted system uses
+# (bluefin-migrate-var-home-passwd would rewrite /var/home on every live boot).
 useradd --create-home --home-dir /var/home/liveuser --uid 1000 --user-group --comment 'Live User' liveuser || true
+usermod --home /home/liveuser liveuser
 passwd --delete liveuser
 printf 'liveuser ALL=(ALL) NOPASSWD: ALL\n' >/etc/sudoers.d/liveuser
 chmod 0440 /etc/sudoers.d/liveuser
-mkdir -p /home/liveuser/.config
-: >/home/liveuser/.config/gnome-initial-setup-done
-chown -R liveuser:liveuser /home/liveuser/.config
+mkdir -p /var/home/liveuser/.config
+: >/var/home/liveuser/.config/gnome-initial-setup-done
+chown -R liveuser:liveuser /var/home/liveuser/.config
 
 mkdir -p /etc/gdm
 cat >/etc/gdm/custom.conf <<'EOF'
@@ -80,26 +84,58 @@ EOF
 systemctl enable var-tmp.mount || true
 
 # Utah installs with the ostree backend. The composefs default (#882, #938)
-# was never exercised by the LUKS e2e before it shipped and fails every flavor
-# (#1129): fisherman's user creation runs chpasswd --root in the composefs
-# deploy directory (no PAM modules there), and the gaming flavors' bootc
-# install to-filesystem exits 126. An empty "image" with a "targetImgref" is
-# the offline ostree shape: fisherman installs from containers-storage.
-# The ISO builder embeds its OCI payload into /usr/lib/containers/storage, the
-# image store this platform already resolves to.
+# was never exercised by the LUKS e2e before it shipped and failed every
+# flavor (#1129); it stays off until the review VM passes for every flavor
+# with review_composefs_backend (docs/skills/local-testing.md).
 #
-# There is deliberately no /etc/containers/storage.conf here. One used to
-# write driver = "vfs" and a graphroot under /var, and it did nothing:
-# Hummingbird ships /usr/share/containers/storage.conf.d/00-vendor.conf, and
-# drop-ins are read after /etc, so the driver stayed overlay and podman kept
-# looking in the vendor image store. The payload now lives where the platform
-# looks, which needs no override and cannot drift from one.
+# The install source is the payload the ISO builder embeds as an unpacked
+# containers-storage graphroot at /usr/lib/containers/storage in the squashfs,
+# bound by /etc/bootc-installer/media-input.json
+# (iso/scripts/embed-store-payload.sh). The live-iso-mode marker below makes
+# fisherman require that receipt and install only the image it names, so the
+# recipe names the published ref (the receipt's image).
+#
+# Fisherman v1 binds a store only at /var/lib/containers/storage, and only on
+# a read-only filesystem. The squashfs is mounted read-only at
+# /run/rootfsbase below the live overlay, so bind its store there read-only.
+cat >/usr/lib/systemd/system/var-lib-containers-storage.mount <<'EOF'
+[Unit]
+Description=Utah live install payload (read-only containers-storage)
+
+[Mount]
+What=/run/rootfsbase/usr/lib/containers/storage
+Where=/var/lib/containers/storage
+Type=none
+Options=bind,ro
+
+[Install]
+WantedBy=local-fs.target
+EOF
+systemctl enable var-lib-containers-storage.mount
+# containers/storage cannot open a read-only graphroot (it takes write locks
+# in it), so the live system's own graphroot moves to the writable overlay and
+# reads the payload as an additional image store: fisherman's
+# `skopeo inspect containers-storage:<image>` and the composefs export both
+# resolve it there. Hummingbird's storage.conf.d/00-vendor.conf only sets the
+# driver (overlay, the payload's driver), so this file's paths stand.
 mkdir -p /etc/containers
+cat >/etc/containers/storage.conf <<'EOF'
+[storage]
+driver = "overlay"
+runroot = "/run/containers/storage"
+graphroot = "/var/lib/containers/live-storage"
+
+[storage.options]
+additionalimagestores = ["/var/lib/containers/storage"]
+
+[storage.options.overlay]
+mountopt = "nodev"
+EOF
 mkdir -p /var/fisherman-tmp
 
-# Installer branding/configuration. The custom recipe must reference the same
-# tag that the ISO builder imports into the VFS store, never the build host's
-# localhost source ref.
+# Installer branding/configuration. The custom recipe must reference the
+# published ref the ISO builder embeds, never the build host's localhost
+# source ref.
 mkdir -p /usr/share/bootc-installer/images /etc/bootc-installer
 # utahraptor.png is the Utah mascot: projectbluefin/artwork's black-outline
 # "utah-look" raster (2100x2100), pinned and checksummed in config/artwork.lock.
@@ -127,7 +163,6 @@ for path in (Path("/etc/bootc-installer/images.json"), Path("${SCRIPT_DIR}/etc/b
         data["imgref"] = ref
         data["targetImgref"] = ref
         data["image"] = ""
-        data["local_imgref"] = f"containers-storage:{ref}"
         data["bootloader"] = "grub2"
         data["composeFsBackend"] = False
     Path("/etc/bootc-installer" , path.name).write_text(json.dumps(data, indent=2) + "\n")

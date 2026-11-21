@@ -1,0 +1,17 @@
+# Dakota's files/bindmounts/home.mount (elements/bluefin/bindmounts.bst):
+# /home is an empty directory in the image and the homes live in /var/home,
+# bind-mounted over it, so /home/<user> is the real path rather than a
+# symlink into /var (#1234). Wanted statically by local-fs.target, as on
+# Dakota, so existing installs pick it up on upgrade.
+[Unit]
+Description=Bind mount of /home
+# Utah-only guard: without /var/home there is nothing to bind, and a failed
+# bind would only add a failed unit to the boot. utah-home.conf recreates the
+# directory and the next boot mounts it.
+ConditionPathIsDirectory=/var/home
+
+[Mount]
+What=/var/home
+Where=/home
+Type=none
+Options=bind

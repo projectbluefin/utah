@@ -8,12 +8,13 @@ has no selinuxfs. The contract's `[selinux] modules` list is checked with
 `semodule -l`. If the module is missing, or semodule is missing or can't list
 modules, the build fails.
 
-Load modules only at build time. Hummingbird keeps the module store at
-`store-root=/usr/lib/selinux`, which is read-only once booted. On an installed
-system, `semodule -i` and even `semodule -l` fail (#551). The store survives
-updates: ostree's per-deployment `semodule -N --refresh` rebuilds from the new
-image's store, and `utah-fix-home-labels --check` proves that this rebuild
-leaves the home-directory rules unchanged.
+Ship image modules from the build. `utah-relocate-selinux-store` moves the
+store from Hummingbird's `/usr/lib/selinux` to `store-root=/etc/selinux` (#551),
+so users can also add local modules on a booted system, but only the build's
+modules are part of the image. On update, ostree's per-deployment
+`semodule -N --refresh` rebuilds from the merged `/etc` store, and
+`utah-fix-home-labels --check` proves that this rebuild leaves the
+home-directory rules unchanged.
 
 ## utah_bootc_probe (#1198)
 
@@ -34,16 +35,32 @@ boot-time source: with CountMe skipped, the review VM logged none (#1198,
 #1247). Running bootc as a unit's bare `ExecStart` doesn't change the domain:
 #1220's VM still logged both denials.
 
-The module is a single rule:
-`(dontaudit unconfined_service_t self (capability2 (mac_admin)))`.
+A unit whose `ExecStart` is a shell (`/bin/sh <script>`) runs in `initrc_t`
+instead (`type_transition init_t shell_exec_t:process initrc_t`), and bootc
+called from it logs the same two denials in `initrc_t`. bootc-installer
+v2026.11.16 writes one such unit into every install:
+`/etc/systemd/system/fisherman-boot-receipt.service`
+(`ExecStart=/bin/sh /etc/fisherman/boot-receipt.sh`) runs `bootc status` once,
+on the first boot. Every flavor of review run 44663789174 failed the gate on it
+(#1129).
+
+The module also carries a third rule for #1329:
+`(dontaudit systemd_nsresourced_t self (capability (dac_read_search)))`.
+systemd-nsresourced logs `{ dac_read_search } comm=systemd-nsresou` at boot,
+carries on without the capability, and the gate counted it and failed the utah and
+utah-nvidia flavors of Post-Testing E2E run 44791358885 (the gaming flavors passed). The two rules below are the bootc probe.
+
+The module is two rules for the probe, one per domain:
+`(dontaudit unconfined_service_t self (capability2 (mac_admin)))` and
+`(dontaudit initrc_t self (capability2 (mac_admin)))`.
 
 - **dontaudit, not allow.** bootc treats the denial as the answer and works
-  without the capability. An allow would let every unconfined service write
+  without the capability. An allow would let every such service write
   labels the policy doesn't know, and would change what the probe decides.
 - **As narrow as the language allows.** A capability check has no target
   object except the process itself, so a domain plus one permission is the
   smallest rule. The cost: a `mac_admin` denial from any other
-  `unconfined_service_t` process is hidden too.
+  `unconfined_service_t` or `initrc_t` process is hidden too.
 - The kernel still logs `SELINUX_ERR op=setxattr
   invalid_context=...invalid_bootcinstall_testlabel_t` for the probe. That
   record is not an AVC, and the gate ignores it.

@@ -1,18 +1,15 @@
 #!/usr/bin/bash
 # Configure Utah's desktop services in the image, following bluefin-lts's
 # build_scripts/40-services.sh. Hummingbird deliberately ships a server preset;
-# these enablements are the part that turns the installed GNOME packages into a
-# booting workstation.
+# Utah's presets and the configuration here are the part that turns the
+# installed GNOME packages into a booting workstation.
 
 set -eoux pipefail
 
 # Lid and sleep actions stay at systemd-logind's defaults (suspend), as on
-# Dakota, which ships no logind or sleep override. Utah has only zram swap,
-# so suspend-then-hibernate has no resume target and cannot work.
-
-unit_exists() {
-    systemctl cat "$1" >/dev/null 2>&1
-}
+# Dakota, which ships no logind or sleep override. Utah's swap is zswap over
+# /var/swap/swapfile with no resume= argument, as on Dakota, so
+# suspend-then-hibernate has no resume target and cannot work.
 
 user_unit_exists() {
     for dir in /usr/lib/systemd/user /usr/local/lib/systemd/user /etc/systemd/user; do
@@ -21,17 +18,12 @@ user_unit_exists() {
     return 1
 }
 
-enable_unit() {
-    unit_exists "$1" && systemctl enable "$1" || true
-}
-
-disable_unit() {
-    unit_exists "$1" && systemctl disable "$1" || true
-}
-
-# Services shared with Bluefin LTS. Optional units are guarded because
-# Hummingbird intentionally does not ship every Bluefin integration package.
-# Not enabled: rechunker-group-fix.service. It exists to repair the
+# System services follow the presets, enabled by default as on Dakota (#1233):
+# 98-utah-enable-default.preset turns on every installed unit no preset turns
+# off, and 85-utah-desktop.preset overrides the Hummingbird base where Utah
+# differs. `systemctl preset-all` near the end of this script applies them.
+#
+# rechunker-group-fix.service is removed outright. It exists to repair the
 # /usr/lib/{group,gshadow} damage left by the legacy rechunker
 # (hhd-dev/rechunk) when rebasing to an image built without it. Utah has never
 # been through legacy-rechunk -- so there is nothing here for it to repair.
@@ -48,28 +40,10 @@ disable_unit() {
 # shell. Remove it outright: disabling only drops the preset's symlinks, and
 # anything that later pulls the unit in by name would bring the cycle back.
 # Strip the unit and its drop-in directory so nothing can order against it.
-disable_unit rechunker-group-fix.service
 rm -f /usr/lib/systemd/system/rechunker-group-fix.service
 rm -rf /usr/lib/systemd/system/rechunker-group-fix.service.d
 rm -f /usr/lib/systemd/system/*.wants/rechunker-group-fix.service \
       /etc/systemd/system/*.wants/rechunker-group-fix.service
-enable_unit brew-setup.service
-enable_unit flatpak-nuke-fedora.service
-enable_unit flatpak-preinstall.service
-# Bluetooth is firmware-less on the X230's BCM20702 (no BCM20702A1 blob is
-# needed), but the service was never enabled, so no adapter appears even with
-# bluez installed. Enable it next to the other desktop units; see #98.
-enable_unit gdm.service
-enable_unit bluetooth.service
-# GNOME's system services, from gnome-build-meta's 80-gnome.preset as Dakota
-# ships it (files/systemd-presets/system-preset/80-gnome.preset).
-enable_unit colord.service
-enable_unit accounts-daemon.service
-# Bluefin defaults for mDNS discovery and hybrid-GPU application launching.
-enable_unit avahi-daemon.service
-enable_unit avahi-daemon.socket
-enable_unit switcheroo-control.service
-enable_unit firewalld.service
 # Workstation firewall as Dakota ships it: GNOME OS's lax zone (open
 # 1025-65535, mDNS, Samba client, ssh) as the default, with a loose IPv6
 # reverse-path filter. gnome-os-config-firewalld ships the zone; these are
@@ -81,30 +55,29 @@ sed -i --follow-symlinks \
     -e 's/^IPv6_rpfilter=.*/IPv6_rpfilter=loose/' /etc/firewalld/firewalld.conf
 grep -qx 'DefaultZone=lax' /etc/firewalld/firewalld.conf
 grep -qx 'IPv6_rpfilter=loose' /etc/firewalld/firewalld.conf
-enable_unit fwupd.service
-enable_unit fwupd-refresh.timer
-enable_unit dconf-update.service
-enable_unit tailscaled.service
-enable_unit uupd.timer
-enable_unit projectbluefin-countme.timer
-enable_unit bluefin-stats-refresh.timer
-enable_unit ublue-system-setup.service
-enable_unit systemd-resolved.service
-# See the preset: gated on systemd-boot by drop-in, skipped elsewhere (#363).
-enable_unit systemd-boot-update.service
-enable_unit bootc-unified-storage.timer
-# Dakota desktop parity (#675). The units ship in
-# system_files/shared/usr/lib/systemd/system/; the preset agrees so bootc's
-# first-boot preset application keeps them enabled (see #98).
-enable_unit ublue-firstboot-date.service
-enable_unit ublue-booted-image.service
+
 # Apply Dakota's runtime desktop integrations onto common's files. Each patch
 # is guarded: already-patched is a no-op, an unrecognized upstream file fails
 # the build loudly instead of silently shipping unpatched behavior.
-# Wallpaper rotation stays with Common's per-user bluefin-dynamic-wallpaper
-# timer (hemisphere-aware, live month-boundary rotation) rather than Dakota's
-# boot-time month symlink: repointing the default would stand the Common
-# rotator down with no replacement until reboot (#675 decision, #732 review).
+# Monthly wallpaper, as Dakota's effective image has it (#1266): both month
+# units keep their links current, but the default stays common's zz0 value.
+# Dakota's common.bst repoints zz0 from 12-bluefin.xml to
+# /var/lib/ublue-os/current-bluefin.xml, and common names another month, so
+# that sed matches nothing (projectbluefin/dakota#1902) and common's per-user,
+# hemisphere-aware bluefin-dynamic-wallpaper rotator stays in charge. Fail if
+# common ever names 12-bluefin.xml: Dakota's repoint would then take effect
+# there, and Utah has to follow it. The contract fails the build if common
+# drops the file.
+ZZ0_OVERRIDE=/usr/share/glib-2.0/schemas/zz0-bluefin-modifications.gschema.override
+if [ -f "${ZZ0_OVERRIDE}" ]; then
+    if grep -qF 'file:///usr/share/backgrounds/bluefin/12-bluefin.xml' "${ZZ0_OVERRIDE}"; then
+        echo "ERROR: ${ZZ0_OVERRIDE} names 12-bluefin.xml, so Dakota's current-bluefin.xml repoint now applies -- re-fit it (projectbluefin/dakota#1902)" >&2
+        exit 1
+    elif ! grep -qE "^picture-uri='file:///usr/share/backgrounds/bluefin/[0-9]{2}-bluefin\.xml'$" "${ZZ0_OVERRIDE}"; then
+        echo "ERROR: ${ZZ0_OVERRIDE} changed upstream -- re-check Dakota's wallpaper repoint (projectbluefin/dakota#1902)" >&2
+        exit 1
+    fi
+fi
 # Installation date for fastfetch: read the first-boot timestamp instead of
 # inferring the image age from /var/log timestamps.
 FASTFETCH_JSONC=/usr/share/ublue-os/fastfetch.jsonc
@@ -118,21 +91,44 @@ if [ -f "${FASTFETCH_JSONC}" ]; then
         exit 1
     fi
 fi
-# Community stats for fastfetch: read what bluefin-stats-refresh.service last
-# fetched, and fall back to the build-time placeholder until it has run once.
-# Common reads only the /usr/share/ublue-os copy, which is read-only at runtime,
-# so without this the banner shows the placeholder forever (#860).
-STATS_CACHE=/var/cache/bluefin-stats
+# Weekly community stats: Dakota drops common's two fastfetch lines and the
+# break after them (patches/common/0006-fastfetch-drop-weekly-stats.patch)
+# and fetches nothing at runtime, so Utah does the same (#1266). Already
+# dropped is a no-op; any other shape fails the build.
 if [ -f "${FASTFETCH_JSONC}" ]; then
-    if grep -qF "${STATS_CACHE}/" "${FASTFETCH_JSONC}"; then
+    python3 - "${FASTFETCH_JSONC}" <<'PY'
+import re
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8") as f:
+    text = f.read()
+stats = ("/usr/share/ublue-os/fastfetch-user-count", "/usr/share/ublue-os/bazaar-install-count")
+if not any(stat in text for stat in stats):
+    sys.exit(0)
+# One object per stat: its lines up to the closing brace, which no inner line
+# matches (the format strings carry {1}, so a brace-free match cannot work).
+body = r'(?:(?![ \t]*\},?\n)[^\n]*\n)*?'
+entry = r'\{\n' + body + r'[ \t]*"text": "cat %s",\n' + body + r'[ \t]*\},\s*'
+pattern = "".join(entry % re.escape(stat) for stat in stats) + r'"break",\s*'
+text, count = re.subn(pattern, "", text)
+if count != 1:
+    sys.exit(f"ERROR: {path} changed upstream -- re-fit Dakota's weekly-stats drop (patches/common/0006)")
+with open(path, "w", encoding="utf-8") as f:
+    f.write(text)
+PY
+fi
+# Ghostty's skeleton config follows GNOME's light/dark style, as Dakota
+# patches it (patches/common/0002-ghostty-dual-theme.patch, #1266).
+GHOSTTY_SKEL=/etc/skel/.config/ghostty/config.ghostty
+GHOSTTY_DUAL_THEME='theme = light:Catppuccin Latte,dark:Catppuccin Mocha'
+if [ -f "${GHOSTTY_SKEL}" ]; then
+    if grep -qxF "${GHOSTTY_DUAL_THEME}" "${GHOSTTY_SKEL}"; then
         : already patched
-    elif grep -qF '"cat /usr/share/ublue-os/fastfetch-user-count"' "${FASTFETCH_JSONC}" \
-        && grep -qF '"cat /usr/share/ublue-os/bazaar-install-count"' "${FASTFETCH_JSONC}"; then
-        for stat in fastfetch-user-count bazaar-install-count; do
-            sed -i "s#\"cat /usr/share/ublue-os/${stat}\"#\"cat ${STATS_CACHE}/${stat} 2>/dev/null || cat /usr/share/ublue-os/${stat}\"#" "${FASTFETCH_JSONC}"
-        done
+    elif grep -qxF 'theme = Catppuccin Mocha' "${GHOSTTY_SKEL}"; then
+        sed -i "s/^theme = Catppuccin Mocha\$/${GHOSTTY_DUAL_THEME}/" "${GHOSTTY_SKEL}"
     else
-        echo "ERROR: ${FASTFETCH_JSONC} changed upstream -- re-fit the community-stats patch (see bluefin-stats-refresh.service)" >&2
+        echo "ERROR: ${GHOSTTY_SKEL} changed upstream -- re-fit Dakota's dual-theme patch (patches/common/0002)" >&2
         exit 1
     fi
 fi
@@ -182,63 +178,22 @@ esac' "${UWELCOME_SH}"
         exit 1
     fi
 fi
+# Utah's bling.sh, bling.fish and ublue-bling are bluefin-cli shims
+# (projectbluefin/common#1719). Only Common's versions read these helpers;
+# bluefin-cli's init script keeps bash-preexec armed itself.
+rm -f /usr/share/ublue-os/bling/env.sh \
+    /usr/share/ublue-os/bling/bash-preexec-rearm.sh
 # Common's System Update, Community and Documentation launchers duplicate
 # Control Center (updates, the Community link, docs); Dakota drops all three
 # (projectbluefin/dakota elements/bluefin/common.bst). `ujust update` stays.
 rm -f /usr/share/applications/system-update.desktop \
     /usr/share/applications/discourse.desktop \
     /usr/share/applications/documentation.desktop
-# input-remapper is installed by Bluefin's package set, but without its root
-# daemon running, udev autoload fails on input devices and the GUI prompts for
-# root credentials on launch. Enable it next to the desktop units; see #99.
-enable_unit input-remapper.service
-enable_unit ModemManager.service
-# Power profiles and thermal management as Dakota ships them (#388):
-# power-profiles-daemon, not TuneD, and no intel_lpmd.
-enable_unit power-profiles-daemon.service
-enable_unit thermald.service
-# Dakota's effective service state (#1233); see 85-utah-desktop.preset.
-enable_unit rtkit-daemon.service
-enable_unit uresourced.service
-enable_unit upower.service
-enable_unit udisks2.service
-enable_unit polkit-agent-helper.socket
-enable_unit cups.service
-enable_unit pcscd.socket
-enable_unit gnome-remote-desktop.service
-enable_unit gnome-remote-desktop-configuration.service
-enable_unit malcontent-timerd.service
-enable_unit malcontent-timer-extension-agent.service
-enable_unit malcontent-webd.service
-enable_unit malcontent-webd-update.timer
-enable_unit systemd-oomd.service
-enable_unit systemd-oomd.socket
-enable_unit wpa_supplicant.service
-enable_unit podman.socket
-enable_unit podman-auto-update.timer
-enable_unit podman-restart.service
-enable_unit podman-clean-transient.service
-enable_unit systemd-sysext.socket
-enable_unit systemd-factory-reset.socket
-enable_unit systemd-pcrextend.socket
-enable_unit systemd-storage-block.socket
-enable_unit systemd-storage-fs.socket
-enable_unit systemd-udev-load-credentials.service
-enable_unit systemd-userdb-load-credentials.service
-disable_unit multipathd.service
-disable_unit lm_sensors.service
-# nfs-client.target is turned off: see 85-utah-desktop.preset.
-disable_unit nfs-client.target
-# sysstat collection is opt-in, as in Dakota (elements/bluefin/sysstat.bst);
-# the package stays for on-demand sar/iostat. See 85-utah-desktop.preset.
-disable_unit sysstat.service
-disable_unit sysstat-collect.timer
-disable_unit sysstat-summary.timer
-disable_unit sysstat-rotate.timer
-# Printing on demand, as Fedora's preset enables it for Bluefin; Hummingbird's
-# 99-default-disable would leave it off.
-enable_unit cups.socket
-enable_unit cups.path
+# The syncthing RPM's "Start Syncthing" and "Syncthing Web UI" launchers:
+# Dakota's syncthing ships the daemon without them (#1361). Starting the daemon
+# from the app grid bypasses syncthing.service and the Sync Folder toggle.
+rm -f /usr/share/applications/syncthing-start.desktop \
+    /usr/share/applications/syncthing-ui.desktop
 
 # Bluefin's Brewfile and Bazaar preinstall hook need the Flathub remote before
 # first boot. Keep this as a .flatpakrepo descriptor so the remote is available
@@ -271,23 +226,34 @@ grep -q '^DeployCollectionID=' /etc/flatpak/remotes.d/flathub.flatpakrepo ||
 grep -qx 'DeployCollectionID=org.flathub.Stable' /etc/flatpak/remotes.d/flathub.flatpakrepo
 # BudsLink backs the BudsLink-Companion extension enabled by default; Dakota
 # appends it to common's system Flatpaks and preinstalls it
-# (projectbluefin/dakota elements/bluefin/common.bst,
-# files/oci/bluefin-flatpak/preinstall.d/io.github.maniacx.BudsLink.preinstall).
-# The desktop contract's [flatpak] apps list fails the build if it is missing.
+# (projectbluefin/dakota elements/bluefin/common.bst; the preinstall comes from
+# the factory's dakota-config-flatpak-apps). The desktop contract's [flatpak]
+# apps list fails the build if it is missing.
 SYSTEM_FLATPAKS=/usr/share/ublue-os/homebrew/system-flatpaks.Brewfile
 if [ -f "${SYSTEM_FLATPAKS}" ] && ! grep -qxF 'flatpak "io.github.maniacx.BudsLink"' "${SYSTEM_FLATPAKS}"; then
     echo 'flatpak "io.github.maniacx.BudsLink"' >>"${SYSTEM_FLATPAKS}"
 fi
-
-disable_unit flatpak-add-fedora-repos.service
 
 # Keep image updates under uupd/bootc rather than the legacy rpm-ostree path.
 # Mask in /usr/lib as well as /etc so the mask survives cross-vendor /etc 3-way merges
 # when switching from systems that have bootc-fetch-apply-updates enabled (such as Bluefin).
 # In a cross-vendor switch, ostree's 3-way /etc merge carries timers.target.wants/
 # symlinks into /etc, which would re-enable the timer if /usr/lib was unmasked.
-disable_unit rpm-ostree.service
+# rpm-ostree.service is off by 85-utah-desktop.preset.
 systemctl mask bootc-fetch-apply-updates.timer bootc-fetch-apply-updates.service
+
+# chrony is removed from the base ([excluded] in base.toml, #1228: time sync is
+# systemd-timesyncd, as on Dakota). Erasing the package drops its sysusers.d
+# file but leaves the account behind, and `bootc container lint --fatal-warn`
+# fails on an /etc/passwd entry with no sysusers.d declaration. Drop the
+# orphaned account with the package.
+if ! rpm -q --quiet chrony; then
+    for f in /etc/passwd /etc/group /etc/shadow /etc/gshadow; do
+        if [ -f "${f}" ]; then
+            sed -i '/^chrony:/d' "${f}"
+        fi
+    done
+fi
 ln -sf /dev/null /usr/lib/systemd/system/bootc-fetch-apply-updates.timer
 ln -sf /dev/null /usr/lib/systemd/system/bootc-fetch-apply-updates.service
 rm -f /usr/lib/systemd/system/*.wants/bootc-fetch-apply-updates.* \
@@ -317,14 +283,12 @@ rm -f /usr/lib/systemd/system/*.wants/serial-getty@ttyS0.service \
       /etc/systemd/system/*.wants/serial-getty@ttyS0.service
 
 # SSH follows TunaOS's convention: closed in published images, opt-in for a
-# local debug build. The preset must agree or first-boot preset-all will undo
-# the build-time enablement.
+# local debug build. preset-all below and first-boot preset application both
+# read the preset, so the debug build flips the preset line.
 if [[ "${ENABLE_SSHD:-0}" == "1" ]]; then
-    enable_unit sshd.service
     sed -i 's/^disable sshd.service$/enable sshd.service/' \
         /usr/lib/systemd/system-preset/85-utah-desktop.preset
-else
-    disable_unit sshd.service
+    grep -qx 'enable sshd.service' /usr/lib/systemd/system-preset/85-utah-desktop.preset
 fi
 
 # These are global user-service presets, so systemctl needs --global.
@@ -354,6 +318,16 @@ fi
 if user_unit_exists ublue-user-setup.service; then
     systemctl --global enable ublue-user-setup.service
 fi
+# The Secret Service starts with the session, as GNOME OS links oo7-daemon
+# into gnome-session.target.wants (#1227). Required: without it nothing
+# unlocks the login keyring.
+user_unit_exists oo7-daemon.service
+systemctl --global enable oo7-daemon.service
+# GTK3 apps follow the light/dark style (#1342), as on Bluefin
+# (ublue-os/bluefin#5163). Required: Utah ships the unit, and without it the
+# adw-gtk3 default keeps GTK3 apps light in Dark mode.
+user_unit_exists ublue-gtk3-theme-sync.service
+systemctl --global enable ublue-gtk3-theme-sync.service
 
 # Common's user preset is not applied by bootc's system preset-all. Without
 # a global enablement, ChairLift's GUI Brewfile is present but never installed.
@@ -368,21 +342,82 @@ authselect enable-feature with-silent-lastlog
 authselect enable-feature with-fingerprint
 # Resolve .local names over mDNS through nss-mdns, as Dakota and Bluefin do.
 authselect enable-feature with-mdns4
+# Changing the password re-encrypts the oo7 login keyring too, as Dakota's
+# bluefin/oo7-passwd-pam.bst arranges (#1227). shadow-utils' passwd stack
+# already calls the keyring module after its system-auth substack; point it at
+# pam_oo7 instead of the removed pam_gnome_keyring. gdm 51's own stacks call
+# pam_oo7 already. Already switched is a no-op; any other shape fails.
+PASSWD_PAM=/etc/pam.d/passwd
+if [ -f "${PASSWD_PAM}" ]; then
+    if grep -qE '^-password[[:space:]]+optional[[:space:]]+pam_oo7\.so use_authtok$' "${PASSWD_PAM}"; then
+        : already switched
+    elif grep -qE '^-password[[:space:]]+optional[[:space:]]+pam_gnome_keyring\.so use_authtok$' "${PASSWD_PAM}" \
+        && grep -qE '^password[[:space:]]+substack[[:space:]]+system-auth$' "${PASSWD_PAM}"; then
+        sed -i -E 's/pam_gnome_keyring\.so use_authtok$/pam_oo7.so use_authtok/' "${PASSWD_PAM}"
+    else
+        echo "ERROR: ${PASSWD_PAM} changed upstream -- re-fit the pam_oo7 password hook (Dakota bluefin/oo7-passwd-pam.bst)" >&2
+        exit 1
+    fi
+fi
+
+# uutils is coreutils and sudo-rs is sudo, as on Dakota (#1229;
+# docs/skills/desktop-contract/references/sudo-rs-uutils.md).
+#
+# uutils-coreutils-replace replaced coreutils-single in the package
+# transaction ([swap] in packages/utah.toml): the GNU names link to uutils,
+# except env, which gnu-env keeps GNU's for pkexec (Dakota's reason).
+[ "$(readlink /usr/bin/ls)" = uutils-coreutils ]
+[ "$(rpm -qf --queryformat '%{NAME}' /usr/bin/env)" = gnu-env ]
+
+# sudo-rs needs C sudo's /etc/pam.d/sudo and sudo-i, /etc/sudoers and
+# sudoers.d, so C sudo stays installed (sudo-rs Requires it), as Dakota
+# stages it first. sudo-rs then takes /usr/bin/sudo, as Dakota's element
+# overwrites it: a hard link, so sudo stays a setuid regular file, and
+# sudoedit, C sudo's link to sudo, reaches sudo-rs too. `rpm -V sudo` reports
+# /usr/bin/sudo changed. visudo and su stay C sudo's and util-linux's, as on
+# Dakota. Fedora's policy labels both paths sudo_exec_t, so the SELinux
+# domain transition matches C sudo's; fail the build if that ever changes.
+test -u /usr/bin/sudo-rs
+ln -f /usr/bin/sudo-rs /usr/bin/sudo
+# Not `-ef`: overlayfs, which container builds run on, reports a different
+# inode for each name of a hard link to a lower-layer file.
+test -u /usr/bin/sudo
+cmp -s /usr/bin/sudo /usr/bin/sudo-rs
+[ "$(readlink /usr/bin/sudoedit)" = sudo ]
+for path in /usr/bin/sudo /usr/bin/sudo-rs; do
+    [ "$(matchpathcon -n "${path}")" = system_u:object_r:sudo_exec_t:s0 ]
+done
+# Dakota ships no su-rs, and nothing runs it: no spare setuid-root su.
+chmod u-s /usr/bin/su-rs
+
+# Dakota's swapfile (/var/swap/swapfile, created at boot by
+# bluefin-swapfile-init) needs the swapfile_t label under Utah's SELinux
+# policy, which has no rule for that path (#1224). Install the one-line module
+# into the policy store, which Hummingbird keeps under /usr/lib/selinux, so it
+# ships in the image and survives ostree's per-deployment policy rebuild.
+# -n: no reload; an image build has no selinuxfs to load it into.
+semodule -n -i /usr/share/selinux/packages/utah-swapfile.cil
+if ! matchpathcon /var/swap/swapfile | grep -q ':swapfile_t:'; then
+    echo "ERROR: /var/swap/swapfile does not label as swapfile_t; swapon would be denied" >&2
+    exit 1
+fi
 
 # uupd is distributed as a release binary, not an RPM in the Hummingbird
-# repositories. Keep its version pinned by the Containerfile argument.
-# Dakota's elements/bluefin/uupd.bst writes the same upstream units, with the
-# distrobox flag below, so the downloads give Dakota's units. Installing them
-# here replaces Common's uupd.timer (four runs a day) with upstream's daily
-# 04:00 timer, which is also what wins on Dakota: BuildStream stages
-# bluefin/uupd.bst after bluefin/common.bst. uupd-manual.service, its polkit
-# rule and /etc/uupd/config.json come from Dakota via system_files.
+# repositories. Keep its version pinned by the Containerfile argument. Its
+# units, uupd-manual.service, polkit rule and /etc/uupd/config.json come from
+# dakota-config-uupd (Dakota's elements/bluefin/uupd.bst), which replaces
+# Common's four-a-day uupd.timer with the daily 04:00 one, as on Dakota.
 install -Dm0755 /tmp/uupd/uupd /usr/bin/uupd
-install -Dm0644 /tmp/uupd/uupd.service /usr/lib/systemd/system/uupd.service
-install -Dm0644 /tmp/uupd/uupd.timer /usr/lib/systemd/system/uupd.timer
-systemctl enable uupd.timer
-# Avoid pulling the distrobox module on every update, as in Dakota's uupd.service.
-sed -i 's|uupd|& --disable-module-distrobox|' /usr/lib/systemd/system/uupd.service
+# Common ships its own /etc/uupd/config.json, so rpm installs the package's
+# copy as .rpmnew; Dakota's hardware-check config must win.
+if [ -f /etc/uupd/config.json.rpmnew ]; then
+    mv -f /etc/uupd/config.json.rpmnew /etc/uupd/config.json
+fi
+
+# Apply the system presets to every installed unit, so the image carries the
+# state first-boot preset application would give it and the desktop contract
+# checks that state. Run after the last unit file lands (uupd above).
+systemctl preset-all
 
 # Hummingbird's resolved unit defaults to a disconnected private /tmp. The
 # Bluefin LTS workaround is needed for bootc's early-boot DNS path.

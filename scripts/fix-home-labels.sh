@@ -24,9 +24,9 @@
 # /etc merge, with that deployment's /usr writable), and that rebuild read
 # HOME=/var/home and rewrote the active file_contexts.homedirs into the broken
 # form on every update (#474, #575). The live ISO creates liveuser with an
-# explicit --home-dir /var/home/liveuser, because in a container /var/home
-# does not exist yet and `useradd -m` under /home trips on the dangling /home
-# symlink (#281).
+# explicit --home-dir /var/home/liveuser, because a container build has no
+# home.mount: `useradd -m` under /home would write into the image's empty
+# bind-mount point, hidden at boot (#281, #1234).
 #
 # --check runs at the image's last step: it rebuilds the policy exactly as
 # ostree does on update and fails the build if the home rules change, so a

@@ -14,6 +14,11 @@
 #   Active phase, deployment slot, and digest are recorded at every stage.
 #   Any failure captures screenshots, serial console logs, failed systemd units,
 #   and emits a structured lifecycle failure report.
+#
+# Exit codes (iso/scripts/e2e-exit.sh): 20 + the phase number that failed,
+# 20 while preparing or booting the disk, luks-e2e.sh's own code (11-17) when
+# the ISO install fails, 75 when E2E_WALL_CLOCK_DEADLINE passes, 77 when QEMU
+# or OVMF is missing.
 set -euo pipefail
 
 usage() {
@@ -94,6 +99,8 @@ TEST_PASSWORD="${UTAH_LIFECYCLE_PASSWORD:-utahtest}"
 SSH_PORT="${UTAH_LIFECYCLE_SSH_PORT:-2224}"
 VNC_DISPLAY="${UTAH_LIFECYCLE_VNC:-4}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "${ROOT}/iso/scripts/e2e-exit.sh"
+source "${ROOT}/iso/scripts/e2e-services.sh"
 
 if [[ "${POLICY}" != "bootc" && "${POLICY}" != "uupd" ]]; then
     echo "ERROR: UTAH_LIFECYCLE_POLICY must be 'bootc' or 'uupd', got '${POLICY}'" >&2
@@ -112,12 +119,13 @@ SERIAL_LOG="${WORK}/serial.log"
 PID_FILE="${WORK}/vm.pid"
 
 ACTIVE_PHASE="initialization"
+E2E_PHASE_EXIT=20
 ACTIVE_DEPLOYMENT="none"
 ACTIVE_DIGEST="none"
 EXPECTED_DIGEST=""
 
 QEMU="$(command -v qemu-system-x86_64 /usr/libexec/qemu-kvm 2>/dev/null | head -1 || true)"
-[[ -n "${QEMU}" ]] || { echo "ERROR: qemu-system-x86_64 not found" >&2; exit 1; }
+[[ -n "${QEMU}" ]] || e2e_exit "${E2E_EXIT_DEPENDENCY}" "qemu-system-x86_64 not found"
 
 OVMF_CODE=""
 for f in /usr/share/edk2/ovmf/OVMF_CODE.fd /usr/share/OVMF/OVMF_CODE_4M.fd \
@@ -125,7 +133,7 @@ for f in /usr/share/edk2/ovmf/OVMF_CODE.fd /usr/share/OVMF/OVMF_CODE_4M.fd \
          /home/linuxbrew/.linuxbrew/share/qemu/edk2-x86_64-code.fd; do
     [[ -f "$f" ]] && { OVMF_CODE="$f"; break; }
 done
-[[ -n "${OVMF_CODE}" ]] || { echo "ERROR: OVMF firmware code not found" >&2; exit 1; }
+[[ -n "${OVMF_CODE}" ]] || e2e_exit "${E2E_EXIT_DEPENDENCY}" "OVMF firmware code not found"
 
 OVMF_VARS_SRC=""
 for f in /usr/share/edk2/ovmf/OVMF_VARS.fd /usr/share/OVMF/OVMF_VARS_4M.fd \
@@ -133,7 +141,7 @@ for f in /usr/share/edk2/ovmf/OVMF_VARS.fd /usr/share/OVMF/OVMF_VARS_4M.fd \
          /home/linuxbrew/.linuxbrew/share/qemu/edk2-i386-vars.fd; do
     [[ -f "$f" ]] && { OVMF_VARS_SRC="$f"; break; }
 done
-[[ -n "${OVMF_VARS_SRC}" ]] || { echo "ERROR: OVMF variable store not found" >&2; exit 1; }
+[[ -n "${OVMF_VARS_SRC}" ]] || e2e_exit "${E2E_EXIT_DEPENDENCY}" "OVMF variable store not found"
 
 ACCEL="-accel kvm"
 test -r /dev/kvm || { echo "No /dev/kvm; falling back to TCG (much slower)"; ACCEL="-accel tcg,thread=multi"; }
@@ -155,6 +163,55 @@ ssh_target_sudo() {
     local command
     printf -v command '%q ' "$@"
     printf '%s\n' "${TEST_PASSWORD}" | ssh_target "sudo -S -p '' -- ${command}"
+}
+
+scp_target() {
+    sshpass -p "${TEST_PASSWORD}" scp "${SSH_OPTS[@]}" -P "${SSH_PORT}" "$@"
+}
+
+# Content gates: checks that hold an image to a rule from this checkout.
+# luks-e2e.sh runs them on the images it installs; for the lifecycle it skips
+# them on the baseline (UTAH_E2E_BASELINE=1), which is the previous :testing
+# and may predate the rule, so a gate never judges an old image by a newer
+# rule and stalls promotion (#1343). Each one runs here on the upgraded
+# candidate instead.
+#
+# verify_setup_state (iso/scripts/e2e-services.sh): every unit in the
+# candidate contract's [services] lists is loaded, enabled and not failed
+# (#1282). Its failures come through fail, on stderr: contract_units calls it
+# inside a command substitution, which would swallow the report.
+fail() { diagnose_failure "$*" >&2; }
+
+# The candidate's /efi mountpoint and mount units (#1326).
+verify_efi_mount() {
+    local phase="$1"
+    ssh_target 'test -d /efi && for unit in efi.automount efi.mount; do load=$(systemctl show "$unit" -p LoadState --value) && state=$(systemctl show "$unit" -p ActiveState --value) && echo "  $unit: load=$load active=$state" && test "$state" != failed || exit 1; done' \
+        > "${EVIDENCE}/efi-${phase}.txt" 2>&1 \
+        || diagnose_failure "EFI mountpoint is missing or an EFI mount unit failed (${phase}); see efi-${phase}.txt"
+}
+
+# bootc's mac_admin probe logs no AVC denial on the candidate's boot (#1198):
+# utah_bootc_probe dontaudits it for countme (unconfined_service_t) and the
+# installer's first-boot fisherman-boot-receipt.service (initrc_t, #1131).
+# Only this boot's records count: audit.log keeps the baseline's first boot,
+# whose policy may lack a rule the candidate has.
+verify_bootc_probe() {
+    local phase="$1" script
+    script="$(cat <<'INNER'
+boot=$(( $(date +%s) - $(cut -d. -f1 /proc/uptime) - 1 ))
+{
+    awk -v boot="${boot}" '{ i = index($0, "audit("); if (i && substr($0, i + 6, 10) + 0 >= boot) print }' \
+        /var/log/audit/audit.log 2>/dev/null
+    journalctl -b --no-pager -o cat 2>/dev/null
+} | grep -F avc: || true
+INNER
+)"
+    ssh_target_sudo bash -c "${script}" > "${EVIDENCE}/avc-${phase}.log" 2>&1 \
+        || diagnose_failure "Could not read the ${phase} deployment's AVC records"
+    if grep -E 'denied .*comm="(chcon|bootc)"' "${EVIDENCE}/avc-${phase}.log" >&2; then
+        diagnose_failure "chcon was denied mac_admin on the ${phase} boot (#1198): utah_bootc_probe is not in effect; see avc-${phase}.log"
+    fi
+    echo "  bootc chcon AVC denials (${phase} boot): none"
 }
 
 verify_boot_files() {
@@ -252,9 +309,14 @@ shot() {
 
 qemu_pids=()
 cleanup() {
+    # Read first: anything else run here changes $?. diagnose_failure and a
+    # bare `set -e` failure both report the phase's code (iso/scripts/e2e-exit.sh).
+    local status=$?
+    trap '' USR1
     for pid in "${qemu_pids[@]:-}"; do
         [[ -n "${pid}" ]] && kill "${pid}" 2>/dev/null || true
     done
+    exit "$(e2e_status "${status}")"
 }
 trap cleanup EXIT
 
@@ -302,6 +364,15 @@ diagnose_failure() {
 
     exit 1
 }
+
+# Fail before CI's timeout-minutes kills the job, so the evidence uploads.
+# During the install phase luks-e2e.sh watches the same deadline and fails
+# first; this handler then runs as soon as it returns.
+deadline_reached() {
+    E2E_EXIT_CODE="${E2E_EXIT_DEADLINE}"
+    diagnose_failure "E2E_WALL_CLOCK_DEADLINE reached; failing now so the evidence uploads before the job is killed"
+}
+e2e_deadline_start deadline_reached
 
 wait_for_boot() {
     local phase_label="$1"
@@ -537,8 +608,11 @@ if [[ "${DISK_OR_ISO}" == *.iso ]]; then
     # both BLS shapes.
     INSTALL_WORK="${UTAH_E2E_WORK:-${WORK}/install}"
     mkdir -p "${INSTALL_WORK}"
-    UTAH_E2E_WORK="${INSTALL_WORK}" bash "${ROOT}/iso/scripts/luks-e2e.sh" \
-        "${DISK_OR_ISO}" "${BASELINE_REF}" "${PASSPHRASE}"
+    # UTAH_E2E_BASELINE=1 skips luks-e2e.sh's content gates on the baseline;
+    # see verify_efi_mount. The candidate is checked after the upgrade.
+    UTAH_E2E_WORK="${INSTALL_WORK}" UTAH_E2E_BASELINE=1 bash "${ROOT}/iso/scripts/luks-e2e.sh" \
+        "${DISK_OR_ISO}" "${BASELINE_REF}" "${PASSPHRASE}" \
+        || e2e_exit "$?" "the install harness (luks-e2e.sh) failed; its exit code is kept"
     DISK_SOURCE="${INSTALL_WORK}/install.qcow2"
 else
     DISK_SOURCE="${DISK_OR_ISO}"
@@ -583,6 +657,7 @@ python3 "${ROOT}/iso/scripts/luks-unlock.py" qemu \
 
 # --- Phase 1: Baseline Deployment ---
 ACTIVE_PHASE="baseline"
+E2E_PHASE_EXIT=21
 ACTIVE_DEPLOYMENT="baseline"
 echo "=== Phase 1/5: Verify Baseline Deployment ==="
 wait_for_boot "Phase 1 (Baseline)"
@@ -634,6 +709,7 @@ echo "  [Phase 1] PASS: Active deployment: baseline, Digest: ${BASELINE_DIGEST}"
 
 # --- Phase 2: Stage Upgrade via Policy ---
 ACTIVE_PHASE="staged"
+E2E_PHASE_EXIT=22
 ACTIVE_DEPLOYMENT="staged-candidate"
 echo "=== Phase 2/5: Stage Candidate Upgrade (${POLICY} policy) ==="
 echo "  Target candidate image: ${TARGET_IMAGE}"
@@ -701,6 +777,7 @@ echo "  [Phase 2] PASS: Active deployment: staged, Candidate digest: ${ACTIVE_DI
 
 # --- Phase 3: Boot Upgraded Deployment ---
 ACTIVE_PHASE="upgraded"
+E2E_PHASE_EXIT=23
 ACTIVE_DEPLOYMENT="upgraded"
 EXPECTED_DIGEST="${ACTIVE_DIGEST}"
 echo "=== Phase 3/5: Reboot and Verify Upgraded Deployment ==="
@@ -726,6 +803,9 @@ python3 "${ROOT}/scripts/bootc_lifecycle.py" validate-phase upgraded \
     --candidate-digest "${EXPECTED_DIGEST}" \
     || diagnose_failure "Upgraded deployment validation failed"
 verify_boot_files upgraded
+verify_efi_mount upgraded
+verify_bootc_probe upgraded
+verify_setup_state upgraded
 
 # Phase 3 (post-upgrade reboot) must check both `booted` and `rollback`:
 # the upgraded deployment is the booted slot, and the previous baseline
@@ -776,6 +856,7 @@ echo "  [Phase 3] PASS: Active deployment: upgraded, Digest: ${UPGRADED_DIGEST}"
 
 # --- Phase 4: Rollback to Previous Deployment ---
 ACTIVE_PHASE="rollback"
+E2E_PHASE_EXIT=24
 ACTIVE_DEPLOYMENT="rollback"
 EXPECTED_DIGEST="${BASELINE_DIGEST}"
 echo "=== Phase 4/5: Rollback to Previous Deployment ==="
@@ -832,6 +913,7 @@ echo "  [Phase 4] PASS: Active deployment: rollback-restored, Digest: ${RESTORED
 
 # --- Phase 5: Final Summary ---
 ACTIVE_PHASE="complete"
+E2E_PHASE_EXIT=25
 echo "=== Phase 5/5: Generate Lifecycle Summary and Evidence ==="
 python3 "${ROOT}/scripts/bootc_lifecycle.py" summary --evidence-dir "${EVIDENCE}"
 

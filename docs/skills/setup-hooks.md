@@ -138,8 +138,9 @@ Hummingbird's `/usr/lib/selinux` (`utah-relocate-selinux-store`, see
 `containerfile.md`), so a user's own `semodule`/`semanage` changes take part
 in the same rebuild; the home-rule invariant above is what keeps those
 rebuilds from re-keying `/var/home`. Build-time
-`useradd -m` must name `/var/home/<user>` explicitly: `/var/home` does not
-exist in a container, so the `/home` symlink dangles (#281).
+`useradd -m` must name `/var/home/<user>` explicitly: a container build has
+no `home.mount`, so `/home` is the image's empty mount point and anything
+written there is hidden at boot (#281, #1234).
 
 ## Tests
 

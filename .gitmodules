@@ -41,10 +41,6 @@
 [submodule "system_files/shared/usr/share/gnome-shell/extensions/fuzzy-application-search@mkhl.codeberg.page"]
 	path = system_files/shared/usr/share/gnome-shell/extensions/fuzzy-application-search@mkhl.codeberg.page
 	url = https://codeberg.org/mkhl/gnome-shell-extension-fuzzy-application-search.git
-[submodule "system_files/shared/usr/share/gnome-shell/extensions/tmp/quick-settings-audio-panel"]
-	path = system_files/shared/usr/share/gnome-shell/extensions/tmp/quick-settings-audio-panel
-	url = https://github.com/Rayzeq/quick-settings-audio-panel.git
-	branch = main
 [submodule "system_files/shared/usr/share/gnome-shell/extensions/tmp/quicksettings-audio-devices-hider"]
 	path = system_files/shared/usr/share/gnome-shell/extensions/tmp/quicksettings-audio-devices-hider
 	url = https://github.com/marcinjahn/gnome-quicksettings-audio-devices-hider-extension.git
@@ -60,12 +56,4 @@
 [submodule "system_files/shared/usr/share/gnome-shell/extensions/tmp/bluefin-bling"]
 	path = system_files/shared/usr/share/gnome-shell/extensions/tmp/bluefin-bling
 	url = https://github.com/projectbluefin/bluefin-bling.git
-	branch = main
-[submodule "system_files/shared/usr/share/gnome-shell/extensions/tmp/copyous"]
-	path = system_files/shared/usr/share/gnome-shell/extensions/tmp/copyous
-	url = https://github.com/boerdereinar/copyous.git
-	branch = main
-[submodule "system_files/shared/usr/share/gnome-shell/extensions/tmp/syncthing-toggle-rehhouari"]
-	path = system_files/shared/usr/share/gnome-shell/extensions/tmp/syncthing-toggle-rehhouari
-	url = https://github.com/rehhouari/gnome-shell-extension-syncthing-toggle.git
 	branch = main
