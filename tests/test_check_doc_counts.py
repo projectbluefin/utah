@@ -46,13 +46,18 @@ class CheckDocCountsTests(unittest.TestCase):
             len(self.module.load_generator().load_installer().section(
                 ROOT / "packages/utah.toml", "unavailable")))
 
+    def stale_unavailable_row(self):
+        # One more than the manifest's real count, so the row is always stale.
+        _, _, unavailable = self.module.expected_counts()
+        return f"Genuinely unavailable | **{unavailable + 1}**"
+
     def test_a_stale_readme_count_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             stale_readme = Path(tmp) / "README.md"
             text = (ROOT / "README.md").read_text()
             rewritten, count = re.subn(
                 r"Genuinely unavailable \| \*\*\d+\*\*",
-                "Genuinely unavailable | **4**", text)
+                self.stale_unavailable_row(), text)
             self.assertEqual(count, 1)
             stale_readme.write_text(rewritten)
 
@@ -72,7 +77,7 @@ class CheckDocCountsTests(unittest.TestCase):
             skill = Path(tmp) / "package-contract.md"
             readme.write_text(re.sub(
                 r"Genuinely unavailable \| \*\*\d+\*\*",
-                "Genuinely unavailable | **4**", (ROOT / "README.md").read_text()))
+                self.stale_unavailable_row(), (ROOT / "README.md").read_text()))
             skill_text, count = re.subn(
                 r"\d+(\s+base\s+manifest\s+packages\s+installed)", r"1\1",
                 (ROOT / "docs/skills/package-contract.md").read_text())

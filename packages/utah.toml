@@ -261,18 +261,23 @@ packages = [
     "systemd-container",
     # Virtualization, as on Dakota (#1232): toolbox and the guest agents for
     # QEMU (with SPICE), VMware and Hyper-V. The guest agents start only on
-    # their hypervisor (udev or ConditionVirtualization). virtiofsd resolves
-    # since the factory's qemu-common 11.1.3-2, and libvirt-client and
-    # libvirt-daemon-config-network since libvirt 12.9.0-2; qemu-kvm and
-    # libvirt-daemon-kvm are still in [unavailable] (utah-packages#1021).
+    # their hypervisor (udev or ConditionVirtualization).
     "qemu-guest-agent",
     "spice-vdagent",
     "open-vm-tools",
     "hyperv-daemons",
     "toolbox",
+    # QEMU/KVM, virtiofsd and libvirt (Dakota's elements/bluefin/libvirt.bst)
+    # from the factory (utah-packages#1021): the kvm daemon set, the default
+    # NAT network `ujust setup-virtualization` binds to the libvirt firewall
+    # zone, and virsh, which it uses to check the daemon. libvirt stays off by
+    # 98-utah-enable-default.preset until that recipe turns the modular virt*d
+    # sockets on.
+    "qemu-kvm",
     "virtiofsd",
-    "libvirt-client",
+    "libvirt-daemon-kvm",
     "libvirt-daemon-config-network",
+    "libvirt-client",
     # pam_pwquality's dictionary. Fedora's Silverblue base pulls it in;
     # Hummingbird's cracklib does not require it. Without it libpwquality
     # fails every candidate with "error loading dictionary", so passwd (via
@@ -919,24 +924,10 @@ coreutils-single = "uutils-coreutils-replace"
 #
 # pipewire-libs-extra is supplied by the pinned September 10 factory candidate
 # and returns to the install contract (#35).
-#
-# qemu-kvm, libvirt-daemon-kvm
-#   Dakota installs QEMU/KVM, libvirt (its own elements/bluefin/libvirt.bst)
-#   and virtiofsd, libvirt off by preset until `ujust setup-virtualization`
-#   turns the modular virt*d sockets on (#1232). At factory 2f92517 neither
-#   resolves: qemu-kvm's qemu-system-x86-core (qemu 11.1.3-2) needs xen,
-#   daxctl, xdp, qatzip and igvm libraries, and libvirt-daemon-kvm also needs
-#   libvirt 12.9.0-2's iSCSI-direct storage driver, which needs libiscsi.
-#   Tracked by utah-packages#1021. virtiofsd (qemu-common 11.1.3-2),
-#   libvirt-client and libvirt-daemon-config-network (libvirt 12.9.0-2)
-#   resolve and are in [parity]. Move the rest into [parity] once
-#   `just check-repos` reports them stale.
 packages = [
     "grub2-efi-x64-cdboot",
     "anaconda-live",
     "firefox",
-    "qemu-kvm",
-    "libvirt-daemon-kvm",
     "slitherer",
 ]
 
@@ -1265,8 +1256,6 @@ parity = [
     "nicstat",
     "syncthing",
     "virtiofsd",
-    "libvirt-client",
-    "libvirt-daemon-config-network",
     "sysprof-cli",
     "erofs-utils",
     "google-noto-serif-cjk-vf-fonts",
@@ -1278,4 +1267,9 @@ parity = [
     "gst-editing-services",
     # Utah's terminal experience (utah-packages#1235).
     "bluefin-cli",
+    # QEMU/KVM and libvirt (#1232, utah-packages#1021).
+    "qemu-kvm",
+    "libvirt-daemon-kvm",
+    "libvirt-daemon-config-network",
+    "libvirt-client",
 ]

@@ -788,8 +788,7 @@ disabled = [
   # before GDM on an install with no user, ahead of gnome-initial-setup.
   "systemd-homed-firstboot.service",
   # Dakota's 80-libvirt.preset (carried in 98-utah-enable-default.preset):
-  # libvirt stays off until `ujust setup-virtualization` (#1232). Absent units
-  # count as off, so these hold once the factory publishes libvirt.
+  # libvirt stays off until `ujust setup-virtualization` (#1232).
   "libvirtd.socket",
   "virtqemud.socket",
   "virtqemud.service",

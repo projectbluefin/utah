@@ -288,6 +288,7 @@
         "libva-intel-media-driver",
         "libvirt-client",
         "libvirt-daemon-config-network",
+        "libvirt-daemon-kvm",
         "libvpl",
         "linux-atm-libs",
         "lm_sensors",
@@ -361,6 +362,7 @@
         "python3-idna",
         "python3-pip",
         "qemu-guest-agent",
+        "qemu-kvm",
         "qt6-qtbase",
         "quota",
         "rc-tools",
@@ -486,8 +488,8 @@
     }
   ],
   "totals": {
-    "installed": 429,
-    "unavailable": 6
+    "installed": 431,
+    "unavailable": 4
   },
   "unavailable": [
     {
@@ -507,14 +509,6 @@
         253
       ],
       "name": "grub2-efi-x64-cdboot"
-    },
-    {
-      "issues": [],
-      "name": "libvirt-daemon-kvm"
-    },
-    {
-      "issues": [],
-      "name": "qemu-kvm"
     },
     {
       "issues": [
