@@ -17,7 +17,7 @@ FROM ${BUILDER_IMAGE} AS os-installer
 ARG OSI_REPO=https://github.com/hanthor/os-installer.git
 # Full commit of hanthor/os-installer (branch utah). Fetched by commit and
 # compared after checkout, so the build never follows a moving branch.
-ARG OSI_REF=cc63a4ef37ab1eb95582c92e63f5f8c0fac004fa
+ARG OSI_REF=20064186ffba96f3ee73114f84feed9404f742ec
 RUN dnf -y install --setopt=install_weak_deps=False \
         git meson ninja-build gettext blueprint-compiler glib2-devel \
         gtk4-devel libadwaita-devel gnome-desktop4-devel libgweather4-devel \
