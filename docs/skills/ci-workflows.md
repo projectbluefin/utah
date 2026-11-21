@@ -119,6 +119,11 @@ post-build verification workflows, not the complete workflow inventory:
   See [testsuite triage](ci-workflows/references/testsuite-triage.md) for
   known failures and [iso-e2e](ci-workflows/references/iso-e2e.md) for the
   ratchet.
+- `.github/workflows/rerun-e2e-infra-failures.yml` -- after a failed first
+  attempt of Post-Testing E2E, `scripts/e2e-infra-rerun.py` classifies every
+  failed job against a short infra signature list; only when all match does it
+  re-run the failed jobs once, behind the `e2e-infra-retry-wait` environment's
+  wait timer. See [infra re-run](ci-workflows/references/iso-e2e.md#infra-re-run).
 - `.github/workflows/execute-release.yml` -- promotion pushes to `main`,
   manual dispatch and a daily 06:00 UTC check retag `:stable`. The daily run
   releases only when `:stable` last moved over seven days ago (or is missing)

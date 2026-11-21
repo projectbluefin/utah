@@ -1,0 +1,11 @@
+2026-11-16T15:23:25.8700921Z Current runner version: '2.338.2'
+2026-11-16T15:23:25.8720306Z ##[group]Runner Image Provisioner
+2026-11-16T15:23:25.8720912Z Hosted Compute Agent
+2026-11-16T15:35:40.3019880Z ##[group]Run # Fresh connection: the VM may have rebooted during the suite.
+2026-11-16T15:35:40.3020371Z [36;1m# Fresh connection: the VM may have rebooted during the suite.[0m
+2026-11-16T15:35:40.9297388Z ##[warning]AVC in permissive domain (not blocked): { getattr } comm=bootupctl bootupd_t -> unlabeled_t:file
+2026-11-16T15:35:40.9299130Z ##[warning]AVC in permissive domain (not blocked): { read } comm=bootupctl bootupd_t -> unlabeled_t:file
+2026-11-16T15:35:40.9300618Z ##[warning]AVC in permissive domain (not blocked): { open } comm=bootupctl bootupd_t -> unlabeled_t:file
+2026-11-16T15:35:40.9303521Z ##[error]unexpected SELinux denial: { mac_admin } comm=chcon unconfined_service_t -> unconfined_service_t:capability2
+2026-11-16T15:35:40.9305260Z ##[error]unexpected SELinux denial: { mac_admin } comm=chcon unconfined_service_t -> unconfined_service_t:capability2
+2026-11-16T15:35:40.9306860Z ##[error]unexpected SELinux denial: { mac_admin } comm=chcon unconfined_service_t -> unconfined_service_t:capability2
