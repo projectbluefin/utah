@@ -195,6 +195,14 @@ class UserServiceTests(VerifyModeTests):
             naming="required user service is not enabled globally: wireplumber.service",
         )
 
+    def test_an_opt_in_user_service_enabled_globally_is_rejected(self):
+        contract = base_contract()
+        contract["services"] = dict(contract["services"], user_disabled=["syncthing.service"])
+        code, _, errors = self.verify(contract)
+        self.assertEqual(code, 0, errors)
+        self.user_enabled.add("syncthing.service")
+        self.assert_rejected(contract, naming="user service must not be enabled globally: syncthing.service")
+
 
 class MediaDecoderTests(VerifyModeTests):
     """[media].decoders must load via gst-inspect-1.0, not merely be installed
@@ -663,6 +671,8 @@ class GSettingsTests(VerifyModeTests):
             gsettings["values"],
             {
                 "org.gnome.shell.extensions.dash-to-dock disable-overview-on-startup": "true",
+                # GTK3 reads gtk-theme, not color-scheme (#1342).
+                "org.gnome.desktop.interface gtk-theme": "'adw-gtk3'",
                 # Dakota's default-enabled set, in Dakota's order
                 # (projectbluefin/dakota elements/bluefin/shell-extensions/disable-ext-validator.bst).
                 "org.gnome.shell enabled-extensions": "['caffeine@patapon.info', "

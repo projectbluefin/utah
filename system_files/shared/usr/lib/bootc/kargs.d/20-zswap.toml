@@ -1,0 +1,10 @@
+# Copied from Dakota (projectbluefin/dakota elements/bluefin/zswap-config.bst).
+# zswap compresses pages in RAM in front of /var/swap/swapfile (#1224). The
+# zstd compressor is a module on Hummingbird's kernel; the initramfs carries it
+# (dracut.conf.d/50-utah-zswap-zstd.conf) so zswap can load it at init.
+kargs = [
+    "zswap.enabled=1",
+    "zswap.compressor=zstd",
+    "zswap.max_pool_percent=20",
+    "zswap.shrinker_enabled=1",
+]

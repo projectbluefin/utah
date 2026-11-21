@@ -100,7 +100,7 @@ class InventoryTests(unittest.TestCase):
             "iso/scripts/luks-unlock.py",
             "iso/scripts/boot-installed.sh",
             "scripts/build-gnome-extensions.sh",
-            "system_files/shared/usr/libexec/bluefin-refresh-stats",
+            "system_files/shared/usr/libexec/bluefin-wallpaper-month-sync",
         ):
             self.assertIn(missed, covered)
 

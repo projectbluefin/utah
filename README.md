@@ -1,9 +1,9 @@
 # Utahraptor
 
 <!-- BEGIN E2E VERIFICATION -->
-[![Verified ISO desktop](https://github.com/projectbluefin/utah/raw/3fad07a5d3309676f3e6263af045cf4a0bdffdcc/screenshots/installed-fastfetch.png)](https://github.com/projectbluefin/utah/blob/3fad07a5d3309676f3e6263af045cf4a0bdffdcc/README.md)
+[![Verified ISO desktop](https://github.com/projectbluefin/utah/raw/cb04ffbceaef83f611eb736bb6bae0d57c4d9eee/screenshots/installed-fastfetch.png)](https://github.com/projectbluefin/utah/blob/cb04ffbceaef83f611eb736bb6bae0d57c4d9eee/README.md)
 
-*LUKS ISO test passed for commit `6d87d76d053e`. [CI run](https://github.com/projectbluefin/utah/actions/runs/44214581637) also runs independent desktop tests that do not gate this record; the LUKS and production ISO jobs passed; [screenshots and provenance](https://github.com/projectbluefin/utah/tree/3fad07a5d3309676f3e6263af045cf4a0bdffdcc).*
+*LUKS ISO test passed for commit `2411c38d33ce`. [CI run](https://github.com/projectbluefin/utah/actions/runs/44764429105) also runs independent desktop tests that do not gate this record; the LUKS and production ISO jobs passed; [screenshots and provenance](https://github.com/projectbluefin/utah/tree/cb04ffbceaef83f611eb736bb6bae0d57c4d9eee).*
 <!-- END E2E VERIFICATION -->
 
 †Utahraptor ostrommaysi
@@ -72,15 +72,15 @@ Bluefin's `base.toml` and is now edited by hand as Dakota parity work lands.
 
 | | count |
 | --- | --- |
-| Base manifest installed | **61** |
-| Utah additions (GNOME 51, base-image parity, device firmware, desktop services) | 268 |
+| Base manifest installed | **57** |
+| Utah additions (GNOME 51, base-image parity, device firmware, desktop services) | 360 |
 | Genuinely unavailable | **6** |
 
 ## Known gaps
 
 Why this is still pre-alpha:
 
-- **Disable Secure Boot.** The live ISO (`systemd-boot-unsigned`), custom OGC kernel, NVIDIA driver, and `v4l2loopback` module are not signed yet. Boot via UEFI with Secure Boot off, and flash the ISO directly with Fedora Media Writer or `dd` (Ventoy and legacy BIOS are unsupported). The live session runs SELinux permissive; installed systems run Enforcing.
+- **Disable Secure Boot.** No flavor boots with Secure Boot on yet. Every flavor runs Fedora's kernel rebuilt with a btrfs fs-verity fix, and that rebuild is not Fedora-signed. The gaming flavors' OGC kernel, the NVIDIA module, `v4l2loopback` and the live ISO's `systemd-boot-unsigned` are unsigned too. Utah will not sign them with its own key or ask you to enroll a MOK. Signing comes from upstream instead: the kernel fix going into Fedora's signed kernel, and signed systemd-boot and kernel modules through Hummingbird (#1225, #1379, #1380, #1381). Boot via UEFI with Secure Boot off, and flash the ISO directly with Fedora Media Writer or `dd` (Ventoy and legacy BIOS are unsupported). The live session runs SELinux permissive; installed systems run Enforcing.
 - **Switching from another `bootc` image.** Ostree's 3-way `/etc` merge can carry over `bootc-fetch-apply-updates.timer` from another image. Utah masks `bootc-fetch-apply-updates` so background updates go through `uupd` instead of silently undoing a `bootc rollback`. After switching, check `systemctl is-enabled bootc-fetch-apply-updates.timer`.
 - **Bootloader updates.** Systems on `systemd-boot` update their EFI partition via `bootctl` (`systemd-boot-update.service`), so `bootupctl status` intentionally shows no components. Check `bootctl status` instead.
 - **Hardware, codecs, and drivers need real-world testing.** Intel/Linux Wi-Fi firmware and Intel media drivers are included, and the OGC kernel (`sched_ext`, `binderfs`) and open NVIDIA module compile, but hardware video decoding, Wi-Fi, and gaming flavors still need testing on physical machines (#383).

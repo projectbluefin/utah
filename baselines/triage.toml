@@ -11,281 +11,296 @@
 #                that arrive as dependencies of something else); area groups them
 # `just check` fails on any gap missing from this file, so a new gap needs a
 # decision before it can land. Drop an entry once it stops being a gap.
+#
+# Recurring waiver reasons (docs/skills/package-contract/references/
+# factory-consumption.md#closing-baseline-gaps):
+#   developer toolchain  owner decision on #1263: compilers, doc generators,
+#                        -devel tools and Python build libraries stay out of
+#                        the image; developers use toolbox, distrobox or brew
+#   library utility      GNOME OS builds a library element unsplit, so its
+#                        test, example and conversion CLIs land in the image;
+#                        Fedora splits them into a -tools/-utils subpackage
+#                        that is not a desktop feature
 
 [item]
 
 # --- Structural differences, one epic child each ---------------------------
 
-kanata = { status = "planned", area = "accessibility-input", issue = "#1222", reason = "Dakota remaps keys with kanata; Utah ships input-remapper" }
+kanata = { status = "planned", area = "accessibility-input", issue = "#1222", reason = "#1297 installs kanata from the factory in place of input-remapper" }
+ydotool = { status = "planned", area = "accessibility-input", issue = "#1222", reason = "Installed from the factory with kanata (#1297)" }
 "/usr/lib/systemd/system/dakota-secure-boot-update.service" = { status = "planned", area = "boot", issue = "#1225" }
 "/usr/lib/systemd/system/ublue-boot-timeout.service" = { status = "planned", area = "boot", issue = "#1225", reason = "Runs bootctl set-timeout; only meaningful on systemd-boot" }
 genpeimg = { status = "planned", area = "boot", issue = "#1225", reason = "PE image tooling for the signed systemd-boot chain" }
 efivar = { status = "planned", area = "boot", issue = "#1225", reason = "efisecdb manages Secure Boot signature databases" }
-apparmor = { status = "planned", area = "auth-security", issue = "#1226", reason = "Dakota confines with AppArmor; Utah inherits SELinux from Hummingbird" }
-oo7-cli = { status = "planned", area = "auth-security", issue = "#1227" }
-oo7-daemon = { status = "planned", area = "auth-security", issue = "#1227", reason = "Dakota's Secret Service; Utah runs gnome-keyring" }
-oo7-portal = { status = "planned", area = "auth-security", issue = "#1227" }
-uutils-coreutils = { status = "planned", area = "cli-tools", issue = "#1229" }
-sudo = { status = "planned", area = "auth-security", issue = "#1229", reason = "sudo_logsrvd and sudo_sendlog; Dakota's sudo is sudo-rs" }
-fish = { status = "unavailable", area = "shells", issue = "#1230", reason = "packages/utah.toml [unavailable]" }
+oo7-cli = { status = "planned", area = "auth-security", issue = "#1227", reason = "#1304 installs it" }
+oo7-daemon = { status = "planned", area = "auth-security", issue = "#1227", reason = "#1304 installs it from the factory in place of gnome-keyring" }
+oo7-portal = { status = "planned", area = "auth-security", issue = "#1227", reason = "#1304 installs it" }
+uutils-coreutils = { status = "planned", area = "cli-tools", issue = "#1229", reason = "#1305 installs it beside GNU coreutils as uutils-<prog> and uu_<prog>; Dakota overwrites the GNU names" }
+sudo = { status = "planned", area = "auth-security", issue = "#1229", reason = "sudo_logsrvd and sudo_sendlog; Dakota's sudo is sudo-rs, deferred in Utah until it is boot-tested, handles confined SELinux users and has a sudoers migration check" }
+fish = { status = "planned", area = "shells", issue = "#1230", reason = "#1309 installs fish and drops zsh; still in packages/utah.toml [unavailable] until it lands" }
 libvirt = { status = "planned", area = "virt-dev", issue = "#1232", reason = "Installed and disabled by preset in Dakota; ujust setup-virtualization turns it on" }
 qemu = { status = "planned", area = "virt-dev", issue = "#1232" }
 usbredir = { status = "planned", area = "virt-dev", issue = "#1232" }
-toolbox = { status = "planned", area = "virt-dev", issue = "#1232" }
+toolbox = { status = "planned", area = "virt-dev", issue = "#1232", reason = "#1309 installs it" }
 nspawn = { status = "planned", area = "virt-dev", issue = "#1232" }
 flatpak-builder = { status = "planned", area = "virt-dev", issue = "#1232" }
-qemu-guest-agent = { status = "planned", area = "vm-guests", issue = "#1232" }
-spice-vdagent = { status = "planned", area = "vm-guests", issue = "#1232" }
+qemu-guest-agent = { status = "planned", area = "vm-guests", issue = "#1232", reason = "#1309 installs it" }
+spice-vdagent = { status = "planned", area = "vm-guests", issue = "#1232", reason = "#1309 installs it" }
 spice = { status = "planned", area = "vm-guests", issue = "#1232", reason = "spice-webdavd folder sharing for SPICE guests" }
-open-vm-tools = { status = "planned", area = "vm-guests", issue = "#1232" }
-hyperv-daemons = { status = "planned", area = "vm-guests", issue = "#1232" }
+open-vm-tools = { status = "planned", area = "vm-guests", issue = "#1232", reason = "#1309 installs it" }
+hyperv-daemons = { status = "planned", area = "vm-guests", issue = "#1232", reason = "#1309 installs it" }
 "/usr/lib/systemd/system/global-preset-all.service" = { status = "planned", area = "system-daemons", issue = "#1233", reason = "GNOME OS first-boot preset-all; part of Dakota's enable-by-default service policy" }
-bluefin = { status = "planned", area = "system-daemons", issue = "#1236", reason = "Dakota's own units: swapfile-init (#1224), migrate-var-home-passwd (#1234), remove-installer, wallpaper-month" }
+kmscon = { status = "planned", area = "system-daemons", issue = "#1237", reason = "Installed from the factory (kmscon, kmscon-pango); kmsconvt@ on the VTs with getty@ disabled, as GNOME OS and Dakota; closes on the next baseline" }
+bluefin = { status = "planned", area = "system-daemons", issue = "#1236", reason = "Dakota's own units: swapfile-init (#1224) and migrate-var-home-passwd (#1234) arrive with #1309, wallpaper-month (#1266), remove-installer" }
+"/usr/lib/systemd/system/ublue-wallpaper-month.service" = { status = "planned", area = "desktop-defaults", issue = "#1266", reason = "Ships in system_files with bluefin-wallpaper-month, as Dakota; the default wallpaper stays common's" }
+"/usr/bin/ublue-firstboot-date" = { status = "planned", area = "system-daemons", issue = "#1265", reason = "Ships with dakota-config-firstboot-date; records only once timesyncd replaces chrony (#1228)" }
+tailscale = { status = "planned", area = "networking", issue = "#1265", reason = "Dakota's Tailscale setup helper (desktop entry, polkit) ships with dakota-config-tailscale-setup; closes on the next Utah snapshot" }
 
 # --- User-visible apps and tools Utah should ship ---------------------------
 
-NetworkManager = { status = "planned", area = "networking", issue = "#1236", reason = "nmtui is the user-facing part; the initrd and nm-cloud-setup units come along with it" }
-power-profiles-daemon = { status = "planned", area = "hardware-power", issue = "#1236", reason = "installed and enabled since feat/power-profiles-daemon; closes on the next Utah snapshot" }
-uupd = { status = "planned", area = "updates", issue = "#1236", reason = "uupd-manual.service and its polkit rule ship since feat/uupd-dakota; closes on the next Utah snapshot" }
-tailscale = { status = "planned", area = "networking", issue = "#1236", reason = "Dakota's Tailscale setup helper (desktop entry, polkit)" }
-ibus = { status = "planned", area = "accessibility-input", issue = "#1236", reason = "Setup entries for the anthy, hangul, libpinyin, libbopomofo and typing-booster engines" }
-anthy = { status = "planned", area = "accessibility-input", issue = "#1236" }
-rygel = { status = "planned", area = "desktop-apps", issue = "#1236", reason = "Settings > Sharing > Media Sharing needs it" }
-sysprof = { status = "planned", area = "desktop-apps", issue = "#1236" }
-syncthing = { status = "planned", area = "desktop-apps", issue = "#1236", reason = "Utah enables the Syncthing toggle extension but ships no daemon" }
-git-lfs = { status = "planned", area = "cli-tools", issue = "#1236" }
-tealdeer = { status = "planned", area = "cli-tools", issue = "#1236" }
-ydotool = { status = "planned", area = "accessibility-input", issue = "#1236" }
-wget2 = { status = "planned", area = "cli-tools", issue = "#1236", reason = "Dakota's wget; Utah has no wget at all" }
-nethogs = { status = "planned", area = "cli-tools", issue = "#1236" }
-nicstat = { status = "planned", area = "cli-tools", issue = "#1236" }
-tiptop = { status = "planned", area = "cli-tools", issue = "#1236" }
-trace-cmd = { status = "planned", area = "cli-tools", issue = "#1236" }
-numactl = { status = "planned", area = "cli-tools", issue = "#1236" }
-bpftop = { status = "planned", area = "cli-tools", issue = "#1236" }
-debuginfod = { status = "planned", area = "cli-tools", issue = "#1236" }
-ifuse = { status = "planned", area = "files-devices", issue = "#1236" }
-opensc = { status = "planned", area = "auth-security", issue = "#1236", reason = "Smart card tools" }
-pam-pkcs11 = { status = "planned", area = "auth-security", issue = "#1236", reason = "Smart card login" }
-uresourced = { status = "planned", area = "system-daemons", issue = "#1236" }
+ibus = { status = "planned", area = "accessibility-input", issue = "#1256", reason = "Setup entries for the anthy, hangul and typing-booster engines" }
+"/usr/bin/emoji-picker" = { status = "planned", area = "accessibility-input", issue = "#1256", reason = "ibus-typing-booster's emoji picker; arrives with the engine" }
+"/usr/share/applications/emoji-picker.desktop" = { status = "planned", area = "accessibility-input", issue = "#1256", reason = "ibus-typing-booster's emoji picker; arrives with the engine" }
+opensc = { status = "planned", area = "auth-security", issue = "#1257", reason = "#1309 installs it with GNOME OS's opensc.module" }
+rygel = { status = "planned", area = "desktop-apps", issue = "#1258", reason = "#1313 installs it; Settings > Sharing > Media Sharing needs it" }
+gst-editing-services = { status = "planned", area = "media", issue = "#1258", reason = "#1313 installs it as a rygel dependency" }
+gupnp-dlna = { status = "planned", area = "media", issue = "#1258", reason = "#1313 installs it as a rygel dependency" }
+git-lfs = { status = "planned", area = "cli-tools", issue = "#1259", reason = "#1309 installs it" }
+ifuse = { status = "planned", area = "files-devices", issue = "#1261", reason = "#1309 installs it" }
+
+# Installed in packages/utah.toml [parity] (#1359); each closes on the next
+# Utah snapshot.
+tealdeer = { status = "planned", area = "cli-tools", issue = "#1359", reason = "Installed in [parity]" }
+nethogs = { status = "planned", area = "cli-tools", issue = "#1359", reason = "Installed in [parity]" }
+tiptop = { status = "planned", area = "cli-tools", issue = "#1359", reason = "Installed in [parity]" }
+"/usr/bin/ptiptop" = { status = "planned", area = "cli-tools", issue = "#1359", reason = "Ships in tiptop, installed in [parity]" }
+trace-cmd = { status = "planned", area = "cli-tools", issue = "#1359", reason = "Installed in [parity]" }
+numactl = { status = "planned", area = "cli-tools", issue = "#1359", reason = "Installed in [parity]" }
+bpftop = { status = "planned", area = "cli-tools", issue = "#1359", reason = "Installed in [parity]" }
+"/usr/bin/alsaucm" = { status = "planned", area = "media", issue = "#1359", reason = "alsa-ucm-utils, installed in [parity]" }
+v4l-utils = { status = "planned", area = "media", issue = "#1359", reason = "v4l-utils, rc-tools and dvb-tools installed in [parity]; v4l-utils-devel-tools (driver debugging) stays out" }
+"/usr/bin/edid-decode" = { status = "planned", area = "graphics", issue = "#1359", reason = "Ships in v4l-utils, installed in [parity]" }
+gstreamer = { status = "planned", area = "media", issue = "#1359", reason = "gst-play, gst-discoverer and gst-device-monitor from gstreamer1-plugins-base-tools, installed in [parity]" }
+libcamera = { status = "planned", area = "media", issue = "#1359", reason = "libcamerify from libcamera-v4l2, installed in [parity]" }
+iproute2 = { status = "planned", area = "networking", issue = "#1359", reason = "tc and routel from iproute-tc, installed in [parity]" }
+util-linux = { status = "planned", area = "cli-tools", issue = "#1359", reason = "script, scriptlive and scriptreplay from util-linux-script, installed in [parity]; uuidd and mkfs.bfs stay out" }
+xz = { status = "planned", area = "cli-tools", issue = "#1359", reason = "lzma and its aliases from xz-lzma-compat, installed in [parity]" }
+lz4 = { status = "planned", area = "cli-tools", issue = "#1359", reason = "Installed in [parity]" }
+sqlite = { status = "planned", area = "cli-tools", issue = "#1359", reason = "sqlite3, installed in [parity]" }
+libarchive = { status = "planned", area = "cli-tools", issue = "#1359", reason = "bsdtar, bsdcpio, bsdcat and bsdunzip, installed in [parity]" }
+xxhash = { status = "planned", area = "cli-tools", issue = "#1359", reason = "Installed in [parity]" }
+libfido2 = { status = "planned", area = "auth-security", issue = "#1359", reason = "fido2-tools, installed in [parity]" }
+"/usr/bin/pamu2fcfg" = { status = "planned", area = "auth-security", issue = "#1359", reason = "pam-u2f and pamu2fcfg installed in [parity]; PAM is left unconfigured" }
+gnutls = { status = "planned", area = "auth-security", issue = "#1359", reason = "gnutls-utils, installed in [parity]" }
+gnupg = { status = "planned", area = "auth-security", issue = "#1359", reason = "gpgsm and the GnuPG utilities (gnupg2-smime, gnupg2-utils) installed in [parity]; the gpg-wks server and gpgme-tool stay out" }
+openldap = { status = "planned", area = "auth-security", issue = "#1359", reason = "openldap-clients, installed in [parity]" }
+cryptsetup = { status = "planned", area = "files-devices", issue = "#1359", reason = "integritysetup and veritysetup, installed in [parity]" }
+bindfs = { status = "planned", area = "files-devices", issue = "#1359", reason = "Installed in [parity]" }
+malcontent = { status = "planned", area = "desktop-apps", issue = "#1359", reason = "malcontent-client from malcontent-tools, installed in [parity]" }
+nfs-utils = { status = "planned", area = "network-fs", issue = "#1359", reason = "nfsiostat, mountstats and rpcctl from nfs-python-utils, installed in [parity]" }
+pam-pkcs11 = { status = "planned", area = "auth-security", issue = "#1359", reason = "Smart-card login; resolves, but its PAM wiring is decided with opensc (#1257) first" }
+
+# Published since factory pin c288398 (#1347); tracked on #1360.
+NetworkManager = { status = "planned", area = "networking", issue = "#1360", reason = "nmtui from NetworkManager-tui, installed in [parity]; the initrd and nm-cloud-setup units stay out" }
+"/usr/bin/bpftool" = { status = "planned", area = "cli-tools", issue = "#1360", reason = "Installed in [parity]" }
+newt = { status = "planned", area = "cli-tools", issue = "#1360", reason = "whiptail, installed in [parity]" }
+lzip = { status = "planned", area = "cli-tools", issue = "#1360", reason = "Installed in [parity]" }
+libsmbios = { status = "planned", area = "hardware-power", issue = "#1360", reason = "Dell smbios-* tools (smbios-utils-bin, smbios-utils-python), installed in [parity]" }
+open-iscsi = { status = "planned", area = "network-fs", issue = "#1360", reason = "iscsi-initiator-utils, installed in [parity] with every unit off, as Dakota's 50-iscsi.preset" }
+open-isns = { status = "planned", area = "network-fs", issue = "#1360", reason = "isns-utils, installed in [parity]; isnsd stays off, as Dakota's 50-iscsi.preset" }
+erofs-utils = { status = "planned", area = "files-devices", issue = "#1360", reason = "Installed in [parity]; projectbluefin/utah-packages#1241 builds it without Intel QPL" }
+nicstat = { status = "planned", area = "cli-tools", issue = "#1360", reason = "Installed in [parity]" }
+
+# Decided on #1361 under Flatpak-first (#1270): background daemons native, apps
+# from Flathub.
+sysprof = { status = "planned", area = "desktop-apps", issue = "#1361", reason = "sysprof-cli (sysprofd, D-Bus-activated sysprof3.service) installed in [parity]; the app is org.gnome.Sysprof from Flathub (dakota-dev-flatpaks.Brewfile)" }
+syncthing = { status = "planned", area = "desktop-apps", issue = "#1361", reason = "Installed in [parity]; the syncthing.service user unit stays opt-in" }
 
 # --- Deliberate differences -------------------------------------------------
 
+apparmor = { status = "waived", reason = "Owner decision (#1226): Utah keeps SELinux from Hummingbird; Dakota confines with AppArmor" }
 baobab = { status = "waived", reason = "Flatpak-first: Utah ships org.gnome.baobab from Flathub (contracts/bluefin-desktop.toml)" }
 papers = { status = "waived", reason = "Flatpak-first: Utah ships org.gnome.Papers from Flathub; papers-libs, papers-thumbnailer and papers-nautilus are installed on the host" }
 ghostty = { status = "waived", reason = "Flatpak-first: Utah ships com.mitchellh.ghostty from the TunaOS Flatpak remote; Dakota builds it natively (#1270)" }
 sushi = { status = "waived", reason = "Flatpak-first: Utah ships org.gnome.NautilusPreviewer from Flathub (#1015)" }
 "/usr/share/applications/org.gnome.NautilusPreviewer.desktop" = { status = "waived", reason = "Flatpak-first: Utah ships org.gnome.NautilusPreviewer from Flathub (#1015)" }
+vim = { status = "waived", reason = "Flatpak-first: gvim stays out; vim-enhanced is installed" }
+umotd = { status = "waived", reason = "uwelcome is Utah's terminal greeting, and bluefin-cli works through it (#1370); decided on #1360" }
+freerdp = { status = "waived", reason = "FreeRDP client, proxy and shadow-server tools; gnome-remote-desktop uses the installed freerdp-libs, and RDP clients are Flatpaks (Flatpak-first)" }
 yelp = { status = "waived", reason = "packages/base.toml [excluded] removes the yelp viewer; Utah keeps yelp-libs and yelp-xsl for help content" }
 snapd = { status = "waived", reason = "Flatpak-first: Utah's app channels are Flatpak and Homebrew" }
 dbus = { status = "waived", reason = "Utah runs dbus-broker; dbus-launch is an X11 session helper" }
 wpa-supplicant = { status = "waived", reason = "Templated wpa_supplicant units; GNOME OS disables them by preset, and NetworkManager drives wpa_supplicant over D-Bus" }
 systemd = { status = "waived", reason = "GNOME OS systemd build: networkd (Utah manages networking with NetworkManager), sysupdate (Utah updates with bootc), and units from a newer systemd than Hummingbird ships" }
-kmscon = { status = "waived", reason = "GNOME OS userspace console; Utah keeps the kernel VT console" }
 buildbox = { status = "waived", reason = "BuildStream remote execution; Dakota's build tooling, not a desktop feature" }
+"/usr/bin/rexplorer" = { status = "waived", reason = "buildbox remote-execution explorer; Dakota's build tooling, not a desktop feature" }
+"/usr/bin/rumbad" = { status = "waived", reason = "buildbox remote-execution metrics daemon; Dakota's build tooling, not a desktop feature" }
 buildstream2 = { status = "waived", reason = "BuildStream; Dakota's build tooling, not a desktop feature" }
 recc-wrapper = { status = "waived", reason = "BuildStream remote compilation wrapper" }
 fdsdk-lic-dedup = { status = "waived", reason = "freedesktop-sdk licence deduplication build helper" }
 sysext-utils = { status = "waived", reason = "GNOME OS system-extension build tooling; Utah does not ship sysexts" }
-"/usr/lib/systemd/system/flatpark-filter-copy.service" = { status = "waived", reason = "Copies Dakota's FlatPark remote filter; Utah does not use FlatPark" }
-"/usr/lib/systemd/user/cgroupify@.service" = { status = "waived", reason = "GNOME OS cgroup helper for its session" }
 
-# --- Untriaged: libraries, SDK and developer tools --------------------------
+# Installed under another name or path, or a GNOME OS build artefact.
+"/usr/bin/bzfless" = { status = "waived", reason = "Debian-style alias GNOME OS's bzip2 adds; Utah's bzip2 ships bzmore and bzless" }
+catatonit = { status = "waived", reason = "Installed; Fedora puts it at /usr/libexec/catatonit/catatonit" }
+cups-pk-helper = { status = "waived", reason = "Installed; Fedora's build is D-Bus activated and ships no systemd unit" }
+curl = { status = "waived", reason = "wcurl wrapper script; Hummingbird's curl does not package it, and curl is installed" }
+distrobox = { status = "waived", reason = "distrobox 1.8.2.5 is installed; Fedora's packaging omits the distrobox-ls alias of distrobox-list" }
+espeak-ng = { status = "waived", reason = "espeak and speak compatibility links; espeak-ng is installed" }
+fastfetch = { status = "waived", reason = "flashfetch, a build-time-configured fastfetch variant; fastfetch is installed" }
+gzip = { status = "waived", reason = "GNOME OS gzip build artefacts (gzip.bin, uncompress); gzip is installed" }
+man-db = { status = "waived", reason = "Fedora's man-db refreshes its cache with man-db-cache-update.service instead of man-db.service and man-db.timer" }
+brltty = { status = "waived", reason = "brltty is installed; Fedora's build starts it through brltty.service rather than per-device templated units" }
+ghostscript = { status = "waived", reason = "dvipdf (TeX) and gpcl6 (GhostPCL, not packaged for Fedora); ghostscript is installed" }
+shadow = { status = "waived", reason = "faillog; pam_faillock replaced it and faillock is installed" }
+"/usr/bin/pcf2vpnc" = { status = "waived", reason = "vpnc's Perl .pcf converter, not in the factory's vpnc build; vpnc is installed" }
+"/usr/bin/pa-info" = { status = "waived", reason = "PulseAudio's diagnostic script; Utah runs PipeWire, and pipewire-utils and pulseaudio-utils cover diagnostics" }
+"/usr/bin/cvt" = { status = "waived", reason = "X11 modeline calculator; GNOME on Wayland sets modes through Mutter" }
+"/usr/bin/chezdav" = { status = "waived", reason = "phodav's standalone WebDAV server; Utah shares files with gnome-user-share" }
+"/usr/bin/ssccli" = { status = "waived", reason = "libssc's Qualcomm Snapdragon sensor CLI; Utah builds x86_64 only" }
 
-"/usr/bin/alsaucm" = { status = "untriaged", area = "media" }
-"/usr/bin/analyze" = { status = "untriaged", area = "spelling" }
-"/usr/bin/bdftruncate" = { status = "untriaged", area = "fonts" }
-"/usr/bin/bpftool" = { status = "untriaged", area = "cli-tools" }
-"/usr/bin/bscalc" = { status = "untriaged", area = "cli-tools" }
-"/usr/bin/bzfless" = { status = "untriaged", area = "cli-tools" }
-"/usr/bin/cd-convert" = { status = "untriaged", area = "hardware-power" }
-"/usr/bin/chardetect" = { status = "untriaged", area = "python-libraries" }
-"/usr/bin/chezdav" = { status = "untriaged", area = "files-devices" }
-"/usr/bin/chkcon" = { status = "untriaged", area = "auth-security" }
-"/usr/bin/cllayerinfo" = { status = "untriaged", area = "graphics" }
-"/usr/bin/cvt" = { status = "untriaged", area = "graphics" }
-"/usr/bin/cxpm" = { status = "untriaged", area = "graphics" }
-"/usr/bin/econftool" = { status = "untriaged", area = "cli-tools" }
-"/usr/bin/edid-decode" = { status = "untriaged", area = "graphics" }
-"/usr/bin/emoji-picker" = { status = "untriaged", area = "accessibility-input" }
-"/usr/share/applications/emoji-picker.desktop" = { status = "untriaged", area = "accessibility-input" }
-"/usr/bin/fastbase64" = { status = "untriaged", area = "cli-tools" }
-"/usr/bin/fastbase64.coreutils" = { status = "untriaged", area = "cli-tools" }
-"/usr/bin/gc" = { status = "untriaged", area = "dev-toolchain" }
-"/usr/bin/gentest" = { status = "untriaged", area = "dev-toolchain" }
-"/usr/bin/hangul" = { status = "untriaged", area = "accessibility-input" }
-"/usr/bin/import_interpolation" = { status = "untriaged", area = "accessibility-input" }
-"/usr/bin/isotest" = { status = "untriaged", area = "accessibility-input" }
-bindfs = { status = "untriaged", area = "files-devices" }
-"/usr/bin/lvm-cache-stats" = { status = "untriaged", area = "files-devices" }
-"/usr/bin/mako-render" = { status = "untriaged", area = "python-libraries" }
-"/usr/bin/manette-test" = { status = "untriaged", area = "hardware-power" }
-"/usr/bin/pa-info" = { status = "untriaged", area = "media" }
-"/usr/bin/pcf2vpnc" = { status = "untriaged", area = "networking" }
-"/usr/bin/playout" = { status = "untriaged", area = "media" }
-"/usr/bin/proxy" = { status = "untriaged", area = "networking" }
-"/usr/bin/ptiptop" = { status = "untriaged", area = "cli-tools" }
-"/usr/bin/rexplorer" = { status = "untriaged", area = "auth-security" }
-"/usr/bin/rpcgen" = { status = "untriaged", area = "dev-toolchain" }
-"/usr/bin/rumbad" = { status = "untriaged", area = "media" }
-"/usr/bin/ssccli" = { status = "untriaged", area = "dev-toolchain" }
-"/usr/bin/substrings.pl" = { status = "untriaged", area = "dev-toolchain" }
-"/usr/bin/sutf" = { status = "untriaged", area = "cli-tools" }
-"/usr/bin/ublue-firstboot-date" = { status = "untriaged", area = "system-daemons" }
-"/usr/lib/systemd/system/ublue-wallpaper-month.service" = { status = "untriaged", area = "desktop-defaults" }
-"/usr/lib/systemd/user/compass.service" = { status = "untriaged", area = "desktop-defaults" }
-"/usr/bin/ucs2any" = { status = "untriaged", area = "fonts" }
-"/usr/bin/vfat-resize" = { status = "untriaged", area = "files-devices" }
-"/usr/bin/volume_key" = { status = "untriaged", area = "auth-security" }
-"/usr/bin/yuvconvert" = { status = "untriaged", area = "media" }
-aom = { status = "untriaged", area = "media" }
-asciidoc = { status = "untriaged", area = "dev-toolchain" }
-aspell = { status = "untriaged", area = "spelling" }
-audit = { status = "untriaged", area = "auth-security" }
-avahi = { status = "untriaged", area = "networking" }
-binutils = { status = "untriaged", area = "dev-toolchain" }
-blueprint-compiler = { status = "untriaged", area = "dev-toolchain" }
-bluez = { status = "untriaged", area = "hardware-power" }
-bootc = { status = "untriaged", area = "updates" }
-bpf = { status = "untriaged", area = "dev-toolchain" }
-brltty = { status = "untriaged", area = "accessibility-input" }
-catatonit = { status = "untriaged", area = "virt-dev" }
-cryptsetup = { status = "untriaged", area = "files-devices" }
-cups = { status = "untriaged", area = "printing" }
-cups-pk-helper = { status = "untriaged", area = "printing" }
-curl = { status = "untriaged", area = "cli-tools" }
-cyrus-sasl = { status = "untriaged", area = "auth-security" }
-dav1d = { status = "untriaged", area = "media" }
-debugedit = { status = "untriaged", area = "dev-toolchain" }
-distrobox = { status = "untriaged", area = "virt-dev" }
-doxygen = { status = "untriaged", area = "dev-toolchain" }
-dtc = { status = "untriaged", area = "dev-toolchain" }
-e2fsprogs = { status = "untriaged", area = "files-devices" }
-ebtables = { status = "untriaged", area = "networking" }
-elfutils = { status = "untriaged", area = "dev-toolchain" }
-erofs-utils = { status = "untriaged", area = "files-devices" }
-espeak-ng = { status = "untriaged", area = "accessibility-input" }
-fastfetch = { status = "untriaged", area = "cli-tools" }
-fcitx5-gtk = { status = "untriaged", area = "accessibility-input" }
-fftw = { status = "untriaged", area = "media" }
-freerdp = { status = "untriaged", area = "networking" }
-gcab = { status = "untriaged", area = "dev-toolchain" }
-gcc = { status = "untriaged", area = "dev-toolchain" }
-gdk-pixbuf = { status = "untriaged", area = "dev-toolchain" }
-gflags = { status = "untriaged", area = "dev-toolchain" }
-ghostscript = { status = "untriaged", area = "printing" }
-giflib = { status = "untriaged", area = "media" }
-git = { status = "untriaged", area = "dev-toolchain" }
-glib = { status = "untriaged", area = "dev-toolchain" }
-glibc = { status = "untriaged", area = "dev-toolchain" }
-gnupg = { status = "untriaged", area = "auth-security" }
-gnutls = { status = "untriaged", area = "auth-security" }
-gobject-introspection = { status = "untriaged", area = "dev-toolchain" }
-graphviz = { status = "untriaged", area = "dev-toolchain" }
-groff = { status = "untriaged", area = "dev-toolchain" }
-grpc = { status = "untriaged", area = "dev-toolchain" }
-gst-editing-services = { status = "untriaged", area = "media" }
-gstreamer = { status = "untriaged", area = "media" }
-gtk = { status = "untriaged", area = "dev-toolchain" }
-gtksourceview = { status = "untriaged", area = "dev-toolchain" }
-gupnp = { status = "untriaged", area = "dev-toolchain" }
-gupnp-dlna = { status = "untriaged", area = "media" }
-gzip = { status = "untriaged", area = "cli-tools" }
-harfbuzz = { status = "untriaged", area = "fonts" }
-hunspell = { status = "untriaged", area = "spelling" }
-icu = { status = "untriaged", area = "dev-toolchain" }
-iproute2 = { status = "untriaged", area = "networking" }
-iptables = { status = "untriaged", area = "networking" }
-itstool = { status = "untriaged", area = "dev-toolchain" }
-jpeg = { status = "untriaged", area = "media" }
-json-glib = { status = "untriaged", area = "dev-toolchain" }
-krb5 = { status = "untriaged", area = "auth-security" }
-kyotocabinet = { status = "untriaged", area = "dev-toolchain" }
-ladspa-sdk = { status = "untriaged", area = "media" }
-lame = { status = "untriaged", area = "media" }
-lcms = { status = "untriaged", area = "media" }
-libarchive = { status = "untriaged", area = "cli-tools" }
-libbluray = { status = "untriaged", area = "media" }
-libcamera = { status = "untriaged", area = "media" }
-libcap-ng = { status = "untriaged", area = "auth-security" }
-libdatrie = { status = "untriaged", area = "spelling" }
-libei = { status = "untriaged", area = "accessibility-input" }
-libevdev = { status = "untriaged", area = "accessibility-input" }
-libevent = { status = "untriaged", area = "dev-toolchain" }
-libfido2 = { status = "untriaged", area = "auth-security" }
-libflac = { status = "untriaged", area = "media" }
-libfyaml = { status = "untriaged", area = "dev-toolchain" }
-libgcrypt = { status = "untriaged", area = "auth-security" }
-libgphoto2 = { status = "untriaged", area = "files-devices" }
-libgsf = { status = "untriaged", area = "dev-toolchain" }
-libgusb = { status = "untriaged", area = "hardware-power" }
-libgxps = { status = "untriaged", area = "printing" }
-libidn2 = { status = "untriaged", area = "networking" }
-libinput = { status = "untriaged", area = "accessibility-input" }
-libmtp = { status = "untriaged", area = "files-devices" }
-libnfs = { status = "untriaged", area = "network-fs" }
-libnl = { status = "untriaged", area = "networking" }
-libpaper = { status = "untriaged", area = "printing" }
-libpcap = { status = "untriaged", area = "networking" }
-libpinyin = { status = "untriaged", area = "accessibility-input" }
-libplist = { status = "untriaged", area = "files-devices" }
-libpng = { status = "untriaged", area = "media" }
-libpsl = { status = "untriaged", area = "networking" }
-librime = { status = "untriaged", area = "accessibility-input" }
-librsvg = { status = "untriaged", area = "media" }
-libseccomp = { status = "untriaged", area = "auth-security" }
-libselinux = { status = "untriaged", area = "auth-security" }
-libsepol = { status = "untriaged", area = "auth-security" }
-libsmbios = { status = "untriaged", area = "hardware-power" }
-libtasn1 = { status = "untriaged", area = "auth-security" }
-libtiff = { status = "untriaged", area = "media" }
-libusbmuxd = { status = "untriaged", area = "files-devices" }
-libvpx = { status = "untriaged", area = "media" }
-libwacom = { status = "untriaged", area = "accessibility-input" }
-libwebp = { status = "untriaged", area = "media" }
-libzip = { status = "untriaged", area = "cli-tools" }
-lua = { status = "untriaged", area = "dev-toolchain" }
-lz4 = { status = "untriaged", area = "cli-tools" }
-lzip = { status = "untriaged", area = "cli-tools" }
-m17n-lib = { status = "untriaged", area = "accessibility-input" }
-malcontent = { status = "untriaged", area = "desktop-apps" }
-man-db = { status = "untriaged", area = "cli-tools" }
-marisa-trie = { status = "untriaged", area = "accessibility-input" }
-mtdev = { status = "untriaged", area = "accessibility-input" }
-mutter = { status = "untriaged", area = "dev-toolchain" }
-mythes = { status = "untriaged", area = "spelling" }
-nettle = { status = "untriaged", area = "auth-security" }
-newt = { status = "untriaged", area = "cli-tools" }
-nfs-utils = { status = "untriaged", area = "network-fs" }
-nuspell = { status = "untriaged", area = "spelling" }
-open-iscsi = { status = "untriaged", area = "network-fs" }
-open-isns = { status = "untriaged", area = "network-fs" }
-opencc = { status = "untriaged", area = "accessibility-input" }
-openjpeg = { status = "untriaged", area = "media" }
-openldap = { status = "untriaged", area = "auth-security" }
-orc = { status = "untriaged", area = "dev-toolchain" }
-pcre2 = { status = "untriaged", area = "dev-toolchain" }
-pcsc-lite = { status = "untriaged", area = "auth-security" }
-perl = { status = "untriaged", area = "dev-toolchain" }
-podman = { status = "untriaged", area = "virt-dev" }
-protobuf = { status = "untriaged", area = "dev-toolchain" }
-python3-dulwich = { status = "untriaged", area = "python-libraries" }
-python3-markdown = { status = "untriaged", area = "python-libraries" }
-samba = { status = "untriaged", area = "network-fs" }
-sassc = { status = "untriaged", area = "dev-toolchain" }
-sbc = { status = "untriaged", area = "media" }
-shadow = { status = "untriaged", area = "auth-security" }
-slang = { status = "untriaged", area = "dev-toolchain" }
-sonic = { status = "untriaged", area = "accessibility-input" }
-speex = { status = "untriaged", area = "media" }
-sqlite = { status = "untriaged", area = "cli-tools" }
-svt-av1 = { status = "untriaged", area = "media" }
-util-linux = { status = "untriaged", area = "cli-tools" }
-v4l-utils = { status = "untriaged", area = "media" }
-vala = { status = "untriaged", area = "dev-toolchain" }
-vim = { status = "untriaged", area = "desktop-apps" }
-virglrenderer = { status = "untriaged", area = "virt-dev" }
-xfsprogs = { status = "untriaged", area = "files-devices" }
-xmlto = { status = "untriaged", area = "dev-toolchain" }
-xxhash = { status = "untriaged", area = "cli-tools" }
-xz = { status = "untriaged", area = "cli-tools" }
+# Server, legacy and network-administration pieces a desktop does not run.
+audit = { status = "waived", reason = "audispd remote and syslog plugins (audispd-plugins); server log forwarding, not a desktop feature" }
+avahi = { status = "waived", reason = "avahi-autoipd and avahi-dnsconfd; NetworkManager handles link-local addressing and DNS" }
+bootc = { status = "waived", reason = "bootc-integration-tests and system-reinstall-bootc; test and package-mode conversion tooling, not used on an installed image" }
+cups = { status = "waived", reason = "cups-lpd (LPD server), cups-printerapp (printer-application developer tools) and system-config-printer's launcher; GNOME Settings is the printer UI" }
+cyrus-sasl = { status = "waived", reason = "saslauthd server and SASL test tools; server-side" }
+e2fsprogs = { status = "waived", reason = "e2scrub needs LVM snapshots; compile_et and mk_cmds are developer toolchain (#1263)" }
+ebtables = { status = "waived", reason = "Legacy ebtables; Utah filters through nftables (iptables-nft, firewalld)" }
+iptables = { status = "waived", reason = "Legacy iptables back-end, iptables-apply and iptables-xml; Utah uses iptables-nft" }
+krb5 = { status = "waived", reason = "Kerberos KDC and admin server (krb5-server); Utah is a client (krb5-workstation)" }
+podman = { status = "waived", reason = "podman-remote and podmansh; podman runs locally, and confined podmansh logins are not part of the desktop" }
+samba = { status = "waived", reason = "Samba AD administration and test tools (samba-tool, ldb-tools, smbtorture); Utah ships the client and winbind" }
+xfsprogs = { status = "waived", reason = "XFS online scrub and protofile tools; not a desktop feature" }
+"/usr/bin/volume_key" = { status = "waived", reason = "volume_key escrow CLI; library utility, not a desktop feature" }
+
+# Library utilities (see the header).
+aom = { status = "waived", reason = "Library utility: AV1 reference encoder and decoder CLIs; apps decode through GStreamer and FFmpeg" }
+dav1d = { status = "waived", reason = "Library utility: dav1d's CLI; the library and its GStreamer plugin are installed" }
+svt-av1 = { status = "waived", reason = "Library utility: SVT-AV1's encoder app" }
+libvpx = { status = "waived", reason = "Library utility: vpxenc and vpxdec (libvpx-utils)" }
+lame = { status = "waived", reason = "Library utility: the LAME encoder CLI" }
+libflac = { status = "waived", reason = "Library utility: flac and metaflac" }
+speex = { status = "waived", reason = "Library utility: speexenc and speexdec (speex-tools)" }
+sbc = { status = "waived", reason = "Library utility: SBC codec test tools" }
+libbluray = { status = "waived", reason = "Library utility: libbluray test tools (libbluray-utils)" }
+ladspa-sdk = { status = "waived", reason = "Library utility: LADSPA example plugin tools" }
+fftw = { status = "waived", reason = "Library utility: FFTW wisdom generation tools" }
+"/usr/bin/yuvconvert" = { status = "waived", reason = "Library utility: libyuv's conversion test tool" }
+"/usr/bin/playout" = { status = "waived", reason = "GStreamer example program; developer toolchain (#1263)" }
+giflib = { status = "waived", reason = "Library utility: GIF manipulation tools (giflib-utils)" }
+jpeg = { status = "waived", reason = "Library utility: cjpeg, djpeg and jpegtran (libjpeg-turbo-utils)" }
+libpng = { status = "waived", reason = "Library utility: pngfix (libpng-tools)" }
+libtiff = { status = "waived", reason = "Library utility: TIFF conversion tools (libtiff-tools)" }
+libwebp = { status = "waived", reason = "Library utility: WebP conversion tools (libwebp-tools)" }
+openjpeg = { status = "waived", reason = "Library utility: OpenJPEG CLIs (openjpeg-tools)" }
+librsvg = { status = "waived", reason = "Library utility: rsvg-convert (librsvg2-tools)" }
+lcms = { status = "waived", reason = "Library utility: Little CMS transform tools (lcms2-utils); lcms is installed" }
+libgxps = { status = "waived", reason = "Library utility: XPS conversion tools (libgxps-tools)" }
+libpaper = { status = "waived", reason = "Library utility: paper size query CLI" }
+libmtp = { status = "waived", reason = "Library utility: libmtp example programs; Files reaches MTP devices through gvfs" }
+libnfs = { status = "waived", reason = "Library utility: libnfs userspace client tools; Utah mounts NFS with nfs-utils" }
+libplist = { status = "waived", reason = "Library utility: plist2json" }
+libusbmuxd = { status = "waived", reason = "Library utility: iproxy and inetcat; libimobiledevice-utils covers iPhone access" }
+libzip = { status = "waived", reason = "Library utility: zipcmp, zipmerge and ziptool (libzip-tools)" }
+libnl = { status = "waived", reason = "Library utility: netlink debugging CLIs (libnl3-cli)" }
+libidn2 = { status = "waived", reason = "Library utility: idn2" }
+libpsl = { status = "waived", reason = "Library utility: psl and psl-make-dafsa" }
+libtasn1 = { status = "waived", reason = "Library utility: ASN.1 tools (libtasn1-tools)" }
+libcap-ng = { status = "waived", reason = "Library utility: pscap, netcap and filecap (libcap-ng-utils)" }
+nettle = { status = "waived", reason = "Library utility: Nettle's CLIs, which Fedora does not package" }
+libselinux = { status = "waived", reason = "Library utility: SELinux policy query tools; policycoreutils and setools-console cover administration" }
+libsepol = { status = "waived", reason = "Library utility: libsepol policy debugging tools (libsepol-utils)" }
+"/usr/bin/chkcon" = { status = "waived", reason = "Library utility: libsepol context check (libsepol-utils)" }
+"/usr/bin/bscalc" = { status = "waived", reason = "Library utility: libbytesize's calculator (libbytesize-tools)" }
+"/usr/bin/econftool" = { status = "waived", reason = "Library utility: libeconf's config inspection CLI (libeconf-utils)" }
+"/usr/bin/proxy" = { status = "waived", reason = "Library utility: libproxy's test binary (libproxy-bin)" }
+"/usr/bin/lvm-cache-stats" = { status = "waived", reason = "Library utility: libblockdev-tools; udisks drives libblockdev directly" }
+"/usr/bin/vfat-resize" = { status = "waived", reason = "Library utility: libblockdev-tools; udisks drives libblockdev directly" }
+"/usr/bin/cd-convert" = { status = "waived", reason = "Library utility: colord-gtk's profile conversion tool" }
+"/usr/bin/fastbase64" = { status = "waived", reason = "Library utility: simdutf's base64 CLI" }
+"/usr/bin/fastbase64.coreutils" = { status = "waived", reason = "Library utility: simdutf's base64 CLI" }
+"/usr/bin/sutf" = { status = "waived", reason = "Library utility: simdutf's transcoding CLI" }
+libei = { status = "waived", reason = "Library utility: input debugging tool (libei-utils)" }
+libevdev = { status = "waived", reason = "Library utility: input debugging tool (libevdev-utils)" }
+libinput = { status = "waived", reason = "Library utility: mouse-dpi-tool and touchpad-edge-detector (libevdev-utils)" }
+libwacom = { status = "waived", reason = "Library utility: tablet database query tools (libwacom-utils)" }
+sonic = { status = "waived", reason = "Library utility: sonic's speech speed CLI" }
+bluez = { status = "waived", reason = "Library utility: BlueZ l2ping, l2test and rctest test tools" }
+"/usr/bin/isotest" = { status = "waived", reason = "Library utility: BlueZ ISO channel test tool" }
+libgusb = { status = "waived", reason = "Library utility: gusbcmd" }
+virglrenderer = { status = "waived", reason = "Library utility: virgl test server" }
+libpinyin = { status = "waived", reason = "Library utility: dictionary build tools (libpinyin-tools); the engine and its data are installed" }
+"/usr/bin/import_interpolation" = { status = "waived", reason = "Library utility: dictionary build tool (libpinyin-tools)" }
+librime = { status = "waived", reason = "Library utility: Rime dictionary tools (librime-tools)" }
+m17n-lib = { status = "waived", reason = "Library utility: m17n database tools (m17n-lib-tools)" }
+marisa-trie = { status = "waived", reason = "Library utility: marisa dictionary tools" }
+opencc = { status = "waived", reason = "Library utility: OpenCC dictionary tools (opencc-tools)" }
+aspell = { status = "waived", reason = "GNOME spell checking runs on enchant with hunspell, which is installed" }
+hunspell = { status = "waived", reason = "Library utility: dictionary build tools (hunspell-devel)" }
+"/usr/bin/analyze" = { status = "waived", reason = "Library utility: hunspell affix analyzer (hunspell-devel)" }
+nuspell = { status = "waived", reason = "nuspell's CLI; GNOME spell checking runs on enchant with hunspell" }
+mythes = { status = "waived", reason = "Library utility: thesaurus index build script" }
+"/usr/bin/bdftruncate" = { status = "waived", reason = "X11 BDF font build tool (xorg-x11-font-utils); Utah ships built fonts" }
+"/usr/bin/ucs2any" = { status = "waived", reason = "X11 BDF font build tool (xorg-x11-font-utils); Utah ships built fonts" }
+harfbuzz = { status = "waived", reason = "Library utility: HarfBuzz shaping and subsetting tools (harfbuzz-devel)" }
+git = { status = "waived", reason = "git-cvsserver, CVS emulation" }
+glibc = { status = "waived", reason = "glibc debugging tools (glibc-utils), nscd and makedb; Utah resolves names through systemd-resolved" }
+
+# Developer toolchain: owner decision on #1263.
+asciidoc = { status = "waived", reason = "Developer toolchain (#1263)" }
+binutils = { status = "waived", reason = "Developer toolchain (#1263): the gprofng profiler" }
+blueprint-compiler = { status = "waived", reason = "Developer toolchain (#1263)" }
+bpf = { status = "waived", reason = "Developer toolchain (#1263): kernel BPF assembler and debugger" }
+debugedit = { status = "waived", reason = "Developer toolchain (#1263)" }
+debuginfod = { status = "waived", reason = "Developer toolchain (#1263): the debuginfod server; elfutils-debuginfod-client is installed" }
+doxygen = { status = "waived", reason = "Developer toolchain (#1263)" }
+dtc = { status = "waived", reason = "Developer toolchain (#1263): device-tree compiler" }
+elfutils = { status = "waived", reason = "Developer toolchain (#1263): eu-* ELF inspection tools" }
+gcab = { status = "waived", reason = "Developer toolchain (#1263): cabinet archive tool; fwupd links libgcab" }
+gcc = { status = "waived", reason = "Developer toolchain (#1263)" }
+gdk-pixbuf = { status = "waived", reason = "Developer toolchain (#1263): gdk-pixbuf2-devel tools" }
+gflags = { status = "waived", reason = "Developer toolchain (#1263)" }
+glib = { status = "waived", reason = "Developer toolchain (#1263): glib2-devel code generators" }
+gobject-introspection = { status = "waived", reason = "Developer toolchain (#1263)" }
+graphviz = { status = "waived", reason = "Developer toolchain (#1263)" }
+"/usr/bin/gc" = { status = "waived", reason = "Developer toolchain (#1263): Graphviz" }
+groff = { status = "waived", reason = "Developer toolchain (#1263): full groff; groff-base renders man pages" }
+grpc = { status = "waived", reason = "Developer toolchain (#1263): gRPC code generators" }
+gtk = { status = "waived", reason = "Developer toolchain (#1263): GTK developer tools" }
+gtksourceview = { status = "waived", reason = "Developer toolchain (#1263): GtkSourceView test widget" }
+gupnp = { status = "waived", reason = "Developer toolchain (#1263): gupnp-binding-tool" }
+icu = { status = "waived", reason = "Developer toolchain (#1263): ICU data build tools" }
+itstool = { status = "waived", reason = "Developer toolchain (#1263)" }
+json-glib = { status = "waived", reason = "Developer toolchain (#1263)" }
+kyotocabinet = { status = "waived", reason = "Developer toolchain (#1263): Kyoto Cabinet test and admin tools" }
+libdatrie = { status = "waived", reason = "Developer toolchain (#1263): trietool" }
+libevent = { status = "waived", reason = "Developer toolchain (#1263)" }
+libfyaml = { status = "waived", reason = "Developer toolchain (#1263)" }
+libgcrypt = { status = "waived", reason = "Developer toolchain (#1263)" }
+libgphoto2 = { status = "waived", reason = "Developer toolchain (#1263): config scripts" }
+libgsf = { status = "waived", reason = "Developer toolchain (#1263)" }
+libpcap = { status = "waived", reason = "Developer toolchain (#1263): pcap-config" }
+libseccomp = { status = "waived", reason = "Developer toolchain (#1263)" }
+lua = { status = "waived", reason = "Developer toolchain (#1263): the Lua interpreter and compiler" }
+mtdev = { status = "waived", reason = "Developer toolchain (#1263)" }
+mutter = { status = "waived", reason = "Developer toolchain (#1263): the Mutter development kit" }
+orc = { status = "waived", reason = "Developer toolchain (#1263)" }
+pcre2 = { status = "waived", reason = "Developer toolchain (#1263): pcre2grep and pcre2test" }
+pcsc-lite = { status = "waived", reason = "Developer toolchain (#1263): pcsc-spy" }
+perl = { status = "waived", reason = "Developer toolchain (#1263): Perl module and build tools" }
+protobuf = { status = "waived", reason = "Developer toolchain (#1263)" }
+python3-dulwich = { status = "waived", reason = "Developer toolchain (#1263): Python library CLI" }
+python3-markdown = { status = "waived", reason = "Developer toolchain (#1263): Python library CLI" }
+"/usr/bin/chardetect" = { status = "waived", reason = "Developer toolchain (#1263): python3-chardet CLI" }
+"/usr/bin/mako-render" = { status = "waived", reason = "Developer toolchain (#1263): python3-mako CLI" }
+sassc = { status = "waived", reason = "Developer toolchain (#1263): installed only to build the GNOME extensions, then removed" }
+slang = { status = "waived", reason = "Developer toolchain (#1263): the S-Lang interpreter" }
+vala = { status = "waived", reason = "Developer toolchain (#1263)" }
+xmlto = { status = "waived", reason = "Developer toolchain (#1263)" }
+"/usr/bin/cllayerinfo" = { status = "waived", reason = "Developer toolchain (#1263): OpenCL ICD loader tool" }
+"/usr/bin/cxpm" = { status = "waived", reason = "Developer toolchain (#1263): libXpm tool" }
+"/usr/bin/gentest" = { status = "waived", reason = "Developer toolchain (#1263): Samba test generator" }
+"/usr/bin/manette-test" = { status = "waived", reason = "Developer toolchain (#1263)" }
+"/usr/bin/rpcgen" = { status = "waived", reason = "Developer toolchain (#1263)" }
+"/usr/bin/substrings.pl" = { status = "waived", reason = "Developer toolchain (#1263): hyphenation dictionary build script" }

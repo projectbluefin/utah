@@ -1,4 +1,5 @@
-; Silence bootc's expected mac_admin probe in ordinary services (#1198).
+; Silence bootc's expected mac_admin probe in ordinary services (#1198), and
+; systemd-nsresourced's dac_read_search denial on its own domain (#1329).
 ;
 ; `bootc status` probes for mac_admin by running chcon with a label the policy
 ; does not define (bootc lsm.rs, selinux_ensure_install). Outside install_t
@@ -9,11 +10,23 @@
 ;   avc: denied { mac_admin } capability=33
 ;        scontext=system_u:system_r:unconfined_service_t:s0 tclass=capability2
 ;
-; on every boot. dontaudit, not allow: granting mac_admin would let every
-; unconfined service write labels the policy does not know, and would change
-; what bootc's probe decides. A capability check has no target but the
-; process itself, so this domain plus one permission is the narrowest rule
-; the policy language can express. Installed at build time (the store is on
-; read-only /usr once booted, #551); the desktop contract's [selinux] modules
-; list asserts it is loaded.
+; on every boot. A service whose ExecStart is a shell (/bin/sh <script>) runs
+; in initrc_t instead (init_t shell_exec_t:process initrc_t) and logs the same
+; pair there: the installer's first-boot fisherman-boot-receipt.service runs
+; `bootc status` that way (#1129). dontaudit, not allow: granting mac_admin
+; would let every such service write labels the policy does not know, and
+; would change what bootc's probe decides. A capability check has no target
+; but the process itself, so a domain plus one permission is the narrowest
+; rule the policy language can express. Installed at build time (the store
+; is on read-only /usr once booted, #551); the desktop contract's [selinux]
+; modules list asserts it is loaded.
 (dontaudit unconfined_service_t self (capability2 (mac_admin)))
+(dontaudit initrc_t self (capability2 (mac_admin)))
+
+; systemd-nsresourced checks dac_read_search on its own process while it
+; walks user namespace state at boot, and the policy denies it. The daemon
+; carries on without it; the testsuite's SELinux gate counted the denial and
+; failed the utah and utah-nvidia flavors of Post-Testing E2E run 44791358885
+; (the gaming flavors passed) (#1329). Same shape as the rules above: a
+; dontaudit of one capability on the daemon's own domain, nothing granted.
+(dontaudit systemd_nsresourced_t self (capability (dac_read_search)))

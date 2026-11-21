@@ -1,7 +1,7 @@
 ---
 name: containerfile
 version: "1.0"
-last_updated: "2026-10-13"
+last_updated: "2026-11-19"
 id: containerfile
 one_line_purpose: Edit the Containerfile without regressing layer count or cache hits.
 entry_point: docs/skills/containerfile.md
@@ -77,6 +77,14 @@ In summary:
   the unit digests (`UUPD_SERVICE_SHA256`, `UUPD_TIMER_SHA256`) cover the
   raw files at that tag and may be unchanged across releases (v1.4.0 and
   v1.5.5 serve identical units).
+- `COMMON_IMAGE_SHA` follows Common's latest published image: Renovate bumps
+  the digest, and each bump passes the desktop contract before it lands.
+  Dakota instead builds Common at a release tag (`v2026.11`, `07d6b3e`). Utah
+  keeps tracking the digest on purpose (#1267): Common fixes Utah depends on,
+  such as the PipeWire drop-in that now parses, would otherwise wait for a
+  Common release. Compare against Dakota's tag only when a Common file differs
+  between the two images. Drop a Utah override of a Common file once the
+  pinned Common ships the fix itself.
 - Artwork reaches the image through the throwaway `artwork` stage, which keeps
   the fetch tooling and unprocessed sources out of every layer.
   `WALLPAPERS_IMAGE`/`WALLPAPERS_IMAGE_SHA` pin the multi-arch index digest of
@@ -106,17 +114,20 @@ In summary:
 
 ## Clock synchronization and TLS failures
 
-The desktop RUN appends `pool pool.ntp.org iburst` to `/etc/chrony.conf`
-when it is absent, preserving the vendor pool (#594). An unreachable NTP
-source can leave a fresh VM clock behind certificate validity dates; verify
-`chronyc sources` and clock synchronization before treating that failure as
-missing CA certificates. The public pool requires network access too.
-
-Keep the fallback idempotent and folded into the existing RUN, before its
-final metadata normalization so the configuration has a stable mtime. Validate
-changes with the download-integrity guard and `just check`; inspect the
-composed configuration and demonstrate chrony recovery on a booted VM for
-runtime acceptance. A source-string assertion alone cannot prove time sync.
+Time sync is `systemd-timesyncd`, as on GNOME OS and Dakota (#1228): chrony
+is in `packages/base.toml` `[excluded]`, `85-utah-desktop.preset` enables
+timesyncd over Hummingbird's `90-default.preset` disable, and
+`/usr/lib/systemd/timesyncd.conf.d/10-gnome-os-fallback-ntp.conf` sets
+`FallbackNTP=gnome.pool.ntp.org`, the server gnome-build-meta compiles in
+(`core-deps/systemd-base.bst`). Hummingbird's compiled-in
+`*.hummingbird.pool.ntp.org` does not resolve publicly, and NetworkManager
+does not pass DHCP NTP servers to timesyncd, so without the drop-in a fresh VM
+clock can sit behind certificate validity dates (#594). Before treating a TLS
+"not yet valid" failure as missing CA certificates, check
+`timedatectl timesync-status` on the booted machine. Dakota's
+`ublue-firstboot-date.path` starts the install-date stamp only once
+`/run/systemd/timesync/synchronized` exists. A source-string assertion alone
+cannot prove time sync; confirm it on a booted VM.
 
 ## Where the build time goes
 
@@ -234,28 +245,57 @@ After the final NVIDIA, OGC, and v4l2loopback package steps, the flavor layer
 runs `utah-regenerate-initramfs`. The helper selects the exact bootc kernel,
 promotes the OGC kernel for gaming flavors, rebuilds that release's initramfs,
 and verifies early microcode plus the installed TPM/passkey/smart-card unlock
-modules before the image can commit.
+modules, the Plymouth theme, and (where the kernel builds it as a module) the
+zstd driver `zswap.compressor=zstd` needs at init (#1224), before the image
+can commit.
 
 ## Clean and lint share a layer
 
 Everything above writes build-time residue that bootc lint rejects: dnf logs
-under `/var/log`, cockpit and dnf state under `/run`, and ~45 `/var`
-directories with no tmpfiles.d entry. `utah-clean-stage` must run after the
-last package install, which is the NVIDIA and OGC step, not after the main
-transaction. The lint that checks the result runs in the same layer
-(`bootc container lint --fatal-warnings --skip nonempty-boot`): nothing can
-change between the two (comment, `Containerfile`).
+under `/var/log`, cockpit and dnf state under `/run`, ~45 `/var`
+directories with no tmpfiles.d entry, and kernel files under `/boot`.
+`utah-clean-stage` must run after the last package install, which is the
+NVIDIA and OGC step, not after the main transaction. The lint that checks the
+result runs in the same layer (`bootc container lint --fatal-warnings`, every
+check enabled): nothing can change between the two (comment, `Containerfile`).
+
+`/boot` ships empty. bootc deploys the kernel and initramfs from
+`/usr/lib/modules/<kver>/`; the image's `/boot` is masked by the ostree
+backend but not by the composefs backend, whose composefs-boot reads
+`/boot/loader/entries/*.conf` as Type #1 boot entries. bootc then refuses a
+BLS install with `Setting up BLS boot: Found Type1 entries in /boot` (#1129).
+The entry came from the kernel cache: `install-fedora-kernel.sh install`
+runs `rpm -U`, kernel-core's `%posttrans` runs `kernel-install add`, and
+grub2-common's `20-grub.install` ignores `layout=ostree` and writes
+`/boot/loader/entries/<machine-id>-<kver>.conf` (options taken from the build
+runner's `/proc/cmdline`) plus copies of vmlinuz, initramfs, System.map,
+config and symvers. The OGC installer adds `/boot/vmlinuz-<release>`, which
+`regenerate-initramfs.sh` has already hardlinked into `/usr/lib/modules`.
+`utah-clean-stage` empties `/boot`, and the lint's `nonempty-boot` check (it
+was skipped from the first commit until #1129) fails the build on anything
+left. To check a published image: `podman run --rm --network=none <image>
+find /boot` must print only `/boot`.
 
 The one deliberate exception is `/var/home`, created after clean-stage but
-before lint in that same RUN. `/home` is a symlink to `var/home` and
-useradd ships `HOME=/home` (#576), so any `useradd --create-home` fails on
-a dangling symlink -- the installer chroot on a fresh install (no tmpfiles
-has run there yet), the tacklebox customize container, and the live ISO
-build all broke with `cannot create directory /home`, exit 12 (#602).
-clean-stage strips all of `/var` except cache, so the mkdir cannot go
-earlier; placing it before lint keeps lint proving the directory is covered
-by the `utah-home.conf` tmpfiles entry. A tmpfiles `d` line alone is not
-enough -- it only runs at boot, never in the installer chroot.
+before lint in that same RUN. useradd ships `HOME=/home` (#576) and
+`home.mount` binds `/var/home` over `/home` (Dakota's bind mount, #1234), so
+the homes live in `/var/home`: the installer pre-creates it in the
+stateroot, and the tacklebox customize container and live ISO build create
+liveuser's home there (#602). clean-stage strips all of `/var` except cache,
+so the mkdir cannot go earlier; placing it before lint keeps lint proving
+the directory is covered by the `utah-home.conf` tmpfiles entry.
+
+The same RUN replaces Hummingbird's `/home -> var/home` symlink with an
+empty directory, the bind-mount point, and fails if anything is in it:
+`home.mount` hides it. A build has no mounts, so build-time code that
+creates a home must write `/var/home/<user>`, not `/home/<user>`.
+
+Installer note: fisherman's ostree path runs `chroot <deployment> useradd
+--create-home`, which now writes a skel copy into the deployment's own
+`/home`, hidden at boot. The account still gets its home: fisherman also
+writes a tmpfiles `C /var/home/<user> - /etc/skel` rule that the first boot
+applies. Anything else an installer writes into `/home/<user>` before the
+first boot is lost the same way.
 
 The image also ships an empty `/efi` directory: GRUB can report the EFI system
 partition to systemd, whose generator selects `/efi` when `/boot` is occupied.
@@ -274,6 +314,18 @@ override silently reverted to Common's recipe (issue #449). The Containerfile
 preserves the mechanism by renaming Common's `00-entry.just` to
 `00-common.just` before staging Utah's local files, so the shallower override
 is in place by the time the entry point runs.
+
+Utah's local files also replace Common's `default.just`, `system.just` and
+`flutter.just` with Dakota's (`files/just-overrides/` at `bf271777`, #1231),
+plus the two Brewfiles `system.just` reads from
+`/usr/share/ublue-os/homebrew/`. Common's entry still imports them by name;
+`changelog.just`, `update.just` and the other Common files stay Common's. The
+headers list Utah's edits: issue links and `rebase-helper` target Utah, and
+recipes that need Dakota's signed systemd-boot chain (#1225) or nethogs mount
+exit with an explanation. Overrides of those recipes go in `60-custom.just`;
+keep the vendored files close to Dakota so they can be re-synced.
+`tests/test_ujust_overrides.py` loads the shipped files, so a recipe that
+breaks parsing or loses an override fails there.
 
 The shipped image is already past the floor: `baselines/utah/rpms.tsv` records
 `just 1.57.0-1.hum1.bfin`. The `just` package comes from the base manifest and

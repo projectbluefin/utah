@@ -376,6 +376,11 @@ def main() -> int:
         if not user_unit_enabled(unit):
             errors.append(f"required user service is not enabled globally: {unit}")
 
+    # Opt-in per-user daemons: shipped, but no user gets them unasked.
+    for unit in services.get("user_disabled", []):
+        if user_unit_enabled(unit):
+            errors.append(f"user service must not be enabled globally: {unit}")
+
     for unit in services.get("masked", []):
         if not unit_masked(unit):
             errors.append(f"required service is not masked: {unit}")

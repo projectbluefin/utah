@@ -7,7 +7,7 @@ ConditionResult=no. These tests pin the shipped files so a cleanup cannot
 silently bring the noise back.
 """
 from pathlib import Path
-import re
+import tomllib
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,10 +21,17 @@ def directives(path: Path) -> list[str]:
 
 class BootNoiseTests(unittest.TestCase):
     def test_udev_rule_groups_are_created(self):
-        groups = {line.split()[1] for line in directives(
-            SHARED / "usr/lib/sysusers.d/utah-udev-groups.conf")
-            if line.startswith("g ")}
-        self.assertEqual(groups, {"plugdev", "nintendo_switch"})
+        # Dakota's bluefin/udev-groups.bst, packaged as dakota-config-udev-groups
+        # (#1265); the contract asserts both groups in the installed file.
+        import tomllib
+        manifest = tomllib.loads((ROOT / "packages/utah.toml").read_text())
+        self.assertIn("dakota-config-udev-groups", manifest["parity"]["packages"])
+        contract = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())
+        self.assertEqual(
+            contract["configuration"]["file_contains"]["/usr/lib/sysusers.d/bluefin-udev-groups.conf"],
+            ["g plugdev", "g nintendo_switch"],
+        )
+        self.assertFalse((SHARED / "usr/lib/sysusers.d/utah-udev-groups.conf").exists())
 
     def test_mail_spool_exists_for_useradd(self):
         rules = directives(SHARED / "usr/lib/tmpfiles.d/utah-mail.conf")
@@ -38,13 +45,19 @@ class BootNoiseTests(unittest.TestCase):
         self.assertTrue(mask.is_file())
         self.assertEqual(directives(mask), [])
 
-    def test_pipewire_conf_has_an_assignment(self):
+    def test_pipewire_conf_assignment_comes_from_common(self):
         # PipeWire 1.6 rejects a conf.d file with no assignments (EINVAL).
-        conf = SHARED / ("usr/share/pipewire/pipewire-pulse.conf.d/"
-                         "50-bluefin-bt-switch.conf")
-        self.assertIn("pulse.cmd = [ ]", directives(conf))
-        # The override must stay a no-op: nothing may be loaded by it.
-        self.assertIsNone(re.search(r"^\s*\{\s*cmd", conf.read_text(), re.M))
+        # Common's copy carries `pulse.cmd = [ ]` itself, so Utah ships no
+        # override and the desktop contract pins Common's line instead (#1267).
+        rel = ("usr/share/pipewire/pipewire-pulse.conf.d/"
+               "50-bluefin-bt-switch.conf")
+        self.assertFalse((SHARED / rel).exists())
+        contract = tomllib.loads(
+            (ROOT / "contracts/bluefin-desktop.toml").read_text())
+        configuration = contract["configuration"]
+        self.assertIn("/" + rel, configuration["files"])
+        self.assertEqual(configuration["file_contains"]["/" + rel],
+                         ["pulse.cmd = [ ]"])
 
     def test_remount_fs_skips_on_read_only_root(self):
         # systemd-remount-fs unconditionally remounts / read-write. On the

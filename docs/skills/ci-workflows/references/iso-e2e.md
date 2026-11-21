@@ -32,7 +32,7 @@ target is read over SSH as well as from serial.
 
 Only after the entire LUKS matrix succeeds, `production-iso` composes a fresh
 `DEBUG=0` x86_64 UEFI ISO from each same digest, writes its SHA-256 checksum,
-and retains both as a 30-day Actions artifact. It is deliberately an artifact,
+and retains both as a 3-day Actions artifact. It is deliberately an artifact,
 not a release: destination, flavor policy, naming, signing, and Secure Boot
 are product decisions tracked by #186. Production-ISO composition is a
 promotion prerequisite, so a failed production build cannot advance testing
@@ -46,17 +46,26 @@ hard-codes `enforcing=0 console=ttyS0,115200n8` on the boot entry for every
 `DEBUG` value (the documented Issue #22 exception: rootless `podman unshare`
 cannot write `security.selinux` xattrs into the squashfs root), so this ISO
 boots SELinux-permissive with a serial console.
-That was unremarkable while ISOs were disposable; retaining them for
-30 days under the name "production" makes it worth stating plainly. Running
+That was unremarkable while ISOs were disposable; retaining them under the
+name "production" makes it worth stating plainly. Running
 the live environment permissive is a product decision, and it belongs to #186
 along with signing and Secure Boot — it must be settled there before any of
 these ISOs reach users. Do not treat a green `production-iso` job as evidence
 that the media is release-ready.
 
-Each retained ISO is multi-GB (the size budget in `iso/scripts/build-iso.sh`
-is the ceiling, not the measured size), per flavor, per dispatch, at 30-day
-retention. That is real Actions storage; if the matrix widens, revisit the
-retention window before the flavor count.
+Each retained ISO is multi-GB (5.5 GB on average; the size budget in
+`iso/scripts/build-iso.sh` is the ceiling), per flavor, per dispatch. At 30-day
+retention that was 617 artifacts and 3.38 TB on 2026-11-20, nearly all
+superseded by newer runs; the last three days alone held 88 (497 GB), which is
+the steady state at `retention-days: 3`. Download an ISO you need within three
+days, and if the matrix widens, revisit the window before the flavor count.
+
+Every network step in the workflow (checkout, apt, GHCR login and pulls)
+carries its own `timeout-minutes`, so a wedged mirror or registry fails as a
+named step instead of holding the job to its 180-240 minute timeout. apt has
+taken up to 31 minutes on these runners and still succeeded (job
+135107979619), so apt steps get 40; checkout gets 10 and pulls 20.
+`tests/test_e2e_workflow_limits.py` fails a network step without one.
 
 Screenshot evidence identifies the tested image, not necessarily the E2E
 workflow checkout. Validate `source_sha` against `build_run` and the published
@@ -198,9 +207,12 @@ replaced by the branch. The README links to the whole run, which also holds the
 independent testsuite legs; those do not gate the record and may still be
 running or red, so the README says so without predicting either outcome. The
 evidence update requires the LUKS and production-ISO jobs to pass.
-The repository must allow Actions to create pull requests; a denied write fails
-this job visibly, without deleting test artifacts. It does not auto-merge
-the evidence PR or imply a fresh pass for a different commit.
+The job token only pushes the `verification` branch. Trusted `main` alone
+mints a repository-scoped Mergeraptor App token (contents and pull-request
+write) to open the PR, so its normal pull_request checks run and Hive's
+review can land it like other bot proposals. A missing App secret or
+installation fails this job visibly, without deleting test artifacts. The job
+does not arm native auto-merge or imply a fresh pass for a different commit.
 
 For a deliberate rerun, dispatch Post-Testing E2E with `build_run_id` from a
 successful testing build containing the current harness. Do not pass a PR
@@ -269,6 +281,27 @@ Fulcio identity pinned to the tacklebox `release-image.yml` workflow on
 `refs/heads/main` or a `refs/tags/v*` tag (the upstream release triggers), so
 an unsigned image or one attested by any other workflow or repository is
 rejected before each Renovate-driven digest bump can run privileged.
+
+### Tacklebox live-boot gate
+
+`tacklebox-iso` boots its ISO with `iso/scripts/tacklebox-boot-gate.sh` and
+passes when `UTAH_LIVE_READY` reaches the serial log. The gate polls for the
+marker itself and returns as soon as it appears; a kernel panic or a QEMU
+process that exited fails at once, and only a boot showing neither waits out
+`UTAH_ISO_BOOT_TIMEOUT` (600 s in CI). It stops the VM on every exit path,
+and the job uploads `serial.log` with the diagnostics.
+
+Two mistakes made every run cost 30 minutes. The gate left its loop only on a
+systemd `Reached target` line and checked for the marker afterwards; in runs
+44538634534 and 44604822618 that line never ended the loop, so the step ran
+the whole 1800 s timeout (30m03s each) and then passed. The job also never
+granted `/dev/kvm`: GitHub-hosted runners do not make it readable by the job
+user, so the gate logged `No /dev/kvm; falling back to TCG` and booted
+emulated. Every job that runs
+QEMU (`luks`, `lifecycle`, `tacklebox-iso`) runs `sudo chmod a+rw /dev/kvm`
+in its "Prepare ISO and QEMU host" step, and `tests/test_iso_ci.py` asserts
+that. Under KVM the `luks` job's live boot reaches the marker in about
+35 seconds.
 
 ### Utah image provenance
 

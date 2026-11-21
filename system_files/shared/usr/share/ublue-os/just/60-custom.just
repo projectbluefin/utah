@@ -1,4 +1,5 @@
-# Utah's entry point imports these at a shallower depth than Common's recipes.
+# Utah's entry point imports these at a shallower depth than Common's recipes
+# and the Dakota default.just/system.just Utah ships in their place (#1231).
 
 # Show device diagnostics locally; optionally upload when fpaste is installed
 [group('System')]
@@ -64,15 +65,7 @@ changelogs:
         printf '%s\n' "$CONTENT"
     fi
 
-# Explain Utah's pending module-signing support without changing MOK state
-[group('System')]
-enroll-secure-boot-key:
-    #!/usr/bin/bash
-    echo 'Utah does not yet ship a kernel-module signing key to enroll.' >&2
-    echo 'Secure Boot module signing and enrollment are tracked at https://github.com/projectbluefin/utah/issues/395' >&2
-    exit 1
-
-# Install gdb, elfutils and sysprof-cli until reboot to diagnose shell hangs
+# Install gdb and elfutils until reboot to diagnose shell hangs
 [group('System')]
 install-debug-tools:
     #!/usr/bin/bash
@@ -92,5 +85,49 @@ install-debug-tools:
         echo 'Using the existing /usr overlay.' >&2
     fi
     DNF="$(command -v dnf5 || command -v dnf)"
-    "$DNF" install -y gdb-headless elfutils sysprof-cli
+    "$DNF" install -y gdb-headless elfutils
     echo 'Installed until the next reboot. Attach with: sudo gdb -p $(pgrep -u "$USER" -x gnome-shell)'
+
+# Set up VMM and local libvirt together, or disable activation without removing data
+[group('System')]
+manage-virtualization: (_virtualization "virtualization")
+
+# Install Virtual Machine Manager together with its working system libvirt backend
+[group('System')]
+setup-virtualization: (_virtualization "setup")
+
+# Dakota's recipes (files/just-overrides/system.just) run its devmode helper
+# directly. Utah ships QEMU but not libvirt yet, which the helper drives, so
+# say so instead of letting it refuse on units it cannot find (#1232).
+_virtualization action:
+    #!/usr/bin/bash
+    set -euo pipefail
+    if [[ ! -e "${LIBVIRT_SOCKET_UNIT:-/usr/lib/systemd/system/virtqemud.socket}" ]]; then
+        echo 'libvirt is not in this image yet (projectbluefin/utah-packages#1021).' >&2
+        echo 'QEMU/KVM, toolbox and the VM guest agents are installed.' >&2
+        exit 1
+    fi
+    exec "${DAKOTA_DEVMODE:-/usr/libexec/dakota-devmode}" "{{ action }}"
+
+# Turn the Bluefin CLI terminal experience on or off for your shell
+[group('System')]
+[no-exit-message]
+bluefin-cli:
+    #!/usr/bin/bash
+    set -euo pipefail
+    # bluefin-cli replaces Common's ublue-bling and bling.sh/bling.fish. It
+    # writes one marked line into the rc file and removes bling's lines.
+    # uwelcome stays the greeting; bluefin-cli's init greets through it.
+    shell="${SHELL##*/}"
+    case "$shell" in
+        bash) rc="${HOME}/.bashrc" ;;
+        zsh) rc="${HOME}/.zshrc" ;;
+        fish) rc="${HOME}/.config/fish/config.fish" ;;
+        *) echo "error: unsupported shell: ${shell:-unknown}" >&2; exit 1 ;;
+    esac
+    if [[ -f "$rc" ]] && grep -qF '# bluefin-cli shell-config' "$rc"; then
+        bluefin-cli shell "$shell" off
+    else
+        bluefin-cli shell "$shell" on
+        bluefin-cli install cli
+    fi

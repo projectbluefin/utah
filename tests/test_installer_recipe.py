@@ -81,6 +81,15 @@ class InstallerFlatpakPathTests(unittest.TestCase):
                 self.assertFalse(path.rstrip("/").endswith("lib/flatpak"),
                                  f"{path!r} is the flatpak dir; fisherman appends lib/flatpak itself")
 
+    def test_recipes_leave_flatpaks_out(self):
+        # Since fisherman 58eaf29e, "flatpaks": [] copies no Flatpak and an
+        # absent key copies the live system's. The e2e sent [], and its
+        # composefs installs had no Ghostty to show fastfetch in (#1129).
+        self.assertNotIn("flatpaks", json.loads(RECIPE.read_text()))
+        for image in json.loads(IMAGES.read_text())["images"]:
+            self.assertNotIn("flatpaks", image)
+        self.assertNotIn('"flatpaks"', LUKS_E2E.read_text())
+
 
 class InstallerBackendTests(unittest.TestCase):
     """The ISO installs with the ostree backend until composefs installs pass
@@ -101,16 +110,96 @@ class InstallerBackendTests(unittest.TestCase):
     def test_configure_live_writes_the_offline_ostree_recipe(self):
         script = CONFIGURE_LIVE.read_text()
         self.assertIn('data["composeFsBackend"] = False', script)
-        # An empty image with targetImgref installs from containers-storage
-        # without pulling; a named image would pull from a registry.
+        # An empty image with targetImgref selects the source the live media's
+        # media-input.json binds; the GUI names imgref, the receipt's image.
         self.assertIn('data["image"] = ""', script)
+        self.assertIn('data["imgref"] = ref', script)
+        self.assertIn('data["targetImgref"] = ref', script)
+        self.assertIn("touch /etc/bootc-installer/live-iso-mode", script)
+
+    def test_no_containers_storage_source_override(self):
+        # With the live-iso-mode marker, fisherman installs only the image the
+        # receipt names, from its read-only store. The recipe names the
+        # published ref (the receipt's image), never bootc-installer's
+        # local_imgref.
+        self.assertNotIn("local_imgref", json.loads(RECIPE.read_text()))
+        self.assertNotIn("local_imgref", CONFIGURE_LIVE.read_text())
 
     def test_luks_e2e_defaults_to_ostree_and_keeps_the_composefs_opt_in(self):
         script = LUKS_E2E.read_text()
         self.assertIn('if [[ "${UTAH_E2E_COMPOSEFS_BACKEND:-0}" == 1 ]]; then', script)
-        self.assertIn('RECIPE_IMAGE="containers-storage:${PAYLOAD_IMAGE}"', script)
+        self.assertIn('RECIPE_IMAGE="${PAYLOAD_IMAGE}"', script)
+        self.assertNotIn('RECIPE_IMAGE="containers-storage:', script)
         self.assertIn('"composeFsBackend": ${RECIPE_COMPOSEFS_BACKEND}', script)
         self.assertIn('"image": "${RECIPE_IMAGE}"', script)
+
+    def test_luks_e2e_checks_the_media_receipt_before_installing(self):
+        script = LUKS_E2E.read_text()
+        receipt = "ssh_live 'cat /etc/bootc-installer/media-input.json'"
+        self.assertIn(receipt, script)
+        self.assertIn('for key in ("image", "targetImgref"):', script)
+        self.assertIn("findmnt -no OPTIONS -T", script)
+        # The store lookup fisherman's gate makes, against the receipt digest.
+        self.assertIn("sudo skopeo inspect --format '{{.Digest}}' 'containers-storage:${PAYLOAD_IMAGE}'",
+                      script)
+        self.assertLess(script.index(receipt),
+                        script.index("sudo /usr/local/bin/fisherman"))
+
+    def test_review_compares_the_config_digest_on_both_backends(self):
+        # fisherman installs both backends from a re-serialized copy of the
+        # payload, so bootc's imageDigest is not the payload manifest's
+        # (composefs run 44688721139, ostree run 44697806988); the config
+        # digest is the identity that survives.
+        script = LUKS_E2E.read_text()
+        self.assertIn("ls /sysroot/composefs/streams", script)
+        self.assertIn('"oci-config-${payload_config}"', script)
+        self.assertIn("for key in ostree.manifest-digest ostree.manifest;", script)
+        self.assertIn("--print-metadata-key=\\$key ${booted_commit}", script)
+        self.assertIn('> "${WORK}/booted-config-digest"', script)
+        step = (ROOT / ".github/workflows/build.yml").read_text()
+        self.assertIn('test "$booted_config" = "$(jq -r .config.digest evidence/payload-manifest.json)"', step)
+        self.assertNotIn(".status.booted.image.imageDigest", step)
+
+    def test_greeter_shot_wakes_an_idle_blanked_screen(self):
+        # GDM blanks the greeter while a slow boot unit holds graphical.target
+        # (run 44715273054); the shot must wake it before retaking.
+        script = LUKS_E2E.read_text()
+        wake = 'monitor "${MONITOR_INSTALLED}" "sendkey shift" || true\n'
+        shot = 'shot_until_drawn installed-greeter "${MONITOR_INSTALLED}"\n'
+        self.assertIn(wake + shot, script)
+
+
+class InstallerExtrasTests(unittest.TestCase):
+    """fisherman runs its desktop steps only for an image that asks (#1129).
+
+    The installer pinned since v2026.11.16 reads them from the recipe's
+    `extras`, else from the image's catalog entry, and a catalog entry with no
+    `extras` gets none: no `rhgb quiet`, so the LUKS prompt was Plymouth's
+    text mode instead of the Bluefin splash, and no print discovery, audio
+    names or OEM setup. Before that pin every install ran all four.
+    """
+
+    STEPS = ("printServices", "oemSetup", "audioNames", "bootSplash")
+
+    def test_catalog_entry_turns_every_extra_on(self):
+        for image in json.loads(IMAGES.read_text())["images"]:
+            extras = image.get("extras")
+            self.assertIsInstance(extras, dict, f"{image['name']} has no extras: fisherman runs none of its steps")
+            self.assertEqual(set(extras), set(self.STEPS))
+            for step in self.STEPS:
+                self.assertIs(extras[step], True, f"{image['name']}: extras.{step} is off")
+
+    def test_recipes_leave_extras_to_the_catalog(self):
+        # An `extras` object in a recipe replaces the catalog's whole; the GUI
+        # copies the catalog's, and the e2e must exercise that same entry.
+        self.assertNotIn("extras", json.loads(RECIPE.read_text()))
+        self.assertNotIn('"extras"', LUKS_E2E.read_text())
+
+    def test_luks_e2e_fails_fast_on_an_entry_without_rhgb(self):
+        script = LUKS_E2E.read_text()
+        self.assertIn("grep -qw rhgb", script)
+        self.assertIn("[ \\$splashless -eq 0 ] || exit 3", script)
+        self.assertLess(script.index("grep -qw rhgb"), script.index('sed -i \\"s/ quiet//\\"'))
 
 
 if __name__ == "__main__":

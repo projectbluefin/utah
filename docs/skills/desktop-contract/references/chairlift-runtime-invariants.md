@@ -30,19 +30,20 @@ the build closure must therefore hold:
   failure gate so an unexpected regression in the closure fails the
   build rather than the boot.
 
-## /var/home symlink structure for the brew prefix
+## /home bind mount and the brew prefix
 
-`/home` is a symlink to `/var/home` on Hummingbird, so both
-`/home/linuxbrew/.linuxbrew` and `/var/home/linuxbrew/.linuxbrew`
-resolve to the same inode. The contract and the system_files hooks must
-agree on the spelling:
+`home.mount` binds `/var/home` over `/home` (Dakota's layout, #1234), so
+both `/home/linuxbrew/.linuxbrew` and `/var/home/linuxbrew/.linuxbrew`
+reach the same inode, and `/home/...` is the real path (no symlink to
+resolve). The contract and the system_files hooks must agree on the
+spelling:
 
 - `contracts/bluefin-desktop.toml` pins the `chairlift.desktop` `Exec=`
   as `/home/linuxbrew/.linuxbrew/bin/chairlift-wrapper` -- the brewed
   binary path Common's release ships.
 - `system_files/shared/etc/profile.d/90-bluefin-starship.sh` checks
   `/var/home/linuxbrew/.linuxbrew/bin/starship` first (so a first login
-  that runs before the symlink resolves still finds the brewed binary)
+  that runs before the bind mount still finds the brewed binary)
   and falls back to the system PATH.
 - `system_files/shared/usr/share/ublue-os/user-setup.hooks.d/20-framework.sh`
   uses `BREW_PREFIX="/home/linuxbrew/.linuxbrew"`, the canonical

@@ -30,6 +30,10 @@ class FlathubDescriptorIntegrityTests(unittest.TestCase):
         user_units = self.root / "usr/lib/systemd/user"
         user_units.mkdir(parents=True)
         (user_units / "brew-preinstall.service").write_text("[Service]\nExecStart=/usr/bin/brew-preinstall\n")
+        # oo7-daemon is the required Secret Service (#1227).
+        (user_units / "oo7-daemon.service").write_text("[Service]\nExecStart=/usr/libexec/oo7-daemon\n")
+        # GTK3 apps follow the light/dark style (#1342); Utah ships the unit.
+        (user_units / "ublue-gtk3-theme-sync.service").write_text("[Service]\nExecStart=/usr/libexec/ublue-gtk3-theme-sync\n")
         # Hummingbird's firewalld: firewalld.conf is a symlink to the
         # standard variant; gnome-os-config-firewalld adds the lax zone.
         zones = self.root / "usr/lib/firewalld/zones"
@@ -44,8 +48,6 @@ class FlathubDescriptorIntegrityTests(unittest.TestCase):
         uupd = self.root / "tmp/uupd"
         uupd.mkdir(parents=True)
         (uupd / "uupd").write_text("#!/bin/sh\nexit 0\n")
-        (uupd / "uupd.service").write_text("[Service]\nExecStart=/usr/bin/uupd\n")
-        (uupd / "uupd.timer").write_text("[Timer]\nOnBootSec=1h\n")
 
     def run_script(self):
         source = (ROOT / "scripts/configure-services.sh").read_text()
@@ -55,6 +57,8 @@ class FlathubDescriptorIntegrityTests(unittest.TestCase):
         transport_and_services = '''\
 systemctl() { return 0; }
 authselect() { return 0; }
+semodule() { return 0; }
+matchpathcon() { echo "$1 system_u:object_r:swapfile_t:s0"; }
 dnf5() { return 0; }
 rpm() { return 1; }
 curl() {

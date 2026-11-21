@@ -31,6 +31,9 @@ post-build verification workflows, not the complete workflow inventory:
   job runs the shared download-pinning gate in fail mode, including on merge
   groups and dispatches. Its documented substring exceptions live in
   `.github/pinned-fetches-allowlist.txt`; review them when their fetches change.
+  The contract checkout fetches extension submodules in a separate
+  five-attempt, serialized retry step because external hosts can transiently
+  return 5xx responses.
   A merge group also runs `contract`, but `kernel_cache`, `build_main` and
   `build_kernel` skip it because they push and sign (see `merge-queue.yml`
   below). A dispatch
@@ -43,7 +46,8 @@ post-build verification workflows, not the complete workflow inventory:
   With the default `review_vm=false`, only the source checks run. Set
   `review_vm=true` as well to build a disposable image on the runner, compose
   and boot an offline ISO, and retain test evidence; `review_iso_all_flavors`
-  expands that job from main flavors to every flavor in `config/flavors.json`.
+  expands that job from main flavors to every flavor in `config/flavors.json`,
+  and `review_composefs_backend` installs with the composefs backend (#1129).
   The review ISO defaults to zstd level 15 so all flavors fit for VM testing.
   Set `review_iso_compression_level=3` to measure the production ISO budget;
   `evidence/iso-size.json` records the image size even when the 8 GiB guard
@@ -109,7 +113,9 @@ post-build verification workflows, not the complete workflow inventory:
   `:testing` through a monotonic ratchet; a red testsuite leg blocks
   promotion, with no override (#1329). The promotion to `main` sets
   `run_e2e: false`; the release gate requires that evidence for the exact
-  `:testing` digests and re-runs `smoke,common`.
+  `:testing` digests and re-runs `smoke,common`. Its `documentation` job
+  opens the README evidence-link PR with a repository-scoped Mergeraptor App
+  token, minted only on trusted `main`, like the extension updater.
   See [testsuite triage](ci-workflows/references/testsuite-triage.md) for
   known failures and [iso-e2e](ci-workflows/references/iso-e2e.md) for the
   ratchet.

@@ -188,24 +188,24 @@ Production live boot entries configure:
 
 ### Secure Boot strategy
 
-- **Live ISO bootloader**: The image carries `systemd-boot-unsigned`, which the
-  live ISO boots from.
-  On hardware with Microsoft UEFI Secure Boot enabled, firmware will reject the
-  unsigned EFI loader unless Secure Boot is temporarily disabled in UEFI setup.
-  Production releases will incorporate Fedora's signed shim (`shimx64.efi`) and
-  a signed bootloader binary.
-- **Custom flavor kernels (`gaming`, `nvidia-gaming`)**: The OGC gaming kernel
-  (`linux-ogc`) is compiled from source and unsigned. Secure Boot systems
-  require either disabling Secure Boot or manually enrolling a Machine Owner Key
-  (MOK) into UEFI NVRAM using `mokutil` (planned tooling; no automated helper
-  currently exists in-tree).
-- **Custom flavor modules (`nvidia`, `nvidia-gaming`) and v4l2loopback (every
-  flavor)**: Out-of-tree NVIDIA and v4l2loopback kernel modules compiled
-  against the base or OGC kernel run under kernel lockdown when Secure Boot is
-  active. Unsigned modules fail to load; signing modules with an enrolled MOK
-  key (e.g. via the kernel's `sign-file` utility) is planned for future release
-  pipelines, but currently module signing is not implemented in-tree and Secure
-  Boot must remain disabled.
+Every Utah image and the live ISO currently need Secure Boot **off**. The
+owner decided on 2026-11-20 that Utah gets signed through Hummingbird and
+Fedora upstream, never with a Utah key or MOK enrollment the way Dakota does.
+The per-component inventory, the evidence and the upstream route for each
+piece are in
+[kernel-cache/references/secure-boot.md](kernel-cache/references/secure-boot.md).
+In short:
+
+- **Live ISO**: `EFI/BOOT/BOOTX64.EFI` is `systemd-boot-unsigned`, which
+  firmware refuses with Secure Boot on. The kernel it loads is Utah's rebuild
+  (below), so switching the ESP to Fedora's shim and GRUB alone would still not
+  boot it.
+- **Installed systems**: Fedora shim (Microsoft UEFI CA) loads Fedora GRUB
+  (Fedora CA), which is valid. Shim then refuses the kernel, because every
+  flavor boots Utah's rebuilt Fedora kernel (`*.utah1`, signed with pesign's
+  Red Hat Test Certificate) or the unsigned OGC kernel.
+- **Out-of-tree modules** (NVIDIA open, v4l2loopback): unsigned, so lockdown
+  refuses to load them when Secure Boot is on.
 
 The Flatpak list both ISO bakes install comes from
 `scripts/verify-desktop-contract.py --flatpaks` (the single Brewfile parser;
@@ -237,15 +237,68 @@ The live ISO installer configuration (`iso/live/src/etc/bootc-installer/recipe.j
 `images.json`, and the recipes generated in `configure-live.sh` and
 `iso/scripts/luks-e2e.sh`) installs with the ostree backend: `composefs` and
 `composeFsBackend` are `false`, and the recipe's empty `image` plus
-`targetImgref` installs offline from containers-storage.
+`targetImgref` installs offline from the embedded payload.
+
+The `images.json` entry carries `extras` with all four of fisherman's desktop
+steps on (`printServices`, `oemSetup`, `audioNames`, `bootSplash`). Fisherman
+from v2026.11.16 runs them only for an image that asks: the recipe's `extras`,
+else the image's catalog entry, and a catalog entry without `extras` gets none
+(`Desktop extras: none (the catalog entry Utah sets none)` in the install
+log). Without `bootSplash` no `rhgb quiet` reaches the boot entry and the LUKS
+prompt is Plymouth's text mode (#1129, review run 44470274049). The recipes
+carry no `extras`, so the GUI and the e2e both take the catalog's;
+`luks-e2e.sh` fails before the boot on any entry without `rhgb`.
+
+Fisherman (bootc-installer v2026.11.16 and later) refuses to install on live
+media (`/etc/bootc-installer/live-iso-mode`) unless
+`/etc/bootc-installer/media-input.json` binds a verified payload on a
+read-only filesystem; otherwise it fails with `local_source_unavailable`.
+`iso/scripts/embed-store-payload.sh` writes the payload as an unpacked
+containers-storage graphroot at `/usr/lib/containers/storage` in the squashfs
+and writes the receipt, whose `containersStoragePath` is
+`/var/lib/containers/storage`: the live system bind-mounts the store there
+read-only from the squashfs at `/run/rootfsbase`, and moves its own graphroot
+to `/var/lib/containers/live-storage` with the payload as an additional image
+store (`configure-live.sh`). Fisherman then installs only the image
+the receipt names, so recipes name that published ref or leave `image` empty,
+never bootc-installer's `local_imgref`. The
+receipt schema: [iso-review](local-testing/references/iso-review.md#offline-payload-receipt).
+
+Do not switch the payload to an OCI layout (`ociLayoutPath`). Layout blobs are
+tar files, so squashfs keeps them as a second copy of the image that shares no
+blocks with the live root. Review VM run 43870670314 did that: its 40
+uncompressed layers (9.95 GiB) grew the main squashfs from 5.2 GiB to 9.8 GiB
+at zstd 15, and every flavor's ISO (9.6-11.8 GiB) failed the 8 GiB budget.
+Unpacked store files are byte-identical to the live root's, and mksquashfs
+stores them once.
 
 The composefs default (#882, #938) shipped without the LUKS e2e ever running
 on it, because the provenance gate had blocked post-testing-e2e since 10-31.
-When the e2e came back it failed on every flavor (#1129): fisherman's
-`chpasswd --root` into the composefs deploy directory finds no PAM modules, and
-the gaming flavors' `bootc install to-filesystem` exits 126. Exercise composefs
-with `UTAH_E2E_COMPOSEFS_BACKEND=1`. Flip the default back only after
-`just luks-test` passes that way for every flavor.
+When the e2e came back it failed on every flavor (#1129). Exercise composefs
+with `UTAH_E2E_COMPOSEFS_BACKEND=1`, or dispatch the review VM with
+`review_composefs_backend=true`
+([iso-review](local-testing/references/iso-review.md)). Flip the default back
+only after that passes for every flavor. Composefs installs need two things
+that ostree installs did not:
+
+- **bootc-installer v2026.11.16 or later.** fisherman runs composefs installs
+  as `podman run … bootc install to-filesystem` from an OCI layout. Older
+  fisherman let podman stage the imported blobs in the live system's
+  RAM-backed `/var/tmp`, and the review VM stalled there for 2.5 hours
+  (fisherman#345). It also set the account password with
+  `chpasswd --root <deploy dir>`, which runs PAM in a directory that holds
+  only `/etc` state ("pam_chauthtok() failed: Module is unknown";
+  fisherman#396).
+- **The catalog entry's `extras`.** The same bump made fisherman's desktop
+  steps opt-in; see above. Older fisherman ran all four for every install.
+- **No `flatpaks` key in a recipe.** The same bump gave the key a new
+  meaning: absent copies the live system's Flatpaks, `[]` copies none. The
+  e2e recipe sent `[]`, so its installs had no Ghostty and no default
+  Flatpak ("Flatpaks: skipped, the recipe's flatpaks list is empty" in the
+  install log). The GUI leaves the key out for a catalog entry without one.
+- **The OGC kernel needs `CGROUP_BPF`.** crun's cgroup-v2 device filter for
+  that container fails without it ("crun: bpf create: Invalid argument"). See
+  [kernel-cache.md](kernel-cache.md).
 
 ## Tacklebox ISOs (unpublished variants)
 
@@ -315,7 +368,8 @@ gate itself, rather than the image, is at fault: `UTAH_E2E_FLATPAKS` sets the
 expected Flatpak set directly (empty skips the check), and
 `UTAH_E2E_PAYLOAD_CHECK=""` skips the booted-image assertion. The booted-image
 read falls back to `sudo` when `bootc status --json` returns nothing to the
-unprivileged test user.
+unprivileged test user. A failure exits 10 + the failing phase number
+([exit codes](lifecycle-e2e.md#exit-codes)).
 
 Every run then checks first-boot service state (#19). It reads the installed
 image's own `/usr/share/utah/bluefin-desktop.toml` through
@@ -350,9 +404,14 @@ the terminal autostart release via a trigger file so `installed-desktop.png`
 captures a clean desktop state before `installed-fastfetch.png` captures the
 terminal overlay, preventing duplicate verification evidence (#240). CI sets
 `UTAH_E2E_REQUIRE_FASTFETCH=1` to require OCR of its completion marker and
-kernel output, and `UTAH_E2E_REQUIRE_SCREENSHOTS=1` to reject missing PNGs and
+one field only fastfetch prints (kernel, desktop, window manager, terminal,
+shell or package count; `iso/scripts/fastfetch-ocr-match.sh`), since
+tesseract regularly drops the kernel line, and `UTAH_E2E_REQUIRE_SCREENSHOTS=1` to reject missing PNGs and
 blank or flat-colour frames: a solid-black or frozen screen would otherwise pass
-the non-empty check and be published as proof a session started (#786). CI retains the tested commit/image digest and proposes evidence updates in a
+the non-empty check and be published as proof a session started (#786). GDM
+blanks the greeter while a slow boot unit holds `graphical.target`, so the
+harness presses Shift, which types nothing, before it retakes the greeter shot
+until it has drawn. CI retains the tested commit/image digest and proposes evidence updates in a
 documentation PR only after all flavors pass. See [ci-workflows.md](ci-workflows.md).
 
 Ghostty is the only terminal the harness's fastfetch capture can show, and
@@ -370,13 +429,23 @@ are the ones that actually reach the process.
 The harness blocks outbound guest networking while retaining loopback-only
 SSH forwards, so installation cannot silently fall back to an online pull.
 For digest-pinned builds, the builder exports the original registry blobs
-through Skopeo's `dir` transport with `--preserve-digests` on both copies.
+through Skopeo's `dir` transport with `--preserve-digests`, and copies that
+export into the payload store with `--preserve-digests` too.
 Do not export from containers-storage or substitute an OCI archive: the
 former exports uncompressed layers, while the latter can convert manifest
 formats. Either changes the digest and breaks the embedded `image@sha256:...`
 reference. Local tag-based builds may export their local containers-storage.
-A digest-preserving copy failure must fail ISO composition, not fall back to
-a mutable tag.
+The builder fails if the store reports another digest than the exported
+manifest. A digest-preserving copy failure must fail ISO composition, not fall
+back to a mutable tag.
+The installed system does not boot that manifest digest: on both backends
+fisherman installs from `skopeo copy containers-storage:<payload>
+oci:<scratch>`, which re-serializes the manifest, so bootc reports the copy's
+digest. The config digest survives the copy. `luks-e2e.sh` checks that what
+bootc stored at install (the composefs repository's streams, or the
+`ostree.manifest-digest` and `ostree.manifest` keys on the booted ostree
+commit) is the booted manifest with the receipt's config, and the review VM
+compares that config with the payload manifest's.
 The live assembler selects a release from `/usr/lib/modules` and uses its
 matching initramfs. Kernel-core provides that release's `vmlinuz` in the module
 directory, while the OGC installer writes `/boot/vmlinuz-<release>`.

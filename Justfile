@@ -52,8 +52,10 @@ check:
     test -f packages/utah-packages.repo
     test -f system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
     test -f system_files/shared/usr/lib/systemd/system/bootc-unified-storage.service.d/10-utah-local-test.conf
-    grep -q 'enable gdm.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
-    grep -q 'enable ublue-system-setup.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
+    # Enable-by-default as on Dakota (#1233): the catch-all that outranks
+    # Hummingbird's 99-default-disable, applied at build time.
+    grep -qx 'enable \*' system_files/shared/usr/lib/systemd/system-preset/98-utah-enable-default.preset
+    grep -qx 'systemctl preset-all' scripts/configure-services.sh
     grep -q 'disable bootc-fetch-apply-updates.timer' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
     grep -q 'disable bootc-fetch-apply-updates.service' system_files/shared/usr/lib/systemd/system-preset/85-utah-desktop.preset
     grep -q 'bootc-fetch-apply-updates.timer' scripts/configure-services.sh
@@ -86,7 +88,7 @@ check:
     # Every Dakota item Utah lacks must be triaged (baselines/triage.toml).
     python3 scripts/image-baseline.py check
     grep -q '/system_files/bluefin' Containerfile
-    grep -q 'flatpak-preinstall.service' scripts/configure-services.sh
+    grep -q '"flatpak-preinstall.service"' contracts/bluefin-desktop.toml
     grep -q 'flathub.flatpakrepo' scripts/configure-services.sh
     test -f iso/live/Containerfile
     test -f iso/live/src/configure-live.sh
@@ -107,7 +109,8 @@ check:
     python3 -m json.tool iso/live/src/etc/bootc-installer/images.json >/dev/null
     python3 -m json.tool iso/live/src/etc/bootc-installer/recipe.json >/dev/null
     grep -q 'org.bootcinstaller.Installer' iso/live/src/install-flatpaks.sh
-    grep -q 'containers-storage' iso/scripts/build-iso.sh
+    grep -q 'iso/scripts/embed-store-payload.sh' iso/scripts/build-iso.sh
+    bash -n iso/scripts/embed-store-payload.sh
     grep -q 'UTAH_LIVE' iso/scripts/build-iso.sh
     grep -q 'Documented exception (Issue #22)' iso/scripts/build-iso.sh
     if grep -q 'rd.utah.isofile' iso/scripts/build-iso.sh; then echo "rd.utah.isofile found in build-iso.sh" >&2; exit 1; fi

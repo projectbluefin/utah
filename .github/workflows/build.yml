@@ -33,6 +33,12 @@ on:
         description: zstd level for the review ISO (15 = test-only; 3 = production budget)
         type: string
         default: '15'
+      # The ISO installs with the ostree backend until composefs installs pass
+      # for every flavor (#1129). This runs the review install on composefs.
+      review_composefs_backend:
+        description: Install the review ISO with the composefs backend instead of ostree (requires review_vm and contract_only)
+        type: boolean
+        default: false
       contract_only:
         description: Run contract checks and skip image publication
         type: boolean
@@ -109,9 +115,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
-          submodules: recursive
+          # Fetches from extension hosts can transiently return 5xx. Keep the
+          # repository checkout independent from those hosts so the retry
+          # policy below can recover without restarting the whole job.
+          submodules: false
           # The dispatch guard requires this to equal the publisher's github.sha.
           ref: ${{ inputs.sha || github.sha }}
+      - name: Checkout submodules with retry
+        run: bash .github/scripts/update-submodules-with-retry.sh
       - name: Install just
         uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3
       - name: Install host test dependencies
@@ -432,14 +443,16 @@ jobs:
           UTAH_E2E_CPUS: "2"
           UTAH_E2E_EXPECT_FLAVOR: ${{ matrix.flavor }}
           UTAH_E2E_README: none
+          UTAH_E2E_COMPOSEFS_BACKEND: ${{ inputs.review_composefs_backend && '1' || '0' }}
         run: |
           set -euo pipefail
           image_ref=$(cat evidence/image-ref.txt)
           bash iso/scripts/luks-e2e.sh "$PWD/output/utah-review.iso" "$image_ref" \
             2>&1 | tee evidence/vm-test.log
-          booted_digest=$(jq -r .status.booted.image.imageDigest "$UTAH_E2E_WORK/bootc-status.json")
-          expected_digest="sha256:$(cut -d ' ' -f1 evidence/payload-manifest.sha256)"
-          test "$booted_digest" = "$expected_digest"
+          # Both backends boot fisherman's re-serialized copy of the payload;
+          # luks-e2e.sh ties the booted manifest to the payload's config.
+          booted_config=$(cat "$UTAH_E2E_WORK/booted-config-digest")
+          test "$booted_config" = "$(jq -r .config.digest evidence/payload-manifest.json)"
           cp "$UTAH_E2E_WORK/bootc-status.json" "$UTAH_E2E_WORK/flavor-checks.json" evidence/
       - name: Preserve VM evidence on success or failure
         if: always()

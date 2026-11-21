@@ -315,17 +315,23 @@ class CheckUnavailableTests(unittest.TestCase):
         self.assertIn(stale, calls["stderr"])
         self.assertIn("move it out of [unavailable] into the contract", calls["stderr"])
 
+    # No entry is deliberately excluded today (fish joined the contract in
+    # #1230); exercise the policy with firefox standing in for one.
+    EXCLUDED = frozenset({"firefox"})
+
     def test_fails_when_a_deliberate_exclusion_stops_resolving(self):
-        verdicts = self.healthy()
-        verdicts["fish"] = 1
-        calls = self.run_check(stdout=self.markers(verdicts))
+        with patch.object(checker, "DELIBERATELY_EXCLUDED", self.EXCLUDED):
+            verdicts = self.healthy()
+            verdicts["firefox"] = 1
+            calls = self.run_check(stdout=self.markers(verdicts))
 
         self.assertEqual(calls["exit"], 1)
-        self.assertIn("fish", calls["stderr"])
+        self.assertIn("firefox", calls["stderr"])
         self.assertIn("deliberately excluded but no longer resolves", calls["stderr"])
 
     def test_fails_when_a_deliberate_exclusion_leaves_the_overlay(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(checker, "DELIBERATELY_EXCLUDED", self.EXCLUDED):
             overlay = Path(tmp) / "utah.toml"
             overlay.write_text('[unavailable]\npackages=["anaconda-live"]\n')
             calls = self.run_check(
@@ -333,7 +339,7 @@ class CheckUnavailableTests(unittest.TestCase):
                 stdout="UTAH_RESOLVE_ONE anaconda-live 1\n")
 
         self.assertEqual(calls["exit"], 1)
-        self.assertIn("fish", calls["stderr"])
+        self.assertIn("firefox", calls["stderr"])
         self.assertIn("policy was dropped, not repealed", calls["stderr"])
 
     def test_refuses_to_pass_without_a_verdict(self):

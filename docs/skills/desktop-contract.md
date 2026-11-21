@@ -71,40 +71,36 @@ The TOML's sections are the contract's table of contents:
 - **`[flatpak]`** — first-boot policy: the Flathub and TunaOS remotes, the Bazaar,
   NautilusPreviewer (spacebar previews in Files), Ghostty and BudsLink preinstalls, the `99-flatpaks.sh`
   hook, and the system-flatpaks Brewfile whose app list the contract enumerates.
-- **`[media]`** — GStreamer decoders that must load, not merely be installed: `openh264dec`.
+- **`[media]`** — GStreamer decoders that must load, not merely be installed: `openh264dec` and
+  `dav1ddec` (gstreamer-plugins-rs, installed with its rsrtp/gif/hlssink3/spotify plugins as Dakota ships them; #12).
   The factory libav is built on `ffmpeg-free` (no H.264), so `avdec_h264` is not asserted (#1116).
 - **`[selinux]`** — policy modules `semodule -l` must list, loaded by the build: `utah_bootc_probe` ([SELinux modules](desktop-contract/references/selinux-modules.md), #1198).
-- **`[services]`** — systemd units the preset must enable: `gdm.service`, `accounts-daemon.service`,
-  `avahi-daemon.service`, `avahi-daemon.socket`, `bluetooth.service`, `switcheroo-control.service`,
-  `ublue-system-setup.service`, `flatpak-preinstall.service`, `flatpak-nuke-fedora.service`,
-  `brew-setup.service`, `dconf-update.service`, `bootc-unified-storage.timer`, `input-remapper.service`,
-  `ModemManager.service`, `power-profiles-daemon.service`, `thermald.service`, `projectbluefin-countme.timer`,
-  `cups.socket`, `systemd-boot-update.service`, `uupd.timer`, `bluefin-stats-refresh.timer`, `ublue-firstboot-date.service`,
-  `ublue-booted-image.service`. [Dakota service presets](desktop-contract/references/dakota-services.md): GNOME units, user units, opt-in sysstat.
+- **`[services]`** — Utah enables every unit no preset turns off, as GNOME OS and Dakota do
+  (#1233): `98-utah-enable-default.preset` carries GNOME OS's and Dakota's disables, Utah's own
+  disables, then `enable *`, outranking Hummingbird's `99-default-disable`; `85-utah-desktop.preset`
+  overrides the base's `90-*` presets where Utah differs. `configure-services.sh` runs
+  `systemctl preset-all`, and the contract's `enabled`/`disabled` lists assert key units in the image.
+  [Dakota service presets](desktop-contract/references/dakota-services.md): the policy, user units, re-measuring.
+  The Secret Service is oo7, not gnome-keyring ([oo7](desktop-contract/references/oo7.md), #1227).
   Update policy delegates background updates to `uupd.timer`; `bootc-fetch-apply-updates.timer` and
   `bootc-fetch-apply-updates.service` are masked in `/etc` and `/usr/lib` (and disabled in
   `85-utah-desktop.preset`) so cross-vendor `/etc` 3-way merges (e.g. switching from Bluefin) do not
   carry active `timers.target.wants` symlinks that bypass uupd staging or undo manual rollbacks.
   Switchers can mask them by hand if a local `/etc` symlink survived. uupd matches Dakota ([uupd](desktop-contract/references/uupd.md)).
 
-  The last two units are Dakota parity (#675): install-date stamping and the
-  booted-image snapshot Common's `/usr/libexec/ublue-booted-image` falls back to.
-  `configure-services.sh` enables them, patches Common's fastfetch ([stats](desktop-contract/references/stats-refresh.md))
-  and `uwelcome.sh` (non-interactive shells skip the greeting), checks image-info ([bootc compatibility](desktop-contract/references/image-info.md)), and applies [Dakota's desktop defaults](desktop-contract/references/dakota-desktop-defaults.md).
-  Wallpaper rotation is deliberately NOT Dakota parity: Common's per-user `bluefin-dynamic-wallpaper`
-  timer is hemisphere-aware and rotates live at month boundaries, while
-  Dakota's boot-time month symlink is northern-only and stale until reboot, so
-  repointing the default would stand the better rotator down (#675 decision).
+  The firstboot-date, booted-image and remove-installer units, from `dakota-config-firstboot-date`
+  (#1265), are Dakota parity (#675): install-date stamping once timesyncd reports its first sync
+  (`ublue-firstboot-date.path`, #1228) and the booted-image snapshot Common's
+  `/usr/libexec/ublue-booted-image` falls back to.
+  `configure-services.sh` applies [Dakota's edits to Common](desktop-contract/references/dakota-common-edits.md)
+  (month units, weekly stats, Ghostty theme, logos; #1266),
+  patches `uwelcome.sh` (non-interactive shells skip the greeting), removes the bling helpers bluefin-cli replaces ([terminal experience](desktop-contract/references/bluefin-cli.md)), checks image-info ([bootc compatibility](desktop-contract/references/image-info.md)), and applies [Dakota's desktop defaults](desktop-contract/references/dakota-desktop-defaults.md).
 
-  A unit being enabled in the built image is not the same as it being enabled
-  on a booted one. bootc applies presets on first boot, and Hummingbird's
-  `99-default-disable.preset` turns off every unit no preset names, so a build
-  -time `systemctl enable` without a line in `85-utah-desktop.preset` (or a
-  vendor preset such as brew's `01-homebrew.preset`) is undone. That is how
-  `flatpak-preinstall.service` shipped "enabled" and booted disabled, leaving
-  non-ISO installs without Bazaar. `DesktopUnitEnablementTests` holds the
-  script and the preset in agreement. Check a booted VM with `systemctl
-  is-enabled <unit>` when in doubt.
+  bootc applies presets on first boot, so a unit's state comes from the
+  presets, never from a build-time `systemctl enable` (#98: `flatpak-preinstall`
+  shipped "enabled" and booted disabled). `ServiceMaskParityTests` resolves the
+  contract's units against the preset files. Check a booted VM with
+  `systemctl is-enabled <unit>` when in doubt.
 
   The Flathub remote is a `/etc/flatpak/remotes.d` descriptor, applied to the
   repo once, when `/var/lib/flatpak/repo` is created. Flathub's descriptor has
@@ -148,7 +144,7 @@ On a fresh installed VM, check `systemctl --user status brew-preinstall`,
 `brew list --cask chairlift`, and launch Control Center from GNOME. Confirm
 settings persist and authenticated system update staging works; static gates
 prove image wiring, not a completed first-login download or GUI behavior.
-Homebrew native compilation invariants, the `/var/home` symlink for the brew prefix, and the polkit update-staging path are in the
+Homebrew native compilation invariants, the `/home` bind mount and the brew prefix, and the polkit update-staging path are in the
 [ChairLift reference](desktop-contract/references/chairlift-runtime-invariants.md); `packages/base.toml` `[fedora]` retains `make`, `gcc`, `gcc-c++`.
 
 ## NoNewPrivileges and SELinux domain transitions
@@ -187,15 +183,15 @@ one is pending a composefs boot check (see below):
 
 - `Failed to resolve group 'plugdev'` / `'nintendo_switch'`, about 100 lines:
   udev rules from libfido2 and common name groups nothing creates.
-  `sysusers.d/utah-udev-groups.conf` creates them.
+  `sysusers.d/bluefin-udev-groups.conf` (`dakota-config-udev-groups`, #1265) creates them.
 - `fchmod() of / failed: Read-only file system`: systemd's `root.conf`
   (`z / 555`) cannot apply to the composefs root. `/etc/tmpfiles.d/root.conf`
   masks it by name with a comment-only file.
 - `Creating mailbox file: No such file or directory` on every `useradd`:
   clean-stage drops `/var/spool/mail`. `tmpfiles.d/utah-mail.conf` recreates it.
 - `error loading config '.../50-bluefin-bt-switch.conf': Invalid argument`:
-  common's file is comments only, which PipeWire 1.6 rejects. Utah's copy
-  adds a no-op `pulse.cmd = [ ]`; drop it once common's copy parses.
+  PipeWire 1.6 rejects a conf.d file with no assignment. Common's copy now
+  carries `pulse.cmd = [ ]`, so Utah ships no override; the contract pins it (#1267).
 - `systemd-remount-fs.service: mount: /: fsconfig() failed: overlay: No
   changes allowed in reconfigure` (#585): systemd-remount-fs unconditionally
   remounts `/` read-write, but the composefs root is `ro` (`findmnt /` shows
@@ -250,7 +246,7 @@ for the live image's own `installer-local` remote.
 
 Utah deliberately differs from Bluefin Classic's RPM path: selected GNOME Shell
 extensions are pinned Git submodules and built into the image. `.gitmodules`
-has 16 trees under `system_files/shared/usr/share/gnome-shell/extensions/`;
+has 14 trees under `system_files/shared/usr/share/gnome-shell/extensions/`;
 gitlinks pin exact commits. Weekly automation proposes valid tracked-branch
 heads; missing or invalid metadata keeps that source pinned and does not block
 other candidates. Only matching Utah submodules represent extensions; do not
@@ -261,7 +257,7 @@ contract and image-build CI run on its exact head instead of a contract-only
 dispatch. Hive review, required checks and the normal merge policy still
 govern landing, and no automated merge is enabled. Source metadata alone does
 not prove GNOME 51 runtime compatibility. Edit `.gitmodules` for source URL or branch changes; automation advances existing pins.
-Search Light was dropped: GNOME 51 removed `set_shader_source`, which its shader code calls, so it failed ISO tests. Only Dakota's extension set is enabled by default ([Dakota desktop defaults](desktop-contract/references/dakota-desktop-defaults.md)).
+Search Light was dropped: GNOME 51 removed `set_shader_source`, which its shader code calls, so it failed ISO tests. Only Dakota's extension set is enabled by default, and the installed set is Dakota's plus two recorded extras ([Dakota desktop defaults](desktop-contract/references/dakota-desktop-defaults.md)).
 
 `scripts/verify-gnome-extensions.py` checks GNOME 51 support and provenance:
 
@@ -320,12 +316,11 @@ a `path=` the extensions ship; it skips when the submodules are not checked out.
 
 GNOME Initial Setup's welcome page shows the icon named by os-release
 `LOGO`. Distributor builds of Settings > About use the compiled PNG paths
-described below. Fedora sets `LOGO=fedora-logo-icon` and
-Bluefin keeps it; common overlays the raptor at
-`/usr/share/pixmaps/fedora-logo-icon.png`. Hummingbird's os-release has no
-`LOGO`, so Utah showed the generic GNOME foot with the raptor already on disk.
-`configure-branding.sh` sets it, and the contract asserts both the key and the
-icon file. To check without a build: `bootc usr-overlay`, append the key to
+described below. Hummingbird's os-release has no `LOGO`, so Utah showed the
+generic GNOME foot. `configure-branding.sh` sets `LOGO=img-logo-icon` as
+Dakota does, and the `artwork` stage installs Dakota's four
+`/usr/share/pixmaps/img-logo-icon*.svg` wordmarks (#1266); the contract asserts
+the key and the files. To check without a build: `bootc usr-overlay`, append the key to
 `/usr/lib/os-release`, `systemctl restart gdm`, and look at Initial Setup.
 
 ## The GDM greeter logo is Bluefin, not Fedora (#378)
@@ -389,7 +384,7 @@ build.
 Hummingbird defaults to a server preset and disables unlisted services, so
 the desktop policy is applied explicitly. `scripts/configure-services.sh`
 mirrors bluefin-lts's `40-services.sh`: it applies the desktop presets,
-enables GDM, input-remapper, firmware updates, Tailscale, uupd, user setup and resolved,
+enables GDM, firmware updates, Tailscale, uupd, user setup and resolved, keeps kanata opt-in,
 configures authselect, and removes the extension build toolchain before
 cleanup. Lid/sleep stay at logind defaults; Dakota-copied sysctl, WirePlumber
 and polkit defaults: [Dakota system defaults](desktop-contract/references/dakota-system-defaults.md).
@@ -399,13 +394,14 @@ under `[services]` in `packages/utah.toml` and configured in
 `scripts/configure-services.sh`, which also disables `PrivateTmp` on
 `systemd-resolved.service` for bootc early-boot DNS resolution.
 
+GTK3 apps follow the light/dark style through Bluefin's `adw-gtk3` default and
+theme-sync user service ([GTK3 dark style](desktop-contract/references/gtk3-dark-style.md), #1342).
+
 ### Discovery and hybrid-GPU services (#387)
 
-Keep build-time enablement in `scripts/configure-services.sh` aligned with
-`85-utah-desktop.preset`: the script configures the image and the preset
-preserves the policy when first-boot presets are applied. Bluefin's
-`enable avahi-daemon.*` covers both the service and socket for mDNS discovery;
-list both explicitly in the script and preset. `switcheroo-control.service`
+Enable-by-default turns these on (#1233); the contract asserts them. Bluefin's
+and GNOME OS's `enable avahi-daemon.*` covers both the service and socket for
+mDNS discovery. `switcheroo-control.service`
 supports launching applications on a discrete GPU. `switcheroo-control` is
 already in the copied Bluefin package contract; Avahi's client libraries
 are not the daemon, so `[services]` in `packages/utah.toml` explicitly
@@ -448,16 +444,17 @@ deleted at build time, and a preset entry alone would not stop it.
 
 ### The newly added network daemons are held disabled (#869)
 
-The parity rollout (#868) added network daemons that Hummingbird's
-`99-default-disable.preset` must keep off. The `disabled` list in
+The parity rollout (#868) added network daemons that must stay off. Under
+enable-by-default (#1233) each needs a `disable` line in
+`98-utah-enable-default.preset`, and the `disabled` list in
 `contracts/bluefin-desktop.toml` (checked by `verify-desktop-contract.py`)
 fails the build if `dnsmasq.service`, `rpcbind.service`/`.socket`,
 `autofs.service`, `openvpn-{client,server}@.service`, `saned.socket`,
 `ipp-usb.service`, `httpd.service`, `httpd.socket`, `httpd@.service` or
 `htcacheclean.service` is enabled; masked, static or absent units count as
 off (Apache httpd, #948: WebDAV runs its own per-session httpd, so port 80
-stays closed). When Dakota parity work (`baselines/triage.toml`) adds another
-network daemon that must stay off, list it here too.
+stays closed). A newly installed daemon that must stay off needs both: the
+preset line and the contract entry.
 
 ### The fwupd-refresh unit pins a static user (#385)
 

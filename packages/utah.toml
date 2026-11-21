@@ -221,6 +221,14 @@ packages = [
     # it, stays out until its own parity ticket (#263); this adds the font
     # itself (#382).
     "stix-fonts",
+    # Dakota's other two fonts (#1240): GNOME OS ships Noto Serif CJK next to
+    # the Sans CJK the base manifest carries, and Dakota's
+    # bluefin/nerd-fonts-symbols.bst adds Symbols Nerd Font as the icon
+    # fallback for common's fastfetch config. nerd-fonts-symbols ships
+    # 10-nerd-font-symbols.conf in conf.avail and enables it from
+    # /etc/fonts/conf.d itself, as the element does.
+    "google-noto-serif-cjk-vf-fonts",
+    "nerd-fonts-symbols",
     # Shell and tooling Bluefin users reach for
     "bash-completion",
     "man-db",
@@ -239,6 +247,20 @@ packages = [
     "crypto-policies-scripts",
     "python3-pip",
     "systemd-container",
+    # Virtualization, as on Dakota (#1232): toolbox and the guest agents for
+    # QEMU (with SPICE), VMware and Hyper-V. The guest agents start only on
+    # their hypervisor (udev or ConditionVirtualization). virtiofsd resolves
+    # since the factory's qemu-common 11.1.3-2, and libvirt-client and
+    # libvirt-daemon-config-network since libvirt 12.9.0-2; qemu-kvm and
+    # libvirt-daemon-kvm are still in [unavailable] (utah-packages#1021).
+    "qemu-guest-agent",
+    "spice-vdagent",
+    "open-vm-tools",
+    "hyperv-daemons",
+    "toolbox",
+    "virtiofsd",
+    "libvirt-client",
+    "libvirt-daemon-config-network",
     # pam_pwquality's dictionary. Fedora's Silverblue base pulls it in;
     # Hummingbird's cracklib does not require it. Without it libpwquality
     # fails every candidate with "error loading dictionary", so passwd (via
@@ -280,18 +302,6 @@ packages = [
     "pipewire-utils",
     "pulseaudio-utils",
     "glycin-thumbnailer",
-    # Video thumbnailer for the media codec parity work (#383). The factory
-    # published it after the Intel runtimes landed in #397, so it resolves
-    # today against the pinned factory repodata (sha256:0f8595d) + Hummingbird
-    # primary: ffmpegthumbnailer-libs and the libav*-free 9.0.1 libraries it
-    # links (libavcodec/libavformat/libavutil/libavfilter) come from the
-    # factory, plus libjpeg-turbo/libpng from Hummingbird. libavformat-free and
-    # libavfilter-free are new to the image and pull zeromq, libssh, and
-    # libvmaf from Hummingbird, so expect image growth. The other thumbnailers
-    # and GStreamer plugins (gnome-epub-thumbnailer, papers-thumbnailer,
-    # gstreamer1-plugin-libav, -dav1d, -bad-free, -ugly-free) are requested in
-    # the parity block below (#383).
-    "ffmpegthumbnailer",
     "samba-client",
     "samba-common-tools",
     "krb5-workstation",
@@ -363,6 +373,12 @@ packages = [
     "qt6-qtbase",
     "python3-charset-normalizer",
     "python3-idna",
+    # Dakota's git-lfs (#1259; freedesktop-sdk components/git-lfs.bst, pulled
+    # in by projectbluefin/dakota elements/bluefin/deps.bst). Hummingbird
+    # builds it. Its %post runs `git lfs install --system`, which writes the
+    # [filter "lfs"] stanza fdsdk's integration command appends to
+    # /etc/gitconfig; contracts/bluefin-desktop.toml asserts the stanza.
+    "git-lfs",
     # Factory-published Bluefin tools consumed from the pinned image (#263).
     # Everything below is built by utah-packages and is asserted in
     # [factory].parity. Flatpak-first applies: no RPM here duplicates a
@@ -388,6 +404,35 @@ packages = [
     # the lax zone; the resolved drop-in applies on its own.
     "gnome-os-config-firewalld",
     "gnome-os-config-resolved-fallback-dns",
+    # The rest of Dakota's and GNOME OS's configuration elements, packaged by
+    # the factory (utah-packages packages/dakota-config and gnome-os-config,
+    # docs/skills/config-packages.md) instead of copied into system_files
+    # (#1265). Each subpackage installs one element's files at the element's
+    # paths; the desktop contract asserts the ones Utah relies on.
+    # dakota-config-firstboot-date's ublue-firstboot-date.path waits for
+    # systemd-timesyncd's sync flag, so it records the install date only once
+    # timesyncd replaces chrony (#1228).
+    "dakota-config-composefs-loop-udisks-ignore",
+    "dakota-config-custom-command-menu-dconf",
+    "dakota-config-firstboot-date",
+    "dakota-config-flatpak-apps",
+    "dakota-config-kexec-disable",
+    "dakota-config-network",
+    "dakota-config-ntsync-modules-load",
+    "dakota-config-rpcbind-preset",
+    "dakota-config-sudo-linuxbrew-path",
+    "dakota-config-tailscale-preset",
+    "dakota-config-tailscale-setup",
+    "dakota-config-udev-groups",
+    "dakota-config-user-avatars",
+    "dakota-config-uupd",
+    "dakota-config-wireplumber-pcsp",
+    "gnome-os-config-hidraw-udev",
+    "gnome-os-config-journald-config",
+    "gnome-os-config-modprobe-config",
+    "gnome-os-config-systemd-presets",
+    "gnome-os-config-uinput",
+    "gnome-os-config-wpa-supplicant-config",
     # Everyday command-line tools (#392). xdg-utils supplies xdg-open, which
     # nothing else in the image provides. nano-default-editor sets EDITOR.
     "xdg-utils",
@@ -404,6 +449,28 @@ packages = [
     "pinentry-gnome3",
     "brltty",
     "ptyxis",
+    # Key remapping as Dakota ships it (bluefin/kanata.bst, bluefin/ydotool.bst),
+    # in place of input-remapper (#1222). kanata.service stays off until the
+    # user writes /etc/kanata/kanata.kbd and enables it (the package's
+    # 80-kanata.preset); ydotool brings the uinput udev rule and modules-load.
+    "kanata",
+    "ydotool",
+    # The Secret Service as Dakota/GNOME OS ship it (gnome-build-meta
+    # core-deps/oo7-daemon, oo7-pam, oo7-portal), in place of gnome-keyring
+    # (#1227): the daemon, the PAM module gdm 51's stacks already call
+    # (-auth/-password/-session optional pam_oo7.so), the portal
+    # gnome-session's gnome-portals.conf prefers, and the CLI. pam_oo7 and
+    # oo7-daemon obsolete gnome-keyring(-pam) < 51; [excluded] removes them.
+    "oo7-daemon",
+    "pam_oo7",
+    "oo7-portal",
+    "oo7-cli",
+    # kmscon on the VTs, as gnome-build-meta gnomeos-deps/kmscon.bst builds
+    # it (#1237): the pango renderer draws kmscon.conf's Adwaita Mono, which
+    # base.toml's adwaita-fonts-all supplies. Units: 85-utah-desktop.preset;
+    # kmscon.conf and the gdm drop-in: system_files.
+    "kmscon",
+    "kmscon-pango",
     # Network file systems and Windows domain clients (the NFS family follows
     # in the second-wave block below).
     "cifs-utils",
@@ -481,6 +548,10 @@ packages = [
     # and audio libraries Bluefin carries (argyllcms backs gnome-color-manager).
     "gstreamer1-plugin-libav",
     "gstreamer1-plugin-dav1d",
+    # The rest of freedesktop-sdk's gstreamer-plugins-rs as Dakota ships it
+    # (components/gstreamer-plugins-rs.bst: rsrtp, gif, hlssink3, spotify);
+    # the factory builds dav1d from the same source now (utah-packages#1153).
+    "gstreamer-plugins-rs",
     "gnome-epub-thumbnailer",
     "argyllcms",
     "lcms",
@@ -492,7 +563,9 @@ packages = [
     # djvulibre, liba52, libmpeg2) are published, so the names they gated resolve.
     # sysstat ships for on-demand sar/iostat; its collection units are opt-in
     # and preset-disabled, as in Dakota (elements/bluefin/sysstat.bst; see
-    # 85-utah-desktop.preset). nfs-client.target is disabled there too.
+    # 98-utah-enable-default.preset). nfs-client.target is enabled, as on
+    # Dakota; tmpfiles.d/utah-gssproxy.conf gives gssproxy its state
+    # directories (#1269).
     "tmux",
     "powertop",
     "sysstat",
@@ -525,6 +598,106 @@ packages = [
     "papers-libs",
     "papers-thumbnailer",
     "papers-nautilus",
+    # iOS file access as Dakota ships it (#1261; projectbluefin/dakota
+    # elements/bluefin/ifuse.bst, 1.2.1): ifuse mounts an iPhone's media and
+    # app documents over libimobiledevice, which libimobiledevice-utils above
+    # already brings in.
+    "ifuse",
+    # Smart card tools and PKCS#11 module as Dakota ships them (#1257;
+    # freedesktop-sdk-extra components/opensc.bst, 0.27.1). pcscd.socket is
+    # already enabled. GNOME OS keeps the module out of the desktop's own
+    # daemons (gnome-build-meta files/opensc/opensc.module); Utah ships that
+    # file as /etc/pkcs11/modules/opensc.module, which outranks the RPM's copy.
+    "opensc",
+    # GNOME's video and audio thumbnailers, as Dakota ships them (#1262;
+    # gnome-build-meta core/gst-thumbnailers.bst, 1.1.0). They replace
+    # ffmpegthumbnailer, which Dakota doesn't ship: both register for
+    # video/mp4, video/webm, video/x-matroska and most other video types, and
+    # GNOME's thumbnail factory uses one thumbnailer per MIME type.
+    # gst-video-thumbnailer decodes through GStreamer, so H.264 previews go
+    # through openh264dec; ffmpegthumbnailer's ffmpeg-free has no H.264 (#1116).
+    "gst-thumbnailers",
+    # Command-line, device and security tools Dakota ships (#1359), measured
+    # by `just baselines` on 2026-11-20 (baselines/GAP.md). The monitoring
+    # tools are the user-facing CLIs #1263 adopted. pam-u2f installs the
+    # module only; PAM is left unconfigured. pam_pkcs11 waits for the
+    # smart-card PAM decision (#1257). bpftool, newt (whiptail, and the
+    # libnewt NetworkManager-tui needs), lzip and the Dell smbios-utils
+    # arrived with factory pin c288398 (#1360). The iSCSI initiator and iSNS
+    # tools ship as on Dakota, every unit off (85-utah-desktop.preset carries
+    # Dakota's 50-iscsi.preset); umotd is waived for uwelcome.
+    "tealdeer",
+    "nethogs",
+    "tiptop",
+    "trace-cmd",
+    "numactl",
+    "bpftop",
+    "alsa-ucm-utils",
+    "v4l-utils",
+    "rc-tools",
+    "dvb-tools",
+    "gstreamer1-plugins-base-tools",
+    "libcamera-v4l2",
+    "iproute-tc",
+    "util-linux-script",
+    "xz-lzma-compat",
+    "lz4",
+    "sqlite",
+    "bsdtar",
+    "bsdcpio",
+    "bsdcat",
+    "bsdunzip",
+    "xxhash",
+    "fido2-tools",
+    "pam-u2f",
+    "pamu2fcfg",
+    "gnutls-utils",
+    "gnupg2-smime",
+    "gnupg2-utils",
+    "openldap-clients",
+    "integritysetup",
+    "veritysetup",
+    "bindfs",
+    "malcontent-tools",
+    "nfs-python-utils",
+    "bpftool",
+    "newt",
+    "NetworkManager-tui",
+    "lzip",
+    "smbios-utils-bin",
+    "smbios-utils-python",
+    "iscsi-initiator-utils",
+    "isns-utils",
+    "nicstat",
+    # Syncthing, as Dakota ships it (elements/bluefin/syncthing.bst, #1361): a
+    # background daemon, not an app, so it is native. Its syncthing.service
+    # user unit stays off (Hummingbird's user 99-default-disable preset; the
+    # contract's user_disabled) and its two app-grid launchers, which Dakota
+    # does not have, are removed by configure-services.sh. The Sync Folder
+    # toggle runs its own Syncthing container and migrates a native setup.
+    "syncthing",
+    # Sysprof's host side, as Dakota ships it (#1361): sysprof-cli carries
+    # sysprofd and its D-Bus-activated sysprof3.service, which the Flathub
+    # org.gnome.Sysprof app needs for whole-system profiling. The factory's
+    # rebuild only recommends kernel-tools (utah-packages#1242).
+    "sysprof-cli",
+    # EROFS image tools, as Dakota ships them (#1360); the factory builds them
+    # without Intel QPL (utah-packages#1241).
+    "erofs-utils",
+    # DLNA/UPnP media sharing (GNOME Settings > Sharing > Media Sharing), as
+    # Dakota ships it (#1258). The rygel package carries /etc/rygel.conf and
+    # the rygel.service user unit Settings starts; gupnp-av's factory recipe
+    # was added in utah-packages#1147.
+    "rygel",
+    "gupnp-av",
+    "gupnp-dlna",
+    "gst-editing-services",
+    # Utah's shell experience and CLI bundles (`ujust bluefin-cli` and the
+    # bling.sh/bling.fish/ublue-bling shims), in place of Common's ublue-bling;
+    # uwelcome stays the terminal greeting and bluefin-cli works through it
+    # (projectbluefin/common#1719). Built by the factory
+    # (utah-packages#1235).
+    "bluefin-cli",
     #
     # Left out (resolved against sha256:d3b5bac2):
     #   tuned, tuned-ppd            Dakota runs power-profiles-daemon, which is
@@ -647,17 +820,12 @@ packages = [
 # no-Secure-Boot posture; GRUB and shim stay the Secure Boot story and keep
 # flowing through bootupd.
 #
-# zram-generator + zram-generator-defaults are the bare-metal swap (#384). The
-# audit found swapon -s empty and zramctl showing nothing: the server base
-# ships no swap at all. zram-generator-defaults ships
-# /usr/lib/systemd/zram-generator.conf, which the generator reads at boot, so
-# installing the two packages both adds the swap and enables the generator --
-# one zram device sized zram-size = min(ram, 8192), i.e. all of RAM capped at
-# 8 GiB. That is exactly what Bluefin ships (it has no custom zram config of
-# its own), so the size is the package default, not something restated here.
-# Not verified in-tree: #384's acceptance check is `swapon -s` showing a zram
-# device on a booted install, and no e2e job here asserts in-VM swap. Run it
-# against the next `testing` image before closing #384.
+# Swap is Dakota's zswap over a disk-backed /var/swap/swapfile (#1224), not
+# zram: the server base ships no swap at all (#384), and Dakota drops GNOME
+# OS's zram default. The swapfile, its init unit, the zswap kargs and sysctls
+# are files under system_files (desktop-contract's Dakota system defaults
+# reference), so no package is needed; zram-generator(-defaults) are gone.
+#
 # systemd-oomd runs enabled, as on Dakota (#1233): GNOME OS enables it through
 # its enable-by-default preset policy and ships no oomd.conf.d or ManagedOOM
 # drop-ins of its own, so Utah enables the daemon and adds no
@@ -676,8 +844,6 @@ packages = [
     "systemd-boot-unsigned",
     "systemd-resolved",
     "tailscale",
-    "zram-generator",
-    "zram-generator-defaults",
 ]
 
 [unavailable]
@@ -693,24 +859,6 @@ packages = [
 #
 # Each entry MUST carry a tracking issue: this list is the documented parity
 # debt, not a dumping ground for packages that are merely inconvenient.
-#
-# evolution-ews-core
-#
-#   The Exchange Web Services plugin for Evolution (fedora_v43 section of
-#   the base manifest). Building it requires both the evolution-data-server
-#   stack -- camel, libebook, libecal, libedata-book -- and Evolution itself,
-#   which is where evolution-mail and evolution-shell come from.
-#   utah-packages now builds evolution-data-server (3.61.3), so the EDS half of
-#   that closure is covered. The remaining gap is two recipes the factory does
-#   not have: evolution, and evolution-ews itself. Move this entry out of
-#   [unavailable] into the contract once utah-packages builds both; tracked by
-#   #10.
-#
-# fish
-#   Deliberately excluded, not blocked: the factory builds it and it resolves,
-#   but Bluefin classic shipping every shell was a mistake Utah does not repeat.
-#   Users who want fish get it from Homebrew. Tracked by #419. Dakota ships
-#   fish from GNOME OS; whether Utah follows is #1230.
 #
 # firefox
 #   Neither enabled repository provides the firefox RPM: the factory does
@@ -740,12 +888,23 @@ packages = [
 # pipewire-libs-extra is supplied by the pinned September 10 factory candidate
 # and returns to the install contract (#35).
 #
+# qemu-kvm, libvirt-daemon-kvm
+#   Dakota installs QEMU/KVM, libvirt (its own elements/bluefin/libvirt.bst)
+#   and virtiofsd, libvirt off by preset until `ujust setup-virtualization`
+#   turns the modular virt*d sockets on (#1232). At factory 2f92517 neither
+#   resolves: qemu-kvm's qemu-system-x86-core (qemu 11.1.3-2) needs xen,
+#   daxctl, xdp, qatzip and igvm libraries, and libvirt-daemon-kvm also needs
+#   libvirt 12.9.0-2's iSCSI-direct storage driver, which needs libiscsi.
+#   Tracked by utah-packages#1021. virtiofsd (qemu-common 11.1.3-2),
+#   libvirt-client and libvirt-daemon-config-network (libvirt 12.9.0-2)
+#   resolve and are in [parity]. Move the rest into [parity] once
+#   `just check-repos` reports them stale.
 packages = [
     "grub2-efi-x64-cdboot",
     "anaconda-live",
-    "evolution-ews-core",
     "firefox",
-    "fish",
+    "qemu-kvm",
+    "libvirt-daemon-kvm",
     "slitherer",
 ]
 
@@ -893,7 +1052,7 @@ parity = [
     "libva-intel-media-driver",
     "intel-mediasdk",
     "intel-vpl-gpu-rt",
-    "ffmpegthumbnailer",
+    "gst-thumbnailers",
     "totem-pl-parser",
     "gstreamer1-plugin-openh264",
     "openh264",
@@ -904,6 +1063,27 @@ parity = [
     "uresourced",
     "gnome-os-config-firewalld",
     "gnome-os-config-resolved-fallback-dns",
+    "dakota-config-composefs-loop-udisks-ignore",
+    "dakota-config-custom-command-menu-dconf",
+    "dakota-config-firstboot-date",
+    "dakota-config-flatpak-apps",
+    "dakota-config-kexec-disable",
+    "dakota-config-network",
+    "dakota-config-ntsync-modules-load",
+    "dakota-config-rpcbind-preset",
+    "dakota-config-sudo-linuxbrew-path",
+    "dakota-config-tailscale-preset",
+    "dakota-config-tailscale-setup",
+    "dakota-config-udev-groups",
+    "dakota-config-user-avatars",
+    "dakota-config-uupd",
+    "dakota-config-wireplumber-pcsp",
+    "gnome-os-config-hidraw-udev",
+    "gnome-os-config-journald-config",
+    "gnome-os-config-modprobe-config",
+    "gnome-os-config-systemd-presets",
+    "gnome-os-config-uinput",
+    "gnome-os-config-wpa-supplicant-config",
     "xdg-utils",
     "rsync",
     "nano",
@@ -915,6 +1095,14 @@ parity = [
     "pinentry-gnome3",
     "brltty",
     "ptyxis",
+    "kanata",
+    "ydotool",
+    "oo7-daemon",
+    "pam_oo7",
+    "oo7-portal",
+    "oo7-cli",
+    "kmscon",
+    "kmscon-pango",
     "cifs-utils",
     "rpcbind",
     "autofs",
@@ -973,6 +1161,7 @@ parity = [
     "words",
     "gstreamer1-plugin-libav",
     "gstreamer1-plugin-dav1d",
+    "gstreamer-plugins-rs",
     "gnome-epub-thumbnailer",
     "argyllcms",
     "lcms",
@@ -1002,4 +1191,46 @@ parity = [
     "papers-libs",
     "papers-thumbnailer",
     "papers-nautilus",
+    "ifuse",
+    "opensc",
+    # Dakota image-scan tools (#1359).
+    "tealdeer",
+    "nethogs",
+    "tiptop",
+    "trace-cmd",
+    "bpftop",
+    "alsa-ucm-utils",
+    "v4l-utils",
+    "rc-tools",
+    "dvb-tools",
+    "gstreamer1-plugins-base-tools",
+    "libcamera-v4l2",
+    "pam-u2f",
+    "pamu2fcfg",
+    "bindfs",
+    "malcontent-tools",
+    "nfs-python-utils",
+    "bpftool",
+    "newt",
+    "lzip",
+    "smbios-utils-bin",
+    "smbios-utils-python",
+    "iscsi-initiator-utils",
+    "isns-utils",
+    "nicstat",
+    "syncthing",
+    "virtiofsd",
+    "libvirt-client",
+    "libvirt-daemon-config-network",
+    "sysprof-cli",
+    "erofs-utils",
+    "google-noto-serif-cjk-vf-fonts",
+    "nerd-fonts-symbols",
+    # DLNA/UPnP media sharing (#1258).
+    "rygel",
+    "gupnp-av",
+    "gupnp-dlna",
+    "gst-editing-services",
+    # Utah's terminal experience (utah-packages#1235).
+    "bluefin-cli",
 ]

@@ -32,6 +32,7 @@ jobs:
       lifecycle_baseline: ${{ steps.baseline.outputs.baseline }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        timeout-minutes: 10
         with:
           persist-credentials: false
       - id: inputs
@@ -75,6 +76,7 @@ jobs:
       # job can move the tag, so the job never tests a build against itself.
       # The workflow concurrency group keeps :testing still until we finish.
       - id: baseline
+        timeout-minutes: 15
         env:
           GH_TOKEN: ${{ github.token }}
           MAIN_REF: ${{ steps.inputs.outputs.main_ref }}
@@ -126,6 +128,7 @@ jobs:
       matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        timeout-minutes: 10
         with:
           ref: ${{ needs.resolve.outputs.sha }}
           persist-credentials: false
@@ -148,11 +151,25 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
     steps:
+      # The harness fails with its evidence (exit 75) 10 minutes before
+      # timeout-minutes would kill the job with nothing uploaded.
+      # TIMEOUT_MINUTES must equal this job's timeout-minutes.
+      - name: Set the job deadline
+        env:
+          TIMEOUT_MINUTES: "180"
+        run: echo "E2E_WALL_CLOCK_DEADLINE=$(( $(date +%s) + (TIMEOUT_MINUTES - 10) * 60 ))" >> "$GITHUB_ENV"
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        timeout-minutes: 10
         with:
           ref: ${{ needs.resolve.outputs.sha }}
           persist-credentials: false
+      # Network steps (checkout, apt, GHCR login and pulls) carry their own
+      # timeout-minutes, so a wedged mirror or registry fails as a named step
+      # instead of burning the job's timeout. apt on these runners has taken
+      # up to 31 minutes and still succeeded (job 135107979619: multi-minute
+      # stalls between packages), so apt steps get 40; pulls take 1-2.
       - name: Prepare ISO and QEMU host
+        timeout-minutes: 40
         run: |
           set -euo pipefail
           # These hosted-runner SDKs are unused by ISO composition.
@@ -167,6 +184,7 @@ jobs:
           mkdir -p output evidence
           df -h .
       - name: Pull exact published payload
+        timeout-minutes: 20
         env:
           GH_TOKEN: ${{ github.token }}
           IMAGE_REF: ${{ matrix.ref }}
@@ -254,11 +272,18 @@ jobs:
           - image: utah
             backend: ostree
     steps:
+      # See the luks job: the harness fails with evidence before the timeout.
+      - name: Set the job deadline
+        env:
+          TIMEOUT_MINUTES: "240"
+        run: echo "E2E_WALL_CLOCK_DEADLINE=$(( $(date +%s) + (TIMEOUT_MINUTES - 10) * 60 ))" >> "$GITHUB_ENV"
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        timeout-minutes: 10
         with:
           ref: ${{ needs.resolve.outputs.sha }}
           persist-credentials: false
       - name: Prepare ISO and QEMU host
+        timeout-minutes: 40
         run: |
           set -euo pipefail
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
@@ -288,6 +313,7 @@ jobs:
             echo "- Candidate (this build): \`$CANDIDATE_REF\`"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Pull the baseline payload
+        timeout-minutes: 20
         env:
           GH_TOKEN: ${{ github.token }}
           BASELINE_REF: ${{ needs.resolve.outputs.lifecycle_baseline }}
@@ -352,10 +378,12 @@ jobs:
       packages: read
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        timeout-minutes: 10
         with:
           ref: ${{ needs.resolve.outputs.sha }}
           persist-credentials: false
       - name: Prepare ISO and QEMU host
+        timeout-minutes: 40
         run: |
           set -euo pipefail
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
@@ -363,6 +391,11 @@ jobs:
           sudo apt-get install -y podman skopeo uidmap slirp4netns fuse-overlayfs \
             squashfs-tools xorriso dosfstools mtools qemu-system-x86 qemu-utils \
             ovmf
+          # Same KVM grant as luks and lifecycle: the job user cannot open
+          # /dev/kvm by default, and without it the boot gate fell back to TCG.
+          test -c /dev/kvm
+          sudo chmod a+rw /dev/kvm
+          test -r /dev/kvm && test -w /dev/kvm
           mkdir -p evidence
           df -h .
       - name: Build the ISO with tacklebox
@@ -375,6 +408,7 @@ jobs:
           sudo bash iso/scripts/build-iso-tacklebox.sh main testing ghcr "$digest" 1 \
             2>&1 | tee evidence/tbx-build.log
       - name: Verify the ISO with tacklebox
+        timeout-minutes: 20
         run: |
           set -euo pipefail
           tacklebox_image=$(< config/tacklebox-image)
@@ -395,12 +429,14 @@ jobs:
           limit=$((8 * 1024 * 1024 * 1024))
           echo "utah-main-tacklebox.iso is $size_bytes bytes"
           test "$size_bytes" -le "$limit" || { echo "ISO exceeds the size budget" >&2; exit 1; }
+      # Under KVM the live session reaches the marker in well under a minute
+      # (the luks job's live boot: ~35 s); the gate returns as soon as it does.
       - name: Live-boot and observe the UTAH_LIVE_READY marker
         env:
-          UTAH_ISO_BOOT_TIMEOUT: 1800
+          UTAH_ISO_BOOT_TIMEOUT: 600
+          UTAH_ISO_BOOT_WORK: ${{ runner.temp }}/utah-tbx-boot
         run: |
           set -euo pipefail
-          # No KVM on GitHub-hosted runners: the gate falls back to TCG.
           bash iso/scripts/tacklebox-boot-gate.sh "$PWD/output/utah-main-tacklebox.iso" UTAH_LIVE_READY \
             2>&1 | tee evidence/tbx-boot.log
       - name: Preserve diagnostics even on failure
@@ -412,6 +448,7 @@ jobs:
           if-no-files-found: warn
           path: |
             evidence/
+            ${{ runner.temp }}/utah-tbx-boot/serial.log
 
   # Test credentials are only present in the DEBUG=1 ISO above. Build this
   # artifact after the whole matrix passes, so a retained ISO is production
@@ -428,10 +465,12 @@ jobs:
       matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        timeout-minutes: 10
         with:
           ref: ${{ needs.resolve.outputs.sha }}
           persist-credentials: false
       - name: Prepare production ISO host
+        timeout-minutes: 40
         run: |
           set -euo pipefail
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
@@ -441,6 +480,7 @@ jobs:
           mkdir -p output
           df -h .
       - name: Pull exact published payload
+        timeout-minutes: 20
         env:
           GH_TOKEN: ${{ github.token }}
           IMAGE_REF: ${{ matrix.ref }}
@@ -471,7 +511,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: production-iso-${{ matrix.image }}
-          retention-days: 30
+          retention-days: 3
           if-no-files-found: error
           path: |
             output/utah-live.iso
@@ -491,7 +531,7 @@ jobs:
       fail-fast: false
       matrix:
         include: ${{ fromJSON(needs.resolve.outputs.suites) }}
-    uses: projectbluefin/testsuite/.github/workflows/e2e.yml@5d942c2b156730ee9a3764a4c5b4270521c3887d # v1
+    uses: projectbluefin/testsuite/.github/workflows/e2e.yml@171ae3df98622f7b17906ca8b69535606e09b1d9 # v1
     with:
       image: ${{ fromJSON(needs.resolve.outputs.digests)[matrix.image] }}
       compose_image: false
@@ -499,7 +539,7 @@ jobs:
       test_repository: projectbluefin/testsuite
       # The tests checked out must be the commit the e2e.yml above comes from,
       # or workflow and tests drift apart (#946). Renovate bumps both together.
-      test_ref: 5d942c2b156730ee9a3764a4c5b4270521c3887d # v1
+      test_ref: 171ae3df98622f7b17906ca8b69535606e09b1d9 # v1
 
   # :testing is a ratchet over commits, not a mirror of the branch tip. The
   # tested digests become :testing when their commit is the promoted commit or
@@ -544,10 +584,12 @@ jobs:
         run: |
           echo "::warning::Not running from main (${GITHUB_REF}); E2E evidence is kept, but no status is recorded and no tag moves."
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        timeout-minutes: 10
         if: github.ref == 'refs/heads/main'
         with:
           persist-credentials: false
       - name: Authenticate to GHCR
+        timeout-minutes: 15
         if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -603,15 +645,20 @@ jobs:
       && (needs.lifecycle.result == 'success'
       || (needs.lifecycle.result == 'skipped' && needs.resolve.outputs.lifecycle == 'skip')) }}
     runs-on: ubuntu-26.04
+    # The workflow token still pushes the `verification` record branch. The
+    # README pull request is opened with the mergeraptor App token below, so
+    # its normal pull_request checks run and the hive treats it as a trusted
+    # bot PR; a PR opened with the workflow token gets no checks of its own.
     permissions:
       contents: write
-      pull-requests: write
       actions: read
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        timeout-minutes: 10
         with:
           ref: main
       - name: Download passing main-desktop screenshots
+        timeout-minutes: 10
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: iso-verified-utah
@@ -643,9 +690,23 @@ jobs:
           RECORD: ${{ runner.temp }}/verification
           RECORD_COMMIT: ${{ steps.publish.outputs.record_commit }}
         run: python3 scripts/update-e2e-readme.py "$RECORD"
+      # Only trusted main may mint the App token and open the PR; a dispatch
+      # on any other ref publishes the record branch but proposes nothing.
+      - name: Get repository-scoped mergeraptor token
+        if: github.repository_owner == 'projectbluefin' && github.ref == 'refs/heads/main'
+        id: app-token
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3
+        with:
+          client-id: ${{ secrets.MERGERAPTOR_APP_ID }}
+          private-key: ${{ secrets.MERGERAPTOR_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
       - name: Propose updated verification link
+        if: github.repository_owner == 'projectbluefin' && github.ref == 'refs/heads/main'
         uses: peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1 # v8
         with:
+          token: ${{ steps.app-token.outputs.token }}
           branch: automation/iso-verification
           title: 'docs: refresh verified ISO record link'
           commit-message: 'docs: refresh verified ISO record link'

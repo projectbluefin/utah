@@ -26,9 +26,7 @@ name a schema installed there.
   each `*.gschema.xml` into the system directory (it never overwrites an
   existing file), and removing the local directory with its compiled cache.
   The per-extension compiles are gone. GSConnect's meson install already uses
-  the system directory. Quick Settings Audio Panel's bundled libpanel keeps a
-  compiled schema in `libs/libpanel/` and loads it itself; that is not an
-  extension `schemas/` directory and is left alone.
+  the system directory.
 - Installed-mode `scripts/verify-gnome-extensions.py` fails if any
   `<uuid>/schemas` remains.
 - `[gsettings]` in `contracts/bluefin-desktop.toml`, checked by

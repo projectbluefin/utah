@@ -28,22 +28,20 @@ Rules applied while choosing names:
   thumbnailers and services that a sandboxed app cannot provide are not
   duplicates.
 - Nothing in the base manifest's `[excluded]` list (`packages/base.toml`) is installed.
-- Hummingbird's `99-default-disable` leaves every unit off, so a service Bluefin
-  runs needs a line in `85-utah-desktop.preset`, an `enable_unit` in
-  `scripts/configure-services.sh` and an entry in `contracts/bluefin-desktop.toml`
-  `[services].enabled`. Bluefin has no preset of its own for these: it inherits
-  Fedora's `90-default.preset` from `redhat-systemd-presets`, which is where
-  to read whether a unit is enabled. It enables `thermald.service`,
-  `intel_lpmd.service`, `tuned.service`, `tuned-ppd.service`, `smartd.service`,
-  `nfs-client.target`, `sysstat.service` and its two timers, but not
-  `rpcbind`, `autofs`, `brltty`, `dnsmasq`, `saned` or `ipp-usb`. Utah follows
-  Dakota rather than Fedora on `sysstat*`: collection is opt-in
-  (`elements/bluefin/sysstat.bst` disables `sysstat.service` and its three
-  timers), so the preset disables them and the contract's `disabled` list holds
-  them off. Utah also disables `nfs-client.target` (Hummingbird's own preset enables
-  it): it pulls in `gssproxy.service`, which failed to start in the review VM
-  (`STATE_DIRECTORY`, Permission denied; cause not diagnosed).
-  `smartmontools` is not installable, so its unit stays unwired.
+- Utah enables every installed unit no preset turns off, as Dakota does
+  (#1233, `98-utah-enable-default.preset`), so a new package's services run
+  unless they are disabled there. A daemon that must stay off needs a
+  `disable` line in `98-utah-enable-default.preset` (or in
+  `85-utah-desktop.preset` when Hummingbird's `90-default.preset` enables it)
+  and an entry in `contracts/bluefin-desktop.toml` `[services].disabled`; a
+  unit the desktop depends on belongs in `[services].enabled`. Dakota's
+  presets are the reference: sysstat collection is opt-in
+  (`elements/bluefin/sysstat.bst`), libvirt is socket-off until
+  `ujust setup-virtualization`. `nfs-client.target` is enabled, as on Dakota.
+  It pulls in `gssproxy.service`, whose `StateDirectory=` can't create
+  `clients/` and `rcache/` itself, because SELinux gives init_t no `add_name`
+  on `gssproxy_var_lib_t`. `tmpfiles.d/utah-gssproxy.conf` recreates them on
+  the `/var` that clean-stage strips (#1269).
 - Power profiles follow Dakota, not Bluefin: Utah installs and enables
   `power-profiles-daemon` and ships no TuneD. Never install `tuned-ppd`
   beside it: both claim `org.freedesktop.UPower.PowerProfiles`. TuneD also
@@ -67,3 +65,27 @@ from `baselines/triage.toml`. Those notices are advisory, so a passing
 check does not mean the triage cleanup is complete. If the refresh is
 still in an open PR, validate the cleanup with its snapshots and land
 the refresh first; the old snapshots still require those triage entries.
+
+To triage new gaps, map each Dakota path to the package that ships it. Start a
+container from the pinned `BASE_IMAGE` with the factory's metadata layer
+mounted at `/etc/utah-packages` and `packages/` at `/etc/yum.repos.d`, the
+same mounts `scripts/check-repo-availability.py` uses, then run
+`dnf repoquery --setopt=optional_metadata_types=filelists --whatprovides PATH`.
+Without filelists, dnf5 matches only the primary metadata's paths. Probe a name
+with `python3 /tmp/install-packages.py --resolve-one NAME` (mounted as
+`check-repo-availability.py` does) before requesting it: a published package
+can still need an unpublished library, as `erofs-utils` needed `libqpl` until
+utah-packages#1241. A bare `dnf install --assumeno` also enables the
+builder-only Fedora 44 repositories in `packages/`, so it can pull a
+dependency the image never gets (`kernel-tools` for `sysprof-cli`). Query the
+next Renovate factory pin's metadata too, so items it will publish are planned
+against that bump, not waived.
+
+Statuses follow the owner decisions: Flatpak-first (#1270), SELinux kept
+(#1226), no homed (#1238), and the developer toolchain waived (#1263).
+Also waive GNOME OS packaging artefacts: an unsplit library element ships
+its test and conversion CLIs, which Fedora puts in a `-tools` or `-utils`
+subpackage. Also waive tools Utah installs under another path. Look those
+up in the Utah image (`rpm -ql`), not the gap report. `triage.toml`'s
+header names these waiver reasons. A gap an open PR closes points at
+that PR's issue as `planned`.
