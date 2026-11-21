@@ -53,7 +53,8 @@ class FlathubDescriptorIntegrityTests(unittest.TestCase):
         bindir = self.root / "usr/bin"
         bindir.mkdir(parents=True)
         (bindir / "uutils-coreutils").write_text("#!/bin/sh\n")
-        (bindir / "ls").symlink_to("uutils-coreutils")
+        for name in ("ls", "cp"):
+            (bindir / name).symlink_to("uutils-coreutils")
         (bindir / "sudo").write_text("C sudo\n")
         (bindir / "sudoedit").symlink_to("sudo")
         for name in ("sudo-rs", "su-rs"):
@@ -76,6 +77,7 @@ matchpathcon() {
 dnf5() { return 0; }
 rpm() {
     if [[ "$1" == -qf ]]; then printf %s "$ENV_OWNER"; return 0; fi
+    if [[ "$1" == -q && "${4:-}" == uutils-coreutils ]]; then printf %s "$UUTILS_EVR"; return 0; fi
     return 1
 }
 curl() {
@@ -94,7 +96,8 @@ curl() {
         return subprocess.run(
             ["bash", str(script)], capture_output=True, text=True,
             env={**os.environ, "ENABLE_SSHD": "0", "DESCRIPTOR_INPUT": str(self.input),
-                 "ENV_OWNER": "gnu-env", "SUDO_LABEL": "system_u:object_r:sudo_exec_t:s0",
+                 "ENV_OWNER": "gnu-env", "UUTILS_EVR": "0.7.0-12.hum1.bfin",
+                 "SUDO_LABEL": "system_u:object_r:sudo_exec_t:s0",
                  **environment},
         )
 
@@ -149,6 +152,27 @@ curl() {
         ls.write_text("GNU ls\n")
         result = self.run_script()
         self.assertNotEqual(result.returncode, 0)
+
+    def test_cp_not_uutils_fails(self):
+        cp = self.root / "usr/bin/cp"
+        cp.unlink()
+        cp.write_text("GNU cp\n")
+        result = self.run_script()
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_uutils_without_the_acl_fix_fails_the_esp_copy_check(self):
+        # uutils 0.7.0 cp failed bootupd's `cp -rp --reflink=auto` onto the
+        # vfat ESP on the ACL copy's ENOTSUP until the factory's 0.7.0-12
+        # (utah-packages#1267; uutils/coreutils#13626).
+        for evr in ("0.7.0-10.hum1.bfin", "0.7.0-9.hum1.bfin", "0.6.0-20.hum1.bfin"):
+            result = self.run_script(UUTILS_EVR=evr)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("need >= 0.7.0-12", result.stderr)
+
+    def test_uutils_newer_than_the_fix_passes_the_esp_copy_check(self):
+        # The other tests run 0.7.0-12; a later release passes too.
+        result = self.run_script(UUTILS_EVR="0.10.0-1.hum1.bfin")
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_firewall_defaults_to_gnome_os_lax_zone_through_the_symlink(self):
         result = self.run_script()
