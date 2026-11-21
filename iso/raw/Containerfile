@@ -1,7 +1,7 @@
 # Spike: a Utah image whose installed disk can also boot as live media.
 #
 # GNOME OS-style install path: the shipped bootc disk image is the live medium
-# (booted with `utah.live systemd.volatile=overlay ro`) and installing is a block
+# (booted with `ro utah.live`: an initrd tmpfs overlay over the root) and installing is a block
 # copy of it, done by OS-Installer's Utah config (hanthor/os-installer, branch
 # utah). In production these layers would live in Utah's own Containerfile; the
 # spike adds them on top of a published :testing digest instead.
@@ -35,7 +35,7 @@ COPY --from=os-installer /out/usr/ /usr/
 COPY src/usr/ /usr/
 
 # python3-pyyaml is OS-Installer's only runtime dependency Utah lacks.
-# Then rebuild the initramfs with systemd-volatile-root and the
+# Then rebuild the initramfs with the utah.live root overlay unit and its
 # ostree-prepare-root ordering (dracut.conf.d/60-utah-live.conf), using the
 # same dracut invocation as scripts/regenerate-initramfs.sh.
 RUN set -euxo pipefail; \
@@ -52,7 +52,7 @@ RUN set -euxo pipefail; \
     rm -f /tmp/dracut.log; rmdir /var/roothome 2>/dev/null || true; \
     listing="$(lsinitrd "/usr/lib/modules/${kver}/initramfs.img")"; \
     for f in usr/lib/systemd/systemd-volatile-root \
-             usr/lib/systemd/system/systemd-volatile-root.service \
+             usr/lib/systemd/system/utah-live-root.service \
              usr/lib/systemd/system/ostree-prepare-root.service.d/10-utah-live.conf; do \
         grep -q " ${f}\$" <<<"${listing}"; \
     done; \

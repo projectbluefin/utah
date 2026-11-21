@@ -7,7 +7,7 @@
 #   1. `bootc install to-disk` the image into OUTPUT_RAW -- exactly what a
 #      fisherman install does at install time today, done once at build time.
 #   2. Add a "Utah Live" BLS entry: the deployment's own entry with `ro
-#      utah.live systemd.volatile=overlay` instead of `rw`, made the GRUB
+#      utah.live` instead of `rw` (utah-live-root.service overlays the root), made the GRUB
 #      default through grubenv. OS-Installer's Utah script removes both from
 #      the installed copy.
 #   3. Install the removable-media EFI fallback (shim as BOOTX64.EFI) so the
@@ -103,7 +103,7 @@ for line in open(src).read().splitlines():
         line = f"version {int(value.strip()) + 1000}" if value.strip().isdigit() else line
     elif key == "options":
         args = [a for a in value.split() if a not in ("rw", "ro")]
-        line = "options " + " ".join(args + ["ro", "utah.live", "systemd.volatile=overlay"] + extra)
+        line = "options " + " ".join(args + ["ro", "utah.live"] + extra)
     out.append(line)
 open(dst, "w").write("\n".join(out) + "\n")
 PY

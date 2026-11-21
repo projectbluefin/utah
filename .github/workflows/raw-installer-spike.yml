@@ -91,8 +91,8 @@ jobs:
           set -euo pipefail
           ssh-keygen -q -t ed25519 -N '' -f "$WORK/id_ed25519"
           # Diagnostics for the CI live entry only: journal on the serial console,
-          # no Plymouth hiding it, SELinux permissive while AVCs are logged.
-          sudo env UTAH_RAW_LIVE_KARGS="utah.live.debug systemd.journald.forward_to_console=1 plymouth.enable=0 rd.plymouth=0 enforcing=0" UTAH_RAW_SSH_PUBKEY="$WORK/id_ed25519.pub" \
+          # no Plymouth hiding it. SELinux stays enforcing: the raw image is labeled.
+          sudo env UTAH_RAW_LIVE_KARGS="utah.live.debug systemd.journald.forward_to_console=1 plymouth.enable=0 rd.plymouth=0" UTAH_RAW_SSH_PUBKEY="$WORK/id_ed25519.pub" \
             UTAH_RAW_DEBUG_SSHD=1 UTAH_RAW_EVIDENCE="$WORK/raw-evidence" \
             bash iso/raw/build-raw-image.sh localhost/utah-raw:spike "$WORK/medium.raw" "${BASELINE_REF%@*}:testing"
           sudo chown "$USER" "$WORK/medium.raw"

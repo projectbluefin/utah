@@ -5,7 +5,7 @@
 
 Stages (every screenshot is listed in DIR/screenshots/manifest.json):
   1. Boot the raw disk image as live media (read-only virtio disk, GRUB's
-     default "Utah Live" entry: utah.live systemd.volatile=overlay ro).
+     default "Utah Live" entry: ro utah.live, tmpfs overlay over the root).
   2. Drive the real OS-Installer window through AT-SPI (buttons, rows, focus)
      and QEMU sendkey (typing): language, welcome, keyboard, disk,
      encryption, confirmation, summary, progress, completion.

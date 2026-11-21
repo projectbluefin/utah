@@ -2,7 +2,7 @@
 # Turn a utah.live boot of the installed disk image into the live session.
 #
 # Runs only with utah.live on the kernel command line. The root is a
-# systemd.volatile=overlay with a tmpfs upper layer, so everything written here
+# tmpfs overlay (utah-live-root.service in the initrd), so everything written here
 # (the live account, its autologin, the installer autostart) exists only in RAM
 # and never reaches the medium -- which is what the installer copies.
 #
