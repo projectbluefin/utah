@@ -63,6 +63,29 @@ check_user_unit_state() {
     echo "  ${unit}: ${result:-unknown}; enabled"
 }
 
+# A template (name@.service) has no state of its own, so `systemctl show`
+# reports nothing for it: its instances run, spawned on demand (kmsconvt@ by
+# logind on each VT, #1237). It must be enabled -- systemctl resolves the
+# template's DefaultInstance and Alias for that, as the build-time verifier
+# does -- and none of its instances may have failed.
+check_template_unit_state() {
+    local unit="$1" scope="$2" boot_pass="${3:-first}" pattern state failed
+    pattern="${unit/@./@*.}"
+    if [[ "${scope}" == user ]]; then
+        state="$(ssh_target "systemctl --user is-enabled '${unit}'" 2>/dev/null || true)"
+        failed="$(ssh_target "systemctl --user list-units --state=failed --plain --no-legend '${pattern}'" 2>/dev/null)" \
+            || fail "could not list the instances of user unit ${unit}"
+    else
+        state="$(ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' systemctl is-enabled '${unit}'" 2>/dev/null || true)"
+        failed="$(ssh_target "systemctl list-units --state=failed --plain --no-legend '${pattern}'" 2>/dev/null)" \
+            || fail "could not list the instances of system unit ${unit}"
+    fi
+    [[ "${state}" == enabled ]] || fail "required ${scope} unit ${unit} is ${state:-not enabled}"
+    [[ -z "${failed}" ]] \
+        || fail "${scope} unit ${unit} has a failed instance during ${boot_pass} boot: ${failed//$'\n'/; }"
+    echo "  ${unit}: enabled; no failed instance"
+}
+
 # Print one [services] list (enabled or user_enabled) of the contract the
 # installed image ships, so the runtime check follows the image under test
 # rather than a list copied into this script. The parser is the repo's
@@ -100,8 +123,11 @@ verify_setup_state() {
     listed="$(contract_units enabled)"
     mapfile -t units <<< "${listed}"
     for unit in "${units[@]}"; do
-        [[ -n "${unit}" ]] || continue
-        check_system_unit_state "${unit}" true false "${boot_pass}"
+        case "${unit}" in
+            "") ;;
+            *@.*) check_template_unit_state "${unit}" system "${boot_pass}" ;;
+            *) check_system_unit_state "${unit}" true false "${boot_pass}" ;;
+        esac
     done
     listed="$(contract_units user_enabled)"
     mapfile -t units <<< "${listed}"
@@ -111,6 +137,7 @@ verify_setup_state() {
             # Installs Homebrew packages from the network, so it fails in the
             # offline luks VM by design; its enablement is still asserted.
             brew-preinstall.service) check_user_unit_state "${unit}" false "${boot_pass}" true ;;
+            *@.*) check_template_unit_state "${unit}" user "${boot_pass}" ;;
             *) check_user_unit_state "${unit}" false "${boot_pass}" ;;
         esac
     done
