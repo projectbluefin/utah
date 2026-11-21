@@ -12,9 +12,10 @@
 #   1. record what takes the space (size-breakdown.txt), so duplicate copies
 #      and leftovers show up in the evidence;
 #   2. fstrim every filesystem, which punches holes in the file for free blocks;
-#   3. compact the btrfs root (full balance) and shrink it to its allocated
-#      chunks plus UTAH_RAW_SHRINK_MARGIN_MIB (default 256), stepping up by
-#      256 MiB while btrfs refuses;
+#   3. compact the btrfs root (full balance into UTAH_RAW_SHRINK_CHUNK_MIB
+#      chunks, default 256, the kernel minimum) and shrink it to its
+#      allocated chunks plus UTAH_RAW_SHRINK_MARGIN_MIB (default 256),
+#      stepping up by 256 MiB while btrfs refuses;
 #   4. cut the root partition and the file right after it (medium.py
 #      shrink-plan), then write the partition table again for the new size
 #      (medium.py shrunk-dump): a truncated file has no backup GPT, and the
@@ -32,6 +33,7 @@ IMAGE="${1:?image ref is required}"
 RAW="$(realpath "${2:?raw image path is required}")"
 EVIDENCE="${UTAH_RAW_EVIDENCE:-$(dirname "${RAW}")/raw-evidence}"
 MARGIN_MIB="${UTAH_RAW_SHRINK_MARGIN_MIB:-256}"
+CHUNK_MIB="${UTAH_RAW_SHRINK_CHUNK_MIB:-256}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 [[ ${EUID} -eq 0 ]] || { echo "run as root (loop devices, mounts)" >&2; exit 1; }
@@ -52,7 +54,8 @@ PY
 
 # Prints the root filesystem's size on its device, in bytes, after shrinking.
 fs_bytes="$(podman run --rm --privileged -v /dev:/dev -e LOOP="${loop}" -e ROOT="${root}" \
-    -e MARGIN="$(( MARGIN_MIB * 1024 * 1024 ))" --security-opt label=type:unconfined_t \
+    -e MARGIN="$(( MARGIN_MIB * 1024 * 1024 ))" -e CHUNK="$(( CHUNK_MIB * 1024 * 1024 ))" \
+    --security-opt label=type:unconfined_t \
     "${IMAGE}" bash -euc '
         report() { echo "$@" >&2; }
         [[ "$(blkid -p -s TYPE -o value "${ROOT}")" == btrfs ]] || { report "root ${ROOT} is not btrfs"; exit 1; }
@@ -79,6 +82,17 @@ fs_bytes="$(podman run --rm --privileged -v /dev:/dev -e LOOP="${loop}" -e ROOT=
         # A full balance packs data into as few chunks as possible, so the
         # allocation (not btrfs min-dev-size, which ran ~4 GB high in run
         # 44874576635) bounds the resize; resize moves chunks above the cut.
+        # At the default 1 GiB data and 512 MiB DUP metadata chunks, the
+        # balance packs nothing: the root still allocated 9.2 GB for 6.9 GB
+        # used (run 44880690120), and a local 2 GB small-file test stayed at
+        # 63% data usage. Rebalanced into 256 MiB chunks (the kernel minimum;
+        # the setting lasts for this mount only and does not reach the
+        # installed system) the same test packed to 94%.
+        uuid=$(blkid -p -s UUID -o value "${ROOT}")
+        for kind in data metadata; do
+            echo "${CHUNK}" >"/sys/fs/btrfs/${uuid}/allocation/${kind}/chunk_size"
+            report "${kind} chunk size $(cat "/sys/fs/btrfs/${uuid}/allocation/${kind}/chunk_size")"
+        done
         btrfs balance start -dusage=100 -musage=100 /m >&2
         fstrim -v /m >&2
         dev=$(btrfs filesystem usage -b /m | awk "/Device size:/ {print \$3}")

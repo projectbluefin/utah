@@ -182,6 +182,13 @@ class ShrinkPlanTests(unittest.TestCase):
         self.assertIn("--wipe-partitions never", shrink)
         self.assertNotIn("--relocate", shrink)
 
+    def test_the_root_is_balanced_into_small_chunks_before_the_resize(self):
+        shrink = (RAW / "shrink-raw-image.sh").read_text()
+        self.assertIn('UTAH_RAW_SHRINK_CHUNK_MIB:-256', shrink)
+        sysfs = shrink.index('allocation/${kind}/chunk_size"')
+        self.assertLess(sysfs, shrink.index("btrfs balance start"))
+        self.assertLess(shrink.index("btrfs balance start"), shrink.rindex("btrfs filesystem resize"))
+
 
 class ResultsTests(unittest.TestCase):
     def test_stages_pass_fail_and_not_run(self):
