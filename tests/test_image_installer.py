@@ -14,6 +14,7 @@ import io
 import json
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -212,6 +213,26 @@ class ShrinkPlanTests(unittest.TestCase):
         bake = workflow.index("bash iso/raw/bake-flatpaks.sh")
         self.assertLess(bake, workflow.rindex('UTAH_RAW_BTRFS_COMPRESS="$BTRFS_COMPRESS"'))
         self.assertEqual(workflow.count('UTAH_RAW_BTRFS_COMPRESS="$BTRFS_COMPRESS"'), 2)
+
+    def test_btrfs_compress_off_turns_compression_off_and_empty_is_the_default(self):
+        # GitHub substitutes an input's default for an empty value, so runs
+        # dispatched with btrfs_compress empty ran at zstd:3 (44938602008,
+        # 44944477347): "off" is the explicit way out.
+        workflow = yaml.safe_load(WORKFLOW.read_text())
+        inputs = workflow[True]["workflow_dispatch"]["inputs"]
+        self.assertEqual(inputs["btrfs_compress"]["default"], "zstd:3")
+        job = workflow["jobs"]["e2e"]
+        self.assertEqual(job["env"]["BTRFS_COMPRESS_INPUT"],
+                         "${{ github.event_name == 'workflow_dispatch' && inputs.btrfs_compress || 'zstd:3' }}")
+        self.assertNotIn("BTRFS_COMPRESS", job["env"])
+        step = job["steps"][0]
+        self.assertEqual(step["name"], "Resolve the btrfs compression")
+        for given, want in (("off", ""), ("zstd:3", "zstd:3"), ("zstd:15", "zstd:15")):
+            with tempfile.TemporaryDirectory() as tmp:
+                env_file = Path(tmp) / "env"
+                subprocess.run(["bash", "-c", step["run"]], check=True, capture_output=True,
+                               env={"PATH": "/usr/bin:/bin", "BTRFS_COMPRESS_INPUT": given, "GITHUB_ENV": str(env_file)})
+                self.assertEqual(env_file.read_text(), f"BTRFS_COMPRESS={want}\n", given)
 
 
 class ResultsTests(unittest.TestCase):

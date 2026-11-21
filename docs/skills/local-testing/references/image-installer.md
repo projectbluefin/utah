@@ -169,7 +169,9 @@ extents; `script` runs the same `install.sh` over SSH), `backend`
 (`auto`, the default and what scheduled and PR runs use; `composefs`, which
 fails on an unfixed kernel; or `ostree`),
 `btrfs_compress`
-(default `zstd:3`, also on scheduled and PR runs; empty turns it off: the
+(default `zstd:3`, also on scheduled and PR runs; `off` turns it off, and an
+empty value means the default, because GitHub substitutes the default for an
+empty dispatch input: the
 shrink step rewrites every file on the root compressed after the Flatpak
 bake; mounting with `compress-force` alone does nothing, because ostree and
 flatpak fallocate their objects), `flatpaks` (default on: bake
