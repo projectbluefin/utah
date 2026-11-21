@@ -569,6 +569,13 @@ class ComposefsTests(unittest.TestCase):
         harness = (RAW / "raw_e2e.py").read_text()
         self.assertIn('self.check_composefs(phase, read=phase == "first boot")', harness)
 
+    def test_the_live_session_leaves_the_medium_boot_unmounted(self):
+        # boot.mount is skipped live; on composefs the gpt-auto automount
+        # would then fail every mount namespace with ENODEV (dbus-broker).
+        units = RAW / "src/usr/lib/systemd/system"
+        for unit in ("boot.mount.d", "boot.automount.d"):
+            self.assertIn("ConditionKernelCommandLine=!utah.live", (units / unit / "50-utah-live.conf").read_text())
+
 
 class KernelVeritySelectorTests(unittest.TestCase):
     """scripts/kernel_verity.py: composefs only on a kernel with the btrfs fs-verity fix."""
