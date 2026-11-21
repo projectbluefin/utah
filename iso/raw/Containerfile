@@ -62,7 +62,7 @@ RUN dnf -y install --setopt=install_weak_deps=False \
 FROM ${BUILDER_IMAGE} AS gnome-setup
 ARG GS_REPO=https://github.com/hanthor/gnome-setup.git
 # Full commit of hanthor/gnome-setup (branch utah).
-ARG GS_REF=48b2c6447dea4f2bb6db9a8297cfc83a873a20b4
+ARG GS_REF=d835929c1f16e2eab98f52f22a85ff31eae46fc5
 RUN dnf -y install --setopt=install_weak_deps=False \
         git cargo rust meson ninja-build gcc gettext gettext-devel blueprint-compiler desktop-file-utils \
         glib2-devel gtk4-devel libadwaita-devel gnome-desktop4-devel appstream-devel && \

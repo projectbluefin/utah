@@ -15,6 +15,7 @@ polkit.addRule(function(action, subject) {
     if (action.id == "io.systemd.sysinstall.Run" ||
         action.id == "io.systemd.sysinstall.ListCandidateDevices" ||
         action.id == "io.systemd.cryptenroll.enroll" ||
+        action.id == "io.systemd.cryptenroll.list-slots" ||
         action.id == "org.freedesktop.locale1.set-locale" ||
         action.id == "org.freedesktop.locale1.set-keyboard")
         return polkit.Result.YES;
