@@ -1,35 +1,136 @@
 name: Raw-image installer spike
 
-# Experimental feasibility spike (not production): GNOME OS-style install by
-# block-copying a pre-installed bootc disk image instead of running
-# `bootc install` at install time. See the draft PR description.
+# EXPERIMENTAL feasibility spike, not a production path: GNOME OS-style install
+# by block-copying a pre-installed bootc disk image (OS-Installer + systemd-repart)
+# instead of `bootc install` at install time. bootc still owns updates.
+#
+#   1. build a live-capable Utah image (iso/raw/Containerfile) from a :testing digest
+#   2. `bootc install to-disk` it once into a raw disk image with a "Utah Live" entry
+#   3. iso/raw/raw_e2e.py: live boot -> drive OS-Installer's GUI (LUKS) -> boot the
+#      installed disk -> gnome-initial-setup -> bootc switch -> bootc rollback,
+#      with screenshots of every stage
 on:
   workflow_dispatch:
+    inputs:
+      baseline:
+        description: Utah image to install (tag or digest); default :testing
+        required: false
+        default: ghcr.io/projectbluefin/utah:testing
+      candidate:
+        description: Image for `bootc switch` (digest ref); default newest other testing-* digest
+        required: false
+        default: ""
+      os_installer_ref:
+        description: hanthor/os-installer ref
+        required: false
+        default: utah
   push:
     branches: [spike/gnomeos-style-installer]
+    paths:
+      - iso/raw/**
+      - .github/workflows/raw-installer-spike.yml
 
 permissions:
   contents: read
 
+concurrency:
+  group: raw-installer-spike-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  probe:
+  e2e:
     runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    env:
+      WORK: /mnt/spike
+      BASELINE: ${{ inputs.baseline || 'ghcr.io/projectbluefin/utah:testing' }}
+      CANDIDATE: ${{ inputs.candidate }}
+      OSI_REF: ${{ inputs.os_installer_ref || 'utah' }}
     steps:
-      - name: Probe image tooling
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Prepare host (podman storage and work dir on /mnt, QEMU, KVM)
         run: |
           set -euo pipefail
-          sudo podman pull -q ghcr.io/projectbluefin/utah:testing
-          sudo podman run --rm ghcr.io/projectbluefin/utah:testing bash -c '
-            set -x
-            rpm -q systemd systemd-udev bootc ostree bootupd grub2-efi-x64 shim-x64 btrfs-progs e2fsprogs dosfstools mtools efibootmgr cryptsetup gnome-initial-setup plymouth python3 python3-gobject at-spi2-core || true
-            ls -l /usr/bin/systemd-repart /usr/lib/systemd/systemd-volatile-root /usr/lib/systemd/system/systemd-volatile-root.service || true
-            cat /usr/lib/ostree/prepare-root.conf || true
-            cat /usr/lib/systemd/system/ostree-prepare-root.service || true
-            ls /usr/lib/bootc/install /usr/lib/bootc/kargs.d; cat /usr/lib/bootc/install/* /usr/lib/bootc/kargs.d/* || true
-            k=$(ls /usr/lib/modules); lsinitrd /usr/lib/modules/$k/initramfs.img 2>/dev/null | grep -E "volatile|ostree|cryptsetup|repart|tpm2|plymouth" | head -40
-            ls /usr/lib/dracut/modules.d | tr "\n" " "
-            dnf5 repolist || true
-            dnf5 install -y --assumeno gnome-desktop4 vte291-gtk4 python3-pyyaml python3-gobject meson gettext desktop-file-utils libgnome-desktop4 2>&1 | tail -30 || true
-            for p in gnome-desktop4 vte291-gtk4 python3-pyyaml python3-gobject meson blueprint-compiler gobject-introspection python3-dogtail; do dnf5 -q repoquery --latest-limit 1 "$p" 2>/dev/null | head -1 | sed "s/^/avail $p: /"; done
-            ls /usr/lib64/girepository-1.0 | tr "\n" " "
-          '
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo apt-get update
+          sudo apt-get install -y podman skopeo qemu-system-x86 qemu-utils ovmf sshpass ffmpeg imagemagick zstd
+          sudo mkdir -p /mnt/containers /var/lib/containers "$WORK"
+          sudo mount --bind /mnt/containers /var/lib/containers
+          sudo chown "$USER" "$WORK"
+          test -c /dev/kvm && sudo chmod a+rw /dev/kvm
+          df -h / /mnt
+      - name: Resolve baseline and candidate digests
+        run: |
+          set -euo pipefail
+          repo="${BASELINE%%[:@]*}"
+          base_digest=$(skopeo inspect --format '{{.Digest}}' "docker://$BASELINE")
+          if [[ -z "$CANDIDATE" ]]; then
+            for tag in $(skopeo list-tags "docker://$repo" | jq -r '.Tags[]' | grep -E '^testing-[0-9]{8}-' | sort -r | head -8); do
+              d=$(skopeo inspect --format '{{.Digest}}' "docker://$repo:$tag")
+              if [[ "$d" != "$base_digest" ]]; then CANDIDATE="$repo@$d"; echo "candidate tag: $tag"; break; fi
+            done
+          fi
+          [[ -n "$CANDIDATE" ]] || { echo "no candidate digest found" >&2; exit 1; }
+          echo "BASELINE_REF=$repo@$base_digest" >> "$GITHUB_ENV"
+          echo "CANDIDATE=$CANDIDATE" >> "$GITHUB_ENV"
+          echo "baseline: $repo@$base_digest"; echo "candidate: $CANDIDATE"
+      - name: Build the live-capable image
+        run: |
+          set -euo pipefail
+          sudo podman pull -q "$BASELINE_REF"
+          osi_sha=$(git ls-remote https://github.com/hanthor/os-installer.git "$OSI_REF" | cut -f1)
+          [[ -n "$osi_sha" ]] || osi_sha="$OSI_REF"
+          echo "os-installer: $osi_sha"
+          sudo podman build --layers=false -t localhost/utah-raw:spike \
+            --build-arg SOURCE_IMAGE="$BASELINE_REF" --build-arg OSI_REF="$osi_sha" \
+            -f iso/raw/Containerfile iso/raw 2>&1 | tail -150
+      - name: Build the raw disk image (bootc install to-disk, once)
+        run: |
+          set -euo pipefail
+          ssh-keygen -q -t ed25519 -N '' -f "$WORK/id_ed25519"
+          sudo env UTAH_RAW_LIVE_KARGS="utah.live.debug" UTAH_RAW_SSH_PUBKEY="$WORK/id_ed25519.pub" \
+            UTAH_RAW_DEBUG_SSHD=1 UTAH_RAW_EVIDENCE="$WORK/raw-evidence" \
+            bash iso/raw/build-raw-image.sh localhost/utah-raw:spike "$WORK/medium.raw" "${BASELINE_REF%@*}:testing"
+          sudo chown "$USER" "$WORK/medium.raw"
+          sudo chown -R "$USER" "$WORK/raw-evidence"
+          start=$(date +%s)
+          zstd -T0 -3 -q -c "$WORK/medium.raw" | wc -c | awk '{printf "zstd -3 compressed: %.2f GiB\n", $1/1073741824}' | tee -a "$WORK/raw-evidence/size.txt"
+          echo "compression took $(( $(date +%s) - start ))s" | tee -a "$WORK/raw-evidence/size.txt"
+          sudo podman rmi -af >/dev/null || true
+          df -h / /mnt
+      - name: End-to-end with screenshots
+        run: |
+          set -euo pipefail
+          python3 iso/raw/raw_e2e.py --raw "$WORK/medium.raw" --work "$WORK/e2e" \
+            --candidate "$CANDIDATE" --ssh-key "$WORK/id_ed25519" 2>&1 | tee "$WORK/e2e.log"
+      - name: Contact sheet
+        if: always()
+        run: |
+          set -euo pipefail
+          cd "$WORK/e2e/screenshots" 2>/dev/null || exit 0
+          ls *.png >/dev/null 2>&1 || exit 0
+          montage -font DejaVu-Sans -pointsize 14 -label '%t' $(ls *.png | sort) \
+            -tile 4x -geometry 480x270+8+8 -background '#202020' -fill white contact-sheet.png
+          python3 - <<'PY'
+          import json, pathlib
+          m = json.loads(pathlib.Path("manifest.json").read_text()) if pathlib.Path("manifest.json").exists() else []
+          lines = ["| Screenshot | What it proves |", "|---|---|"]
+          lines += [f"| `{e['file']}` | {e['proves']} |" for e in m]
+          pathlib.Path("index.md").write_text("\n".join(lines) + "\n")
+          print("\n".join(lines))
+          PY
+      - name: Upload screenshots and logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: raw-installer-spike-evidence
+          retention-days: 30
+          if-no-files-found: warn
+          path: |
+            ${{ env.WORK }}/e2e/screenshots/
+            ${{ env.WORK }}/e2e/evidence/
+            ${{ env.WORK }}/e2e/*.log
+            ${{ env.WORK }}/e2e.log
+            ${{ env.WORK }}/raw-evidence/

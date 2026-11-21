@@ -1,0 +1,14 @@
+[Unit]
+Description=Prepare the Utah live session (utah.live)
+ConditionKernelCommandLine=utah.live
+DefaultDependencies=no
+After=local-fs.target systemd-sysusers.service systemd-tmpfiles-setup.service
+Before=display-manager.service systemd-user-sessions.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/utah-live-setup
+
+[Install]
+WantedBy=multi-user.target
