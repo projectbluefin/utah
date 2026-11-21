@@ -12,10 +12,15 @@
 #   1. record what takes the space (size-breakdown.txt), so duplicate copies
 #      and leftovers show up in the evidence;
 #   2. fstrim every filesystem, which punches holes in the file for free blocks;
-#   3. compact the btrfs root (balance) and resize it to its minimum plus
-#      UTAH_RAW_SHRINK_MARGIN_MIB (default 256);
+#   3. compact the btrfs root (full balance) and shrink it to its allocated
+#      chunks plus UTAH_RAW_SHRINK_MARGIN_MIB (default 256), stepping up by
+#      256 MiB while btrfs refuses;
 #   4. cut the root partition and the file right after it (medium.py
-#      shrink-plan) and rewrite the backup GPT at the new end.
+#      shrink-plan), then write the partition table again for the new size
+#      (medium.py shrunk-dump): a truncated file has no backup GPT, and the
+#      primary header's last usable LBA would point past the end, which makes
+#      Linux ignore the whole table (spike-to-track run 44874576635: no root
+#      device in the initrd).
 #
 # btrfs-progs runs from IMAGE, like the mkfs in build-raw-image.sh, so the
 # tools match the kernel and the installed system.
@@ -71,12 +76,20 @@ fs_bytes="$(podman run --rm --privileged -v /dev:/dev -e LOOP="${loop}" -e ROOT=
                 umount /p
             done
         } >&2
-        btrfs balance start -dusage=90 -musage=90 /m >&2
+        # A full balance packs data into as few chunks as possible, so the
+        # allocation (not btrfs min-dev-size, which ran ~4 GB high in run
+        # 44874576635) bounds the resize; resize moves chunks above the cut.
+        btrfs balance start -dusage=100 -musage=100 /m >&2
         fstrim -v /m >&2
-        min=$(btrfs inspect-internal min-dev-size /m | cut -d" " -f1)
-        target=$(( (min + MARGIN + 1048575) / 1048576 * 1048576 ))
-        report "btrfs min-dev-size ${min}, resizing to ${target}"
-        btrfs filesystem resize "${target}" /m >&2
+        dev=$(btrfs filesystem usage -b /m | awk "/Device size:/ {print \$3}")
+        alloc=$(btrfs filesystem usage -b /m | awk "/Device allocated:/ {print \$3}")
+        target=$(( (alloc + MARGIN + 1048575) / 1048576 * 1048576 ))
+        report "btrfs allocated ${alloc} of ${dev}; shrinking to ${target}"
+        until btrfs filesystem resize "${target}" /m >&2; do
+            target=$(( target + 268435456 ))
+            (( target < dev )) || { report "cannot shrink below ${dev}"; exit 1; }
+            report "retrying at ${target}"
+        done
         umount /m
         btrfs inspect-internal dump-super "${ROOT}" | awk "\$1 == \"dev_item.total_bytes\" {print \$2}"
     ' 2>"${EVIDENCE}/size-breakdown.txt")"
@@ -88,11 +101,14 @@ trap - EXIT
 read -r partno sectors image_bytes < <(python3 "${HERE}/medium.py" shrink-plan \
     "${EVIDENCE}/partitions-before-shrink.json" "${fs_bytes}")
 echo "root filesystem ${fs_bytes} bytes: partition ${partno} -> ${sectors} sectors, image -> ${image_bytes} bytes"
-echo ",${sectors}" | sfdisk --quiet --no-reread -N "${partno}" "${RAW}"
+sfdisk --dump "${RAW}" >"${EVIDENCE}/partitions-before-shrink.dump"
+python3 "${HERE}/medium.py" shrunk-dump "${EVIDENCE}/partitions-before-shrink.dump" "${partno}" "${sectors}" \
+    >"${EVIDENCE}/partitions-shrunk.dump"
 truncate -s "${image_bytes}" "${RAW}"
-sfdisk --quiet --relocate gpt-bak-std "${RAW}"
+sfdisk --quiet --no-reread --wipe never --wipe-partitions never "${RAW}" <"${EVIDENCE}/partitions-shrunk.dump"
 sfdisk --verify "${RAW}"
 sfdisk --dump "${RAW}" | tee "${EVIDENCE}/partitions.txt"
+grep -qx 'label: gpt' "${EVIDENCE}/partitions.txt" || { echo "the shrunk medium lost its GPT" >&2; exit 1; }
 
 after_apparent=$(du -b --apparent-size "${RAW}" | cut -f1)
 after_allocated=$(( $(du -k "${RAW}" | cut -f1) * 1024 ))

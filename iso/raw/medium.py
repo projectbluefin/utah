@@ -11,6 +11,7 @@ and shrink-raw-image.sh asks it where to cut the image once the root
 filesystem has been shrunk to its content:
 
   medium.py shrink-plan SFDISK_JSON FS_BYTES     print "PARTNO SECTORS IMAGE_BYTES"
+  medium.py shrunk-dump DUMP PARTNO SECTORS      the sfdisk dump to write after the cut
 
 The live entry is the deployment's own entry with `ro utah.live` in place of
 `rw` (utah-live-root.service overlays the root with tmpfs in the initrd). Its
@@ -20,6 +21,7 @@ the installed copy and fails if any entry still carries `utah.live`.
 """
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -98,6 +100,33 @@ def shrink_plan(table: dict, fs_bytes: int) -> tuple[int, int, int]:
     return number, sectors, image_bytes
 
 
+PART_LINE = re.compile(r"^(\S*?)(\d+)(\s*:\s*start=\s*\d+,\s*size=\s*)(\d+)(.*)$")
+
+
+def shrunk_dump(dump: str, partno: int, sectors: int) -> str:
+    """An `sfdisk --dump` of the medium with partition partno cut to sectors.
+
+    Written back to the truncated file, sfdisk lays out a fresh primary and
+    backup GPT for the new size while keeping the disk and partition UUIDs,
+    types and names. `last-lba:` is dropped so sfdisk derives it from the
+    file's new size instead of the old one.
+    """
+    out, found = [], False
+    for line in dump.splitlines():
+        if line.startswith("last-lba:"):
+            continue
+        m = PART_LINE.match(line)
+        if m and int(m.group(2)) == partno:
+            line = f"{m.group(1)}{m.group(2)}{m.group(3)}{sectors}{m.group(5)}"
+            found = True
+        out.append(line)
+    if not found:
+        raise ValueError(f"partition {partno} not in the dump")
+    if "label: gpt" not in out:
+        raise ValueError("not a GPT dump")
+    return "\n".join(out) + "\n"
+
+
 def main(argv: list[str]) -> int:
     if len(argv) >= 4 and argv[1] == "live-entry":
         extra = argv[4].split() if len(argv) > 4 else []
@@ -107,6 +136,9 @@ def main(argv: list[str]) -> int:
         path = Path(argv[2])
         current = path.read_text() if path.exists() else ""
         path.write_text(grubenv(current, argv[3]))
+        return 0
+    if len(argv) == 5 and argv[1] == "shrunk-dump":
+        sys.stdout.write(shrunk_dump(Path(argv[2]).read_text(), int(argv[3]), int(argv[4])))
         return 0
     if len(argv) == 4 and argv[1] == "shrink-plan":
         table = json.loads(Path(argv[2]).read_text())

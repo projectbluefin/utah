@@ -97,13 +97,43 @@ class ShrinkPlanTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             medium.shrink_plan(TABLE, 47181790 * 512 + 2**20)
 
+    @unittest.skipUnless(shutil.which("sfdisk"), "sfdisk not installed")
+    def test_the_cut_medium_keeps_a_valid_gpt(self):
+        """Run 44874576635: truncating without rewriting the GPT left no partitions."""
+        import subprocess
+        with tempfile.TemporaryDirectory() as tmp:
+            raw = Path(tmp, "m.raw")
+            with open(raw, "wb") as f:
+                f.truncate(24 * 2**30)
+            layout = ('label: gpt\nsize=1MiB, type=21686148-6449-6E6F-744E-656564454649\n'
+                      'size=512MiB, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B\n'
+                      'size=1GiB, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4\n'
+                      'type=4F68BCE3-E8CD-4DB1-96E7-FBCAF984B709, name="root"\n')
+            run = lambda *a, **k: subprocess.run(["sfdisk", *a], check=True, capture_output=True, text=True, **k).stdout  # noqa: E731
+            run("-q", str(raw), input=layout)
+            number, sectors, size = medium.shrink_plan(json.loads(run("--json", str(raw))), 8 * 2**30)
+            new = medium.shrunk_dump(run("--dump", str(raw)), number, sectors)
+            with open(raw, "r+b") as f:
+                f.truncate(size)
+            run("-q", "--no-reread", "--wipe", "never", "--wipe-partitions", "never", str(raw), input=new)
+            table = json.loads(run("--json", str(raw)))["partitiontable"]
+            self.assertEqual(table["label"], "gpt")
+            self.assertEqual(int(table["partitions"][-1]["size"]), sectors)
+            self.assertLess(int(table["lastlba"]), size // 512)
+
+    def test_shrunk_dump_needs_the_partition(self):
+        with self.assertRaises(ValueError):
+            medium.shrunk_dump("label: gpt\nx1 : start= 1, size= 2, type=a\n", 4, 8)
+
     def test_the_build_script_and_the_shrink_script_use_these_helpers(self):
         build = (RAW / "build-raw-image.sh").read_text()
         self.assertIn('medium.py" live-entry', build)
         self.assertIn('medium.py" grubenv', build)
         shrink = (RAW / "shrink-raw-image.sh").read_text()
         self.assertIn('medium.py" shrink-plan', shrink)
-        self.assertIn("--relocate gpt-bak-std", shrink)
+        self.assertIn('medium.py" shrunk-dump', shrink)
+        self.assertIn("--wipe-partitions never", shrink)
+        self.assertNotIn("--relocate", shrink)
 
 
 class ResultsTests(unittest.TestCase):

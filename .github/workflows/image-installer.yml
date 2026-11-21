@@ -42,9 +42,9 @@ on:
         type: string
         default: ''
       formats:
-        description: Download formats to measure (iso/raw/measure_medium.py)
+        description: Download formats to measure (iso/raw/measure_medium.py; xz-9 adds ~20 min)
         type: string
-        default: zstd-3,zstd-19-long,xz-9
+        default: zstd-3,zstd-19-long
   schedule:
     # Nightly, after the 04:00-06:00 UTC testing build and Post-Testing E2E.
     - cron: '41 7 * * *'
@@ -126,7 +126,7 @@ jobs:
       WORK: /mnt/image-installer
       INSTALL: ${{ inputs.install || 'gui' }}
       BTRFS_COMPRESS: ${{ inputs.btrfs_compress }}
-      FORMATS: ${{ inputs.formats || 'zstd-3,zstd-19-long,xz-9' }}
+      FORMATS: ${{ inputs.formats || 'zstd-3,zstd-19-long' }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         timeout-minutes: 10
