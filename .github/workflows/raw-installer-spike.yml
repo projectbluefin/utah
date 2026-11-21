@@ -5,10 +5,13 @@ name: Raw-image installer spike
 # instead of `bootc install` at install time. bootc still owns updates.
 #
 #   1. build a live-capable Utah image (iso/raw/Containerfile) from a :testing digest
-#   2. `bootc install to-disk` it once into a raw disk image with a "Utah Live" entry
-#   3. iso/raw/raw_e2e.py: live boot -> drive OS-Installer's GUI (LUKS) -> boot the
-#      installed disk -> gnome-initial-setup -> bootc switch -> bootc rollback,
-#      with screenshots of every stage
+#   2. `bootc install to-filesystem` it once into a raw disk image (ESP, ext4 /boot,
+#      btrfs root) with a "Utah Live" entry
+#   3. iso/raw/raw_e2e.py: live boot -> install -> boot the installed disk (LUKS) ->
+#      gnome-initial-setup -> bootc switch -> bootc rollback, with screenshots of
+#      every stage. Matrix: `gui` drives OS-Installer's window; `script` runs the
+#      same install.sh over SSH, so the installed-disk stages are exercised even
+#      while the GUI path is being debugged.
 on:
   workflow_dispatch:
     inputs:
@@ -39,8 +42,13 @@ concurrency:
 
 jobs:
   e2e:
+    name: e2e (${{ matrix.install }} install)
     runs-on: ubuntu-24.04
     timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix:
+        install: [gui, script]
     env:
       WORK: /mnt/spike
       BASELINE: ${{ inputs.baseline || 'ghcr.io/projectbluefin/utah:testing' }}
@@ -55,7 +63,7 @@ jobs:
           set -euo pipefail
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
           sudo apt-get update
-          sudo apt-get install -y podman skopeo qemu-system-x86 qemu-utils ovmf sshpass ffmpeg imagemagick zstd
+          sudo apt-get install -y podman skopeo qemu-system-x86 qemu-utils ovmf sshpass ffmpeg imagemagick zstd tesseract-ocr
           sudo mkdir -p /mnt/containers /var/lib/containers "$WORK"
           sudo mount --bind /mnt/containers /var/lib/containers
           sudo chown "$USER" "$WORK"
@@ -86,7 +94,7 @@ jobs:
           sudo podman build --layers=false -t localhost/utah-raw:spike \
             --build-arg SOURCE_IMAGE="$BASELINE_REF" --build-arg OSI_REF="$osi_sha" \
             -f iso/raw/Containerfile iso/raw 2>&1 | tail -150
-      - name: Build the raw disk image (bootc install to-disk, once)
+      - name: Build the raw disk image (bootc install to-filesystem, once)
         run: |
           set -euo pipefail
           ssh-keygen -q -t ed25519 -N '' -f "$WORK/id_ed25519"
@@ -105,7 +113,7 @@ jobs:
       - name: End-to-end with screenshots
         run: |
           set -euo pipefail
-          python3 iso/raw/raw_e2e.py --raw "$WORK/medium.raw" --work "$WORK/e2e" \
+          python3 iso/raw/raw_e2e.py --raw "$WORK/medium.raw" --work "$WORK/e2e" --install "${{ matrix.install }}" \
             --candidate "$CANDIDATE" --ssh-key "$WORK/id_ed25519" 2>&1 | tee "$WORK/e2e.log"
       - name: Contact sheet
         if: always()
@@ -127,12 +135,13 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: raw-installer-spike-evidence
+          name: raw-installer-spike-evidence-${{ matrix.install }}
           retention-days: 30
           if-no-files-found: warn
           path: |
             ${{ env.WORK }}/e2e/screenshots/
             ${{ env.WORK }}/e2e/evidence/
+            ${{ env.WORK }}/e2e/debug/
             ${{ env.WORK }}/e2e/*.log
             ${{ env.WORK }}/e2e.log
             ${{ env.WORK }}/raw-evidence/

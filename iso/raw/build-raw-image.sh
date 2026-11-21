@@ -4,8 +4,13 @@
 #
 # Usage (root): build-raw-image.sh IMAGE OUTPUT_RAW [TARGET_IMGREF]
 #
-#   1. `bootc install to-disk` the image into OUTPUT_RAW -- exactly what a
-#      fisherman install does at install time today, done once at build time.
+#   1. `bootc install to-filesystem` the image into OUTPUT_RAW, partitioned
+#      the way an encrypted install needs it: ESP, a separate ext4 /boot and a
+#      btrfs root. The installer encrypts only the root, so GRUB keeps reading
+#      an unencrypted /boot (it cannot unlock systemd-repart's LUKS2/argon2id;
+#      `bootc install to-disk --filesystem btrfs` puts /boot inside the root).
+#      This is what fisherman does at install time today, done once at build
+#      time.
 #   2. Add a "Utah Live" BLS entry: the deployment's own entry with `ro
 #      utah.live` instead of `rw` (utah-live-root.service overlays the root), made the GRUB
 #      default through grubenv. OS-Installer's Utah script removes both from
@@ -38,21 +43,15 @@ data="$(dirname "${OUT}")"
 
 rm -f "${OUT}"
 truncate -s "${SIZE}" "${OUT}"
-install_args=(--via-loopback "/data/$(basename "${OUT}")" --filesystem btrfs --wipe
-              --generic-image --target-imgref "${TARGET_IMGREF}")
-volumes=(-v /dev:/dev -v /var/lib/containers:/var/lib/containers -v "${data}:/data")
-if [[ -n "${UTAH_RAW_SSH_PUBKEY:-}" ]]; then
-    install -m 0644 "${UTAH_RAW_SSH_PUBKEY}" "${data}/root-key.pub"
-    install_args+=(--root-ssh-authorized-keys /data/root-key.pub)
-fi
-echo "bootc install to-disk ${IMAGE} -> ${OUT} (${SIZE}, target ${TARGET_IMGREF})"
-start=$(date +%s)
-podman run --rm --privileged --pid=host "${volumes[@]}" \
-    --security-opt label=type:unconfined_t \
-    "${IMAGE}" bootc install to-disk "${install_args[@]}"
-echo "bootc install to-disk took $(( $(date +%s) - start ))s" | tee "${EVIDENCE}/install-time.txt"
-rm -f "${data}/root-key.pub"
-
+# BIOS-BOOT only because bootupd installs its BIOS component when it finds one;
+# the installer drops it (UEFI-only target).
+sfdisk --quiet "${OUT}" <<'EOF'
+label: gpt
+size=1MiB, type=21686148-6449-6E6F-744E-656564454649, name="BIOS-BOOT"
+size=512MiB, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B, name="EFI-SYSTEM"
+size=1GiB, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name="boot"
+type=4F68BCE3-E8CD-4DB1-96E7-FBCAF984B709, name="root"
+EOF
 loop="$(losetup --find --show --partscan "${OUT}")"
 mnt="$(mktemp -d)"
 cleanup() {
@@ -63,6 +62,35 @@ cleanup() {
 }
 trap cleanup EXIT
 udevadm settle
+
+install_args=(--generic-image --target-imgref "${TARGET_IMGREF}")
+volumes=(-v /dev:/dev -v /var/lib/containers:/var/lib/containers -v "${data}:/data")
+if [[ -n "${UTAH_RAW_SSH_PUBKEY:-}" ]]; then
+    install -m 0644 "${UTAH_RAW_SSH_PUBKEY}" "${data}/root-key.pub"
+    install_args+=(--root-ssh-authorized-keys /data/root-key.pub)
+fi
+echo "bootc install to-filesystem ${IMAGE} -> ${OUT} (${SIZE}, target ${TARGET_IMGREF})"
+start=$(date +%s)
+# mkfs and mounts run in the image itself: its btrfs-progs/e2fsprogs/dosfstools
+# match what the installed system will run, and bootc sees the mounts directly.
+podman run --rm --privileged --pid=host "${volumes[@]}" \
+    --security-opt label=type:unconfined_t -e LOOP="${loop}" \
+    "${IMAGE}" bash -euxc '
+        mkfs.fat -F 32 -n EFI-SYSTEM "${LOOP}p2" >/dev/null
+        mkfs.ext4 -q -L boot "${LOOP}p3"
+        mkfs.btrfs -q -L root "${LOOP}p4"
+        mkdir -p /target
+        mount "${LOOP}p4" /target
+        mkdir /target/boot
+        mount "${LOOP}p3" /target/boot
+        mkdir /target/boot/efi
+        mount "${LOOP}p2" /target/boot/efi
+        bootc install to-filesystem "$@" /target
+        umount -R /target
+    ' bash "${install_args[@]}"
+echo "bootc install to-filesystem took $(( $(date +%s) - start ))s" | tee "${EVIDENCE}/install-time.txt"
+rm -f "${data}/root-key.pub"
+
 sfdisk --dump "${loop}" | tee "${EVIDENCE}/partitions.txt"
 blkid "${loop}"p* | tee "${EVIDENCE}/blkid.txt"
 
@@ -79,8 +107,7 @@ done
 mkdir -p "${mnt}/boot" "${mnt}/efi" "${mnt}/root"
 mount "${root}" "${mnt}/root"
 mount "${esp}" "${mnt}/efi"
-# bootc puts /boot on its own ext4 partition for some layouts and in the root
-# filesystem for others (btrfs root with bootc 1.17: no /boot partition).
+# Kept layout-agnostic: older media put /boot inside the btrfs root.
 bootdir="${mnt}/root/boot"
 if [[ -n "${boot}" ]]; then
     mount "${boot}" "${mnt}/boot"

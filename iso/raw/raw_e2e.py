@@ -6,14 +6,24 @@
 Stages (every screenshot is listed in DIR/screenshots/manifest.json):
   1. Boot the raw disk image as live media (read-only virtio disk, GRUB's
      default "Utah Live" entry: ro utah.live, tmpfs overlay over the root).
-  2. Drive the real OS-Installer window through AT-SPI (buttons, rows, focus)
-     and QEMU sendkey (typing): language, welcome, keyboard, disk,
-     encryption, confirmation, summary, progress, completion.
+  2. Install with the real OS-Installer window (--install gui): language,
+     welcome, keyboard, disk, encryption with a passphrase, confirmation,
+     summary, progress, completion. With --install script the same Utah
+     install.sh runs over SSH instead (to exercise the installed disk while
+     the GUI path is being worked on).
   3. Boot the installed disk alone: Plymouth LUKS prompt, unlock,
      gnome-initial-setup (user creation), GNOME desktop, a terminal with
      `bootc status`.
   4. `bootc switch` to the candidate digest, reboot, unlock, log in at GDM:
      desktop + `bootc status`. Then `bootc rollback` and the same again.
+
+Input is what a user at the machine would give: a QEMU USB tablet clicks at a
+widget's on-screen position and QEMU `sendkey` types. AT-SPI (atspi_drive.py,
+run in the guest session) only observes: which page shows, what is sensitive,
+and where a widget is inside its window. Buttons are pressed through their
+AT-SPI "click" action. GTK 4 reports positions relative to the window, so the
+harness maximizes it first: a maximized window spans the screen width and ends
+at the bottom edge, which turns window coordinates into screen coordinates.
 
 Reuses iso/scripts/qemu_monitor.py, plymouth-prompt.py and luks-unlock.py.
 """
@@ -23,6 +33,7 @@ import json
 import os
 import shlex
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -40,6 +51,9 @@ PASSWORD = "utahtest2026"
 INSTALLER_APP = "installer"   # AT-SPI app name of com.github.p3732.os_installer
 GIS_APP = "initial-setup"
 TARGET_DISK = "/dev/vdb"
+SCREEN_W, SCREEN_H = 1920, 1080
+TOP_BAR = 32                  # GNOME Shell top bar at scale 1 (fallback placement only)
+ABS_MAX = 0x7FFF              # QEMU absolute pointer axis range
 
 SSH_OPTS = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
             "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=5",
@@ -70,20 +84,24 @@ class Harness:
         self.work = Path(args.work).resolve()
         self.shots = self.work / "screenshots"
         self.evidence = self.work / "evidence"
-        self.shots.mkdir(parents=True, exist_ok=True)
-        self.evidence.mkdir(parents=True, exist_ok=True)
+        self.debug = self.work / "debug"
+        for d in (self.shots, self.evidence, self.debug):
+            d.mkdir(parents=True, exist_ok=True)
         self.manifest = []
         self.vm = None
         self.mon_sock = None
+        self.qmp_sock = None
         self.serial = None
         self.ssh_port = None
         self.code, self.vars_src = find_firmware()
         self.baseline_digest = None
         self.candidate_digest = args.candidate.split("@", 1)[1] if "@" in args.candidate else None
+        self.timings = {}
 
     # ---- QEMU ---------------------------------------------------------------
     def start_vm(self, name, drives, vars_file, ssh_port):
         self.mon_sock = str(self.work / f"{name}-monitor.sock")
+        self.qmp_sock = str(self.work / f"{name}-qmp.sock")
         self.serial = self.work / f"{name}-serial.log"
         self.ssh_port = ssh_port
         cmd = ["qemu-system-x86_64", "-name", name, "-machine", "q35", "-m", str(self.args.ram),
@@ -93,15 +111,18 @@ class Harness:
                "-netdev", f"user,id=n0,hostfwd=tcp:127.0.0.1:{ssh_port}-:22",
                "-device", "virtio-net-pci,netdev=n0",
                "-vga", "none", "-device", "VGA,xres=1920,yres=1080",
+               # Absolute pointer: clicks land at exact screen coordinates.
+               "-device", "qemu-xhci", "-device", "usb-tablet",
                "-display", "none", "-serial", f"file:{self.serial}",
-               "-monitor", f"unix:{self.mon_sock},server,nowait"]
+               "-monitor", f"unix:{self.mon_sock},server,nowait",
+               "-qmp", f"unix:{self.qmp_sock},server=on,wait=off"]
         cmd += ["-accel", "kvm", "-cpu", "host"] if os.access("/dev/kvm", os.W_OK) else ["-accel", "tcg"]
         for d in drives:
             cmd += ["-drive", d["drive"], "-device", d["device"]]
         log(f"starting VM {name}: {' '.join(shlex.quote(c) for c in cmd)}")
         self.vm = subprocess.Popen(cmd, stdout=open(self.work / f"{name}-qemu.log", "w"), stderr=subprocess.STDOUT)
         for _ in range(50):
-            if os.path.exists(self.mon_sock):
+            if os.path.exists(self.mon_sock) and os.path.exists(self.qmp_sock):
                 break
             time.sleep(0.2)
 
@@ -124,6 +145,46 @@ class Harness:
 
     def mon(self, command):
         return run_hmp_command(self.mon_sock, command, settle=0.1, prompt=b"(qemu)", recv_timeout=5)
+
+    def qmp(self, *commands):
+        """Run QMP commands on a fresh connection; returns their replies."""
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+            s.settimeout(10)
+            s.connect(self.qmp_sock)
+            f = s.makefile("rwb", buffering=0)
+
+            def reply():
+                while True:
+                    line = f.readline()
+                    if not line:
+                        raise Fail("QMP connection closed")
+                    msg = json.loads(line)
+                    if "return" in msg or "error" in msg:
+                        return msg
+
+            f.readline()  # greeting
+            f.write(b'{"execute": "qmp_capabilities"}\n')
+            reply()
+            out = []
+            for c in commands:
+                f.write(json.dumps(c).encode() + b"\n")
+                r = reply()
+                if "error" in r:
+                    raise Fail(f"QMP {c['execute']}: {r['error']}")
+                out.append(r)
+            return out
+
+    def click_at(self, x, y):
+        x = max(0, min(SCREEN_W - 1, int(x)))
+        y = max(0, min(SCREEN_H - 1, int(y)))
+        ev = lambda events: {"execute": "input-send-event", "arguments": {"events": events}}  # noqa: E731
+        self.qmp(ev([{"type": "abs", "data": {"axis": "x", "value": round(x * ABS_MAX / (SCREEN_W - 1))}},
+                     {"type": "abs", "data": {"axis": "y", "value": round(y * ABS_MAX / (SCREEN_H - 1))}}]))
+        time.sleep(0.4)
+        self.qmp(ev([{"type": "btn", "data": {"down": True, "button": "left"}}]))
+        time.sleep(0.1)
+        self.qmp(ev([{"type": "btn", "data": {"down": False, "button": "left"}}]))
+        time.sleep(0.5)
 
     def key(self, k):
         self.mon(f"sendkey {k}")
@@ -152,6 +213,10 @@ class Harness:
         time.sleep(0.5)
         return ppm
 
+    def to_png(self, ppm, png):
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(ppm), str(png)], check=True)
+        ppm.unlink(missing_ok=True)
+
     def shot(self, label, proves, retake_until_drawn=False):
         png = self.shots / f"{label}.png"
         for attempt in range(12 if retake_until_drawn else 1):
@@ -161,12 +226,19 @@ class Harness:
             log(f"  {label}: frame not drawn yet ({attempt + 1}/12)")
             self.key("shift")
             time.sleep(5)
-        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(ppm), str(png)], check=True)
-        ppm.unlink(missing_ok=True)
+        self.to_png(ppm, png)
         self.manifest.append({"file": png.name, "stage": label, "proves": proves})
         self.write_manifest()
         log(f"  screenshot {png.name}: {proves}")
         return png
+
+    def debug_shot(self, label):
+        """Diagnostic frame outside the stage table (debug/)."""
+        try:
+            png = self.debug / f"{label}.png"
+            self.to_png(self.screendump(png), png)
+        except Exception as e:  # noqa: BLE001
+            log(f"  debug shot {label} failed: {e}")
 
     def write_manifest(self):
         (self.shots / "manifest.json").write_text(json.dumps(self.manifest, indent=2) + "\n")
@@ -224,7 +296,7 @@ class Harness:
     def save(self, name, text):
         (self.evidence / name).write_text(text)
 
-    # ---- AT-SPI -------------------------------------------------------------
+    # ---- AT-SPI observation + pointer/keyboard input -------------------------
     def atspi(self, runner, *argv):
         out = runner("python3 /var/tmp/atspi_drive.py " + " ".join(shlex.quote(a) for a in argv))
         try:
@@ -235,60 +307,116 @@ class Harness:
     def snapshot(self, runner, app):
         try:
             nodes = self.atspi(runner, "snapshot", app)
-        except Fail:
+        except (Fail, subprocess.TimeoutExpired):
             return []
         return nodes if isinstance(nodes, list) else []
 
-    def wait_for(self, runner, app, predicate, what, timeout=300):
+    def poll(self, runner, app, predicate, timeout):
         end = time.time() + timeout
-        nodes = []
-        while time.time() < end:
+        while True:
             nodes = self.snapshot(runner, app)
             if nodes and predicate(nodes):
                 return nodes
-            time.sleep(3)
-        self.save(f"atspi-timeout-{slug(what)}.json", json.dumps(nodes, indent=1))
+            if time.time() >= end:
+                return None
+            time.sleep(2)
+
+    def wait_for(self, runner, app, predicate, what, timeout=300):
+        nodes = self.poll(runner, app, predicate, timeout)
+        if nodes is not None:
+            return nodes
+        self.save(f"atspi-timeout-{slug(what)}.json", json.dumps(self.snapshot(runner, app), indent=1))
         self.shot(f"fail-{slug(what)}", f"FAILURE: {what} never appeared")
         raise Fail(f"{what} never appeared in {app}")
 
-    def kb_focus(self, runner, app, want, keys=("tab",), max_steps=40):
-        """Move keyboard focus with QEMU keys until AT-SPI reports a matching focused node.
+    def to_screen(self, nodes, node):
+        frame = top_frame(nodes)
+        if frame is None or not node.get("ext"):
+            raise Fail(f"no window extents for {node.get('role')} {node.get('name')!r}")
+        fx, fy, fw, fh = frame["ext"]
+        x, y, w, h = node["ext"]
+        if fw >= SCREEN_W - 2:
+            # Maximized or fullscreen: full width, bottom-aligned under the top bar.
+            ox, oy = 0, SCREEN_H - fh
+        else:
+            # Mutter centers new windows in the work area (fallback; logged).
+            ox, oy = (SCREEN_W - fw) // 2, TOP_BAR + (SCREEN_H - TOP_BAR - fh) // 2
+            log(f"  window {fw}x{fh} not maximized; assuming it is centered")
+        return ox + (x - fx) + w // 2, oy + (y - fy) + h // 2
 
-        GTK 4 implements neither Component.GrabFocus nor actions on list rows,
-        so the harness navigates like a keyboard user and uses AT-SPI to see
-        where focus landed."""
-        for i in range(max_steps):
-            focused = [n for n in self.snapshot(runner, app) if "focused" in n["states"]]
-            if focused and want(focused[-1]):
-                return focused[-1]
-            self.key(keys[i % len(keys)])
-            time.sleep(0.4)
-        raise Fail(f"keyboard focus never reached the wanted widget in {app}")
+    def click_node(self, nodes, node):
+        x, y = self.to_screen(nodes, node)
+        log(f"  click {node['role']} {node['name'] or node['text'][:30]!r} at ({x}, {y}) ext={node['ext']}")
+        self.click_at(x, y)
 
-    def press(self, runner, app, name, role=None, fallback_key="ret"):
-        argv = ["act", app, name] + ([role] if role else [])
-        res = self.atspi(runner, *argv)
-        if not res or "error" in res:
-            raise Fail(f"could not press {name!r}: {res}")
-        if res["how"] == "none":
-            self.kb_focus(runner, app, lambda n: norm(n["name"]) == norm(name))
-            self.key(fallback_key)
-        time.sleep(2)
-        return res
+    def maximize(self, runner, app):
+        """Maximize the app's window so window coordinates map to the screen."""
+        nodes = []
+        for attempt in range(4):
+            nodes = self.snapshot(runner, app)
+            frame = top_frame(nodes)
+            if frame is not None and frame["ext"][2] >= SCREEN_W - 2:
+                log(f"  {app} window maximized: frame ext={frame['ext']}")
+                return nodes
+            log(f"  {app} frame ext={frame and frame['ext']}; maximizing (attempt {attempt + 1})")
+            if attempt % 2 == 0 and has_name(nodes, "Maximize", sensitive=True):
+                self.atspi(runner, "act", app, "Maximize")
+            else:
+                self.atspi(runner, "frame-action", app, "window.toggle-maximized")
+            time.sleep(3)
+        self.save(f"atspi-maximize-{slug(app)}.json", json.dumps(nodes, indent=1))
+        log(f"  {app} window could not be maximized; clicks use the centered-window fallback")
+        return nodes
 
-    def row(self, runner, app, text):
-        t = text.lower()
-        self.kb_focus(runner, app, lambda n: n["role"] == "list item")
-        self.kb_focus(runner, app, lambda n: n["role"] == "list item" and t in n["name"].lower(), keys=("down",))
-        self.key("ret")
-        time.sleep(2)
+    def click_until(self, runner, app, pick, done, what, tries=3, settle=20):
+        """Click the node pick(nodes) returns until done(nodes) holds."""
+        for attempt in range(tries):
+            nodes = self.snapshot(runner, app)
+            node = pick(nodes)
+            if node is None:
+                self.save(f"atspi-missing-{slug(what)}.json", json.dumps(nodes, indent=1))
+                raise Fail(f"{what}: nothing to click")
+            self.click_node(nodes, node)
+            got = self.poll(runner, app, done, settle)
+            if got is not None:
+                return got
+            self.debug_shot(f"miss-{slug(what)}-{attempt}")
+            self.save(f"atspi-miss-{slug(what)}-{attempt}.json", json.dumps(self.snapshot(runner, app), indent=1))
+        self.shot(f"fail-{slug(what)}", f"FAILURE: clicking never reached {what}")
+        raise Fail(f"clicking never reached {what}")
 
-    def focus_and_type(self, runner, app, name, text, role=None):
-        self.kb_focus(runner, app, lambda n: norm(n["name"]) == norm(name) or
-                      (n["role"] in ("password text", "text", "entry") and norm(name) in norm(n["name"] + n["text"])))
-        time.sleep(0.5)
+    def press(self, runner, app, name, done, what, timeout=120):
+        """Press a button by its AT-SPI click action (pointer if it has none)."""
+        for attempt in range(3):
+            res = self.atspi(runner, "act", app, name)
+            if not res or "error" in res:
+                log(f"  press {name!r}: {res}")
+                time.sleep(3)
+                continue
+            if res["how"] == "none":
+                nodes = self.snapshot(runner, app)
+                node = next((n for n in nodes if n["path"] == res["path"]), None)
+                if node is not None:
+                    self.click_node(nodes, node)
+            got = self.poll(runner, app, done, 30 if attempt < 2 else timeout)
+            if got is not None:
+                return got
+            self.debug_shot(f"press-miss-{slug(what)}-{attempt}")
+        self.save(f"atspi-timeout-{slug(what)}.json", json.dumps(self.snapshot(runner, app), indent=1))
+        self.shot(f"fail-{slug(what)}", f"FAILURE: pressing {name!r} never reached {what}")
+        raise Fail(f"pressing {name!r} never reached {what}")
+
+    def fill(self, runner, app, node, text, clear=True):
+        """Click an entry, then type into it."""
+        nodes = self.snapshot(runner, app)
+        node = next((n for n in nodes if n["path"] == node["path"]), node)
+        self.click_node(nodes, node)
+        time.sleep(1)
+        if clear:
+            self.key("ctrl-a")
+            self.key("backspace")
         self.type(text)
-        time.sleep(0.5)
+        time.sleep(1)
 
     # ---- Stages -------------------------------------------------------------
     def live(self):
@@ -332,13 +460,16 @@ class Harness:
     def shot_when_grub(self):
         # GRUB shows its menu briefly; catch it to show the live entry is the default.
         end = time.time() + 60
+        probe = self.debug / "grub-probe.png"
         while time.time() < end:
             time.sleep(2)
-            ppm = self.screendump(self.shots / "00-grub.png")
+            ppm = self.screendump(probe)
             if drawn(ppm, min_colors=3):
+                ppm.unlink(missing_ok=True)
                 time.sleep(1)
                 self.shot("00-grub-menu", "Firmware -> shim -> GRUB on the medium; 'Utah Live' BLS entry is the default")
                 return
+        probe.with_suffix(".ppm").unlink(missing_ok=True)
         log("  GRUB menu not captured (timeout hidden)")
 
     def installer(self):
@@ -346,55 +477,94 @@ class Harness:
         r, app = self.live_runner, INSTALLER_APP
         nodes = self.wait_for(r, app, lambda n: has_text(n, "English"), "language page", 240)
         self.save("atspi-language.json", json.dumps(nodes, indent=1))
-        # GNOME Shell starts in the overview; Escape gives the installer window keyboard focus.
+        # GNOME Shell opens the overview at login, above the autostarted window.
         self.key("esc")
         time.sleep(3)
+        self.maximize(r, app)
+        time.sleep(2)
         self.shot("02-installer-language", "OS-Installer autostarted in the live session: language page")
-        self.row(r, app, "English")
-        self.wait_for(r, app, lambda n: has_text(n, "copying this live system"), "welcome page", 120)
-        self.shot("03-installer-welcome", "Welcome page with Utah branding and config text")
-        self.press(r, app, "Continue")
-        nodes = self.wait_for(r, app, lambda n: has_text(n, "Test the Keyboard Layout Here"), "keyboard page", 120)
+
+        self.click_until(r, app, lambda n: row_containing(n, "English (United States)"),
+                         lambda n: has_text(n, "copying this live system"), "welcome page")
+        self.shot("03-installer-welcome", "Welcome page with the Utah logo and config text")
+
+        self.press(r, app, "Continue", lambda n: has_text(n, "Test the Keyboard Layout Here"), "keyboard page")
         self.shot("04-installer-keyboard", "Keyboard layout page")
-        self.press(r, app, "Continue")
-        nodes = self.wait_for(r, app, lambda n: has_text(n, TARGET_DISK), "disk page", 120)
+
+        nodes = self.press(r, app, "Continue", lambda n: has_text(n, TARGET_DISK), "disk page")
         self.save("atspi-disk.json", json.dumps(nodes, indent=1))
-        self.shot("05-installer-disk", f"Disk selection: the empty target {TARGET_DISK} is offered; the live medium is not a valid target")
-        self.row(r, app, TARGET_DISK)
-        nodes = self.wait_for(r, app, lambda n: has_name(n, "Encrypt Files"), "encryption page", 120)
+        self.shot("05-installer-disk", f"Disk selection: the empty 48 GB target {TARGET_DISK} is offered; the 24 GB live medium is too small to pick")
+
+        nodes = self.click_until(r, app, lambda n: row_containing(n, TARGET_DISK),
+                                 lambda n: has_name(n, "Encrypt Files"), "encryption page")
         self.save("atspi-encrypt.json", json.dumps(nodes, indent=1))
-        self.press(r, app, "Encrypt Files", fallback_key="spc")
-        self.wait_for(r, app, lambda n: has_name(n, "Encryption PIN", sensitive=True), "encryption PIN entry", 60)
-        self.focus_and_type(r, app, "Encryption PIN", PIN)
-        self.focus_and_type(r, app, "Confirm PIN", PIN)
+        self.enable_encryption(r, app)
         self.shot("06-installer-encryption", "Encryption enabled with a passphrase (LUKS2 via systemd-repart Encrypt=key-file)")
-        self.press(r, app, "Continue")
-        self.wait_for(r, app, lambda n: has_text(n, "This will delete all data on"), "confirmation page", 120)
+
+        self.press(r, app, "Continue", lambda n: has_text(n, "This will delete all data on"), "confirmation page")
         self.shot("07-installer-confirm", "Confirmation: the target disk will be erased")
-        self.press(r, app, "Confirm")
-        nodes = self.wait_for(r, app, lambda n: not has_text(n, "This will delete all data on"), "page after confirmation", 60)
-        if not has_name(nodes, "Show Terminal Output") and has_name(nodes, "Confirm"):
-            self.shot("08-installer-summary", "Summary page before the install starts")
-            self.press(r, app, "Confirm")
-        self.wait_for(r, app, lambda n: has_name(n, "Show Terminal Output") or has_text(n, "Restart System"), "install page", 120)
-        self.shot("09-installer-progress", "Install running: block copy of the live medium onto the target")
+        nodes = self.press(r, app, "Confirm", lambda n: not has_text(n, "This will delete all data on"), "page after confirmation")
         start = time.time()
-        nodes = self.wait_for(r, app, lambda n: has_text(n, "Restart System") or has_text(n, "Error During Installation"),
-                              "install result", 3600)
+        if has_name(nodes, "Confirm") and not install_finished(nodes):
+            self.shot("08-installer-summary", "Summary page; the install script is already running in the background")
+            nodes = self.press(r, app, "Confirm", lambda n: has_name(n, "Confirm") is False or install_finished(n), "install page")
+        if not install_finished(nodes):
+            time.sleep(5)
+            self.shot("09-installer-progress", "Install running: block copy of the live medium onto the target")
+        nodes = self.wait_for(r, app, install_finished, "install result", 3600)
+        self.timings["gui-install-seconds-after-confirm"] = int(time.time() - start)
+        self.grab_install_log()
         if has_text(nodes, "Error During Installation"):
             self.shot("10-installer-failed", "FAILURE: OS-Installer reported an error")
-            self.grab_install_log()
-            raise Fail("installer failed")
-        log(f"  installer finished after {int(time.time() - start)}s on the progress page")
-        self.shot("10-installer-done", "Installation complete page")
-        try:
-            self.press(r, app, "Show Terminal Output")
+            self.atspi(r, "frame-action", app, "win.show-terminal")
             time.sleep(3)
-            self.shot("11-installer-log", "Install script output: repart block copy, UUID regeneration, live entry removed, timings")
-            self.key("esc")
-        except Fail as e:
-            log(f"  terminal view not captured: {e}")
-        self.grab_install_log()
+            self.shot("11-installer-log", "Install script output at the failure")
+            raise Fail("installer failed")
+        log(f"  installer finished {self.timings['gui-install-seconds-after-confirm']}s after confirmation")
+        self.shot("10-installer-done", "Installation complete page")
+        res = self.atspi(r, "frame-action", app, "win.show-terminal")
+        if res and "error" not in res:
+            time.sleep(3)
+            self.shot("11-installer-log", "OS-Installer's terminal view: repart block copy into LUKS2, UUID regeneration, live entry removed, timings")
+        else:
+            log(f"  terminal view not opened: {res}")
+        self.after_install()
+
+    def enable_encryption(self, r, app):
+        res = self.atspi(r, "act", app, "Encrypt Files")
+        log(f"  Encrypt Files: {res}")
+        pin_ready = lambda n: has_name(n, "Encryption PIN", sensitive=True)  # noqa: E731
+        if not (res and res.get("how", "none") != "none" and self.poll(r, app, pin_ready, 10)):
+            self.click_until(r, app, lambda n: named(n, "Encrypt Files"), pin_ready, "encryption switch")
+        for label in ("Encryption PIN", "Confirm PIN"):
+            nodes = self.snapshot(r, app)
+            node = named(nodes, label, sensitive=True)
+            if node is None:
+                self.save("atspi-encrypt-missing.json", json.dumps(nodes, indent=1))
+                raise Fail(f"no sensitive {label!r} entry")
+            self.fill(r, app, node, PIN)
+        nodes = self.snapshot(r, app)
+        self.save("atspi-encrypt-filled.json", json.dumps(nodes, indent=1))
+        lengths = [len(n["text"]) for n in nodes if n["role"] in ("password text", "text", "entry") and n["text"]]
+        log(f"  entry text lengths after typing: {lengths}")
+        if lengths and lengths.count(len(PIN)) < 2:
+            self.debug_shot("encryption-typed")
+            raise Fail(f"passphrase entries hold {lengths}, expected two of length {len(PIN)}")
+
+    def script_install(self):
+        """Run the same install.sh over SSH (no GUI), for --install script."""
+        log("=== Stage 2 (script): Utah install.sh over SSH ===")
+        start = time.time()
+        out = self.ssh("liveuser", f"sudo OSI_DEVICE_PATH={TARGET_DISK} OSI_DEVICE_IS_PARTITION=0 OSI_USE_ENCRYPTION=1 "
+                       f"OSI_ENCRYPTION_PIN={PIN} /usr/share/utah/os-installer/scripts/install.sh 2>&1",
+                       password="live", timeout=3600, check=False)
+        self.timings["script-install-seconds"] = int(time.time() - start)
+        self.save("utah-install.log", out)
+        if "Utah installed to" not in out:
+            raise Fail("install.sh failed (evidence/utah-install.log)")
+        self.after_install()
+
+    def after_install(self):
         facts = self.ssh("liveuser", "sudo efibootmgr -v; lsblk -o NAME,SIZE,TYPE,FSTYPE,UUID,PARTLABEL", password="live", check=False)
         self.save("live-after-install.txt", facts)
         self.stop_vm(lambda: self.ssh("liveuser", "sudo systemctl poweroff --no-block", password="live", check=False))
@@ -405,20 +575,19 @@ class Harness:
         except subprocess.CalledProcessError:
             log("  no /run/utah-install.log")
 
-    def installed_boot(self, phase, unlock_label, expect_gis=False):
+    def installed_boot(self, phase, unlock_label):
         """Boot (or reboot) the installed disk: Plymouth prompt, unlock, graphical target."""
-        serial_mark = self.serial.stat().st_size if self.serial and self.serial.exists() else 0
         status = subprocess.run([sys.executable, str(SCRIPTS / "plymouth-prompt.py"), "wait", self.mon_sock, str(self.serial),
                                  str(self.work / "theme.plymouth"), str(self.work / "watermark.png"),
                                  str(self.shots / f"{unlock_label}.ppm"), "600"]).returncode
         ppm = self.shots / f"{unlock_label}.ppm"
         if ppm.exists():
-            subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(ppm), str(self.shots / f"{unlock_label}.png")], check=True)
-            ppm.unlink()
+            self.to_png(ppm, self.shots / f"{unlock_label}.png")
             self.manifest.append({"file": f"{unlock_label}.png", "stage": unlock_label,
                                   "proves": f"{phase}: graphical, Bluefin-branded Plymouth LUKS passphrase prompt (plymouth-prompt.py exit {status})"})
             self.write_manifest()
         if status != 0:
+            self.debug_shot(f"no-prompt-{slug(phase)}")
             raise Fail(f"{phase}: no branded Plymouth prompt (plymouth-prompt.py exit {status})")
         r = subprocess.run([sys.executable, str(SCRIPTS / "luks-unlock.py"), "qemu", self.mon_sock, PIN, str(self.serial),
                             str(self.ssh_port)], capture_output=True, text=True)
@@ -434,7 +603,8 @@ class Harness:
             time.sleep(5)
         else:
             raise Fail(f"{phase}: graphical.target not reached")
-        facts = self.ssh("root", "cat /proc/cmdline; echo; findmnt -no FSTYPE,SOURCE /sysroot; lsblk -f; getenforce; "
+        facts = self.ssh("root", "cat /proc/cmdline; echo; findmnt -no FSTYPE,SOURCE /sysroot; findmnt -no FSTYPE,SOURCE,OPTIONS /boot; "
+                         "lsblk -f; getenforce; cat /etc/crypttab; "
                          "systemctl is-active gdm.service graphical.target; systemctl --failed --no-legend; bootc status", check=False)
         self.save(f"facts-{slug(phase)}.txt", facts)
         if "utah.live" in facts.split("\n", 1)[0]:
@@ -452,59 +622,65 @@ class Harness:
 
     def initial_setup(self):
         log("=== Stage 3: gnome-initial-setup creates the user ===")
-        gis_user = self.ssh("root", "ps -o user= -C gnome-initial-setup | head -1 || true", check=False).strip()
+        # ps truncates long user names and comm is cut at 15 characters: match the
+        # executable path and resolve the uid.
+        find_gis = ("ps -eo uid=,args= | awk '{u=$1; $1=\"\"; if ($0 ~ /\\/gnome-initial-setup( |$)/) {print u; exit}}' "
+                    "| xargs -r id -nu")
+        gis_user = ""
         end = time.time() + 300
         while not gis_user and time.time() < end:
-            time.sleep(5)
-            gis_user = self.ssh("root", "ps -o user= -C gnome-initial-setup | head -1 || true", check=False).strip()
+            gis_user = self.ssh("root", find_gis, check=False).strip()
+            if not gis_user:
+                time.sleep(5)
         if not gis_user:
             self.shot("fail-no-gis", "FAILURE: gnome-initial-setup never started")
             raise Fail("gnome-initial-setup did not start on first boot")
+        log(f"  gnome-initial-setup runs as {gis_user}")
         r, app = self.user_runner(gis_user), GIS_APP
         self.wait_for(r, app, lambda n: has_name(n, "Next") or has_name(n, "~Start Using"), "initial setup window", 300)
+        self.maximize(r, app)
+        previous = None
         for step in range(20):
             nodes = self.snapshot(r, app)
             self.save(f"atspi-gis-{step:02d}.json", json.dumps(nodes, indent=1))
             page = page_title(nodes)
-            self.shot(f"13-gis-{step:02d}-{slug(page)[:30]}", f"gnome-initial-setup on the installed system: {page}", True)
-            start_using = [n for n in nodes if norm(n["name"]).startswith("start using")]
-            if start_using:
-                self.press(r, app, start_using[0]["name"])
-                break
-            pw = [n for n in nodes if n["role"] == "password text" and "editable" in n["states"]]
-            txt = [n for n in nodes if n["role"] in ("text", "entry") and "editable" in n["states"]]
+            log(f"  initial setup page {step}: {page!r}")
+            entries = [n for n in nodes if n["role"] in ("text", "entry", "password text") and "editable" in n["states"]]
+            pw = [n for n in entries if n["role"] == "password text"]
+            txt = [n for n in entries if n["role"] != "password text"]
             if pw:
                 for n in pw[:2]:
-                    self.atspi(r, "focus-path", app, n["path"])
-                    self.key("ctrl-a")
-                    self.type(PASSWORD)
+                    self.fill(r, app, n, PASSWORD)
             elif has_text(nodes, "Full Name") or has_name(nodes, "Full Name"):
-                self.atspi(r, "focus-path", app, txt[0]["path"])
-                self.key("ctrl-a")
-                self.type(USER_FULL)
-                time.sleep(1)
+                if txt:
+                    self.fill(r, app, txt[0], USER_FULL)
+                    time.sleep(1)
                 if len(txt) > 1:
-                    self.atspi(r, "focus-path", app, txt[1]["path"])
-                    self.key("ctrl-a")
-                    self.type(USER)
+                    self.fill(r, app, txt[1], USER)
             time.sleep(1)
+            self.shot(f"13-gis-{step:02d}-{slug(page)[:30]}", f"gnome-initial-setup on the installed system: {page}", True)
+            nodes = self.snapshot(r, app)
+            start_using = [n for n in nodes if norm(n["name"]).startswith("start using") and "sensitive" in n["states"]]
+            if start_using:
+                self.atspi(r, "act", app, start_using[0]["name"])
+                break
             nxt = [n for n in nodes if norm(n["name"]) in ("next", "skip") and "sensitive" in n["states"]]
             if not nxt:
-                nodes = self.snapshot(r, app)
-                nxt = [n for n in nodes if norm(n["name"]) in ("next", "skip") and "sensitive" in n["states"]]
-            if not nxt:
+                self.save(f"atspi-gis-stuck-{step:02d}.json", json.dumps(nodes, indent=1))
                 raise Fail(f"initial setup page {page!r}: no sensitive Next/Skip")
-            self.press(r, app, nxt[0]["name"])
-            time.sleep(3)
+            sig = page_sig(nodes)
+            self.press(r, app, nxt[0]["name"], lambda n, s=sig: page_sig(n) != s or has_name(n, "~Start Using"),
+                       f"page after {page}", timeout=60)
+            previous = page
         else:
-            raise Fail("initial setup did not finish in 20 pages")
+            raise Fail(f"initial setup did not finish in 20 pages (last {previous!r})")
         self.wait_user_shell()
 
     def wait_user_shell(self):
         end = time.time() + 300
         while time.time() < end:
             if self.ssh("root", f"pgrep -u {USER} -x gnome-shell >/dev/null && echo up", check=False).strip() == "up":
-                time.sleep(15)
+                time.sleep(20)
                 return
             time.sleep(5)
         self.shot("fail-no-session", f"FAILURE: no GNOME session for {USER}")
@@ -520,6 +696,9 @@ class Harness:
         self.wait_user_shell()
 
     def desktop_and_status(self, phase, prefix):
+        # Close the overview (or Shell's first-login welcome dialog) over the desktop.
+        self.key("esc")
+        time.sleep(3)
         self.shot(f"{prefix}-desktop", f"{phase}: GNOME desktop for {USER}", True)
         status = self.ssh("root", "bootc status", check=False)
         status_json = self.ssh("root", "bootc status --json", check=False)
@@ -528,8 +707,8 @@ class Harness:
         cmd = f"echo {PASSWORD} | sudo -S -p '' bootc status"
         unit = f"utah-e2e-term-{prefix}"
         self.ssh("root", f"systemd-run --machine={USER}@.host --user --collect --unit={unit} "
-                         f"python3 /var/tmp/vte_term.py 'bootc status' {shlex.quote(cmd)}")
-        time.sleep(12)
+                         f"python3 /var/tmp/vte_term.py 'bootc status' {shlex.quote(cmd)}", check=False)
+        time.sleep(15)
         self.shot(f"{prefix}-bootc-status", f"{phase}: terminal on the desktop running `bootc status`", True)
         self.ssh("root", f"systemctl --machine={USER}@.host --user stop {unit}", check=False)
         try:
@@ -556,16 +735,21 @@ class Harness:
             {"drive": f"file={self.work / 'install.qcow2'},format=qcow2,if=none,id=target",
              "device": "virtio-blk-pci,drive=target,bootindex=1"},
         ], vars_installed, self.args.ssh_port + 1)
-        self.installed_boot("first boot", "12-first-boot-luks-prompt", expect_gis=True)
+        self.installed_boot("first boot", "12-first-boot-luks-prompt")
         self.initial_setup()
         self.baseline_digest = self.desktop_and_status("first boot", "14-first-boot")
         log(f"  baseline digest {self.baseline_digest}")
 
         log("=== Stage 4: bootc switch to the candidate digest ===")
-        out = self.ssh("root", f"bootc switch {shlex.quote(self.args.candidate)} 2>&1", timeout=3600)
+        start = time.time()
+        out = self.ssh("root", f"bootc switch {shlex.quote(self.args.candidate)} 2>&1", timeout=3600, check=False)
         self.save("bootc-switch.log", out)
-        staged = json.loads(self.ssh("root", "bootc status --json"))["status"].get("staged") or {}
-        log(f"  staged: {staged.get('image', {}).get('imageDigest')}")
+        self.timings["bootc-switch-seconds"] = int(time.time() - start)
+        staged = (json.loads(self.ssh("root", "bootc status --json"))["status"].get("staged") or {})
+        staged_digest = (staged.get("image") or {}).get("imageDigest")
+        log(f"  staged: {staged_digest}")
+        if not staged_digest:
+            raise Fail("bootc switch staged nothing (evidence/bootc-switch.log)")
         self.reboot()
         self.installed_boot("after bootc switch", "20-switch-luks-prompt")
         self.gdm_login("after bootc switch", "21-switch-gdm")
@@ -598,13 +782,48 @@ def has_text(nodes, text):
 
 
 def has_name(nodes, name, sensitive=False):
+    return named(nodes, name, sensitive) is not None
+
+
+def named(nodes, name, sensitive=False):
     want = norm(name)
     for n in nodes:
         got = norm(n["name"])
         if (want[1:] in got if want.startswith("~") else got == want):
             if not sensitive or "sensitive" in n["states"]:
-                return True
-    return False
+                return n
+    return None
+
+
+def row_containing(nodes, text):
+    """The list row (or, failing that, the node) whose name/text contains text."""
+    t = text.lower()
+    by_path = {n["path"]: n for n in nodes}
+    for n in nodes:
+        if t not in f"{n['name']} {n['text']}".lower() or not n.get("ext"):
+            continue
+        parts = n["path"].split(".")
+        while parts:
+            cand = by_path.get(".".join(parts))
+            if cand and cand["role"] in ("list item", "table row", "row") and cand.get("ext"):
+                return cand
+            parts.pop()
+        return n
+    return None
+
+
+def top_frame(nodes):
+    frames = [n for n in nodes if n["role"] in ("frame", "window", "dialog") and n.get("ext") and n["ext"][2] > 0]
+    return max(frames, key=lambda n: n["ext"][2] * n["ext"][3]) if frames else None
+
+
+def install_finished(nodes):
+    return has_text(nodes, "Restart System") or has_text(nodes, "Error During Installation")
+
+
+def page_sig(nodes):
+    """What identifies a page: its showing headings and labels."""
+    return frozenset((n["role"], n["name"] or n["text"]) for n in nodes if n["role"] in ("heading", "label"))
 
 
 def page_title(nodes):
@@ -644,17 +863,16 @@ def main():
     ap.add_argument("--ram", type=int, default=6144)
     ap.add_argument("--cpus", type=int, default=4)
     ap.add_argument("--target-size", default="48G")
-    ap.add_argument("--stages", default="live,installer,installed")
+    ap.add_argument("--install", choices=("gui", "script"), default="gui")
     args = ap.parse_args()
     h = Harness(args)
     try:
-        stages = args.stages.split(",")
-        if "live" in stages:
-            h.live()
-        if "installer" in stages:
+        h.live()
+        if args.install == "gui":
             h.installer()
-        if "installed" in stages:
-            h.installed()
+        else:
+            h.script_install()
+        h.installed()
         log("PASS: all stages")
         return 0
     except Exception as e:  # noqa: BLE001
@@ -664,10 +882,13 @@ def main():
                 h.shot("fail-final", f"FAILURE state: {e}")
             except Exception:  # noqa: BLE001
                 pass
+            if h.serial is not None and h.serial.name.startswith("live"):
+                h.grab_install_log()
             h.collect_journal("failure")
         return 1
     finally:
         h.write_manifest()
+        h.save("timings.json", json.dumps(h.timings, indent=1) + "\n")
         if h.vm is not None and h.vm.poll() is None:
             h.vm.kill()
 
