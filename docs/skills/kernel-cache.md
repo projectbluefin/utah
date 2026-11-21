@@ -96,6 +96,14 @@ A/B evidence for the patch (2026-11-07, VM, 6700 fs-verity files on btrfs, 10
 cold-read passes each): Fedora `7.2.15-200.fc44` logged 18 `FILE CORRUPTED`
 reports, at least one on every pass; the rebuild logged none.
 
+The image-based installer builds a composefs medium only on a kernel with the
+fix and falls back to ostree on any other (`scripts/kernel_verity.py`: the
+`.utah1` release marker, the fix in the package changelog, 7.4 or newer, or
+older than 7.2 without `CONFIG_BTRFS_EXPERIMENTAL`). Dropping this rebuild for
+a Fedora kernel without the fix therefore moves that medium back to ostree
+instead of breaking it; teach the selector the new kernel's marker if Fedora
+carries the backport under another name.
+
 Remove it when the fix is in the base image's kernel: delete the patch (and the
 script, its `COPY`s, the `check` in the Containerfile and the
 `/utah-cache/fedora-kernel` lookups), and `main` can return to the pristine

@@ -19,6 +19,9 @@ Stages (every screenshot is listed in DIR/screenshots/manifest.json):
      With --flatpaks (the medium's baked app list), every installed boot
      checks the baked apps are there; after the first boot one is removed
      (--remove-flatpak) and must stay removed through switch and rollback.
+     With --backend composefs, every installed boot must run the composefs
+     image with fs-verity enforced and every object must carry verity; the
+     first boot also reads every object (composefs_check.py --read).
 
 DIR/evidence/results.json records each stage (STAGES) as pass, fail or not
 run with its duration, plus SELinux mode and failed units for every boot;
@@ -67,6 +70,15 @@ SSH_OPTS = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/nul
             "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=5",
             "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=8"]
 
+# /etc/resolv.conf on a boot (target, SELinux label) and the boot's SELinux
+# denials, into the facts file. On composefs a build-injected empty
+# /etc/resolv.conf (build-raw-image.sh) made resolved log "Failed to open
+# /etc/resolv.conf: Permission denied" on every boot; record_boot fails on it.
+RESOLV_FACTS = ("echo '== /etc/resolv.conf'; ls -laZ /etc/resolv.conf; readlink -f /etc/resolv.conf; "
+                "echo '== SELinux denials'; "
+                "journalctl -b --no-pager -o cat _TRANSPORT=audit | grep -o 'avc: *denied.*' "
+                "| sed -E 's/ (pid|ino)=[0-9]+//g' | sort | uniq -c | sort -rn | head -20")
+
 # The stages results.json reports, in order. compare_paths.py lines them up
 # against the ISO/fisherman luks job's phases.
 STAGES = ("live boot", "install", "first boot unlock", "initial setup",
@@ -92,6 +104,8 @@ class Results:
         self.stages = {}
         self.boots = {}
         self.flatpaks = {}
+        self.composefs = {}
+        self.backend = None
         self.current = None
         self.started = None
         self.error = None
@@ -120,12 +134,15 @@ class Results:
     def flatpak(self, phase, installed, problems):
         self.flatpaks[phase] = {"apps": len(installed), "problems": problems}
 
+    def composefs_boot(self, phase, facts, problems):
+        self.composefs[phase] = {**{k: v for k, v in facts.items() if k != "cmdline"}, "problems": problems}
+
     def as_dict(self, timings=None):
         stages = [{"stage": s, **self.stages.get(s, {"status": "not run", "seconds": None})} for s in STAGES]
         passed = self.error is None and all(s["status"] == "pass" for s in stages)
         return {"result": "pass" if passed else "fail", "error": self.error, "install": self.install,
-                "stages": stages, "boots": self.boots, "flatpaks": self.flatpaks,
-                "timings": dict(timings or {})}
+                "backend": self.backend, "stages": stages, "boots": self.boots, "flatpaks": self.flatpaks,
+                "composefs": self.composefs, "timings": dict(timings or {})}
 
 
 def flatpak_problems(baked, installed, removed=None):
@@ -139,6 +156,44 @@ def flatpak_problems(baked, installed, removed=None):
     problems = [f"missing {app}" for app in sorted(set(baked) - installed) if app != removed]
     if removed and removed in installed:
         problems.append(f"{removed} came back after it was removed")
+    return problems
+
+
+def composefs_karg(cmdline):
+    """(digest, strict) from the composefs karg on a kernel command line, or None."""
+    for arg in cmdline.split():
+        key, eq, value = arg.partition("=")
+        if eq and key in ("composefs", "composefs.digest"):
+            return value.lstrip("?"), not value.startswith("?")
+    return None
+
+
+def composefs_problems(facts):
+    """What is wrong with an installed composefs boot (composefs_check.py's facts).
+
+    The installed entries must enforce fs-verity (no `?` on the karg, as on
+    the live entry), the root must be the composefs image of that
+    digest, every object must carry verity, and a full read must find no
+    error and no "FILE CORRUPTED" report.
+    """
+    problems = []
+    karg = composefs_karg(facts.get("cmdline", ""))
+    if karg is None:
+        return ["no composefs karg on the kernel command line"]
+    digest, strict = karg
+    if not strict:
+        problems.append("the composefs karg does not enforce fs-verity ('?')")
+    if not facts.get("root_source", "").endswith(digest.rsplit(":", 1)[-1]):
+        problems.append(f"root is {facts.get('root_source')!r}, not the composefs image {digest}")
+    objects, verity = facts.get("objects", 0), facts.get("verity_objects", 0)
+    if not objects:
+        problems.append("no objects in /sysroot/composefs/objects")
+    elif verity != objects:
+        problems.append(f"{objects - verity} of {objects} composefs objects have no fs-verity")
+    if facts.get("read_errors"):
+        problems.append(f"{facts['read_errors']} composefs objects failed to read")
+    if facts.get("corrupted_reports"):
+        problems.append(f"{facts['corrupted_reports']} fs-verity FILE CORRUPTED reports this boot")
     return problems
 
 
@@ -180,6 +235,10 @@ class Harness:
         self.candidate_digest = args.candidate.split("@", 1)[1] if "@" in args.candidate else None
         self.timings = {}
         self.results = Results(args.install)
+        decision = json.loads(Path(args.backend_decision).read_text()) if args.backend_decision else {}
+        if decision and decision.get("backend") != args.backend:
+            raise SystemExit(f"--backend {args.backend} contradicts {args.backend_decision}: {decision}")
+        self.results.backend = {"backend": args.backend, **decision}
 
     # ---- QEMU ---------------------------------------------------------------
     def start_vm(self, name, drives, vars_file, ssh_port):
@@ -503,11 +562,26 @@ class Harness:
         time.sleep(1)
 
     def record_boot(self, phase, user, password=None):
-        """SELinux mode and failed units of the running boot, into results.json."""
-        out = self.ssh(user, "getenforce; echo ---; systemctl --failed --no-legend --plain",
+        """SELinux mode and failed units of the running boot, into results.json.
+
+        Fails the boot if systemd-resolved could not read /etc/resolv.conf: a
+        build-injected empty file in the deployment's /etc (build-raw-image.sh)
+        did that on every composefs boot without failing a unit. Fails it too
+        on any SELinux denial on /boot: an unlabeled /boot root denied logind
+        on every installed composefs boot (#1368); build-raw-image.sh labels it."""
+        sudo = "" if user == "root" else "sudo "
+        out = self.ssh(user, "getenforce; echo ---; systemctl --failed --no-legend --plain; echo ---; "
+                       f"{sudo}journalctl -b --no-pager -o cat -u systemd-resolved | grep -c 'resolv.conf: Permission denied'; echo ---; "
+                       f"{sudo}journalctl -b --no-pager -o cat _TRANSPORT=audit | grep -c 'avc: *denied.* path=\"/boot[/\"]'",
                        password=password, check=False)
-        selinux, _, failed = out.partition("---")
+        selinux, _, rest = out.partition("---")
+        failed, _, rest = rest.partition("---")
+        denied, _, boot_avcs = rest.partition("---")
         self.results.boot(phase, selinux.strip() or "unknown", parse_failed_units(failed))
+        if denied.strip() not in ("", "0"):
+            raise Fail(f"{phase}: systemd-resolved could not open /etc/resolv.conf ({denied.strip()} times)")
+        if boot_avcs.strip() not in ("", "0"):
+            raise Fail(f"{phase}: {boot_avcs.strip()} SELinux denials on /boot (facts file)")
 
     # ---- Stages -------------------------------------------------------------
     def live(self):
@@ -531,7 +605,8 @@ class Harness:
         runner = lambda c: self.ssh("liveuser", "export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus; " + c, password=live_pw)  # noqa: E731
         self.live_runner = runner
         facts = self.ssh("liveuser", "cat /proc/cmdline; echo; findmnt -no FSTYPE,SOURCE,OPTIONS /sysroot; findmnt -no FSTYPE,OPTIONS /; getenforce; "
-                         "lsblk -o NAME,SIZE,RO,TYPE,FSTYPE,LABEL,PARTLABEL,MOUNTPOINTS; systemctl --failed --no-legend; sudo bootc status || true",
+                         "lsblk -o NAME,SIZE,RO,TYPE,FSTYPE,LABEL,PARTLABEL,MOUNTPOINTS; systemctl --failed --no-legend; sudo bootc status || true; "
+                         + RESOLV_FACTS.replace("journalctl", "sudo journalctl"),
                          password=live_pw, check=False)
         self.save("live-facts.txt", facts)
         self.record_boot("live", "liveuser", password=live_pw)
@@ -704,7 +779,8 @@ class Harness:
             raise Fail(f"{phase}: graphical.target not reached")
         facts = self.ssh("root", "cat /proc/cmdline; echo; findmnt -no FSTYPE,SOURCE /sysroot; findmnt -no FSTYPE,SOURCE,OPTIONS /boot; "
                          "lsblk -f; getenforce; cat /etc/crypttab; "
-                         "systemctl is-active gdm.service graphical.target; systemctl --failed --no-legend; bootc status", check=False)
+                         "systemctl is-active gdm.service graphical.target; systemctl --failed --no-legend; bootc status; "
+                         + RESOLV_FACTS, check=False)
         self.save(f"facts-{slug(phase)}.txt", facts)
         self.record_boot(phase, "root")
         if "utah.live" in facts.split("\n", 1)[0]:
@@ -712,6 +788,22 @@ class Harness:
         self.scp_to("root", HERE / "atspi_drive.py", "/var/tmp/atspi_drive.py")
         self.scp_to("root", HERE / "vte_term.py", "/var/tmp/vte_term.py")
         self.ssh("root", "chmod 0755 /var/tmp/atspi_drive.py /var/tmp/vte_term.py")
+        if self.args.backend == "composefs":
+            self.check_composefs(phase, read=phase == "first boot")
+
+    def check_composefs(self, phase, read):
+        """fs-verity is enforced on this boot; on the first boot, every object reads back clean."""
+        self.scp_to("root", HERE / "composefs_check.py", "/var/tmp/composefs_check.py")
+        out = self.ssh("root", "python3 /var/tmp/composefs_check.py" + (" --read" if read else ""), timeout=3600)
+        self.save(f"composefs-{slug(phase)}.json", out)
+        facts = json.loads(out)
+        problems = composefs_problems(facts)
+        self.results.composefs_boot(phase, facts, problems)
+        log(f"  {phase}: composefs {facts['verity_objects']}/{facts['objects']} objects with fs-verity"
+            + (f", read {facts['read_bytes'] / 1e9:.2f} GB in {facts['seconds']}s" if read else "")
+            + f"; problems: {'; '.join(problems) or 'none'}")
+        if problems:
+            raise Fail(f"{phase}: composefs: {'; '.join(problems)}")
 
     def user_runner(self, user):
         def run(command):
@@ -1034,6 +1126,10 @@ def main():
     ap.add_argument("--cpus", type=int, default=4)
     ap.add_argument("--target-size", default="48G")
     ap.add_argument("--install", choices=("gui", "script"), default="gui")
+    ap.add_argument("--backend", choices=("composefs", "ostree"), default="composefs",
+                    help="bootc backend the medium was built with (build-raw-image.sh backend.json)")
+    ap.add_argument("--backend-decision",
+                    help="build-raw-image.sh's backend.json (scripts/kernel_verity.py), recorded in results.json")
     ap.add_argument("--flatpaks", help="apps baked into the medium (bake-flatpaks.sh flatpak-apps.txt)")
     ap.add_argument("--remove-flatpak", default="org.gnome.Calculator",
                     help="baked app to remove after first boot (default: first baked app if absent)")

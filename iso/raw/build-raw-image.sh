@@ -10,7 +10,12 @@
 #      an unencrypted /boot (it cannot unlock systemd-repart's LUKS2/argon2id;
 #      `bootc install to-disk --filesystem btrfs` puts /boot inside the root).
 #      This is what fisherman does at install time today, done once at build
-#      time.
+#      time. UTAH_RAW_BACKEND picks bootc's backend: auto (default) takes
+#      composefs (`--composefs-backend`: repository in /composefs, deployment
+#      state in /state, fs-verity on every object) when the image's kernel has
+#      the btrfs fs-verity fix and ostree (/ostree) otherwise
+#      (scripts/kernel_verity.py, decision in backend.json); composefs on an
+#      unfixed kernel fails the build.
 #   2. Add a "Utah Live" BLS entry: the deployment's own entry with `ro
 #      utah.live` instead of `rw` (utah-live-root.service overlays the root),
 #      made the GRUB default through grubenv (medium.py). OS-Installer's Utah
@@ -25,6 +30,7 @@
 #   UTAH_RAW_DEBUG_SSHD=1    CI only: enable sshd as a local /etc change of the
 #                            deployment, so it survives `bootc switch`
 #   UTAH_RAW_EVIDENCE        directory for partition table, entries and sizes
+#   UTAH_RAW_BACKEND         auto (default), composefs or ostree
 #
 # The root is written uncompressed: shrink-raw-image.sh compresses it after
 # the Flatpaks are baked (UTAH_RAW_BTRFS_COMPRESS), so they are covered too.
@@ -36,12 +42,19 @@ TARGET_IMGREF="${3:-ghcr.io/projectbluefin/utah:testing}"
 SIZE="${UTAH_RAW_SIZE:-24G}"
 LIVE_KARGS="${UTAH_RAW_LIVE_KARGS:-}"
 EVIDENCE="${UTAH_RAW_EVIDENCE:-$(dirname "${OUT}")/raw-evidence}"
+REQUESTED_BACKEND="${UTAH_RAW_BACKEND:-auto}"
 ESP_TYPE=c12a7328-f81f-11d2-ba4b-00a0c93ec93b
 LIVE_ENTRY=utah-live
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 [[ ${EUID} -eq 0 ]] || { echo "run as root (bootc install, loop devices)" >&2; exit 1; }
 mkdir -p "$(dirname "${OUT}")" "${EVIDENCE}"
+# Decided by the image's own kernel and rpm database, inside the image.
+decision="$(podman run --rm -i --entrypoint python3 "${IMAGE}" - select --backend "${REQUESTED_BACKEND}" \
+    <"${HERE}/../../scripts/kernel_verity.py")" \
+    || { echo "backend selection for ${REQUESTED_BACKEND} failed (scripts/kernel_verity.py, above)" >&2; exit 1; }
+printf '%s\n' "${decision}" | tee "${EVIDENCE}/backend.json"
+BACKEND="$(python3 -c 'import json, sys; print(json.load(sys.stdin)["backend"])' <<<"${decision}")"
 OUT="$(realpath -m "${OUT}")"
 data="$(dirname "${OUT}")"
 
@@ -63,6 +76,7 @@ trap cleanup EXIT
 udevadm settle
 
 install_args=(--generic-image --target-imgref "${TARGET_IMGREF}")
+[[ "${BACKEND}" == ostree ]] || install_args+=(--composefs-backend)
 mapfile -t kargs < <(python3 "${HERE}/medium.py" install-kargs)
 [[ ${#kargs[@]} -gt 0 ]] || { echo "medium.py install-kargs printed nothing" >&2; exit 1; }
 for karg in "${kargs[@]}"; do install_args+=(--karg "${karg}"); done
@@ -71,7 +85,7 @@ if [[ -n "${UTAH_RAW_SSH_PUBKEY:-}" ]]; then
     install -m 0644 "${UTAH_RAW_SSH_PUBKEY}" "${data}/root-key.pub"
     install_args+=(--root-ssh-authorized-keys /data/root-key.pub)
 fi
-echo "bootc install to-filesystem ${IMAGE} -> ${OUT} (${SIZE}, target ${TARGET_IMGREF})"
+echo "bootc install to-filesystem ${IMAGE} -> ${OUT} (${SIZE}, ${BACKEND} backend, target ${TARGET_IMGREF})"
 start=$(date +%s)
 # mkfs and mounts run in the image itself: its btrfs-progs/e2fsprogs/dosfstools
 # match what the installed system will run, and bootc sees the mounts directly.
@@ -139,16 +153,63 @@ for f in "${mnt}"/efi/EFI/*/grub.cfg "${mnt}"/efi/EFI/*/bootuuid.cfg "${bootdir}
     [[ -f "$f" ]] && { echo "== ${f#"${mnt}"/}"; cat "$f"; }
 done >"${EVIDENCE}/grub-configs.txt"
 
+# --- SELinux labels on /boot --------------------------------------------------
+# bootc labels the /boot filesystem root only on its ostree path, and the
+# /boot/efi mountpoint and the live entry written above are labeled by
+# nothing: logind is denied getattr on /boot as unlabeled_t on every
+# installed boot (#1368, tuna-os/fisherman#504). The install block-copies
+# /boot, so label all of it here from the image's own policy (the ESP is vfat,
+# labeled at mount, and not under ${bootdir}).
+podman run --rm --privileged --security-opt label=type:unconfined_t \
+    -v "${bootdir}:/target/boot" "${IMAGE}" bash -euc '
+        . /etc/selinux/config
+        setfiles -F -r /target "/etc/selinux/${SELINUXTYPE}/contexts/files/file_contexts" /target/boot
+        for d in /target/boot /target/boot/efi /target/boot/loader/entries; do
+            if [[ -e "$d" ]]; then
+                echo "${d#/target}: $(getfattr --absolute-names --only-values -n security.selinux "$d" | tr -d "\0")"
+            fi
+        done
+    ' | tee "${EVIDENCE}/boot-labels.txt"
+grep -q '^/boot: .*:boot_t:' "${EVIDENCE}/boot-labels.txt" \
+    || { echo "/boot is not labeled boot_t (boot-labels.txt above)" >&2; exit 1; }
+
 # --- CI-only diagnostics on the deployment ------------------------------------
-for d in "${mnt}"/root/ostree/deploy/*/deploy/*.0; do
+# A deployment's /etc: ostree/deploy/<stateroot>/deploy/<checksum>.0/etc, or
+# state/deploy/<verity digest>/etc on composefs (bind-mounted at boot).
+if [[ "${BACKEND}" == ostree ]]; then deployments=("${mnt}"/root/ostree/deploy/*/deploy/*.0)
+else deployments=("${mnt}"/root/state/deploy/*); fi
+[[ ${#deployments[@]} -eq 1 && -d "${deployments[0]}/etc" ]] || { echo "expected one ${BACKEND} deployment, found: ${deployments[*]}" >&2; exit 1; }
+for d in "${deployments[@]}"; do
     cat "$d/etc/fstab" >"${EVIDENCE}/fstab.txt" 2>/dev/null || true
     printf '%s\n' "machine-id: '$(cat "$d/etc/machine-id" 2>/dev/null)'" >>"${EVIDENCE}/fstab.txt"
     if [[ "${UTAH_RAW_DEBUG_SSHD:-0}" == 1 ]]; then
         install -d "$d/etc/systemd/system/graphical.target.wants"
         ln -sfn /usr/lib/systemd/system/sshd.service "$d/etc/systemd/system/graphical.target.wants/sshd.service"
     fi
+    find "$d" "$(dirname "$d")" -maxdepth 1 -name '*.origin' -exec cat {} + >"${EVIDENCE}/origin.txt"
 done
-find "${mnt}"/root/ostree/deploy/*/deploy -maxdepth 1 -name '*.origin' -exec cat {} + >"${EVIDENCE}/origin.txt"
+if [[ "${BACKEND}" == composefs ]]; then
+    # Every object bootc wrote should carry fs-verity (lsattr's V flag);
+    # raw_e2e.py checks the same on the installed disk after the block copy.
+    objects=$(find "${mnt}/root/composefs/objects" -type f | wc -l)
+    verity=$(find "${mnt}/root/composefs/objects" -type f -print0 | xargs -0r lsattr 2>/dev/null | awk '$1 ~ /V/' | wc -l)
+    printf '{"objects": %s, "verity_objects": %s}\n' "${objects}" "${verity}" | tee "${EVIDENCE}/composefs-verity.json"
+    (( objects > 0 && verity == objects )) || { echo "composefs objects without fs-verity: ${verity} of ${objects}" >&2; exit 1; }
+    # A podman/buildah RUN leaves empty, mode 0700 /etc/resolv.conf and
+    # /etc/hostname behind when the image has none (buildah#4242), and the
+    # live layer's RUN does. ostree's import deletes them (ostree-ext
+    # cleanup_root); bootc's composefs backend copies them into the
+    # deployment's /etc. There the empty resolv.conf keeps tmpfiles from
+    # linking resolved's stub, NetworkManager writes its own into it, and
+    # resolved cannot read it: "Failed to open /etc/resolv.conf: Permission
+    # denied" on every live and installed boot (runs 44910214722, 44923414875).
+    for f in "${deployments[0]}/etc/resolv.conf" "${deployments[0]}/etc/hostname"; do
+        if [[ -f "$f" && ! -L "$f" && ! -s "$f" ]]; then
+            echo "removing the build-injected empty ${f#"${deployments[0]}"/}"
+            rm -f "$f"
+        fi
+    done
+fi
 sync
 umount "${mnt}/efi"
 [[ -n "${boot}" ]] && umount "${mnt}/boot"

@@ -720,7 +720,10 @@ echo "  receipt: ${PAYLOAD_IMAGE} ${MEDIA_DIGEST} from ${MEDIA_STORE} (read-only
 # UTAH_E2E_COMPOSEFS_BACKEND=1 opts in to the composefs backend, naming the
 # receipt's image as the GUI installer does; fisherman installs it from the
 # embedded store either way. It is not the default until it passes for
-# every flavor (#1129).
+# every flavor (#1129). It also needs a kernel that reads btrfs fs-verity data
+# correctly (scripts/kernel_verity.py, mainline 254e15591ee4): the live root
+# is the payload image, so its kernel and rpm database decide, and an
+# unfixed kernel fails the run instead of installing composefs on it.
 #
 # The user block is what phase 6 logs in as. Without it the installed system
 # has no account at all and the greeter has nobody to offer.
@@ -734,6 +737,9 @@ echo "  receipt: ${PAYLOAD_IMAGE} ${MEDIA_DIGEST} from ${MEDIA_STORE} (read-only
 # pulls the payload from a registry and needs real space for it; Utah's ISO
 # carries the image in the squashfs.
 if [[ "${UTAH_E2E_COMPOSEFS_BACKEND:-0}" == 1 ]]; then
+    kernel_decision="$(ssh_live "python3 - select --backend composefs" <"${ROOT}/scripts/kernel_verity.py")" \
+        || fail "composefs install requested, but the payload's kernel lacks the btrfs fs-verity fix (scripts/kernel_verity.py, above)"
+    echo "  kernel: ${kernel_decision}"
     RECIPE_IMAGE="${PAYLOAD_IMAGE}"
     RECIPE_COMPOSEFS_BACKEND=true
 else

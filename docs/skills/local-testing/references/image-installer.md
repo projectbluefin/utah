@@ -10,19 +10,93 @@ nothing. Tracking issue: #1403. History: spike #1399.
 
 | Piece | File |
 |---|---|
-| Live-capable layer on a published digest: OS-Installer from a pinned `hanthor/os-installer` commit (`OSI_REF`, fetched by commit and compared after checkout), `utah.live` units, initramfs with `systemd-volatile-root` | `iso/raw/Containerfile`, `iso/raw/src/` |
-| Raw medium: GPT BIOS-BOOT, 512 MiB ESP, 1 GiB ext4 `/boot`, btrfs root; one `bootc install to-filesystem --generic-image --karg rhgb --karg quiet`; "Utah Live" BLS entry as GRUB default; `EFI/BOOT` fallback | `iso/raw/build-raw-image.sh`, `iso/raw/medium.py` |
-| Offline Flatpaks in the medium's stateful `/var` (stateroot `var/lib/flatpak`), never in an image: the set the ISO bakes (`system-flatpaks.Brewfile` apps via `scripts/verify-desktop-contract.py --flatpaks`, `--no-related`, listed runtimes pinned) plus `flatpak preinstall` of the image's `preinstall.d`, run in the image with that directory bind-mounted, then `setfiles` with the image's contexts | `iso/raw/bake-flatpaks.sh` |
-| Shrink to content: fstrim, btrfs balance + resize to minimum (+256 MiB), cut the root partition and the file, rewrite the backup GPT; `size-breakdown.txt` shows what takes the space | `iso/raw/shrink-raw-image.sh`, `medium.py shrink-plan` |
-| End to end with screenshots and `evidence/results.json` | `iso/raw/raw_e2e.py`, `atspi_drive.py`, `vte_term.py` |
+| Live-capable layer on a published digest: OS-Installer from a pinned `hanthor/os-installer` commit (`OSI_REF`, fetched by commit and compared after checkout), `utah.live` units, initramfs with `systemd-volatile-root` and the live overlay ordered before both root setups (`ostree-prepare-root`, `bootc-root-setup`) | `iso/raw/Containerfile`, `iso/raw/src/` |
+| Raw medium: GPT BIOS-BOOT, 512 MiB ESP, 1 GiB ext4 `/boot`, btrfs root; one `bootc install to-filesystem --generic-image --karg rhgb --karg quiet`, with `--composefs-backend` when the image's kernel has the btrfs fs-verity fix (`UTAH_RAW_BACKEND=auto`, `scripts/kernel_verity.py`; ostree otherwise); "Utah Live" BLS entry as GRUB default; `EFI/BOOT` fallback | `iso/raw/build-raw-image.sh`, `iso/raw/medium.py`, `scripts/kernel_verity.py` |
+| Offline Flatpaks in the medium's stateful `/var` (`state/os/default/var` on composefs, the stateroot's `var` on ostree), never in an image: the set the ISO bakes (`system-flatpaks.Brewfile` apps via `scripts/verify-desktop-contract.py --flatpaks`, `--no-related`, listed runtimes pinned) plus `flatpak preinstall` of the image's `preinstall.d`, run in the image with that directory bind-mounted, then `setfiles` with the image's contexts | `iso/raw/bake-flatpaks.sh` |
+| Shrink to content: fstrim, btrfs balance + resize to minimum (+256 MiB, stepping up while btrfs refuses), fstrim again, cut the root partition and the file, rewrite the backup GPT; `size-breakdown.txt` shows what takes the space | `iso/raw/shrink-raw-image.sh`, `medium.py shrink-plan` |
+| End to end with screenshots and `evidence/results.json`; on composefs, fs-verity checks on every installed boot | `iso/raw/raw_e2e.py`, `composefs_check.py`, `atspi_drive.py`, `vte_term.py` |
 | Size per step (raw, allocated, zstd -3, zstd -19 --long, xz -9, pack/unpack time) | `iso/raw/measure_medium.py` |
 | Comparison with the Post-Testing E2E `luks` job for the same digest | `iso/raw/compare_paths.py` |
 
 The installer's own logic (`utah_config/scripts/install.sh`: mirror the
 medium's GPT with `CopyBlocks=`, LUKS2 via `Encrypt=key-file`, new filesystem
 UUIDs and their references, drop the live entry, `rd.luks.uuid` + crypttab,
-grow root) lives in the os-installer fork. Bump it by moving `OSI_REF` in
+grow root; deployments under `ostree/deploy` or composefs's `state/deploy`)
+lives in the os-installer fork. Bump it by moving `OSI_REF` in
 `iso/raw/Containerfile` to a full commit of the fork's `utah` branch.
+
+### composefs backend
+
+The medium is built with bootc's composefs backend when the image's kernel
+reads btrfs fs-verity data correctly, and with ostree otherwise (see
+[Backend selection](#backend-selection)). On composefs: the
+repository in `/composefs` (fs-verity on every object), the deployment's
+`etc` and `.origin` in `/state/deploy/<verity digest>`, the shared `/var` in
+`/state/os/default/var`, Type #1 entries with a `composefs=<digest>` karg and
+the kernel in `/boot/bootc_composefs-<digest>/`. The live overlay
+(`utah-live-root.service`) runs before `bootc-root-setup.service`, which then
+assembles the composefs root from the overlaid `/sysroot`. The repository
+itself is bound from the medium back over the overlay: erofs cannot mount
+the deployment's image from an overlayfs file ("Block device required"), and
+overlayfs does not pass fs-verity through. So the live entry keeps the strict
+`composefs=<digest>` karg like the installed ones, and the live root sits at
+overlay depth 1. The build fails if
+any object lacks verity (`composefs-verity.json`), and so does the shrink
+step if compression drops it. Every installed boot of the E2E checks the
+strict karg, the `composefs:<digest>` root and verity on every object; the
+first boot reads every object end to end and fails on a read error or a
+`FILE CORRUPTED` report.
+
+composefs costs space that ostree does not: btrfs keeps each object's
+fs-verity Merkle tree (SHA-512, at least one 4 KiB block per object over
+4 KiB) in metadata, which is DUP. The no-Flatpak root of run 44910214722 had
+514 MB of metadata against 215 MB on ostree (run 44897756832), so about
+0.6 GB more on disk, and the hashes do not compress. The full metadata also
+makes the shrink step's first resize fail with ENOSPC on composefs; it steps
+up and then trims again, or the chunks the resize moved stay allocated in
+the file.
+
+The live layer's `RUN` leaves podman's empty, mode 0700 `/etc/resolv.conf`
+and `/etc/hostname` mount targets in the image (buildah#4242). ostree's
+import deletes them; bootc's composefs backend copied them into the
+deployment's `/etc`, so tmpfiles never linked resolved's stub,
+NetworkManager wrote its own file into the 0700 one, and resolved logged
+"Failed to open /etc/resolv.conf: Permission denied" on every live and
+installed boot (run 44923414875). `build-raw-image.sh` removes them when
+empty, and the E2E fails a boot that logs it. The live session also skips
+`flatpak-preinstall.service`: it would download into the RAM overlay.
+
+bootc labels the `/boot` filesystem root only on its ostree path, and
+nothing labels the `/boot/efi` mountpoint or the live entry the build writes
+from the (SELinux-less) CI host. On composefs, logind was denied getattr on
+the `unlabeled_t` `/boot` root on every installed boot (#1368,
+tuna-os/fisherman#504; run 44923414875). After its last write to `/boot`,
+`build-raw-image.sh` runs `setfiles` from the image's own policy over the
+whole `/boot` filesystem (the ESP is vfat, labeled at mount), records the
+labels in `boot-labels.txt` and fails unless the root is `boot_t`. The
+install block-copies `/boot`, so the labels carry over, and the E2E fails a
+boot with any SELinux denial on a `/boot` path.
+
+### Backend selection
+
+Since 7.2, btrfs reads data through large folios, and without mainline
+`254e15591ee4` fs-verity then reports intact files as corrupt
+(`docs/skills/kernel-cache.md`, "The patched Fedora kernel"). A composefs root
+is nothing but fs-verity objects, so `UTAH_RAW_BACKEND=auto` (the default,
+and what scheduled and PR runs use) asks `scripts/kernel_verity.py`, run in
+the image against its own kernel and rpm database, before `bootc install`.
+The kernel counts as fixed if its release carries Utah's patch marker
+(`.utah1`: main and nvidia), its package changelog names the fix, it is 7.4
+or newer (7.4-rc1 excepted), or it is older than 7.2 without
+`CONFIG_BTRFS_EXPERIMENTAL` (the gaming flavors' OGC 7.1.x, whose btrfs only
+uses large data folios under that option). A fixed kernel gets composefs, any
+other kernel ostree; `composefs` forced on an unfixed kernel fails the build.
+The decision is in `raw-evidence/backend.json`, `results.json` (`backend`)
+and the job summary. This keeps composefs safe when Utah moves to Fedora's
+signed kernel (#1379), which lacks the fix today. The ISO path's composefs
+opt-in (`UTAH_E2E_COMPOSEFS_BACKEND=1`, `luks-e2e.sh`) runs the same check on
+the live root and fails on an unfixed kernel. Dispatch with `backend=ostree`
+for the ostree medium on any kernel.
 
 ### Offline Flatpaks
 
@@ -51,7 +125,10 @@ requests that touch `iso/raw/**`, the workflow, or
 `tests/test_image_installer.py`. Dispatch inputs: `image_ref` (exact
 `ghcr.io/projectbluefin/<image>@sha256:...`), `all_flavors`, `install`
 (`gui` drives OS-Installer's window through a QEMU USB tablet at AT-SPI
-extents; `script` runs the same `install.sh` over SSH), `btrfs_compress`
+extents; `script` runs the same `install.sh` over SSH), `backend`
+(`auto`, the default and what scheduled and PR runs use; `composefs`, which
+fails on an unfixed kernel; or `ostree`),
+`btrfs_compress`
 (default `zstd:3`, also on scheduled and PR runs; empty turns it off: the
 shrink step rewrites every file on the root compressed after the Flatpak
 bake; mounting with `compress-force` alone does nothing, because ostree and
