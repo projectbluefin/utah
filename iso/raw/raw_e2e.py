@@ -251,28 +251,41 @@ class Harness:
         self.shot(f"fail-{slug(what)}", f"FAILURE: {what} never appeared")
         raise Fail(f"{what} never appeared in {app}")
 
+    def kb_focus(self, runner, app, want, keys=("tab",), max_steps=40):
+        """Move keyboard focus with QEMU keys until AT-SPI reports a matching focused node.
+
+        GTK 4 implements neither Component.GrabFocus nor actions on list rows,
+        so the harness navigates like a keyboard user and uses AT-SPI to see
+        where focus landed."""
+        for i in range(max_steps):
+            focused = [n for n in self.snapshot(runner, app) if "focused" in n["states"]]
+            if focused and want(focused[-1]):
+                return focused[-1]
+            self.key(keys[i % len(keys)])
+            time.sleep(0.4)
+        raise Fail(f"keyboard focus never reached the wanted widget in {app}")
+
     def press(self, runner, app, name, role=None, fallback_key="ret"):
         argv = ["act", app, name] + ([role] if role else [])
         res = self.atspi(runner, *argv)
         if not res or "error" in res:
             raise Fail(f"could not press {name!r}: {res}")
-        if res["how"] == "focus":
+        if res["how"] == "none":
+            self.kb_focus(runner, app, lambda n: norm(n["name"]) == norm(name))
             self.key(fallback_key)
         time.sleep(2)
         return res
 
     def row(self, runner, app, text):
-        res = self.atspi(runner, "row", app, text)
-        if not res or "error" in res:
-            raise Fail(f"no row {text!r}: {res}")
-        if res["how"] == "focus":
-            self.key("ret")
+        t = text.lower()
+        self.kb_focus(runner, app, lambda n: n["role"] == "list item")
+        self.kb_focus(runner, app, lambda n: n["role"] == "list item" and t in n["name"].lower(), keys=("down",))
+        self.key("ret")
         time.sleep(2)
 
     def focus_and_type(self, runner, app, name, text, role=None):
-        res = self.atspi(runner, "focus", app, name, *([role] if role else []))
-        if not res or "error" in res:
-            raise Fail(f"could not focus {name!r}: {res}")
+        self.kb_focus(runner, app, lambda n: norm(n["name"]) == norm(name) or
+                      (n["role"] in ("password text", "text", "entry") and norm(name) in norm(n["name"] + n["text"])))
         time.sleep(0.5)
         self.type(text)
         time.sleep(0.5)

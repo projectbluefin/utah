@@ -52,7 +52,7 @@ def states(node):
     except Exception:
         return set()
     names = set()
-    for st in ("SHOWING", "VISIBLE", "SENSITIVE", "FOCUSED", "CHECKED", "EDITABLE", "SELECTED", "ENABLED"):
+    for st in ("SHOWING", "VISIBLE", "SENSITIVE", "FOCUSED", "CHECKED", "EDITABLE", "SELECTED", "ENABLED", "ACTIVE"):
         if ss.contains(getattr(Atspi.StateType, st)):
             names.add(st.lower())
     return names
@@ -135,11 +135,9 @@ def press(node):
         if preferred in acts:
             Atspi.Action.do_action(node, acts.index(preferred))
             return f"action:{preferred}"
-    if acts:
-        Atspi.Action.do_action(node, 0)
-        return f"action:{acts[0]}"
-    Atspi.Component.grab_focus(node)
-    return "focus"
+    # GTK 4 implements neither Component.GrabFocus nor actions on list rows;
+    # the caller falls back to keyboard navigation.
+    return "none"
 
 
 def find(app, name, role):
@@ -171,6 +169,18 @@ def main(argv):
             how = "focus"
         print(json.dumps({"how": how, "path": path, "role": node.get_role_name(), "name": node.get_name()}))
         return 0
+    if cmd == "frame-action":
+        # GTK 4 exposes a window's GActions (win.advance, ...) as AT-SPI
+        # actions on the frame; running one is what the bound button does.
+        for node, path, _ in showing_nodes(app):
+            if node.get_role_name() == "frame":
+                acts = actions_of(node)
+                if argv[3] in acts:
+                    Atspi.Action.do_action(node, acts.index(argv[3]))
+                    print(json.dumps({"how": f"action:{argv[3]}", "path": path}))
+                    return 0
+        print(json.dumps({"error": f"no frame action {argv[3]!r}"}))
+        return 2
     if cmd == "focus-path":
         for node, path, _ in showing_nodes(app):
             if path == argv[3]:
