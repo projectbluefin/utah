@@ -155,6 +155,18 @@ jobs:
           sudo podman build --layers=false -t localhost/utah-raw:ci \
             --build-arg SOURCE_IMAGE="$SOURCE_REF" -f iso/raw/Containerfile iso/raw 2>&1 | tail -150
           echo "IMAGE_BUILD_SECONDS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
+      # ADR-0001 decision 6: Flatpaks live on the medium's stateful /var, never
+      # in an image, so bootc updates cannot bring them back.
+      - name: Assert the published image and the live layer carry no Flatpaks
+        env:
+          SOURCE_REF: ${{ matrix.ref }}
+        run: |
+          set -euo pipefail
+          for ref in "$SOURCE_REF" localhost/utah-raw:ci; do
+            sudo podman run --rm --entrypoint sh "$ref" -c \
+              'test ! -e /var/lib/flatpak || test -z "$(ls -A /var/lib/flatpak)"' \
+              || { echo "::error::$ref has content in /var/lib/flatpak"; exit 1; }
+          done
       - name: Build the raw medium (bootc install to-filesystem, once)
         env:
           SOURCE_REF: ${{ matrix.ref }}
@@ -167,14 +179,23 @@ jobs:
             UTAH_RAW_SSH_PUBKEY="$WORK/id_ed25519.pub" UTAH_RAW_DEBUG_SSHD=1 UTAH_RAW_EVIDENCE="$WORK/raw-evidence" \
             UTAH_RAW_BTRFS_COMPRESS="$BTRFS_COMPRESS" \
             bash iso/raw/build-raw-image.sh localhost/utah-raw:ci "$WORK/medium.raw" "${SOURCE_REF%@*}:testing"
-      - name: Shrink the medium to its content
+      - name: Bake the Flatpaks into the medium and shrink it
         run: |
           set -euo pipefail
-          sudo python3 iso/raw/measure_medium.py "$WORK/medium.raw" "$WORK/raw-evidence/size-1-installed.json" \
+          ev="$WORK/raw-evidence"
+          sudo python3 iso/raw/measure_medium.py "$WORK/medium.raw" "$ev/size-1-installed.json" \
             --label "after bootc install" --formats zstd-3
-          sudo env UTAH_RAW_EVIDENCE="$WORK/raw-evidence" bash iso/raw/shrink-raw-image.sh localhost/utah-raw:ci "$WORK/medium.raw"
+          # The trade-off: the same medium without Flatpaks (online first-boot
+          # preinstall instead), shrunk and measured, then discarded.
+          sudo cp --sparse=always "$WORK/medium.raw" "$WORK/no-flatpaks.raw"
+          sudo env UTAH_RAW_EVIDENCE="$ev/no-flatpaks" bash iso/raw/shrink-raw-image.sh localhost/utah-raw:ci "$WORK/no-flatpaks.raw"
+          sudo python3 iso/raw/measure_medium.py "$WORK/no-flatpaks.raw" "$ev/size-2-no-flatpaks.json" \
+            --label "shrunk, no Flatpaks (not tested)" --formats zstd-3,zstd-19-long
+          sudo rm -f "$WORK/no-flatpaks.raw"
+          sudo env UTAH_RAW_EVIDENCE="$ev" bash iso/raw/bake-flatpaks.sh localhost/utah-raw:ci "$WORK/medium.raw"
+          sudo env UTAH_RAW_EVIDENCE="$ev" bash iso/raw/shrink-raw-image.sh localhost/utah-raw:ci "$WORK/medium.raw"
           sudo chown "$USER" "$WORK/medium.raw"
-          sudo chown -R "$USER" "$WORK/raw-evidence"
+          sudo chown -R "$USER" "$ev"
           sudo podman rmi -af >/dev/null || true
           df -h / /mnt
       - name: End-to-end with screenshots
@@ -183,14 +204,15 @@ jobs:
         run: |
           set -euo pipefail
           python3 iso/raw/raw_e2e.py --raw "$WORK/medium.raw" --work "$WORK/e2e" --install "$INSTALL" \
-            --candidate "$CANDIDATE" --ssh-key "$WORK/id_ed25519" 2>&1 | tee "$WORK/e2e.log"
+            --candidate "$CANDIDATE" --ssh-key "$WORK/id_ed25519" \
+            --flatpaks "$WORK/raw-evidence/flatpak-apps.txt" 2>&1 | tee "$WORK/e2e.log"
       - name: Measure the medium
         if: always()
         run: |
           set -euo pipefail
           test -f "$WORK/medium.raw" || exit 0
-          python3 iso/raw/measure_medium.py "$WORK/medium.raw" "$WORK/raw-evidence/size-2-shrunk.json" \
-            --label "shrunk (tested medium)" --formats "$FORMATS"
+          python3 iso/raw/measure_medium.py "$WORK/medium.raw" "$WORK/raw-evidence/size-3-flatpaks.json" \
+            --label "shrunk + Flatpaks (tested medium)" --formats "$FORMATS"
       - name: Compare with the ISO/fisherman path
         if: always()
         env:

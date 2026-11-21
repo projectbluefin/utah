@@ -178,6 +178,7 @@ def image_metrics(evidence, raw_evidence, sizes, image_build_seconds):
     results = read_json(Path(evidence) / "results.json") or {}
     medium = read_json(Path(raw_evidence) / "medium.json") or {}
     shrink = read_json(Path(raw_evidence) / "shrink.json") or {}
+    flatpaks = read_json(Path(raw_evidence) / "flatpaks.json") or {}
     log_path = Path(evidence) / "utah-install.log"
     log_text = log_path.read_text(errors="replace") if log_path.exists() else ""
     installed = INSTALLED_RE.search(log_text)
@@ -197,6 +198,7 @@ def image_metrics(evidence, raw_evidence, sizes, image_build_seconds):
         "bootc_switch_seconds": timings.get("bootc-switch-seconds"),
         "stages": results.get("stages") or [],
         "boots": results.get("boots") or {},
+        "flatpaks": {"baked": flatpaks or None, "checks": results.get("flatpaks") or {}},
     }
 
 
@@ -208,6 +210,18 @@ def secs(n):
     if n is None:
         return "n/a"
     return f"{n // 60} min {n % 60:02d} s" if n >= 60 else f"{n} s"
+
+
+def flatpak_cell(flatpaks):
+    baked, checks = flatpaks.get("baked"), flatpaks.get("checks") or {}
+    if not baked:
+        return "none baked"
+    text = f"{baked['apps']} apps, {gib(baked['bytes'])} in the medium's /var (baked in {secs(baked['seconds'])})"
+    if checks:
+        problems = [p for c in checks.values() for p in c.get("problems", [])]
+        persisted = ", a removed app stayed removed through switch and rollback" if "after bootc rollback" in checks else ""
+        text += "; " + ("; ".join(problems) if problems else f"all present on {', '.join(checks)}{persisted}")
+    return text
 
 
 def render(comparison):
@@ -238,6 +252,7 @@ def render(comparison):
     lines += [
         f"| SELinux | {selinux} | live: {fm_selinux.get('live', 'n/a')}; installed: {fm_selinux.get('installed', 'n/a')} |",
         f"| Failed units | {failed} | {fm.get('failed_units', 'n/a')} |",
+        f"| Offline Flatpaks | {flatpak_cell(img.get('flatpaks') or {})} | baked into the ISO's live squashfs; present offline on the installed disk (luks trailing check) |",
         "",
         "| Image-based stage | Result | Fisherman phase | Result |",
         "|---|---|---|---|",
