@@ -192,6 +192,13 @@ class ShrinkPlanTests(unittest.TestCase):
         self.assertLess(sysfs, shrink.index("btrfs balance start"))
         self.assertLess(shrink.index("btrfs balance start"), shrink.rindex("btrfs filesystem resize"))
 
+    def test_the_root_is_trimmed_again_after_the_resize(self):
+        # Chunks the resize empties below the cut keep their data in the
+        # file until trimmed (run 44910214722).
+        shrink = (RAW / "shrink-raw-image.sh").read_text()
+        resize = shrink.rindex("btrfs filesystem resize")
+        self.assertIn("fstrim -v /m", shrink[resize:shrink.index("btrfs inspect-internal dump-super")])
+
     def test_compression_rewrites_the_files_after_the_flatpak_bake(self):
         # ostree and flatpak fallocate their objects, and btrfs does not
         # compress writes into preallocated extents, so compress-force on the

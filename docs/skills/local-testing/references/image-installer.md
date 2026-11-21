@@ -13,7 +13,7 @@ nothing. Tracking issue: #1403. History: spike #1399.
 | Live-capable layer on a published digest: OS-Installer from a pinned `hanthor/os-installer` commit (`OSI_REF`, fetched by commit and compared after checkout), `utah.live` units, initramfs with `systemd-volatile-root` and the live overlay ordered before both root setups (`ostree-prepare-root`, `bootc-root-setup`) | `iso/raw/Containerfile`, `iso/raw/src/` |
 | Raw medium: GPT BIOS-BOOT, 512 MiB ESP, 1 GiB ext4 `/boot`, btrfs root; one `bootc install to-filesystem --generic-image --karg rhgb --karg quiet`, with `--composefs-backend` when the image's kernel has the btrfs fs-verity fix (`UTAH_RAW_BACKEND=auto`, `scripts/kernel_verity.py`; ostree otherwise); "Utah Live" BLS entry as GRUB default; `EFI/BOOT` fallback | `iso/raw/build-raw-image.sh`, `iso/raw/medium.py`, `scripts/kernel_verity.py` |
 | Offline Flatpaks in the medium's stateful `/var` (`state/os/default/var` on composefs, the stateroot's `var` on ostree), never in an image: the set the ISO bakes (`system-flatpaks.Brewfile` apps via `scripts/verify-desktop-contract.py --flatpaks`, `--no-related`, listed runtimes pinned) plus `flatpak preinstall` of the image's `preinstall.d`, run in the image with that directory bind-mounted, then `setfiles` with the image's contexts | `iso/raw/bake-flatpaks.sh` |
-| Shrink to content: fstrim, btrfs balance + resize to minimum (+256 MiB), cut the root partition and the file, rewrite the backup GPT; `size-breakdown.txt` shows what takes the space | `iso/raw/shrink-raw-image.sh`, `medium.py shrink-plan` |
+| Shrink to content: fstrim, btrfs balance + resize to minimum (+256 MiB, stepping up while btrfs refuses), fstrim again, cut the root partition and the file, rewrite the backup GPT; `size-breakdown.txt` shows what takes the space | `iso/raw/shrink-raw-image.sh`, `medium.py shrink-plan` |
 | End to end with screenshots and `evidence/results.json`; on composefs, fs-verity checks on every installed boot | `iso/raw/raw_e2e.py`, `composefs_check.py`, `atspi_drive.py`, `vte_term.py` |
 | Size per step (raw, allocated, zstd -3, zstd -19 --long, xz -9, pack/unpack time) | `iso/raw/measure_medium.py` |
 | Comparison with the Post-Testing E2E `luks` job for the same digest | `iso/raw/compare_paths.py` |
@@ -46,6 +46,15 @@ step if compression drops it. Every installed boot of the E2E checks the
 strict karg, the `composefs:<digest>` root and verity on every object; the
 first boot reads every object end to end and fails on a read error or a
 `FILE CORRUPTED` report.
+
+composefs costs space that ostree does not: btrfs keeps each object's
+fs-verity Merkle tree (SHA-512, at least one 4 KiB block per object over
+4 KiB) in metadata, which is DUP. The no-Flatpak root of run 44910214722 had
+514 MB of metadata against 215 MB on ostree (run 44897756832), so about
+0.6 GB more on disk, and the hashes do not compress. The full metadata also
+makes the shrink step's first resize fail with ENOSPC on composefs; it steps
+up and then trims again, or the chunks the resize moved stay allocated in
+the file.
 
 ### Backend selection
 

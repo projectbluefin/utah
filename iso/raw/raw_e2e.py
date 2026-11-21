@@ -70,6 +70,16 @@ SSH_OPTS = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/nul
             "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=5",
             "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=8"]
 
+# /etc/resolv.conf on a boot (target, SELinux label), how often resolved
+# could not open it, and the boot's SELinux denials: the composefs live session
+# logged "Failed to open /etc/resolv.conf: Permission denied" 78 times (run
+# 44910214722), the ostree one never.
+RESOLV_FACTS = ("echo '== /etc/resolv.conf'; ls -laZ /etc/resolv.conf; readlink -f /etc/resolv.conf; "
+                "ls -laZ /run/systemd/resolve 2>&1; "
+                "journalctl -b --no-pager -o cat -u systemd-resolved | grep -c 'resolv.conf: Permission denied'; "
+                "journalctl -b --no-pager -o cat _TRANSPORT=audit | grep -o 'avc: *denied.*' "
+                "| sed -E 's/ (pid|ino)=[0-9]+//g' | sort | uniq -c | sort -rn | head -20")
+
 # The stages results.json reports, in order. compare_paths.py lines them up
 # against the ISO/fisherman luks job's phases.
 STAGES = ("live boot", "install", "first boot unlock", "initial setup",
@@ -581,7 +591,8 @@ class Harness:
         runner = lambda c: self.ssh("liveuser", "export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus; " + c, password=live_pw)  # noqa: E731
         self.live_runner = runner
         facts = self.ssh("liveuser", "cat /proc/cmdline; echo; findmnt -no FSTYPE,SOURCE,OPTIONS /sysroot; findmnt -no FSTYPE,OPTIONS /; getenforce; "
-                         "lsblk -o NAME,SIZE,RO,TYPE,FSTYPE,LABEL,PARTLABEL,MOUNTPOINTS; systemctl --failed --no-legend; sudo bootc status || true",
+                         "lsblk -o NAME,SIZE,RO,TYPE,FSTYPE,LABEL,PARTLABEL,MOUNTPOINTS; systemctl --failed --no-legend; sudo bootc status || true; "
+                         + RESOLV_FACTS.replace("journalctl", "sudo journalctl"),
                          password=live_pw, check=False)
         self.save("live-facts.txt", facts)
         self.record_boot("live", "liveuser", password=live_pw)
@@ -754,7 +765,8 @@ class Harness:
             raise Fail(f"{phase}: graphical.target not reached")
         facts = self.ssh("root", "cat /proc/cmdline; echo; findmnt -no FSTYPE,SOURCE /sysroot; findmnt -no FSTYPE,SOURCE,OPTIONS /boot; "
                          "lsblk -f; getenforce; cat /etc/crypttab; "
-                         "systemctl is-active gdm.service graphical.target; systemctl --failed --no-legend; bootc status", check=False)
+                         "systemctl is-active gdm.service graphical.target; systemctl --failed --no-legend; bootc status; "
+                         + RESOLV_FACTS, check=False)
         self.save(f"facts-{slug(phase)}.txt", facts)
         self.record_boot(phase, "root")
         if "utah.live" in facts.split("\n", 1)[0]:

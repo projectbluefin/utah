@@ -17,7 +17,7 @@
 #      (full balance into UTAH_RAW_SHRINK_CHUNK_MIB
 #      chunks, default 256, the kernel minimum) and shrink it to its
 #      allocated chunks plus UTAH_RAW_SHRINK_MARGIN_MIB (default 256),
-#      stepping up by 256 MiB while btrfs refuses;
+#      stepping up by 256 MiB while btrfs refuses, then trim the root again;
 #   4. cut the root partition and the file right after it (medium.py
 #      shrink-plan), then write the partition table again for the new size
 #      (medium.py shrunk-dump): a truncated file has no backup GPT, and the
@@ -131,6 +131,13 @@ fs_bytes="$(podman run --rm --privileged -v /dev:/dev -e LOOP="${loop}" -e ROOT=
         alloc=$(btrfs filesystem usage -b /m | awk "/Device allocated:/ {print \$3}")
         target=$(( (alloc + MARGIN + 1048575) / 1048576 * 1048576 ))
         report "btrfs allocated ${alloc} of ${dev}; shrinking to ${target}"
+        # On composefs the first resize usually runs out of space: fs-verity
+        # keeps the Merkle tree of every object in btrfs metadata (514 MB of
+        # metadata against 215 MB on ostree, no-Flatpak media of run
+        # 44910214722 and 44897756832), the balance packs it nearly full, and
+        # relocating a metadata chunk then needs a new DUP chunk below the
+        # cut. A local copy of the composefs objects needed 1.25 GiB over the
+        # allocation instead of 256 MiB.
         until btrfs filesystem resize "${target}" /m >&2; do
             # A resize that runs out of space can abort its transaction and
             # leave the filesystem read-only (run 44917186176: ENOSPC, then
@@ -143,6 +150,10 @@ fs_bytes="$(podman run --rm --privileged -v /dev:/dev -e LOOP="${loop}" -e ROOT=
             (( target < dev )) || { report "cannot shrink below ${dev}"; exit 1; }
             report "retrying at ${target}"
         done
+        # Trim again: chunks the resize emptied below the cut keep their old
+        # data in the file until trimmed (the no-Flatpak composefs medium of
+        # run 44910214722 was about 0.9 GB more allocated than its content).
+        fstrim -v /m >&2
         umount /m
         btrfs inspect-internal dump-super "${ROOT}" | awk "\$1 == \"dev_item.total_bytes\" {print \$2}"
     ' 2>"${EVIDENCE}/size-breakdown.txt")"
