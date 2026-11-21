@@ -8,12 +8,13 @@ has no selinuxfs. The contract's `[selinux] modules` list is checked with
 `semodule -l`. If the module is missing, or semodule is missing or can't list
 modules, the build fails.
 
-Load modules only at build time. Hummingbird keeps the module store at
-`store-root=/usr/lib/selinux`, which is read-only once booted. On an installed
-system, `semodule -i` and even `semodule -l` fail (#551). The store survives
-updates: ostree's per-deployment `semodule -N --refresh` rebuilds from the new
-image's store, and `utah-fix-home-labels --check` proves that this rebuild
-leaves the home-directory rules unchanged.
+Ship image modules from the build. `utah-relocate-selinux-store` moves the
+store from Hummingbird's `/usr/lib/selinux` to `store-root=/etc/selinux` (#551),
+so users can also add local modules on a booted system, but only the build's
+modules are part of the image. On update, ostree's per-deployment
+`semodule -N --refresh` rebuilds from the merged `/etc` store, and
+`utah-fix-home-labels --check` proves that this rebuild leaves the
+home-directory rules unchanged.
 
 ## utah_bootc_probe (#1198)
 

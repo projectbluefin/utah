@@ -12,8 +12,8 @@ those two domains and grants nothing: an allow would let every such service
 write labels the policy does not know and would change what bootc's probe
 decides.
 
-The module store is on read-only /usr once booted (#551), so the build loads
-it, and the desktop contract's [selinux] list makes the build fail if it is
+The image ships the module from the build (the store lives under /etc/selinux
+since #551), and the desktop contract's [selinux] list makes the build fail if it is
 not loaded (`semodule -l`, tests/test_desktop_contract_verify.py).
 """
 import re

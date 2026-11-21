@@ -104,6 +104,7 @@ COPY scripts/install-packages.py \
      scripts/mirror-shim.sh \
      scripts/verify-efi-chain.sh \
      scripts/fix-home-labels.sh \
+     scripts/relocate-selinux-store.sh \
      scripts/regenerate-initramfs.sh \
      iso/scripts/live-kernel.py \
      scripts/install-v4l2loopback.sh \
@@ -225,6 +226,7 @@ RUN --mount=type=bind,from=v4l2loopback,source=/out,target=/tmp/utah-v4l2loopbac
                 mirror-shim.sh:utah-mirror-shim \
                 verify-efi-chain.sh:utah-verify-efi-chain \
                 fix-home-labels.sh:utah-fix-home-labels \
+                relocate-selinux-store.sh:utah-relocate-selinux-store \
                 regenerate-initramfs.sh:utah-regenerate-initramfs \
                 live-kernel.py:utah-live-kernel \
                 install-v4l2loopback.sh:utah-install-v4l2loopback; do \
@@ -289,6 +291,11 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
       /usr/share/utah/base.toml /usr/share/utah/utah.toml && \
     IMAGE_FLAVOR=main /usr/local/libexec/utah-verify-rpm-contract \
       /usr/share/utah/base.toml /usr/share/utah/utah.toml && \
+    # The SELinux module store moves from Hummingbird's read-only
+    # /usr/lib/selinux to /etc/selinux so setsebool -P, semanage and semodule
+    # work on a booted system (#551). It runs before the home-label rebuild
+    # below so the rebuilt policy lands in the store's final location.
+    /usr/local/libexec/utah-relocate-selinux-store && \
     /usr/local/libexec/utah-fix-home-labels && \
     DNF="$(command -v dnf5 || command -v dnf)" && \
     "$DNF" clean all && rm -rf /var/cache/libdnf5 /var/cache/dnf && \
@@ -357,8 +364,8 @@ ARG UUPD_SHA256=d8d420a153de11589abad3292eef2131a75ac3487414065a2661a558ef0d027c
 # failure printed nothing at all -- see the comment at the top of that script.
 #
 # Utah's SELinux policy modules load here, before the desktop contract that
-# lists them under [selinux]: the module store is under read-only /usr once
-# booted (#551), so the build is the only place to change it. -n: no reload,
+# lists them under [selinux]. The store was relocated to /etc/selinux above
+# (#551), so the modules land there and ship as image /etc. -n: no reload,
 # the build has no selinuxfs. utah_bootc_probe dontaudits bootc's expected
 # mac_admin probe from plain services (#1198; the .cil says why not allow), and
 # systemd_nsresourced_t's dac_read_search on its own domain (#1329).
