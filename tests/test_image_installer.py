@@ -365,6 +365,15 @@ class OfflineFlatpakTests(unittest.TestCase):
         e2e = steps[names.index("End-to-end with screenshots")]["run"]
         self.assertIn("--flatpaks", e2e)
 
+    def test_flatpaks_are_on_by_default_and_a_dispatch_can_turn_them_off(self):
+        workflow = yaml.safe_load(WORKFLOW.read_text())
+        flag = workflow[True]["workflow_dispatch"]["inputs"]["flatpaks"]
+        self.assertEqual((flag["type"], flag["default"]), ("boolean", True))
+        # A bare inputs.flatpaks is null on schedule and pull_request, which
+        # would turn the bake off there.
+        self.assertEqual(workflow["jobs"]["e2e"]["env"]["FLATPAKS"],
+                         "${{ github.event_name != 'workflow_dispatch' || inputs.flatpaks }}")
+
     def test_comparison_reports_baked_flatpaks_and_removal(self):
         cell = compare.flatpak_cell({"baked": {"apps": 20, "bytes": 3 * 2**30, "seconds": 400},
                                      "checks": {"first boot": {"problems": []},

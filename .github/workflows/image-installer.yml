@@ -41,6 +41,10 @@ on:
         description: Build the medium's btrfs root with compress-force=<value> (e.g. zstd:3); empty = off
         type: string
         default: ''
+      flatpaks:
+        description: Bake the image's preinstall Flatpaks into the medium's /var (off = online first-boot preinstall)
+        type: boolean
+        default: true
       formats:
         description: Download formats to measure (iso/raw/measure_medium.py; xz-9 adds ~20 min)
         type: string
@@ -126,6 +130,8 @@ jobs:
       WORK: /mnt/image-installer
       INSTALL: ${{ inputs.install || 'gui' }}
       BTRFS_COMPRESS: ${{ inputs.btrfs_compress }}
+      # Scheduled and PR runs bake them; a dispatch can turn them off.
+      FLATPAKS: ${{ github.event_name != 'workflow_dispatch' || inputs.flatpaks }}
       FORMATS: ${{ inputs.formats || 'zstd-3,zstd-19-long' }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -185,14 +191,17 @@ jobs:
           ev="$WORK/raw-evidence"
           sudo python3 iso/raw/measure_medium.py "$WORK/medium.raw" "$ev/size-1-installed.json" \
             --label "after bootc install" --formats zstd-3
-          # The trade-off: the same medium without Flatpaks (online first-boot
-          # preinstall instead), shrunk and measured, then discarded.
-          sudo cp --sparse=always "$WORK/medium.raw" "$WORK/no-flatpaks.raw"
-          sudo env UTAH_RAW_EVIDENCE="$ev/no-flatpaks" bash iso/raw/shrink-raw-image.sh localhost/utah-raw:ci "$WORK/no-flatpaks.raw"
-          sudo python3 iso/raw/measure_medium.py "$WORK/no-flatpaks.raw" "$ev/size-2-no-flatpaks.json" \
-            --label "shrunk, no Flatpaks (not tested)" --formats zstd-3,zstd-19-long
-          sudo rm -f "$WORK/no-flatpaks.raw"
-          sudo env UTAH_RAW_EVIDENCE="$ev" bash iso/raw/bake-flatpaks.sh localhost/utah-raw:ci "$WORK/medium.raw"
+          if [[ "$FLATPAKS" == true ]]; then
+            # The trade-off: the same medium without Flatpaks (online first-boot
+            # preinstall instead), shrunk and measured, then discarded. Dispatch
+            # with flatpaks=false to run the E2E on that medium.
+            sudo cp --sparse=always "$WORK/medium.raw" "$WORK/no-flatpaks.raw"
+            sudo env UTAH_RAW_EVIDENCE="$ev/no-flatpaks" bash iso/raw/shrink-raw-image.sh localhost/utah-raw:ci "$WORK/no-flatpaks.raw"
+            sudo python3 iso/raw/measure_medium.py "$WORK/no-flatpaks.raw" "$ev/size-2-no-flatpaks.json" \
+              --label "shrunk, no Flatpaks (not tested)" --formats zstd-3,zstd-19-long
+            sudo rm -f "$WORK/no-flatpaks.raw"
+            sudo env UTAH_RAW_EVIDENCE="$ev" bash iso/raw/bake-flatpaks.sh localhost/utah-raw:ci "$WORK/medium.raw"
+          fi
           sudo env UTAH_RAW_EVIDENCE="$ev" bash iso/raw/shrink-raw-image.sh localhost/utah-raw:ci "$WORK/medium.raw"
           sudo chown "$USER" "$WORK/medium.raw"
           sudo chown -R "$USER" "$ev"
@@ -203,16 +212,19 @@ jobs:
           CANDIDATE: ${{ matrix.candidate }}
         run: |
           set -euo pipefail
+          baked=()
+          [[ "$FLATPAKS" != true ]] || baked=(--flatpaks "$WORK/raw-evidence/flatpak-apps.txt")
           python3 iso/raw/raw_e2e.py --raw "$WORK/medium.raw" --work "$WORK/e2e" --install "$INSTALL" \
-            --candidate "$CANDIDATE" --ssh-key "$WORK/id_ed25519" \
-            --flatpaks "$WORK/raw-evidence/flatpak-apps.txt" 2>&1 | tee "$WORK/e2e.log"
+            --candidate "$CANDIDATE" --ssh-key "$WORK/id_ed25519" "${baked[@]}" 2>&1 | tee "$WORK/e2e.log"
       - name: Measure the medium
         if: always()
         run: |
           set -euo pipefail
           test -f "$WORK/medium.raw" || exit 0
-          python3 iso/raw/measure_medium.py "$WORK/medium.raw" "$WORK/raw-evidence/size-3-flatpaks.json" \
-            --label "shrunk + Flatpaks (tested medium)" --formats "$FORMATS"
+          if [[ "$FLATPAKS" == true ]]; then out=size-3-flatpaks.json label="shrunk + Flatpaks (tested medium)"
+          else out=size-3-no-flatpaks.json label="shrunk, no Flatpaks (tested medium)"; fi
+          python3 iso/raw/measure_medium.py "$WORK/medium.raw" "$WORK/raw-evidence/$out" \
+            --label "$label" --formats "$FORMATS"
       - name: Compare with the ISO/fisherman path
         if: always()
         env:

@@ -50,7 +50,9 @@ requests that touch `iso/raw/**`, the workflow, or
 `ghcr.io/projectbluefin/<image>@sha256:...`), `all_flavors`, `install`
 (`gui` drives OS-Installer's window through a QEMU USB tablet at AT-SPI
 extents; `script` runs the same `install.sh` over SSH), `btrfs_compress`
-(build the root with `compress-force=<value>`), `formats`.
+(build the root with `compress-force=<value>`), `flatpaks` (default on: bake
+the preinstall set into the medium's `/var`; off leaves it to the online
+first-boot preinstall), `formats`.
 
 The job summary holds the comparison table; the
 `image-installer-<image>` artifact holds screenshots, `contact-sheet.png`,
