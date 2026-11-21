@@ -1,0 +1,234 @@
+name: Image-based installer (experimental)
+
+# The experimental install path of docs/adr/0001-image-based-installer.md,
+# run in parallel with the live ISO + bootc-installer/fisherman path so the two
+# can be compared on the same :testing digest. It is NOT a gate: nothing here
+# is a required check or in post-testing-e2e.yml's promote-to-testing needs,
+# it publishes nothing and moves no tag.
+#
+# Per flavor:
+#   1. build a live-capable layer on the exact :testing digest (iso/raw/Containerfile:
+#      OS-Installer from a pinned hanthor/os-installer commit, utah.live units);
+#   2. `bootc install to-filesystem` it once into a raw disk image
+#      (iso/raw/build-raw-image.sh), then shrink that medium to its content
+#      (iso/raw/shrink-raw-image.sh);
+#   3. iso/raw/raw_e2e.py: live boot -> OS-Installer GUI install into LUKS2 ->
+#      Plymouth unlock -> gnome-initial-setup -> desktop + bootc status ->
+#      bootc switch -> bootc rollback, with a screenshot of every stage;
+#   4. measure the medium (raw, allocated, compressed, time to pack/unpack;
+#      iso/raw/measure_medium.py) and compare with the latest Post-Testing E2E
+#      luks job for the same digest (iso/raw/compare_paths.py): job summary
+#      and comparison.json.
+# Screenshots, logs and the comparison are uploaded; the medium and disks are
+# never uploaded (CI media carry test credentials).
+on:
+  workflow_dispatch:
+    inputs:
+      image_ref:
+        description: Exact image to install (repo@sha256:...); default each flavor's current :testing digest
+        type: string
+        default: ''
+      all_flavors:
+        description: Every flavor in config/flavors.json (default main only)
+        type: boolean
+        default: false
+      install:
+        description: gui drives OS-Installer's window; script runs the same install.sh over SSH
+        type: choice
+        options: [gui, script]
+        default: gui
+      btrfs_compress:
+        description: Build the medium's btrfs root with compress-force=<value> (e.g. zstd:3); empty = off
+        type: string
+        default: ''
+      formats:
+        description: Download formats to measure (iso/raw/measure_medium.py)
+        type: string
+        default: zstd-3,zstd-19-long,xz-9
+  schedule:
+    # Nightly, after the 04:00-06:00 UTC testing build and Post-Testing E2E.
+    - cron: '41 7 * * *'
+  pull_request:
+    paths:
+      - iso/raw/**
+      - .github/workflows/image-installer.yml
+      - tests/test_image_installer.py
+
+permissions: {}
+
+concurrency:
+  group: image-installer-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        timeout-minutes: 10
+        with:
+          persist-credentials: false
+      - id: matrix
+        timeout-minutes: 10
+        env:
+          IMAGE_REF: ${{ inputs.image_ref }}
+          ALL_FLAVORS: ${{ inputs.all_flavors && 'true' || 'false' }}
+        run: |
+          set -euo pipefail
+          # The bootc switch target: the newest testing-YYYYMMDD-* digest that is not the baseline.
+          candidate() {
+            local repo="$1" base="$2" tag d
+            for tag in $(skopeo list-tags "docker://$repo" | jq -r '.Tags[]' | grep -E '^testing-[0-9]{8}-' | sort -r | head -8); do
+              d=$(skopeo inspect --format '{{.Digest}}' "docker://$repo:$tag")
+              if [[ "$d" != "$base" ]]; then echo "$repo@$d"; return; fi
+            done
+            echo "no candidate digest for $repo" >&2; return 1
+          }
+          entries=()
+          if [[ -n "$IMAGE_REF" ]]; then
+            [[ "$IMAGE_REF" =~ ^ghcr\.io/projectbluefin/[a-z0-9-]+@sha256:[0-9a-f]{64}$ ]] \
+              || { echo "image_ref must be ghcr.io/projectbluefin/<image>@sha256:<digest>" >&2; exit 1; }
+            images=("$(basename "${IMAGE_REF%@*}")")
+          elif [[ "$ALL_FLAVORS" == true ]]; then
+            mapfile -t images < <(python3 scripts/flavors.py images | jq -r '.[].image')
+          else
+            mapfile -t images < <(python3 scripts/flavors.py list-main | jq -r '.[]' | xargs -n1 python3 scripts/flavors.py image)
+          fi
+          for image in "${images[@]}"; do
+            repo="ghcr.io/projectbluefin/$image"
+            if [[ -n "$IMAGE_REF" ]]; then digest="${IMAGE_REF#*@}"
+            else digest=$(skopeo inspect --format '{{.Digest}}' "docker://$repo:testing"); fi
+            entries+=("$(jq -cn --arg image "$image" --arg ref "$repo@$digest" --arg digest "$digest" \
+              --arg candidate "$(candidate "$repo" "$digest")" '{image:$image,ref:$ref,digest:$digest,candidate:$candidate}')")
+          done
+          matrix=$(printf '%s\n' "${entries[@]}" | jq -cs '{include: .}')
+          echo "$matrix" | jq .
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  e2e:
+    name: e2e (${{ matrix.image }})
+    needs: resolve
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    permissions:
+      contents: read
+      # compare_paths.py reads the Post-Testing E2E luks job's log and artifacts.
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
+    env:
+      WORK: /mnt/image-installer
+      INSTALL: ${{ inputs.install || 'gui' }}
+      BTRFS_COMPRESS: ${{ inputs.btrfs_compress }}
+      FORMATS: ${{ inputs.formats || 'zstd-3,zstd-19-long,xz-9' }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        timeout-minutes: 10
+        with:
+          persist-credentials: false
+      - name: Prepare host (podman storage and work dir on /mnt, QEMU, KVM)
+        timeout-minutes: 40
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo apt-get update
+          sudo apt-get install -y podman skopeo qemu-system-x86 qemu-utils ovmf sshpass ffmpeg imagemagick zstd xz-utils tesseract-ocr
+          sudo mkdir -p /mnt/containers /var/lib/containers "$WORK"
+          sudo mount --bind /mnt/containers /var/lib/containers
+          sudo chown "$USER" "$WORK"
+          test -c /dev/kvm && sudo chmod a+rw /dev/kvm
+          df -h / /mnt
+      - name: Build the live-capable image layer
+        timeout-minutes: 60
+        env:
+          SOURCE_REF: ${{ matrix.ref }}
+        run: |
+          set -euo pipefail
+          start=$(date +%s)
+          sudo podman pull -q "$SOURCE_REF"
+          sudo podman build --layers=false -t localhost/utah-raw:ci \
+            --build-arg SOURCE_IMAGE="$SOURCE_REF" -f iso/raw/Containerfile iso/raw 2>&1 | tail -150
+          echo "IMAGE_BUILD_SECONDS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
+      - name: Build the raw medium (bootc install to-filesystem, once)
+        env:
+          SOURCE_REF: ${{ matrix.ref }}
+        run: |
+          set -euo pipefail
+          ssh-keygen -q -t ed25519 -N '' -f "$WORK/id_ed25519"
+          # Diagnostics for the CI live entry only: journal on the serial console,
+          # no Plymouth hiding it. SELinux stays enforcing: the raw image is labeled.
+          sudo env UTAH_RAW_LIVE_KARGS="utah.live.debug systemd.journald.forward_to_console=1 plymouth.enable=0 rd.plymouth=0" \
+            UTAH_RAW_SSH_PUBKEY="$WORK/id_ed25519.pub" UTAH_RAW_DEBUG_SSHD=1 UTAH_RAW_EVIDENCE="$WORK/raw-evidence" \
+            UTAH_RAW_BTRFS_COMPRESS="$BTRFS_COMPRESS" \
+            bash iso/raw/build-raw-image.sh localhost/utah-raw:ci "$WORK/medium.raw" "${SOURCE_REF%@*}:testing"
+      - name: Shrink the medium to its content
+        run: |
+          set -euo pipefail
+          sudo python3 iso/raw/measure_medium.py "$WORK/medium.raw" "$WORK/raw-evidence/size-1-installed.json" \
+            --label "after bootc install" --formats zstd-3
+          sudo env UTAH_RAW_EVIDENCE="$WORK/raw-evidence" bash iso/raw/shrink-raw-image.sh localhost/utah-raw:ci "$WORK/medium.raw"
+          sudo chown "$USER" "$WORK/medium.raw"
+          sudo chown -R "$USER" "$WORK/raw-evidence"
+          sudo podman rmi -af >/dev/null || true
+          df -h / /mnt
+      - name: End-to-end with screenshots
+        env:
+          CANDIDATE: ${{ matrix.candidate }}
+        run: |
+          set -euo pipefail
+          python3 iso/raw/raw_e2e.py --raw "$WORK/medium.raw" --work "$WORK/e2e" --install "$INSTALL" \
+            --candidate "$CANDIDATE" --ssh-key "$WORK/id_ed25519" 2>&1 | tee "$WORK/e2e.log"
+      - name: Measure the medium
+        if: always()
+        run: |
+          set -euo pipefail
+          test -f "$WORK/medium.raw" || exit 0
+          python3 iso/raw/measure_medium.py "$WORK/medium.raw" "$WORK/raw-evidence/size-2-shrunk.json" \
+            --label "shrunk (tested medium)" --formats "$FORMATS"
+      - name: Compare with the ISO/fisherman path
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE: ${{ matrix.image }}
+          DIGEST: ${{ matrix.digest }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$WORK/e2e/evidence" "$WORK/raw-evidence"
+          shopt -s nullglob
+          sizes=("$WORK"/raw-evidence/size-*.json)
+          python3 iso/raw/compare_paths.py --repo "$GITHUB_REPOSITORY" --image "$IMAGE" --digest "$DIGEST" \
+            --evidence "$WORK/e2e/evidence" --raw-evidence "$WORK/raw-evidence" \
+            --sizes "${sizes[@]}" \
+            --image-build-seconds "${IMAGE_BUILD_SECONDS:-0}" \
+            --out "$WORK/comparison.json" --summary "$GITHUB_STEP_SUMMARY"
+      - name: Contact sheet
+        if: always()
+        run: |
+          set -euo pipefail
+          cd "$WORK/e2e/screenshots" 2>/dev/null || exit 0
+          shopt -s nullglob
+          shots=(./*.png)
+          (( ${#shots[@]} )) || exit 0
+          montage -font DejaVu-Sans -pointsize 14 -label '%t' "${shots[@]}" \
+            -tile 4x -geometry 480x270+8+8 -background '#202020' -fill white contact-sheet.png
+      - name: Upload screenshots, logs and the comparison
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: image-installer-${{ matrix.image }}
+          retention-days: 30
+          if-no-files-found: warn
+          path: |
+            ${{ env.WORK }}/e2e/screenshots/
+            ${{ env.WORK }}/e2e/evidence/
+            ${{ env.WORK }}/e2e/debug/
+            ${{ env.WORK }}/e2e/*.log
+            ${{ env.WORK }}/e2e.log
+            ${{ env.WORK }}/raw-evidence/
+            ${{ env.WORK }}/comparison.json

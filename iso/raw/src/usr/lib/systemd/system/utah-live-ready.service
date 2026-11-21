@@ -1,0 +1,14 @@
+[Unit]
+Description=Utah live environment ready marker
+ConditionKernelCommandLine=utah.live
+After=display-manager.service
+Requires=display-manager.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/echo UTAH_LIVE_READY
+StandardOutput=tty
+TTYPath=/dev/ttyS0
+
+[Install]
+WantedBy=multi-user.target

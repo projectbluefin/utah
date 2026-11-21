@@ -1,7 +1,7 @@
 ---
 name: ci-workflows
 version: "1.4"
-last_updated: "2026-11-07"
+last_updated: "2026-11-21"
 id: ci-workflows
 one_line_purpose: Navigate Utah's build, promote, and sync workflow topology.
 entry_point: docs/skills/ci-workflows.md
@@ -151,6 +151,18 @@ post-build verification workflows, not the complete workflow inventory:
   failed job against a short infra signature list; only when all match does it
   re-run the failed jobs once, behind the `e2e-infra-retry-wait` environment's
   wait timer. See [infra re-run](ci-workflows/references/iso-e2e.md#infra-re-run).
+- `.github/workflows/image-installer.yml` -- nightly, manual dispatch, and
+  pull requests touching `iso/raw/**`. The experimental image-based installer
+  of ADR-0001 (`docs/adr/0001-image-based-installer.md`): builds a raw bootc
+  medium on each flavor's current `:testing` digest (main only unless
+  `all_flavors`), shrinks it, drives OS-Installer through a LUKS2 install,
+  first boot, gnome-initial-setup, bootc switch and rollback with
+  screenshots, and writes a comparison with the Post-Testing E2E `luks` job
+  for the same digest to the job summary and `comparison.json`. It is
+  deliberately non-blocking: not a required check, not in
+  `promote-to-testing`'s needs, read-only permissions, no tag moves;
+  `tests/test_image_installer.py` holds that. Details:
+  [image-installer](local-testing/references/image-installer.md).
 - `.github/workflows/execute-release.yml` -- promotion pushes to `main`,
   manual dispatch and a daily 06:00 UTC check retag `:stable`. The daily run
   releases only when `:stable` last moved over seven days ago (or is missing)
