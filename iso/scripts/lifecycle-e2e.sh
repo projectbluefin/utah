@@ -162,15 +162,43 @@ ssh_target_sudo() {
     printf '%s\n' "${TEST_PASSWORD}" | ssh_target "sudo -S -p '' -- ${command}"
 }
 
-# The candidate's /efi mountpoint and mount units (#1326). luks-e2e.sh runs
-# this on the images it installs; for the lifecycle it skips the baseline,
-# which is the previous :testing and may predate /efi, so the gate never
-# judges an old image by a newer rule and stalls promotion (#1343).
+# Content gates: checks that hold an image to a rule from this checkout.
+# luks-e2e.sh runs them on the images it installs; for the lifecycle it skips
+# them on the baseline (UTAH_E2E_BASELINE=1), which is the previous :testing
+# and may predate the rule, so a gate never judges an old image by a newer
+# rule and stalls promotion (#1343). Each one runs here on the upgraded
+# candidate instead.
+#
+# The candidate's /efi mountpoint and mount units (#1326).
 verify_efi_mount() {
     local phase="$1"
     ssh_target 'test -d /efi && for unit in efi.automount efi.mount; do load=$(systemctl show "$unit" -p LoadState --value) && state=$(systemctl show "$unit" -p ActiveState --value) && echo "  $unit: load=$load active=$state" && test "$state" != failed || exit 1; done' \
         > "${EVIDENCE}/efi-${phase}.txt" 2>&1 \
         || diagnose_failure "EFI mountpoint is missing or an EFI mount unit failed (${phase}); see efi-${phase}.txt"
+}
+
+# bootc's mac_admin probe logs no AVC denial on the candidate's boot (#1198):
+# utah_bootc_probe dontaudits it for countme (unconfined_service_t) and the
+# installer's first-boot fisherman-boot-receipt.service (initrc_t, #1131).
+# Only this boot's records count: audit.log keeps the baseline's first boot,
+# whose policy may lack a rule the candidate has.
+verify_bootc_probe() {
+    local phase="$1" script
+    script="$(cat <<'INNER'
+boot=$(( $(date +%s) - $(cut -d. -f1 /proc/uptime) - 1 ))
+{
+    awk -v boot="${boot}" '{ i = index($0, "audit("); if (i && substr($0, i + 6, 10) + 0 >= boot) print }' \
+        /var/log/audit/audit.log 2>/dev/null
+    journalctl -b --no-pager -o cat 2>/dev/null
+} | grep -F avc: || true
+INNER
+)"
+    ssh_target_sudo bash -c "${script}" > "${EVIDENCE}/avc-${phase}.log" 2>&1 \
+        || diagnose_failure "Could not read the ${phase} deployment's AVC records"
+    if grep -E 'denied .*comm="(chcon|bootc)"' "${EVIDENCE}/avc-${phase}.log" >&2; then
+        diagnose_failure "chcon was denied mac_admin on the ${phase} boot (#1198): utah_bootc_probe is not in effect; see avc-${phase}.log"
+    fi
+    echo "  bootc chcon AVC denials (${phase} boot): none"
 }
 
 verify_boot_files() {
@@ -546,9 +574,9 @@ if [[ "${DISK_OR_ISO}" == *.iso ]]; then
     # both BLS shapes.
     INSTALL_WORK="${UTAH_E2E_WORK:-${WORK}/install}"
     mkdir -p "${INSTALL_WORK}"
-    # UTAH_E2E_EFI_CHECK="": see verify_efi_mount; the candidate is checked
-    # after the upgrade.
-    UTAH_E2E_WORK="${INSTALL_WORK}" UTAH_E2E_EFI_CHECK="" bash "${ROOT}/iso/scripts/luks-e2e.sh" \
+    # UTAH_E2E_BASELINE=1 skips luks-e2e.sh's content gates on the baseline;
+    # see verify_efi_mount. The candidate is checked after the upgrade.
+    UTAH_E2E_WORK="${INSTALL_WORK}" UTAH_E2E_BASELINE=1 bash "${ROOT}/iso/scripts/luks-e2e.sh" \
         "${DISK_OR_ISO}" "${BASELINE_REF}" "${PASSPHRASE}" \
         || e2e_exit "$?" "the install harness (luks-e2e.sh) failed; its exit code is kept"
     DISK_SOURCE="${INSTALL_WORK}/install.qcow2"
@@ -725,6 +753,7 @@ python3 "${ROOT}/scripts/bootc_lifecycle.py" validate-phase upgraded \
     || diagnose_failure "Upgraded deployment validation failed"
 verify_boot_files upgraded
 verify_efi_mount upgraded
+verify_bootc_probe upgraded
 
 # Phase 3 (post-upgrade reboot) must check both `booted` and `rollback`:
 # the upgraded deployment is the booted slot, and the previous baseline

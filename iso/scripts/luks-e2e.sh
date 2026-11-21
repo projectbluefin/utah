@@ -93,6 +93,16 @@ SSH_PORT_INSTALLED=$((SSH_PORT + 1))
 # turns "it hung somewhere in phase 5" into something you can just look at.
 VNC_LIVE="${UTAH_E2E_VNC_LIVE:-2}"
 VNC_INSTALLED="${UTAH_E2E_VNC_INSTALLED:-3}"
+# UTAH_E2E_BASELINE=1: the installed image is the lifecycle's baseline, the
+# previous :testing, which lifecycle-e2e.sh installs before upgrading it.
+# Content gates -- checks that hold the image to a rule from this checkout,
+# such as a mountpoint or a policy rule a later commit added -- are skipped:
+# the baseline predates the rule, failing it blocks the promotion that would
+# replace it, and the baseline never gets the fix (#1343, #1346). The
+# lifecycle runs each skipped gate on the upgraded candidate instead, and the
+# luks job runs them on every candidate it installs. Install, boot, unlock,
+# login and checks against the image's own installed contract still run.
+BASELINE_INSTALL="${UTAH_E2E_BASELINE:-0}"
 VARS="${WORK}/ovmf-vars.fd"
 
 QEMU="$(command -v qemu-system-x86_64 /usr/libexec/qemu-kvm 2>/dev/null | head -1)"
@@ -1090,10 +1100,10 @@ for i in $(seq 1 60); do
 done
 echo "  ssh: logged in as ${TEST_USER}"
 
-# Set UTAH_E2E_EFI_CHECK="" to skip: lifecycle-e2e.sh does for the baseline
-# install, an earlier :testing that may predate /efi (#1330, #1343), and runs
-# the same check on the upgraded candidate instead.
-if [[ -n "${UTAH_E2E_EFI_CHECK-x}" ]]; then
+# A content gate: skipped on the lifecycle's baseline (UTAH_E2E_BASELINE=1),
+# an earlier :testing that may predate /efi (#1330, #1343); the lifecycle
+# checks the upgraded candidate instead.
+if [[ "${BASELINE_INSTALL}" == 0 ]]; then
     echo "Verifying the installed EFI mountpoint and units..."
     ssh_target 'test -d /efi && for unit in efi.automount efi.mount; do load=$(systemctl show "$unit" -p LoadState --value) && state=$(systemctl show "$unit" -p ActiveState --value) && echo "  $unit: load=$load active=$state" && test "$state" != failed || exit 1; done' \
         || fail "EFI mountpoint is missing or an EFI mount unit failed on the installed system"
@@ -1214,15 +1224,18 @@ echo "  logrotate.service: succeeded with a nonempty state file"
 # script with /bin/sh (initrc_t). The utah_bootc_probe policy module dontaudits
 # both; any such AVC on the installed system means the module is not loaded or
 # a caller runs bootc from a domain it does not cover (#1198, #1129; check
-# from #1220).
-echo "Verifying bootc's SELinux probe logs no AVC denials..."
-ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' sh -c 'grep -hF avc: /var/log/audit/audit.log 2>/dev/null; journalctl -b --no-pager -o cat 2>/dev/null | grep -F avc:; true'" \
-    > "${WORK}/avc.log" || fail "could not read the installed system's AVC records"
-if grep -E 'denied .*comm="(chcon|bootc)"' "${WORK}/avc.log" >&2; then
-    # The AVC names only the probe's domain. Keep what identifies the caller:
-    # the probe's SYSCALL records (ppid, exe), the services whose main PID
-    # precedes it, and the labels and mounts the transition depends on.
-    cat > "${WORK}/bootc-probe-diag.sh" <<'DIAG'
+# from #1220). A content gate: the lifecycle's baseline (UTAH_E2E_BASELINE=1)
+# may predate a rule the installer's boot needs -- :testing from before #1131
+# has no initrc_t rule -- so the lifecycle checks the upgraded candidate.
+if [[ "${BASELINE_INSTALL}" == 0 ]]; then
+    echo "Verifying bootc's SELinux probe logs no AVC denials..."
+    ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' sh -c 'grep -hF avc: /var/log/audit/audit.log 2>/dev/null; journalctl -b --no-pager -o cat 2>/dev/null | grep -F avc:; true'" \
+        > "${WORK}/avc.log" || fail "could not read the installed system's AVC records"
+    if grep -E 'denied .*comm="(chcon|bootc)"' "${WORK}/avc.log" >&2; then
+        # The AVC names only the probe's domain. Keep what identifies the caller:
+        # the probe's SYSCALL records (ppid, exe), the services whose main PID
+        # precedes it, and the labels and mounts the transition depends on.
+        cat > "${WORK}/bootc-probe-diag.sh" <<'DIAG'
 echo "## SYSCALL records of chcon/bootc"
 grep -E 'type=SYSCALL.*comm="(chcon|bootc)"' /var/log/audit/audit.log
 echo "## pid 1"
@@ -1237,13 +1250,16 @@ systemctl show --type=service --all -p Id -p ExecMainPID -p ExecMainStartTimesta
     | awk -F= '/^Id=/{id=$2} /^ExecMainPID=/{pid=$2} /^ExecMainStartTimestampMonotonic=/{if (pid > 0) print pid, $2, id}' \
     | sort -n
 DIAG
-    scp_target "${WORK}/bootc-probe-diag.sh" "${TEST_USER}@127.0.0.1:/tmp/utah-bootc-probe-diag.sh" >/dev/null \
-        && ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' sh /tmp/utah-bootc-probe-diag.sh" \
-            > "${WORK}/bootc-probe-diag.log" 2>&1 || true
-    cat "${WORK}/bootc-probe-diag.log" >&2 || true
-    fail "chcon was denied mac_admin during boot (#1198): utah_bootc_probe is not in effect (callers: bootc-probe-diag.log)"
+        scp_target "${WORK}/bootc-probe-diag.sh" "${TEST_USER}@127.0.0.1:/tmp/utah-bootc-probe-diag.sh" >/dev/null \
+            && ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' sh /tmp/utah-bootc-probe-diag.sh" \
+                > "${WORK}/bootc-probe-diag.log" 2>&1 || true
+        cat "${WORK}/bootc-probe-diag.log" >&2 || true
+        fail "chcon was denied mac_admin during boot (#1198): utah_bootc_probe is not in effect (callers: bootc-probe-diag.log)"
+    fi
+    echo "  bootc chcon AVC denials: none"
+else
+    echo "  bootc probe AVC gate: skipped on the lifecycle baseline; the upgraded candidate is checked"
 fi
-echo "  bootc chcon AVC denials: none"
 
 E2E_PHASE_EXIT=17
 echo "=== Phase 7/7: log in and prove the desktop starts ==="
