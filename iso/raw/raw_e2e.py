@@ -701,10 +701,38 @@ class Harness:
         self.type(PASSWORD, enter=True)
         self.wait_user_shell()
 
+    def close_overview(self):
+        """Leave the overview GNOME Shell opens at login, checked through its D-Bus property.
+
+        Run 44866213203: one Escape right after the first login (gnome-initial-setup's
+        hand-off) left the overview up. Press Escape like a user until the Shell says
+        it is closed; set the property only if keys never take."""
+        r = self.user_runner(USER)
+        prop = ("gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell "
+                "--method org.freedesktop.DBus.Properties.{} org.gnome.Shell OverviewActive{}")
+        for attempt in range(5):
+            try:
+                active = "true" in r(prop.format("Get", ""))
+            except Fail as e:
+                log(f"  OverviewActive unreadable: {e}")
+                self.key("esc")
+                time.sleep(3)
+                return
+            if not active:
+                return
+            if attempt < 4:
+                self.key("esc")
+            else:
+                log("  overview still active after Escape; closing it through org.gnome.Shell")
+                try:
+                    r(prop.format("Set", " '<false>'"))
+                except Fail as e:
+                    log(f"  could not close the overview: {e}")
+            time.sleep(3)
+
     def desktop_and_status(self, phase, prefix):
-        # Close the overview (or Shell's first-login welcome dialog) over the desktop.
-        self.key("esc")
-        time.sleep(3)
+        # Close the overview (and Shell's first-login welcome dialog) over the desktop.
+        self.close_overview()
         self.shot(f"{prefix}-desktop", f"{phase}: GNOME desktop for {USER}", True)
         status = self.ssh("root", "bootc status", check=False)
         status_json = self.ssh("root", "bootc status --json", check=False)
