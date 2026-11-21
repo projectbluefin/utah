@@ -207,10 +207,9 @@ files = [
   "/etc/kmscon/kmscon.conf",
   "/usr/lib/systemd/system/gdm.service.d/kmscon.conf",
   # sudo-rs is sudo, as on Dakota (#1229), and reads C sudo's PAM stacks
-  # (sudo, and sudo-i for `sudo -i`) and sudoers. uutils sits beside GNU
-  # coreutils, whose cp bootupd needs on the ESP (#1431).
+  # (sudo, and sudo-i for `sudo -i`) and sudoers. coreutils stay GNU's, whose
+  # cp bootupd needs on the ESP; uutils comes from Homebrew (#1433).
   # configure-services.sh fails the build if a link or label is wrong.
-  "/usr/bin/uutils-coreutils",
   "/usr/bin/env",
   "/usr/bin/sudo-rs",
   "/etc/pam.d/sudo",

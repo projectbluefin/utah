@@ -489,13 +489,11 @@ packages = [
     "kmscon",
     "kmscon-pango",
     # sudo-rs as sudo, as Dakota ships it (bluefin/sudo-rs.bst; #1229);
-    # configure-services.sh points sudo at sudo-rs. uutils is installed beside
-    # GNU coreutils, not in its place: bootupd copies GRUB onto the vfat ESP
-    # with `cp -a`, which uutils cp fails with EOPNOTSUPP where GNU cp skips
-    # the xattrs it cannot keep, so every bootc install broke (#1431).
-    # See docs/skills/desktop-contract/references/sudo-rs-uutils.md.
+    # configure-services.sh points sudo at sudo-rs. uutils is not in the
+    # image: it comes from Homebrew (`brew install uutils-coreutils`), and GNU
+    # coreutils stay because bootupd and bootc rely on GNU cp (#1433).
+    # See docs/skills/desktop-contract/references/sudo-rs.md.
     "sudo-rs",
-    "uutils-coreutils",
     # Network file systems and Windows domain clients (the NFS family follows
     # in the second-wave block below).
     "cifs-utils",
@@ -877,8 +875,8 @@ packages = [
 # removes the base package in the same step (dnf5 do --action=remove), and
 # whatever requires it stays satisfied by the replacement's Provides.
 #
-# Never coreutils-single while the bootloader is GRUB through bootupd: uutils
-# cp cannot copy GRUB onto the vfat ESP, so bootc install fails (#1431).
+# Never coreutils-single: bootupd copies GRUB onto the vfat ESP with GNU cp
+# semantics, so bootc install fails without it (#1431, #1433).
 
 [unavailable]
 # Parity gaps none of Utah's enabled repositories provide.  Two kinds of gap
@@ -1133,7 +1131,6 @@ parity = [
     "kmscon",
     "kmscon-pango",
     "sudo-rs",
-    "uutils-coreutils",
     "cifs-utils",
     "rpcbind",
     "autofs",

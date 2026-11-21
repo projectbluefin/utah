@@ -335,13 +335,15 @@ class PackageResolutionTests(unittest.TestCase):
     def test_manifest_keeps_gnu_cp_for_bootupd(self):
         # #1431: bootupd copies GRUB onto the vfat ESP with `cp -a`. uutils cp
         # fails there with EOPNOTSUPP, so swapping coreutils-single for the
-        # uutils links broke every bootc install of the image.
+        # uutils links broke every bootc install of the image. uutils comes
+        # from Homebrew, never the image (#1433).
         overlay = ROOT / "packages/utah.toml"
         self.assertNotIn("coreutils-single", installer.swaps(overlay))
         manifest = tomllib.loads(overlay.read_text())
         for table in manifest.values():
             if isinstance(table, dict):
-                self.assertNotIn("uutils-coreutils-replace", table.get("packages", []))
+                for name in ("uutils-coreutils", "uutils-coreutils-replace", "gnu-env"):
+                    self.assertNotIn(name, table.get("packages", []))
 
 
 class ResolveOneTests(unittest.TestCase):

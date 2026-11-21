@@ -82,7 +82,7 @@ The TOML's sections are the contract's table of contents:
   `systemctl preset-all`, and the contract's `enabled`/`disabled` lists assert key units in the image.
   [Dakota service presets](desktop-contract/references/dakota-services.md): the policy, user units, re-measuring.
   The Secret Service is oo7, not gnome-keyring ([oo7](desktop-contract/references/oo7.md), #1227).
-  uutils sits beside GNU coreutils (bootupd needs GNU `cp`, #1431) and sudo-rs is `sudo` over C sudo's PAM and sudoers ([sudo-rs and uutils](desktop-contract/references/sudo-rs-uutils.md), #1229).
+  sudo-rs is `sudo` over C sudo's PAM and sudoers; coreutils stay GNU's (bootupd needs GNU `cp`) and uutils comes from Homebrew, `brew install uutils-coreutils` ([sudo-rs](desktop-contract/references/sudo-rs.md), #1229, #1433).
   Update policy delegates background updates to `uupd.timer`; `bootc-fetch-apply-updates.timer` and
   `bootc-fetch-apply-updates.service` are masked in `/etc` and `/usr/lib` (and disabled in
   `85-utah-desktop.preset`) so cross-vendor `/etc` 3-way merges (e.g. switching from Bluefin) do not

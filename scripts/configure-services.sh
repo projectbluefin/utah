@@ -361,11 +361,12 @@ if [ -f "${PASSWD_PAM}" ]; then
 fi
 
 # sudo-rs is sudo, as on Dakota (#1229;
-# docs/skills/desktop-contract/references/sudo-rs-uutils.md).
+# docs/skills/desktop-contract/references/sudo-rs.md).
 #
-# cp stays GNU's. bootupd installs GRUB with `cp -a` onto the vfat ESP; GNU
-# cp skips the xattrs vfat cannot hold, uutils cp fails with EOPNOTSUPP, and
-# every bootc install of the image then fails (#1431).
+# cp stays GNU's and uutils is not in the image (Homebrew ships it, #1433).
+# bootupd installs GRUB with `cp -a` onto the vfat ESP; GNU cp skips the
+# xattrs vfat cannot hold, uutils cp fails with EOPNOTSUPP, and every bootc
+# install of the image then fails (#1431).
 if [ "$(readlink /usr/bin/cp)" = uutils-coreutils ]; then
     echo "ERROR: /usr/bin/cp is uutils; bootupd cannot copy GRUB to the ESP with it (#1431)" >&2
     exit 1

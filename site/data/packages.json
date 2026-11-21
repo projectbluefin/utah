@@ -414,7 +414,6 @@
         "uriparser",
         "usermode",
         "util-linux-script",
-        "uutils-coreutils",
         "v4l-utils",
         "veritysetup",
         "vim-enhanced",
@@ -486,7 +485,7 @@
     }
   ],
   "totals": {
-    "installed": 429,
+    "installed": 428,
     "unavailable": 4
   },
   "unavailable": [
