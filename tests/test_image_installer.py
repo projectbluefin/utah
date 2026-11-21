@@ -189,6 +189,20 @@ class ShrinkPlanTests(unittest.TestCase):
         self.assertLess(sysfs, shrink.index("btrfs balance start"))
         self.assertLess(shrink.index("btrfs balance start"), shrink.rindex("btrfs filesystem resize"))
 
+    def test_compression_rewrites_the_files_after_the_flatpak_bake(self):
+        # ostree and flatpak fallocate their objects, and btrfs does not
+        # compress writes into preallocated extents, so compress-force on the
+        # install mount changed nothing; the shrink step rewrites the files.
+        build = (RAW / "build-raw-image.sh").read_text()
+        self.assertNotIn("compress-force", build)
+        shrink = (RAW / "shrink-raw-image.sh").read_text()
+        defrag = shrink.index('btrfs filesystem defragment -r -c"${COMPRESS%%:*}" /m')
+        self.assertLess(defrag, shrink.index("btrfs balance start"))
+        workflow = (ROOT / ".github/workflows/image-installer.yml").read_text()
+        bake = workflow.index("bash iso/raw/bake-flatpaks.sh")
+        self.assertLess(bake, workflow.rindex('UTAH_RAW_BTRFS_COMPRESS="$BTRFS_COMPRESS"'))
+        self.assertEqual(workflow.count('UTAH_RAW_BTRFS_COMPRESS="$BTRFS_COMPRESS"'), 2)
+
 
 class ResultsTests(unittest.TestCase):
     def test_stages_pass_fail_and_not_run(self):

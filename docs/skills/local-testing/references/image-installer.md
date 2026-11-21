@@ -52,7 +52,10 @@ requests that touch `iso/raw/**`, the workflow, or
 `ghcr.io/projectbluefin/<image>@sha256:...`), `all_flavors`, `install`
 (`gui` drives OS-Installer's window through a QEMU USB tablet at AT-SPI
 extents; `script` runs the same `install.sh` over SSH), `btrfs_compress`
-(build the root with `compress-force=<value>`), `flatpaks` (default on: bake
+(default `zstd:3`, also on scheduled and PR runs; empty turns it off: the
+shrink step rewrites every file on the root compressed after the Flatpak
+bake; mounting with `compress-force` alone does nothing, because ostree and
+flatpak fallocate their objects), `flatpaks` (default on: bake
 the set above into the medium's `/var`; off leaves the image's `preinstall.d`
 to the online first-boot flatpak-preinstall.service), `formats`.
 

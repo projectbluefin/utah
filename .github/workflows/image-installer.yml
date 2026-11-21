@@ -38,9 +38,9 @@ on:
         options: [gui, script]
         default: gui
       btrfs_compress:
-        description: Build the medium's btrfs root with compress-force=<value> (e.g. zstd:3); empty = off
+        description: Compress the medium's btrfs root after the Flatpak bake (defragment -c<algorithm>, default level); empty = off
         type: string
-        default: ''
+        default: 'zstd:3'
       flatpaks:
         description: Bake the image's preinstall Flatpaks into the medium's /var (off = online first-boot preinstall)
         type: boolean
@@ -129,8 +129,9 @@ jobs:
     env:
       WORK: /mnt/image-installer
       INSTALL: ${{ inputs.install || 'gui' }}
-      BTRFS_COMPRESS: ${{ inputs.btrfs_compress }}
-      # Scheduled and PR runs bake them; a dispatch can turn them off.
+      # Scheduled and PR runs compress the root and bake the Flatpaks; a
+      # dispatch can turn either off (btrfs_compress empty, flatpaks false).
+      BTRFS_COMPRESS: ${{ github.event_name != 'workflow_dispatch' && 'zstd:3' || inputs.btrfs_compress }}
       FLATPAKS: ${{ github.event_name != 'workflow_dispatch' || inputs.flatpaks }}
       FORMATS: ${{ inputs.formats || 'zstd-3,zstd-19-long' }}
     steps:
@@ -183,7 +184,6 @@ jobs:
           # no Plymouth hiding it. SELinux stays enforcing: the raw image is labeled.
           sudo env UTAH_RAW_LIVE_KARGS="utah.live.debug systemd.journald.forward_to_console=1 plymouth.enable=0 rd.plymouth=0" \
             UTAH_RAW_SSH_PUBKEY="$WORK/id_ed25519.pub" UTAH_RAW_DEBUG_SSHD=1 UTAH_RAW_EVIDENCE="$WORK/raw-evidence" \
-            UTAH_RAW_BTRFS_COMPRESS="$BTRFS_COMPRESS" \
             bash iso/raw/build-raw-image.sh localhost/utah-raw:ci "$WORK/medium.raw" "${SOURCE_REF%@*}:testing"
       - name: Bake the Flatpaks into the medium and shrink it
         id: medium
@@ -197,13 +197,15 @@ jobs:
             # preinstall instead), shrunk and measured, then discarded. Dispatch
             # with flatpaks=false to run the E2E on that medium.
             sudo cp --sparse=always "$WORK/medium.raw" "$WORK/no-flatpaks.raw"
-            sudo env UTAH_RAW_EVIDENCE="$ev/no-flatpaks" bash iso/raw/shrink-raw-image.sh localhost/utah-raw:ci "$WORK/no-flatpaks.raw"
+            sudo env UTAH_RAW_EVIDENCE="$ev/no-flatpaks" UTAH_RAW_BTRFS_COMPRESS="$BTRFS_COMPRESS" \
+              bash iso/raw/shrink-raw-image.sh localhost/utah-raw:ci "$WORK/no-flatpaks.raw"
             sudo python3 iso/raw/measure_medium.py "$WORK/no-flatpaks.raw" "$ev/size-2-no-flatpaks.json" \
               --label "shrunk, no Flatpaks (not tested)" --formats zstd-3,zstd-19-long
             sudo rm -f "$WORK/no-flatpaks.raw"
             sudo env UTAH_RAW_EVIDENCE="$ev" bash iso/raw/bake-flatpaks.sh localhost/utah-raw:ci "$WORK/medium.raw"
           fi
-          sudo env UTAH_RAW_EVIDENCE="$ev" bash iso/raw/shrink-raw-image.sh localhost/utah-raw:ci "$WORK/medium.raw"
+          sudo env UTAH_RAW_EVIDENCE="$ev" UTAH_RAW_BTRFS_COMPRESS="$BTRFS_COMPRESS" \
+            bash iso/raw/shrink-raw-image.sh localhost/utah-raw:ci "$WORK/medium.raw"
           sudo chown "$USER" "$WORK/medium.raw"
           sudo chown -R "$USER" "$ev"
           sudo podman rmi -af >/dev/null || true

@@ -25,10 +25,9 @@
 #   UTAH_RAW_DEBUG_SSHD=1    CI only: enable sshd as a local /etc change of the
 #                            deployment, so it survives `bootc switch`
 #   UTAH_RAW_EVIDENCE        directory for partition table, entries and sizes
-#   UTAH_RAW_BTRFS_COMPRESS  mount the root with compress-force=<value> (e.g.
-#                            zstd:3) while bootc writes it, so the medium (and
-#                            the block copy of it) holds compressed extents;
-#                            empty (default) writes uncompressed
+#
+# The root is written uncompressed: shrink-raw-image.sh compresses it after
+# the Flatpaks are baked (UTAH_RAW_BTRFS_COMPRESS), so they are covered too.
 set -euo pipefail
 
 IMAGE="${1:?image ref is required}"
@@ -78,13 +77,12 @@ start=$(date +%s)
 # match what the installed system will run, and bootc sees the mounts directly.
 podman run --rm --privileged --pid=host "${volumes[@]}" \
     --security-opt label=type:unconfined_t -e LOOP="${loop}" \
-    -e COMPRESS="${UTAH_RAW_BTRFS_COMPRESS:-}" \
     "${IMAGE}" bash -euxc '
         mkfs.fat -F 32 -n EFI-SYSTEM "${LOOP}p2" >/dev/null
         mkfs.ext4 -q -L boot "${LOOP}p3"
         mkfs.btrfs -q -L root "${LOOP}p4"
         mkdir -p /target
-        mount ${COMPRESS:+-o "compress-force=${COMPRESS}"} "${LOOP}p4" /target
+        mount "${LOOP}p4" /target
         mkdir /target/boot
         mount "${LOOP}p3" /target/boot
         mkdir /target/boot/efi

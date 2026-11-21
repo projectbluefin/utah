@@ -12,7 +12,9 @@
 #   1. record what takes the space (size-breakdown.txt), so duplicate copies
 #      and leftovers show up in the evidence;
 #   2. fstrim every filesystem, which punches holes in the file for free blocks;
-#   3. compact the btrfs root (full balance into UTAH_RAW_SHRINK_CHUNK_MIB
+#   3. with UTAH_RAW_BTRFS_COMPRESS set (e.g. zstd:3), rewrite every file on
+#      the btrfs root compressed, Flatpaks included; then compact the root
+#      (full balance into UTAH_RAW_SHRINK_CHUNK_MIB
 #      chunks, default 256, the kernel minimum) and shrink it to its
 #      allocated chunks plus UTAH_RAW_SHRINK_MARGIN_MIB (default 256),
 #      stepping up by 256 MiB while btrfs refuses;
@@ -34,6 +36,7 @@ RAW="$(realpath "${2:?raw image path is required}")"
 EVIDENCE="${UTAH_RAW_EVIDENCE:-$(dirname "${RAW}")/raw-evidence}"
 MARGIN_MIB="${UTAH_RAW_SHRINK_MARGIN_MIB:-256}"
 CHUNK_MIB="${UTAH_RAW_SHRINK_CHUNK_MIB:-256}"
+COMPRESS="${UTAH_RAW_BTRFS_COMPRESS:-}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 [[ ${EUID} -eq 0 ]] || { echo "run as root (loop devices, mounts)" >&2; exit 1; }
@@ -54,7 +57,7 @@ PY
 
 # Prints the root filesystem's size on its device, in bytes, after shrinking.
 fs_bytes="$(podman run --rm --privileged -v /dev:/dev -e LOOP="${loop}" -e ROOT="${root}" \
-    -e MARGIN="$(( MARGIN_MIB * 1024 * 1024 ))" -e CHUNK="$(( CHUNK_MIB * 1024 * 1024 ))" \
+    -e MARGIN="$(( MARGIN_MIB * 1024 * 1024 ))" -e CHUNK="$(( CHUNK_MIB * 1024 * 1024 ))" -e COMPRESS="${COMPRESS}" \
     --security-opt label=type:unconfined_t \
     "${IMAGE}" bash -euc '
         report() { echo "$@" >&2; }
@@ -79,6 +82,21 @@ fs_bytes="$(podman run --rm --privileged -v /dev:/dev -e LOOP="${loop}" -e ROOT=
                 umount /p
             done
         } >&2
+        # ostree and flatpak fallocate each object before writing it, and
+        # btrfs never compresses writes into preallocated extents: mounting
+        # the root compress-force=zstd:3 while bootc wrote it left run
+        # 44884511244 at 6.54 GB used, the same as uncompressed. Rewriting
+        # the files compresses them (6.19 GB to 3.08 GB in 3 minutes locally),
+        # and doing it here, after bake-flatpaks.sh, covers the Flatpaks too.
+        # Defrag compresses at the algorithm default level (zstd: 3) on
+        # kernels before 6.15, which reject -L.
+        if [[ -n "${COMPRESS}" ]]; then
+            start=$(date +%s)
+            btrfs filesystem defragment -r -c"${COMPRESS%%:*}" /m >&2
+            sync -f /m
+            report "== compressed with ${COMPRESS%%:*} in $(( $(date +%s) - start ))s"
+            btrfs filesystem usage -b /m >&2
+        fi
         # A full balance packs data into as few chunks as possible, so the
         # allocation (not btrfs min-dev-size, which ran ~4 GB high in run
         # 44874576635) bounds the resize; resize moves chunks above the cut.
