@@ -1,0 +1,25 @@
+# systemd-sysinstall's Varlink API (io.systemd.SysInstall) for gnome-setup in
+# the live session only (utah.live.installer=gnome-setup). Utah's systemd 261
+# has no Varlink sysinstall, so the live layer carries a build of systemd's
+# main branch with --install-kernel=/--install-boot-loader= (hanthor/systemd,
+# SYSTEMD_REF in iso/raw/Containerfile) under /usr/libexec/utah-sysinstall.
+# Named apart from systemd-sysinstall.socket so a future systemd package can
+# ship its own without a clash.
+[Unit]
+Description=Utah live: System Install Tool socket (io.systemd.SysInstall)
+ConditionKernelCommandLine=utah.live.installer=gnome-setup
+DefaultDependencies=no
+Before=sockets.target
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Socket]
+ListenStream=/run/systemd/io.systemd.SysInstall
+Symlinks=/run/varlink/registry/io.systemd.SysInstall
+FileDescriptorName=varlink
+SocketMode=0666
+Accept=yes
+MaxConnectionsPerSource=16
+
+[Install]
+WantedBy=sockets.target

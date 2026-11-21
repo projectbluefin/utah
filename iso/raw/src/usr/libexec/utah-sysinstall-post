@@ -1,0 +1,231 @@
+#!/usr/bin/bash
+# Finish a gnome-setup install of the Utah live medium (docs/adr/0001).
+#
+# gnome-setup asks systemd-sysinstall to install onto TARGET with the
+# definitions utah-live-definitions wrote at boot: every medium partition
+# block-copied (CopyBlocks=), the root into LUKS2 (Encrypt=key-file, plus
+# tpm2 when the machine has a TPM; the key file is empty until gnome-setup's
+# recovery key page enrolls a recovery key and wipes it). systemd-sysinstall
+# runs with --install-kernel=no --install-boot-loader=no: the copied ESP
+# already carries shim and GRUB, and /boot the deployment's BLS entries.
+# gnome-setup then starts this script as utah-sysinstall-post@<TARGET>.service
+# (pages.conf: [page:installer] post-install-unit) and waits for it, before
+# the recovery key page. It does what a block copy cannot get right by itself,
+# as OS-Installer's install.sh does after its own copy:
+#
+#   * new filesystem UUIDs/serials (the live medium may stay plugged in), and
+#     every boot-config reference to the old ones rewritten (BLS entries,
+#     bootupd's GRUB configs on the ESP and in /boot, the deployment's
+#     /etc/fstab);
+#   * the live boot entry and its GRUB default (grubenv saved_entry) removed;
+#   * rd.luks.uuid (and tpm2-device=auto when a TPM2 token is enrolled) on the
+#     BLS entries and an /etc/crypttab line in every deployment;
+#   * the root filesystem grown to the partition systemd-repart grew;
+#   * a firmware boot entry for shim.
+#
+# Both bootc backends are handled: ostree (/ostree/deploy/<stateroot>/deploy)
+# and composefs (/state/deploy/<verity digest>).
+#
+# Usage: utah-sysinstall-post TARGET (whole disk, e.g. /dev/vdb)
+set -euo pipefail
+
+target="${1:?usage: utah-sysinstall-post TARGET}"
+read -r -a cmdline </proc/cmdline
+grep -qw utah.live /proc/cmdline || { echo "ERROR: not running from Utah live media" >&2; exit 1; }
+LIVE_KARG=utah.live
+LIVE_ENTRY=utah-live
+
+exec > >(tee -a /run/utah-install.log) 2>&1
+start=$(date +%s)
+printf '==> %s Utah post-install for %s started\n' "$(date -Is)" "${target}"
+log() { printf '==> %s\n' "$*"; }
+fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+
+ESP_TYPE=c12a7328-f81f-11d2-ba4b-00a0c93ec93b
+[[ -b "${target}" ]] || fail "${target} is not a block device"
+target="$(realpath "${target}")"
+
+# The medium: the disk holding the booted root (root=UUID=, bootc's default).
+root_spec=""
+for arg in "${cmdline[@]}"; do
+    case "${arg}" in root=UUID=*) root_spec="${arg#root=UUID=}" ;; esac
+done
+[[ -n "${root_spec}" ]] || fail "no root=UUID= on the kernel command line"
+src_disk="$(lsblk -rnpo NAME,PKNAME,UUID | awk -v v="${root_spec}" -v t="${target}" '$3 == v && $2 != t { print $2; exit }')"
+[[ -n "${src_disk}" && "$(realpath "${src_disk}")" != "${target}" ]] || fail "${target} is the live medium, or the medium was not found"
+
+udevadm settle
+esp="" boot="" root_part=""
+while read -r part; do
+    ptype="$(lsblk -rno PARTTYPE "${part}" | tr '[:upper:]' '[:lower:]')"
+    fstype="$(blkid -p -s TYPE -o value "${part}" || true)"
+    if [[ "${ptype}" == "${ESP_TYPE}" ]]; then esp="${part}"
+    elif [[ "${fstype}" == crypto_LUKS ]]; then root_part="${part}"
+    elif [[ "${fstype}" == ext4 ]]; then boot="${part}"
+    fi
+done < <(lsblk -rnpo NAME,TYPE "${target}" | awk '$2 == "part" { print $1 }')
+[[ -n "${esp}" && -n "${root_part}" ]] || fail "expected an ESP and a LUKS2 root on ${target} (esp=${esp:-none} root=${root_part:-none})"
+log "Target ESP=${esp} boot=${boot:-none} root=${root_part} (medium ${src_disk})"
+
+work="$(mktemp -d /run/utah-install.XXXXXX)"
+mapper="utah-install-root-$$"
+cleanup() {
+    set +e
+    for m in "${work}"/mnt/*; do mountpoint -q "$m" && umount -R "$m"; done
+    [[ -e "/dev/mapper/${mapper}" ]] && cryptsetup close "${mapper}"
+    rm -rf "${work}"
+}
+trap cleanup EXIT
+mkdir -p "${work}/mnt/root" "${work}/mnt/boot" "${work}/mnt/efi"
+
+# systemd-repart enrolled an empty passphrase (no key file was passed); the
+# cryptsetup CLI cannot pass an empty one, libcryptsetup can.
+luks_uuid="$(cryptsetup luksUUID "${root_part}")"
+python3 - "${root_part}" "${mapper}" <<'PY'
+import ctypes, sys
+lib = ctypes.CDLL("libcryptsetup.so.12")
+lib.crypt_init.argtypes = [ctypes.POINTER(ctypes.c_void_p), ctypes.c_char_p]
+lib.crypt_load.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_void_p]
+lib.crypt_activate_by_passphrase.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int,
+                                             ctypes.c_char_p, ctypes.c_size_t, ctypes.c_uint32]
+lib.crypt_free.argtypes = [ctypes.c_void_p]
+cd = ctypes.c_void_p()
+if lib.crypt_init(ctypes.byref(cd), sys.argv[1].encode()) < 0:
+    sys.exit(f"crypt_init({sys.argv[1]}) failed")
+try:
+    if lib.crypt_load(cd, b"LUKS2", None) < 0:
+        sys.exit(f"{sys.argv[1]} is not LUKS2")
+    r = lib.crypt_activate_by_passphrase(cd, sys.argv[2].encode(), -1, b"", 0, 0)
+    if r < 0:
+        sys.exit(f"the empty passphrase does not unlock {sys.argv[1]} ({r})")
+finally:
+    lib.crypt_free(cd)
+PY
+root_dev="/dev/mapper/${mapper}"
+tpm2=0
+cryptsetup luksDump "${root_part}" | grep -q 'systemd-tpm2' && tpm2=1
+log "root is LUKS2 ${luks_uuid} (TPM2 token: ${tpm2})"
+
+# --- Give every copied filesystem a new identity. ----------------------------
+declare -A uuid_map
+new_fs_uuid() {
+    local dev="$1" fstype old new=""
+    fstype="$(blkid -p -s TYPE -o value "${dev}")"
+    old="$(blkid -p -s UUID -o value "${dev}")"
+    case "${fstype}" in
+        vfat)
+            new="$(python3 - "${dev}" <<'PY'
+import os, struct, sys
+dev = sys.argv[1]
+serial = struct.unpack("<I", os.urandom(4))[0]
+with open(dev, "r+b") as f:
+    bs = bytearray(f.read(512))
+    fat32 = bs[82:90] == b"FAT32   "
+    off = 0x43 if fat32 else 0x27
+    bs[off:off + 4] = struct.pack("<I", serial)
+    f.seek(0); f.write(bs)
+    if fat32:
+        bytes_per_sector = struct.unpack("<H", bs[11:13])[0]
+        backup = struct.unpack("<H", bs[50:52])[0]
+        if backup:
+            f.seek(backup * bytes_per_sector + off); f.write(struct.pack("<I", serial))
+print("%04X-%04X" % (serial >> 16, serial & 0xFFFF))
+PY
+)" ;;
+        ext4)
+            e2fsck -fy "${dev}" >/dev/null || [[ $? -le 1 ]] || fail "e2fsck failed on ${dev}"
+            tune2fs -U random "${dev}" >/dev/null ;;
+        btrfs)
+            btrfstune -f -u "${dev}" >/dev/null ;;
+        *) fail "unsupported filesystem ${fstype:-unknown} on ${dev}" ;;
+    esac
+    udevadm settle
+    [[ -n "${new}" ]] || new="$(blkid -p -s UUID -o value "${dev}")"
+    [[ -n "${old}" && -n "${new}" && "${old}" != "${new}" ]] || fail "UUID change on ${dev} did not take (${old} -> ${new})"
+    uuid_map["${old}"]="${new}"
+    log "${dev} (${fstype}): ${old} -> ${new}"
+}
+new_fs_uuid "${esp}"
+[[ -n "${boot}" ]] && new_fs_uuid "${boot}"
+new_fs_uuid "${root_dev}"
+
+# --- Mount and fix up the copied boot configuration. -------------------------
+mount "${root_dev}" "${work}/mnt/root"
+bootdir="${work}/mnt/root/boot"
+if [[ -n "${boot}" ]]; then
+    mount "${boot}" "${work}/mnt/boot"
+    bootdir="${work}/mnt/boot"
+fi
+mount "${esp}" "${work}/mnt/efi"
+
+deployments=()
+for d in "${work}"/mnt/root/ostree/deploy/*/deploy/* "${work}"/mnt/root/state/deploy/*; do
+    [[ -d "$d/etc" ]] && deployments+=("$d")
+done
+[[ ${#deployments[@]} -ge 1 ]] || fail "no ostree or composefs deployment on the copied root"
+log "deployments: ${deployments[*]#"${work}"/mnt/root/}"
+for d in "${deployments[@]}"; do
+    mid="$(cat "$d/etc/machine-id" 2>/dev/null || true)"
+    [[ -z "${mid}" || "${mid}" == uninitialized ]] || fail "the medium carries a machine-id (${mid}); it is not pristine"
+done
+
+entry_dir="${bootdir}/loader/entries"
+shopt -s nullglob
+files=("${entry_dir}"/*.conf "${bootdir}"/grub2/*.cfg "${work}"/mnt/efi/EFI/*/*.cfg)
+for d in "${deployments[@]}"; do [[ -f "$d/etc/fstab" ]] && files+=("$d/etc/fstab"); done
+shopt -u nullglob
+for old in "${!uuid_map[@]}"; do
+    for f in "${files[@]}"; do
+        if grep -qF -- "${old}" "$f"; then
+            sed -i "s/${old}/${uuid_map[${old}]}/g" "$f"
+            log "rewrote ${old} in ${f#"${work}"/mnt/}"
+        fi
+    done
+done
+
+rm -f "${entry_dir}/${LIVE_ENTRY}.conf"
+if [[ -f "${bootdir}/grub2/grubenv" ]]; then
+    python3 - "${bootdir}/grub2/grubenv" "${LIVE_ENTRY}" <<'PY'
+import sys
+path, live = sys.argv[1], sys.argv[2]
+lines = [l for l in open(path).read().split("\n") if l and not l.startswith("#")]
+keep = [l for l in lines if l != f"saved_entry={live}"]
+body = "# GRUB Environment Block\n" + "".join(l + "\n" for l in keep)
+open(path, "w").write(body + "#" * (1024 - len(body)))
+PY
+fi
+if grep -rqw "${LIVE_KARG}" "${entry_dir}/" 2>/dev/null; then
+    fail "a boot entry still carries ${LIVE_KARG}"
+fi
+
+options="discard"
+[[ "${tpm2}" == 1 ]] && options="tpm2-device=auto,discard"
+for entry in "${entry_dir}"/*.conf; do
+    [[ -f "${entry}" ]] || continue
+    sed -i "/^options /{/rd.luks.uuid=${luks_uuid}/!s/\$/ rd.luks.uuid=${luks_uuid} rd.luks.options=${luks_uuid}=${options}/}" "${entry}"
+    log "boot entry ${entry##*/}: $(sed -n 's/^options //p' "${entry}")"
+done
+for d in "${deployments[@]}"; do
+    printf 'luks-%s UUID=%s none %s\n' "${luks_uuid}" "${luks_uuid}" "${options}" >"$d/etc/crypttab"
+done
+
+btrfs filesystem resize max "${work}/mnt/root" >/dev/null
+log "root filesystem grown: $(df -h --output=size "${work}/mnt/root" | tail -1 | tr -d ' ')"
+
+loader=""
+for candidate in "${work}"/mnt/efi/EFI/*/shimx64.efi; do
+    [[ "${candidate}" == */EFI/BOOT/* ]] && continue
+    [[ -f "${candidate}" ]] && { loader="${candidate#"${work}"/mnt/efi}"; break; }
+done
+sync
+umount -R "${work}/mnt/efi"
+[[ -n "${boot}" ]] && umount -R "${work}/mnt/boot"
+umount -R "${work}/mnt/root"
+cryptsetup close "${mapper}"
+
+if [[ -n "${loader}" && -d /sys/firmware/efi/efivars ]]; then
+    efibootmgr --create --disk "${target}" --part "$(lsblk -rno PARTN "${esp}")" --label Utah \
+        --loader "$(tr / '\\' <<<"${loader}")" >/dev/null
+    log "firmware boot entry: Utah -> ${loader}"
+fi
+log "Utah post-install for ${target} finished in $(( $(date +%s) - start ))s"

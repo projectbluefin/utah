@@ -397,6 +397,12 @@ class NonBlockingTrackTests(unittest.TestCase):
         self.assertIn('test "$(git -C /src rev-parse HEAD)" = "${OSI_REF}"', containerfile)
         self.assertRegex(containerfile, r"(?m)^ARG BUILDER_IMAGE=\S+@sha256:[0-9a-f]{64}$")
 
+    def test_gnome_setup_and_systemd_are_pinned_by_commit(self):
+        containerfile = (RAW / "Containerfile").read_text()
+        for ref in ("GS_REF", "SYSTEMD_REF"):
+            self.assertRegex(containerfile, rf"(?m)^ARG {ref}=[0-9a-f]{{40}}$")
+            self.assertIn(f'test "$(git -C /src rev-parse HEAD)" = "${{{ref}}}"', containerfile)
+
     def test_the_medium_is_never_uploaded(self):
         upload = next(s for s in self.workflow["jobs"]["e2e"]["steps"] if "upload-artifact" in s.get("uses", ""))
         paths = upload["with"]["path"]
@@ -684,6 +690,56 @@ class KernelVeritySelectorTests(unittest.TestCase):
         self.assertIn('ssh_live "python3 - select --backend composefs" <"${ROOT}/scripts/kernel_verity.py"', luks)
         build = (RAW / "build-raw-image.sh").read_text()
         self.assertIn('<"${HERE}/../../scripts/kernel_verity.py"', build)
+
+
+class GnomeSetupTests(unittest.TestCase):
+    """installer=gnome-setup: gnome-setup drives systemd-sysinstall on the live medium."""
+
+    workflow = yaml.safe_load(WORKFLOW.read_text())
+
+    def test_the_installer_is_a_dispatch_input_defaulting_to_os_installer(self):
+        inputs = self.workflow[True]["workflow_dispatch"]["inputs"]
+        self.assertEqual(inputs["installer"]["options"], ["os-installer", "gnome-setup"])
+        self.assertEqual(inputs["installer"]["default"], "os-installer")
+        text = WORKFLOW.read_text()
+        self.assertIn('UTAH_RAW_INSTALLER="$INSTALLER"', text)
+        self.assertIn('--installer "$INSTALLER"', text)
+
+    def test_the_live_karg_selects_the_installer(self):
+        build = (RAW / "build-raw-image.sh").read_text()
+        self.assertIn("utah.live.installer=gnome-setup", build)
+        setup = (RAW / "src/usr/libexec/utah-live-setup").read_text()
+        self.assertIn("utah.live.installer=gnome-setup", setup)
+        for unit in ("utah-sysinstall.socket", "utah-cryptenroll.socket"):
+            text = (RAW / "src/usr/lib/systemd/system" / unit).read_text()
+            self.assertIn("ConditionKernelCommandLine=utah.live.installer=gnome-setup", text)
+
+    def test_sysinstall_leaves_the_copied_boot_chain_alone(self):
+        service = (RAW / "src/usr/lib/systemd/system/utah-sysinstall@.service").read_text()
+        self.assertIn("--install-kernel=no --install-boot-loader=no", service)
+        self.assertIn("SYSTEMD_REPART_PATH=/usr/libexec/utah-sysinstall/systemd-repart", service)
+
+    def test_the_post_install_unit_is_the_one_gnome_setup_starts(self):
+        pages = (RAW / "src/usr/share/utah/gnome-setup/pages.conf").read_text()
+        self.assertIn("post-install-unit=utah-sysinstall-post@.service", pages)
+        self.assertTrue((RAW / "src/usr/lib/systemd/system/utah-sysinstall-post@.service").exists())
+        rules = (RAW / "src/usr/share/polkit-1/rules.d/50-utah-live-gnome-setup.rules").read_text()
+        self.assertIn("utah-sysinstall-post@", rules)
+        containerfile = (RAW / "Containerfile").read_text()
+        self.assertIn("ln -s /run/utah-live/repart.d /out/usr/lib/gnome-setup/definitions", containerfile)
+        self.assertIn("/usr/share/utah/gnome-setup/pages.conf /usr/lib/gnome-setup/pages.conf", containerfile)
+
+    def test_installed_systems_do_not_offer_gnome_setup(self):
+        containerfile = (RAW / "Containerfile").read_text()
+        self.assertIn("mv /out/usr/share/applications/org.gnome.Setup.desktop", containerfile)
+        self.assertIn("rm -rf /out/usr/lib/systemd/user", containerfile)
+
+    def test_results_record_the_installer_and_encryption(self):
+        results = raw_e2e.Results("gui")
+        results.installer = "gnome-setup"
+        out = results.as_dict()
+        self.assertEqual(out["installer"], "gnome-setup")
+        self.assertIn("encryption", out)
 
 
 if __name__ == "__main__":

@@ -189,6 +189,8 @@ def image_metrics(evidence, raw_evidence, sizes, image_build_seconds):
         "result": results.get("result", "not run"),
         "error": results.get("error"),
         "install": results.get("install"),
+        "installer": results.get("installer", "os-installer"),
+        "encryption": results.get("encryption"),
         "backend": backend,
         "sizes": [s for s in (read_json(p) for p in sizes) if s],
         "shrink": shrink or None,
@@ -251,6 +253,7 @@ def render(comparison):
     iso_text = f"{fm.get('iso_size') or 'n/a'} (production ISO artifact {gib(iso)})"
     lines += [
         f"| Result | {img['result']} | {fm.get('conclusion') or 'n/a'} |",
+        f"| Installer | {img.get('installer') or 'os-installer'} ({img.get('install') or 'gui'}) | bootc-installer + fisherman |",
         f"| bootc backend | {backend_cell(img.get('backend'))} | ostree (composefs is opt-in, #1129) |",
         f"| Medium, raw | {gib(final.get('apparent_bytes'))} (allocated {gib(final.get('allocated_bytes'))}) | {iso_text} |",
         f"| Medium, zstd -3 | {gib(zstd3)} | ISO is already compressed |",

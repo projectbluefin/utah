@@ -11,6 +11,14 @@ Stages (every screenshot is listed in DIR/screenshots/manifest.json):
      summary, progress, completion. With --install script the same Utah
      install.sh runs over SSH instead, which exercises the installed disk
      independently of the GUI driver.
+     With --installer gnome-setup (live entry with utah.live.installer=
+     gnome-setup) the installer is gnome-setup driving systemd-sysinstall:
+     language, keyboard, try-or-install, disk, confirmation, progress, the
+     recovery key with its QR code, done. --install script then runs the same
+     systemd-sysinstall Run, utah-sysinstall-post@ and a recovery key
+     enrollment over SSH. With a TPM (--tpm, swtpm) the root is bound to it:
+     every boot with the TPM must unlock without a prompt, and the bootc switch
+     boot runs without the TPM and unlocks with the recovery key.
   3. Boot the installed disk alone: Plymouth LUKS prompt, unlock,
      gnome-initial-setup (user creation), GNOME desktop, a terminal with
      `bootc status`.
@@ -60,8 +68,10 @@ USER_FULL = "Utah Tester"
 USER = "tester"
 PASSWORD = "utahtest2026"
 INSTALLER_APP = "installer"   # AT-SPI app name of com.github.p3732.os_installer
+GS_APP = "setup"              # AT-SPI app name of gnome-setup (org.gnome.Setup)
 GIS_APP = "initial-setup"
 TARGET_DISK = "/dev/vdb"
+TARGET_SIZE_TEXT = "51.5 GB"  # glib's format_size of the 48 GiB target, as gnome-setup's disk row shows it
 SCREEN_W, SCREEN_H = 1920, 1080
 TOP_BAR = 32                  # GNOME Shell top bar at scale 1: top of the work area
 ABS_MAX = 0x7FFF              # QEMU absolute pointer axis range
@@ -106,6 +116,8 @@ class Results:
         self.flatpaks = {}
         self.composefs = {}
         self.backend = None
+        self.installer = "os-installer"
+        self.encryption = {}
         self.current = None
         self.started = None
         self.error = None
@@ -141,7 +153,8 @@ class Results:
         stages = [{"stage": s, **self.stages.get(s, {"status": "not run", "seconds": None})} for s in STAGES]
         passed = self.error is None and all(s["status"] == "pass" for s in stages)
         return {"result": "pass" if passed else "fail", "error": self.error, "install": self.install,
-                "backend": self.backend, "stages": stages, "boots": self.boots, "flatpaks": self.flatpaks,
+                "installer": self.installer, "backend": self.backend, "encryption": self.encryption,
+                "stages": stages, "boots": self.boots, "flatpaks": self.flatpaks,
                 "composefs": self.composefs, "timings": dict(timings or {})}
 
 
@@ -239,9 +252,18 @@ class Harness:
         if decision and decision.get("backend") != args.backend:
             raise SystemExit(f"--backend {args.backend} contradicts {args.backend_decision}: {decision}")
         self.results.backend = {"backend": args.backend, **decision}
+        self.results.installer = args.installer
+        self.gnome_setup = args.installer == "gnome-setup"
+        self.tpm = bool(args.tpm)
+        if self.tpm and not shutil.which("swtpm"):
+            raise SystemExit("--tpm needs swtpm")
+        self.tpm_state = self.work / "swtpm-state"
+        self.swtpm = None
+        self.recovery_key = None
+        self.results.encryption = {"tpm2": self.tpm, "unlocks": {}}
 
     # ---- QEMU ---------------------------------------------------------------
-    def start_vm(self, name, drives, vars_file, ssh_port):
+    def start_vm(self, name, drives, vars_file, ssh_port, tpm=False):
         self.mon_sock = str(self.work / f"{name}-monitor.sock")
         self.qmp_sock = str(self.work / f"{name}-qmp.sock")
         self.serial = self.work / f"{name}-serial.log"
@@ -259,6 +281,8 @@ class Harness:
                "-monitor", f"unix:{self.mon_sock},server,nowait",
                "-qmp", f"unix:{self.qmp_sock},server=on,wait=off"]
         cmd += ["-accel", "kvm", "-cpu", "host"] if os.access("/dev/kvm", os.W_OK) else ["-accel", "tcg"]
+        if tpm:
+            cmd += self.start_swtpm(name)
         for d in drives:
             cmd += ["-drive", d["drive"], "-device", d["device"]]
         log(f"starting VM {name}: {' '.join(shlex.quote(c) for c in cmd)}")
@@ -268,8 +292,36 @@ class Harness:
                 break
             time.sleep(0.2)
 
+    def start_swtpm(self, name):
+        """A software TPM 2.0 whose state persists across the VMs of this run."""
+        sock = self.work / f"{name}-swtpm.sock"
+        sock.unlink(missing_ok=True)
+        self.tpm_state.mkdir(exist_ok=True)
+        self.swtpm = subprocess.Popen(["swtpm", "socket", "--tpm2", "--tpmstate", f"dir={self.tpm_state}",
+                                       "--ctrl", f"type=unixio,path={sock}",
+                                       "--log", f"file={self.work / f'{name}-swtpm.log'},level=1"],
+                                      stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        for _ in range(50):
+            if sock.exists():
+                break
+            time.sleep(0.2)
+        else:
+            raise Fail("swtpm did not create its control socket")
+        return ["-chardev", f"socket,id=chrtpm,path={sock}",
+                "-tpmdev", "emulator,id=tpm0,chardev=chrtpm", "-device", "tpm-crb,tpmdev=tpm0"]
+
+    def stop_swtpm(self):
+        if self.swtpm is not None and self.swtpm.poll() is None:
+            self.swtpm.terminate()
+            try:
+                self.swtpm.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                self.swtpm.kill()
+        self.swtpm = None
+
     def stop_vm(self, graceful_cmd=None):
         if self.vm is None:
+            self.stop_swtpm()
             return
         if graceful_cmd:
             try:
@@ -284,6 +336,7 @@ class Harness:
             self.vm.kill()
             self.vm.wait()
         self.vm = None
+        self.stop_swtpm()
 
     def mon(self, command):
         return run_hmp_command(self.mon_sock, command, settle=0.1, prompt=b"(qemu)", recv_timeout=5)
@@ -597,7 +650,7 @@ class Harness:
              "device": "virtio-blk-pci,drive=medium,bootindex=1"},
             {"drive": f"file={target},format=qcow2,if=none,id=target",
              "device": "virtio-blk-pci,drive=target"},
-        ], self.vars_live, self.args.ssh_port)
+        ], self.vars_live, self.args.ssh_port, tpm=self.tpm)
         self.shot_when_grub()
         self.wait_serial("UTAH_LIVE_READY", 1200)
         live_pw = "live"
@@ -641,6 +694,8 @@ class Harness:
         log("  GRUB menu not captured (timeout hidden)")
 
     def installer(self):
+        if self.gnome_setup:
+            return self.gnome_setup_install()
         log("=== Stage 2: OS-Installer GUI ===")
         self.results.begin("install")
         r, app = self.live_runner, INSTALLER_APP
@@ -722,8 +777,119 @@ class Harness:
             self.debug_shot("encryption-typed")
             raise Fail(f"passphrase entries hold {lengths}, expected two of length {len(PIN)}")
 
+    # ---- gnome-setup ----------------------------------------------------------
+    def gnome_setup_install(self):
+        log("=== Stage 2: gnome-setup GUI (systemd-sysinstall) ===")
+        self.results.begin("install")
+        r, app = self.live_runner, GS_APP
+        nodes = self.wait_for(r, app, lambda n: has_text(n, "English"), "language page", 300)
+        self.save("atspi-gs-language.json", json.dumps(nodes, indent=1))
+        self.key("esc")
+        time.sleep(3)
+        self.maximize(r, app)
+        time.sleep(2)
+        self.shot("02-setup-language", "gnome-setup autostarted in the live session: language page")
+        if not has_name(self.snapshot(r, app), "Next", sensitive=True):
+            self.click_until(r, app, lambda n: row_containing(n, "English (United States)"),
+                             lambda n: has_name(n, "Next", sensitive=True), "language selected")
+        self.press(r, app, "Next", lambda n: has_text(n, "Keyboard Layout"), "keyboard page")
+        nodes = self.snapshot(r, app)
+        if not has_name(nodes, "Next", sensitive=True):
+            self.click_until(r, app, lambda n: row_containing(n, "English (US)"),
+                             lambda n: has_name(n, "Next", sensitive=True), "keyboard selected")
+        self.shot("03-setup-keyboard", "Keyboard layout page")
+        self.press(r, app, "Next", lambda n: has_name(n, "Install Now"), "try-or-install page")
+        self.shot("04-setup-try-or-install", "Try or install: Utah's name and logo from os-release")
+        self.press(r, app, "Install Now", lambda n: has_text(n, "Select a Disk"), "disk page")
+        nodes = self.wait_for(r, app, lambda n: row_containing(n, TARGET_SIZE_TEXT) is not None, "target disk row", 120)
+        self.save("atspi-gs-disk.json", json.dumps(nodes, indent=1))
+        self.shot("05-setup-disk", f"Disk selection from systemd-sysinstall's ListCandidateDevices: the empty {TARGET_SIZE_TEXT} target {TARGET_DISK}")
+        self.click_until(r, app, lambda n: row_containing(n, TARGET_SIZE_TEXT),
+                         lambda n: has_text(n, "Begin Installation?") or has_text(n, "Existing Data Found"), "confirmation")
+        self.shot("06-setup-confirm", "Confirmation before systemd-sysinstall writes the disk")
+        start = time.time()
+        self.press(r, app, "Install", lambda n: has_text(n, "Installing"), "install page")
+        progress = self.poll(r, app, lambda n: has_text(n, "Copying Partition") or has_text(n, "Back Up Recovery Key")
+                             or has_text(n, "Installation Failed"), 300)
+        if progress is not None and has_text(progress, "Copying Partition"):
+            time.sleep(5)
+            self.shot("07-setup-progress", "systemd-sysinstall's progress: systemd-repart block-copies the medium into LUKS2")
+        nodes = self.wait_for(r, app, lambda n: has_text(n, "Back Up Recovery Key") or has_text(n, "Installation Failed"),
+                              "install result", 3600)
+        self.timings["gui-install-seconds-after-confirm"] = int(time.time() - start)
+        self.grab_install_log()
+        self.grab_sysinstall_journal()
+        if has_text(nodes, "Installation Failed"):
+            self.shot("08-setup-failed", "FAILURE: gnome-setup reported an install error")
+            raise Fail("gnome-setup: installation failed (evidence/sysinstall-journal.txt)")
+        log(f"  install finished {self.timings['gui-install-seconds-after-confirm']}s after confirmation")
+        nodes = self.wait_for(r, app, lambda n: len(self.recovery_key_text(n)) > 40, "recovery key", 120)
+        self.recovery_key = self.recovery_key_text(nodes)
+        self.save("recovery-key.txt", self.recovery_key + "\n")
+        self.shot("08-setup-recovery-key", "Recovery key page: systemd-cryptenroll's MakeRecoveryKey")
+        self.press(r, app, "Show QR Code for Recovery Key", lambda n: has_text(n, "Scan to Back Up"), "QR code dialog")
+        time.sleep(2)
+        self.shot("09-setup-recovery-qr", "The recovery key as a QR code")
+        self.press(r, app, "Done", lambda n: not has_text(n, "Scan to Back Up"), "QR code dialog closed")
+        self.press(r, app, "I backed up my recovery key", lambda n: has_name(n, "Done", sensitive=True), "recovery key confirmed")
+        self.press(r, app, "Done", lambda n: has_text(n, "Installation Complete"), "done page")
+        self.shot("10-setup-done", "Installation complete; the recovery key is enrolled and the empty passphrase wiped")
+        self.check_slots()
+        self.after_install()
+
+    @staticmethod
+    def recovery_key_text(nodes):
+        node = named(nodes, "Recovery Key")
+        return (node["text"] or "").strip() if node else ""
+
+    def grab_sysinstall_journal(self):
+        out = self.ssh("liveuser", "sudo journalctl -b --no-pager -o short-monotonic -u 'utah-sysinstall@*' "
+                       "-u 'utah-sysinstall-post@*' -u 'utah-cryptenroll@*'; cat /run/utah-live/repart.d/*.conf",
+                       password="live", check=False)
+        self.save("sysinstall-journal.txt", out)
+
+    def check_slots(self):
+        """The target's LUKS2 keyslots: a recovery key, TPM2 when there is one, no passphrase left."""
+        out = self.ssh("liveuser", f"dev=$(lsblk -rnpo NAME,FSTYPE {TARGET_DISK} | awk '$2 == \"crypto_LUKS\" {{print $1}}'); "
+                       "echo \"$dev\"; sudo /usr/libexec/utah-sysinstall/systemd-cryptenroll \"$dev\"",
+                       password="live", check=False)
+        self.save("luks-slots.txt", out)
+        types = {line.split()[1] for line in out.splitlines()[1:] if len(line.split()) >= 2 and line.split()[0].isdigit()}
+        self.results.encryption["slots"] = sorted(types)
+        log(f"  LUKS2 slots on the target: {sorted(types)}")
+        want = {"recovery"} | ({"tpm2"} if self.tpm else set())
+        if not want <= types or "password" in types:
+            raise Fail(f"target keyslots are {sorted(types)}, expected {sorted(want)} and no password (evidence/luks-slots.txt)")
+
+    def gnome_setup_script_install(self):
+        """What gnome-setup does, over SSH: sysinstall Run, the post-install unit, a recovery key."""
+        log("=== Stage 2 (script): systemd-sysinstall + utah-sysinstall-post over SSH ===")
+        self.results.begin("install")
+        start = time.time()
+        call = json.dumps({"node": TARGET_DISK, "definitions": ["/run/utah-live/repart.d"], "erase": True})
+        unit = "utah-sysinstall-post@" + TARGET_DISK.strip("/").replace("/", "-") + ".service"
+        out = self.ssh("liveuser", f"sudo varlinkctl call --more /run/systemd/io.systemd.SysInstall io.systemd.SysInstall.Run "
+                       f"{shlex.quote(call)} && sudo systemctl start {unit} && "
+                       f"dev=$(lsblk -rnpo NAME,FSTYPE {TARGET_DISK} | awk '$2 == \"crypto_LUKS\" {{print $1}}') && "
+                       "sudo /usr/libexec/utah-sysinstall/systemd-cryptenroll --unlock-key-file=/dev/null "
+                       "--recovery-key --wipe-slot=password \"$dev\" 2>&1",
+                       password="live", timeout=3600, check=False)
+        self.timings["script-install-seconds"] = int(time.time() - start)
+        self.save("script-install.log", out)
+        self.grab_install_log()
+        self.grab_sysinstall_journal()
+        keys = [w for w in out.split() if w.count("-") == 7 and len(w) == 71]
+        if not keys:
+            raise Fail("no recovery key from systemd-cryptenroll (evidence/script-install.log)")
+        self.recovery_key = keys[-1]
+        self.save("recovery-key.txt", self.recovery_key + "\n")
+        self.check_slots()
+        self.after_install()
+
     def script_install(self):
         """Run the same install.sh over SSH (no GUI), for --install script."""
+        if self.gnome_setup:
+            return self.gnome_setup_script_install()
         log("=== Stage 2 (script): Utah install.sh over SSH ===")
         self.results.begin("install")
         start = time.time()
@@ -749,26 +915,41 @@ class Harness:
         else:
             log("  no /run/utah-install.log")
 
-    def installed_boot(self, phase, unlock_label):
-        """Boot (or reboot) the installed disk: Plymouth prompt, unlock, graphical target."""
-        status = subprocess.run([sys.executable, str(SCRIPTS / "plymouth-prompt.py"), "wait", self.mon_sock, str(self.serial),
-                                 str(self.work / "theme.plymouth"), str(self.work / "watermark.png"),
-                                 str(self.shots / f"{unlock_label}.ppm"), "600"]).returncode
-        ppm = self.shots / f"{unlock_label}.ppm"
-        if ppm.exists():
-            self.to_png(ppm, self.shots / f"{unlock_label}.png")
-            self.manifest.append({"file": f"{unlock_label}.png", "stage": unlock_label,
-                                  "proves": f"{phase}: graphical, Bluefin-branded Plymouth LUKS passphrase prompt (plymouth-prompt.py exit {status})"})
-            self.write_manifest()
-        if status != 0:
-            self.debug_shot(f"no-prompt-{slug(phase)}")
-            raise Fail(f"{phase}: no branded Plymouth prompt (plymouth-prompt.py exit {status})")
-        r = subprocess.run([sys.executable, str(SCRIPTS / "luks-unlock.py"), "qemu", self.mon_sock, PIN, str(self.serial),
-                            str(self.ssh_port)], capture_output=True, text=True)
-        self.save(f"unlock-{slug(phase)}.log", r.stdout + r.stderr)
-        if r.returncode != 0:
-            self.shot(f"fail-unlock-{slug(phase)}", f"FAILURE: {phase} unlock")
-            raise Fail(f"{phase}: LUKS unlock failed ({r.returncode})")
+    def installed_boot(self, phase, unlock_label, unlock="pin"):
+        """Boot (or reboot) the installed disk: unlock, graphical target.
+
+        unlock: "pin" types OS-Installer's passphrase and "recovery" gnome-setup's
+        recovery key at the branded Plymouth prompt; "tpm" expects no prompt at
+        all (gnome-setup's TPM2 enrollment) and screenshots the first frame the
+        unlocked system draws."""
+        self.results.encryption["unlocks"][phase] = unlock
+        if unlock == "tpm":
+            try:
+                self.wait_ssh("root", 900)
+            except Fail:
+                self.shot(f"fail-tpm-unlock-{slug(phase)}", f"FAILURE: {phase}: no TPM2 unlock (a prompt instead?)")
+                raise
+        else:
+            status = subprocess.run([sys.executable, str(SCRIPTS / "plymouth-prompt.py"), "wait", self.mon_sock, str(self.serial),
+                                     str(self.work / "theme.plymouth"), str(self.work / "watermark.png"),
+                                     str(self.shots / f"{unlock_label}.ppm"), "600"]).returncode
+            ppm = self.shots / f"{unlock_label}.ppm"
+            what = "passphrase" if unlock == "pin" else "recovery key"
+            if ppm.exists():
+                self.to_png(ppm, self.shots / f"{unlock_label}.png")
+                self.manifest.append({"file": f"{unlock_label}.png", "stage": unlock_label,
+                                      "proves": f"{phase}: graphical, Bluefin-branded Plymouth LUKS prompt, answered with the {what} (plymouth-prompt.py exit {status})"})
+                self.write_manifest()
+            if status != 0:
+                self.debug_shot(f"no-prompt-{slug(phase)}")
+                raise Fail(f"{phase}: no branded Plymouth prompt (plymouth-prompt.py exit {status})")
+            secret = PIN if unlock == "pin" else self.recovery_key
+            r = subprocess.run([sys.executable, str(SCRIPTS / "luks-unlock.py"), "qemu", self.mon_sock, secret, str(self.serial),
+                                str(self.ssh_port)], capture_output=True, text=True)
+            self.save(f"unlock-{slug(phase)}.log", r.stdout + r.stderr)
+            if r.returncode != 0:
+                self.shot(f"fail-unlock-{slug(phase)}", f"FAILURE: {phase} unlock")
+                raise Fail(f"{phase}: LUKS unlock failed ({r.returncode})")
         self.wait_ssh("root", 600)
         end = time.time() + 600
         while time.time() < end:
@@ -783,6 +964,12 @@ class Harness:
                          + RESOLV_FACTS, check=False)
         self.save(f"facts-{slug(phase)}.txt", facts)
         self.record_boot(phase, "root")
+        if unlock == "tpm":
+            unlock_log = self.ssh("root", "journalctl -b --no-pager -o cat -u 'systemd-cryptsetup@*'", check=False)
+            self.save(f"unlock-{slug(phase)}.log", unlock_log)
+            time.sleep(10)
+            self.shot(unlock_label, f"{phase}: no Plymouth prompt; the LUKS2 root was unlocked by the TPM2 "
+                      "(PCR 7) and the system reached the graphical target", True)
         if "utah.live" in facts.split("\n", 1)[0]:
             raise Fail(f"{phase}: installed system booted with utah.live")
         self.scp_to("root", HERE / "atspi_drive.py", "/var/tmp/atspi_drive.py")
@@ -924,17 +1111,27 @@ class Harness:
         status_json = self.ssh("root", "bootc status --json", check=False)
         self.save(f"bootc-status-{slug(phase)}.txt", status)
         self.save(f"bootc-status-{slug(phase)}.json", status_json)
-        cmd = f"echo {PASSWORD} | sudo -S -p '' bootc status"
-        unit = f"utah-e2e-term-{prefix}"
-        self.ssh("root", f"systemd-run --machine={USER}@.host --user --collect --unit={unit} "
-                         f"python3 /var/tmp/vte_term.py 'bootc status' {shlex.quote(cmd)}", check=False)
-        time.sleep(15)
-        self.shot(f"{prefix}-bootc-status", f"{phase}: terminal on the desktop running `bootc status`", True)
-        self.ssh("root", f"systemctl --machine={USER}@.host --user stop {unit}", check=False)
+        digest_cmd = f"echo {PASSWORD} | sudo -S -p '' bootc status"
+        self.terminal_shot(prefix, "bootc-status", "bootc status", digest_cmd, f"{phase}: terminal on the desktop running `bootc status`")
+        if self.gnome_setup and phase == "first boot":
+            luks = (f"echo {PASSWORD} | sudo -S -p '' true; dev=$(lsblk -rnpo NAME,FSTYPE | awk '$2 == \"crypto_LUKS\" {{print $1}}'); "
+                    "echo \"== keyslots of $dev\"; sudo systemd-cryptenroll \"$dev\"; echo '== /proc/cmdline'; "
+                    "tr ' ' '\\n' </proc/cmdline | grep rd.luks; echo '== unlock'; "
+                    "sudo journalctl -b -o cat -u 'systemd-cryptsetup@*' | tail -n 8")
+            self.terminal_shot(prefix, "luks", "LUKS2 root", luks,
+                               f"{phase}: the root's LUKS2 keyslots (recovery key{', TPM2' if self.tpm else ''}, no passphrase) and how it was unlocked")
         try:
             return json.loads(status_json)["status"]["booted"]["image"]["imageDigest"]
         except (KeyError, TypeError, json.JSONDecodeError):
             raise Fail(f"{phase}: bootc status --json has no booted image digest")
+
+    def terminal_shot(self, prefix, name, title, cmd, proves):
+        unit = f"utah-e2e-term-{prefix}-{name}"
+        self.ssh("root", f"systemd-run --machine={USER}@.host --user --collect --unit={unit} "
+                         f"python3 /var/tmp/vte_term.py {shlex.quote(title)} {shlex.quote(cmd)}", check=False)
+        time.sleep(15)
+        self.shot(f"{prefix}-{name}", proves, True)
+        self.ssh("root", f"systemctl --machine={USER}@.host --user stop {unit}", check=False)
 
     def reboot(self):
         self.ssh("root", "systemctl reboot --no-block", check=False)
@@ -980,16 +1177,27 @@ class Harness:
         log(f"  removed Flatpak {app}")
         return app
 
+    def restart_installed(self, name, tpm):
+        """Power the installed system off and boot it again, with or without the TPM."""
+        self.stop_vm(lambda: self.ssh("root", "systemctl poweroff --no-block", check=False))
+        self.start_vm(name, self.installed_drives, self.vars_installed, self.args.ssh_port + 1, tpm=tpm)
+
     def installed(self):
         log("=== Stage 3: first boot of the installed disk ===")
         self.results.begin("first boot unlock")
-        vars_installed = self.work / "vars-installed.fd"
-        shutil.copy(self.vars_live, vars_installed)
-        self.start_vm("installed", [
+        self.vars_installed = self.work / "vars-installed.fd"
+        shutil.copy(self.vars_live, self.vars_installed)
+        self.installed_drives = [
             {"drive": f"file={self.work / 'install.qcow2'},format=qcow2,if=none,id=target",
              "device": "virtio-blk-pci,drive=target,bootindex=1"},
-        ], vars_installed, self.args.ssh_port + 1)
-        self.installed_boot("first boot", "12-first-boot-luks-prompt")
+        ]
+        self.start_vm("installed", self.installed_drives, self.vars_installed, self.args.ssh_port + 1, tpm=self.tpm)
+        if not self.gnome_setup:
+            self.installed_boot("first boot", "12-first-boot-luks-prompt")
+        elif self.tpm:
+            self.installed_boot("first boot", "12-first-boot-tpm2-unlock", unlock="tpm")
+        else:
+            self.installed_boot("first boot", "12-first-boot-recovery-key-prompt", unlock="recovery")
         self.results.begin("initial setup")
         self.initial_setup()
         self.results.begin("first boot desktop")
@@ -1009,8 +1217,13 @@ class Harness:
         log(f"  staged: {staged_digest}")
         if not staged_digest:
             raise Fail("bootc switch staged nothing (evidence/bootc-switch.log)")
-        self.reboot()
-        self.installed_boot("after bootc switch", "20-switch-luks-prompt")
+        if self.gnome_setup:
+            # Without the TPM the root asks for a key: the recovery key gnome-setup showed.
+            self.restart_installed("installed-switch", tpm=False)
+            self.installed_boot("after bootc switch", "20-switch-recovery-key-prompt", unlock="recovery")
+        else:
+            self.reboot()
+            self.installed_boot("after bootc switch", "20-switch-luks-prompt")
         self.gdm_login("after bootc switch", "21-switch-gdm")
         digest = self.desktop_and_status("after bootc switch", "22-switch")
         self.check_flatpaks("after bootc switch", removed)
@@ -1020,8 +1233,15 @@ class Harness:
         log("=== Stage 5: bootc rollback ===")
         self.results.begin("bootc rollback")
         self.save("bootc-rollback.log", self.ssh("root", "bootc rollback 2>&1"))
-        self.reboot()
-        self.installed_boot("after bootc rollback", "30-rollback-luks-prompt")
+        if self.gnome_setup:
+            self.restart_installed("installed-rollback", tpm=self.tpm)
+            if self.tpm:
+                self.installed_boot("after bootc rollback", "30-rollback-tpm2-unlock", unlock="tpm")
+            else:
+                self.installed_boot("after bootc rollback", "30-rollback-recovery-key-prompt", unlock="recovery")
+        else:
+            self.reboot()
+            self.installed_boot("after bootc rollback", "30-rollback-luks-prompt")
         self.gdm_login("after bootc rollback", "31-rollback-gdm")
         digest = self.desktop_and_status("after bootc rollback", "32-rollback")
         self.check_flatpaks("after bootc rollback", removed)
@@ -1126,6 +1346,10 @@ def main():
     ap.add_argument("--cpus", type=int, default=4)
     ap.add_argument("--target-size", default="48G")
     ap.add_argument("--install", choices=("gui", "script"), default="gui")
+    ap.add_argument("--installer", choices=("os-installer", "gnome-setup"), default="os-installer",
+                    help="installer the medium's live session offers (build-raw-image.sh installer.txt)")
+    ap.add_argument("--tpm", action="store_true",
+                    help="give the VMs a software TPM 2.0 (swtpm) that persists across them")
     ap.add_argument("--backend", choices=("composefs", "ostree"), default="composefs",
                     help="bootc backend the medium was built with (build-raw-image.sh backend.json)")
     ap.add_argument("--backend-decision",
@@ -1155,6 +1379,8 @@ def main():
                 pass
             if h.serial is not None and h.serial.name.startswith("live"):
                 h.grab_install_log()
+                if h.gnome_setup:
+                    h.grab_sysinstall_journal()
             h.collect_journal("failure")
         return 1
     finally:

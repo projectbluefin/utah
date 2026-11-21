@@ -1,0 +1,21 @@
+# systemd-cryptenroll's Varlink API (io.systemd.CryptEnroll) for gnome-setup's
+# recovery key page, live session only. Same systemd build as
+# utah-sysinstall.socket.
+[Unit]
+Description=Utah live: Disk Encryption Enrollment socket (io.systemd.CryptEnroll)
+ConditionKernelCommandLine=utah.live.installer=gnome-setup
+DefaultDependencies=no
+Before=sockets.target
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Socket]
+ListenStream=/run/systemd/io.systemd.CryptEnroll
+Symlinks=/run/varlink/registry/io.systemd.CryptEnroll
+FileDescriptorName=varlink
+SocketMode=0666
+Accept=yes
+MaxConnectionsPerSource=16
+
+[Install]
+WantedBy=sockets.target
