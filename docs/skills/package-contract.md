@@ -136,8 +136,15 @@ and `vah264dec` with `gst-inspect-1.0`, then test a known H.264 sample.
 The PR #919 decoder-load probe failed for H.264: the factory's `gstreamer1-plugin-libav` is built against `ffmpeg-free`, so `avdec_h264` never registers (#1116); `openh264dec` is the supported software H.264 path.
 `utah-verify-desktop-contract` loads each `[media].decoders` entry in `contracts/bluefin-desktop.toml` with `gst-inspect-1.0` and blocks the image build on failure; `avdec_h264` returns only when the factory ships full FFmpeg.
 
-Remaining #383 gaps include full FFmpeg (the decided direction, replacing
-`-free`) and hardware/codec proof. Keep #383 open for those.
+For #12, `[parity]` explicitly installs `ffmpeg-free` and its seven runtime
+libraries (`libav{codec,device,filter,format,util}-free`, `libswresample-free`,
+`libswscale-free`); `[factory].parity` rejects releases without `.bfin`.
+These names already appear in `baselines/utah/rpms.tsv`; making them explicit
+also puts each NEVRA and origin in the contract report. This protects source
+identity, not codec capability. The approved reversible path keeps the
+published FFmpeg build; do not remove OpenH264 or assert native H.264/HEVC,
+VC-1 or VVC until the factory actually enables and publishes those decoders.
+Keep #12 open for that remaining capability work and hardware/codec proof.
 
 ## Repository policy
 
@@ -371,7 +378,7 @@ describe the same image as its `surface.tsv`; after a refresh,
 [remove resolved triage entries](package-contract/references/factory-consumption.md#closing-baseline-gaps).
 
 Current counts, per the README "Parity with Dakota" section: 57 base manifest
-packages installed, 364 Utah additions (GNOME 51, base-image parity, device
+packages installed, 372 Utah additions (GNOME 51, base-image parity, device
 firmware, desktop services), 6 genuinely unavailable. After changing a manifest,
 run `python3 scripts/generate-site-data.py`, then
 `python3 scripts/check-doc-counts.py --write` to refresh both documents.

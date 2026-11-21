@@ -187,6 +187,7 @@
         "exfatprogs",
         "f2fs-tools",
         "fcitx5-gtk",
+        "ffmpeg-free",
         "fido2-tools",
         "file",
         "foo2zjs",
@@ -267,6 +268,11 @@
         "langpacks-fonts-en",
         "lcms",
         "less",
+        "libavcodec-free",
+        "libavdevice-free",
+        "libavfilter-free",
+        "libavformat-free",
+        "libavutil-free",
         "libcamera-v4l2",
         "libhangul",
         "libieee1284",
@@ -276,6 +282,8 @@
         "libpinyin",
         "libsane-airscan",
         "libsane-hpaio",
+        "libswresample-free",
+        "libswscale-free",
         "libuser",
         "libva-intel-media-driver",
         "libvirt-client",
@@ -478,7 +486,7 @@
     }
   ],
   "totals": {
-    "installed": 421,
+    "installed": 429,
     "unavailable": 6
   },
   "unavailable": [

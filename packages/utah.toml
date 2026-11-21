@@ -188,6 +188,17 @@ packages = [
     "intel-mediasdk",
     "intel-vpl-gpu-rt",
     "libvpl",
+    # Explicitly install the published FFmpeg runtime closure and assert its
+    # factory identity below (#12). These are still the curated -free builds:
+    # keep OpenH264 until the factory publishes native H.264/HEVC decoders.
+    "ffmpeg-free",
+    "libavcodec-free",
+    "libavdevice-free",
+    "libavfilter-free",
+    "libavformat-free",
+    "libavutil-free",
+    "libswresample-free",
+    "libswscale-free",
     # Playlist parsing and software H.264 decoding now have their dependency
     # closures in the pinned factory (#383). Request the real codec explicitly
     # so a noopenh264 compatibility library cannot satisfy the plugin alone.
@@ -1073,6 +1084,15 @@ parity = [
     "libva-intel-media-driver",
     "intel-mediasdk",
     "intel-vpl-gpu-rt",
+    # The command and all seven FFmpeg libraries must remain factory builds.
+    "ffmpeg-free",
+    "libavcodec-free",
+    "libavdevice-free",
+    "libavfilter-free",
+    "libavformat-free",
+    "libavutil-free",
+    "libswresample-free",
+    "libswscale-free",
     "gst-thumbnailers",
     "totem-pl-parser",
     "gstreamer1-plugin-openh264",
