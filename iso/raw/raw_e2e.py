@@ -161,8 +161,8 @@ def composefs_karg(cmdline):
 def composefs_problems(facts):
     """What is wrong with an installed composefs boot (composefs_check.py's facts).
 
-    The installed entries must enforce fs-verity (no `?` on the karg; only the
-    live entry relaxes it), the root must be the composefs image of that
+    The installed entries must enforce fs-verity (no `?` on the karg, as on
+    the live entry), the root must be the composefs image of that
     digest, every object must carry verity, and a full read must find no
     error and no "FILE CORRUPTED" report.
     """

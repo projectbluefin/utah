@@ -33,9 +33,12 @@ repository in `/composefs` (fs-verity on every object), the deployment's
 `/state/os/default/var`, Type #1 entries with a `composefs=<digest>` karg and
 the kernel in `/boot/bootc_composefs-<digest>/`. The live overlay
 (`utah-live-root.service`) runs before `bootc-root-setup.service`, which then
-assembles the composefs root from the overlaid `/sysroot`. overlayfs does not
-pass fs-verity through, so only the live entry carries the insecure
-`composefs=?<digest>`; the installed entries stay strict. The build fails if
+assembles the composefs root from the overlaid `/sysroot`. The repository
+itself is bound from the medium back over the overlay: erofs cannot mount
+the deployment's image from an overlayfs file ("Block device required"), and
+overlayfs does not pass fs-verity through. So the live entry keeps the strict
+`composefs=<digest>` karg like the installed ones, and the live root sits at
+overlay depth 1. The build fails if
 any object lacks verity (`composefs-verity.json`), and so does the shrink
 step if compression drops it. Every installed boot of the E2E checks the
 strict karg, the `composefs:<digest>` root and verity on every object; the

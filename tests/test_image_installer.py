@@ -476,17 +476,13 @@ initrd /bootc_composefs-{DIGEST}/initrd
 class ComposefsTests(unittest.TestCase):
     """The composefs backend: the medium's default, with ostree as the fallback."""
 
-    def test_the_live_entry_relaxes_fs_verity_only_there(self):
+    def test_the_live_entry_keeps_fs_verity_strict(self):
         live = medium.live_entry(COMPOSEFS_ENTRY)
         words = next(line for line in live.splitlines() if line.startswith("options ")).split()[1:]
-        self.assertIn(f"composefs=?{DIGEST}", words)
-        self.assertNotIn(f"composefs={DIGEST}", words)
+        self.assertIn(f"composefs={DIGEST}", words)
+        self.assertFalse(any(w.startswith("composefs=?") for w in words))
         self.assertEqual(words[-2:], ["ro", "utah.live"])
         self.assertIn(f"linux /bootc_composefs-{DIGEST}/vmlinuz\n", live)
-        self.assertEqual(medium.live_karg(f"composefs.digest=v1-sha512-12:{DIGEST}"),
-                         f"composefs.digest=?v1-sha512-12:{DIGEST}")
-        self.assertEqual(medium.live_karg(f"composefs=?{DIGEST}"), f"composefs=?{DIGEST}")
-        self.assertEqual(medium.live_karg("ostree=/ostree/boot.1/default/abc/0"), "ostree=/ostree/boot.1/default/abc/0")
         self.assertEqual(medium.live_entry(live), live)
 
     def test_an_installed_boot_must_enforce_verity_on_every_object(self):
@@ -527,6 +523,10 @@ class ComposefsTests(unittest.TestCase):
         units = RAW / "src/usr/lib/systemd/system"
         live_root = (units / "utah-live-root.service").read_text()
         self.assertIn("Before=ostree-prepare-root.service bootc-root-setup.service initrd-root-fs.target", live_root)
+        # The composefs repository is bound from the medium over the overlay:
+        # erofs cannot mount its image from an overlayfs file.
+        self.assertIn("mount --bind /sysroot/composefs /run/utah-live/composefs", live_root)
+        self.assertIn("mount --bind /run/utah-live/composefs /sysroot/composefs", live_root)
         for dropin in ("ostree-prepare-root.service.d", "bootc-root-setup.service.d"):
             text = (units / dropin / "10-utah-live.conf").read_text()
             self.assertIn("Wants=utah-live-root.service", text)

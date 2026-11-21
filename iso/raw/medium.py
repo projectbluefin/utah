@@ -21,10 +21,6 @@ filesystem has been shrunk to its content:
 The live entry is the deployment's own entry with `ro utah.live` in place of
 `rw` (utah-live-root.service overlays the root with tmpfs in the initrd). Its
 version is raised so GRUB's blscfg, which sorts highest first, lists it first.
-On a composefs-backend medium the entry's composefs karg also gets the `?`
-insecure marker: the composefs repository is read through that overlay, and
-overlayfs does not pass fs-verity through, so a strict mount would find no
-verity digest on any object. The installed disk keeps the strict entries.
 OS-Installer's Utah install.sh removes the entry and the grubenv default from
 the installed copy and fails if any entry still carries `utah.live`.
 """
@@ -74,17 +70,6 @@ def sfdisk_script(layout=LAYOUT) -> str:
     return "\n".join(lines) + "\n"
 
 
-COMPOSEFS_KARGS = ("composefs", "composefs.digest")
-
-
-def live_karg(arg: str) -> str:
-    """arg as the live entry carries it: composefs kargs without fs-verity enforcement."""
-    key, eq, value = arg.partition("=")
-    if eq and key in COMPOSEFS_KARGS and not value.startswith("?"):
-        return f"{key}=?{value}"
-    return arg
-
-
 def live_entry(entry: str, extra_kargs: list[str] | None = None) -> str:
     """The live variant of a BLS entry's text."""
     extra = list(extra_kargs or [])
@@ -99,7 +84,7 @@ def live_entry(entry: str, extra_kargs: list[str] | None = None) -> str:
             line = f"version {int(value) + VERSION_BUMP}"
         elif key == "options":
             saw_options = True
-            args = [live_karg(a) for a in value.split() if a not in ("rw", "ro", LIVE_KARG)]
+            args = [a for a in value.split() if a not in ("rw", "ro", LIVE_KARG)]
             line = "options " + " ".join(args + ["ro", LIVE_KARG] + extra)
         out.append(line)
     if not saw_options:
