@@ -31,6 +31,7 @@ next to the code, and the skills cite them.
 | Edit a first-boot setup hook or its once-only stamp | [`skills/setup-hooks.md`](skills/setup-hooks.md) |
 | Reconcile README ↔ docs.projectbluefin.io/utah, add a live component to the docs page, or change the upstream source the docs page renders from | [`skills/docs-parity.md`](skills/docs-parity.md) |
 | Decide whether to write or update a skill | [`skills/skill-improvement.md`](skills/skill-improvement.md) |
+| Record or look up an architecture decision (why the install path, boot chain or updater is what it is, or is about to change) | [`adr/README.md`](adr/README.md) |
 | Onboard into the factory / cross-repo rules | common's `docs/skills/factory-onboarding.md` |
 
 ## Skill catalog
