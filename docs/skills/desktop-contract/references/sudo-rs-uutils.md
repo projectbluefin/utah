@@ -32,6 +32,16 @@ RPM level, and sudo-rs replaces `/usr/bin/sudo` in the image build.
 - `configure-services.sh` fails the build unless `/usr/bin/ls` links to
   uutils and `gnu-env` owns `/usr/bin/env`. `install-packages.py` fails it if
   `coreutils-single` survives the transaction.
+- **cp and the ESP.** bootupd installs the EFI files onto the vfat ESP with
+  `cp -rp --reflink=auto`. uutils 0.7.0 treated the "Operation not supported"
+  (os error 95) from copying ACLs onto vfat as fatal, so every install and
+  luks E2E failed at `grubx64.efi`; GNU cp falls back to chmod. uutils 0.10.0
+  made the ACL copy best-effort (uutils/coreutils#13626), but needs crate
+  releases Fedora doesn't ship, so the factory carries that fix on 0.7.0 from
+  `0.7.0-12` (projectbluefin/utah-packages#1267). `configure-services.sh`
+  fails the build unless `/usr/bin/cp` links to uutils-coreutils `0.7.0-12`
+  or later. Reproduce on a package image: mount a vfat loop file and run
+  that `cp` with a file carrying an ACL.
 
 ### sudo-rs is sudo
 

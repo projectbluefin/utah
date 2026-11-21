@@ -368,6 +368,17 @@ fi
 # except env, which gnu-env keeps GNU's for pkexec (Dakota's reason).
 [ "$(readlink /usr/bin/ls)" = uutils-coreutils ]
 [ "$(rpm -qf --queryformat '%{NAME}' /usr/bin/env)" = gnu-env ]
+# bootupd copies the EFI files onto the vfat ESP with `cp -rp --reflink=auto`.
+# uutils 0.7.0 treated the ACL copy's "Operation not supported" there as fatal,
+# where GNU cp falls back to chmod, so every install failed. The factory's
+# 0.7.0-12 carries the best-effort ACL copy uutils shipped in 0.10.0
+# (uutils/coreutils#13626, projectbluefin/utah-packages#1267). cp is uutils.
+[ "$(readlink /usr/bin/cp)" = uutils-coreutils ]
+UUTILS_EVR="$(rpm -q --queryformat '%{VERSION}-%{RELEASE}' uutils-coreutils)"
+[ "$(printf '%s\n' 0.7.0-12 "${UUTILS_EVR}" | sort -V | head -n 1)" = 0.7.0-12 ] || {
+    echo "ERROR: uutils-coreutils ${UUTILS_EVR} cp fails bootupd's ESP copy on vfat; need >= 0.7.0-12" >&2
+    exit 1
+}
 
 # sudo-rs needs C sudo's /etc/pam.d/sudo and sudo-i, /etc/sudoers and
 # sudoers.d, so C sudo stays installed (sudo-rs Requires it), as Dakota
