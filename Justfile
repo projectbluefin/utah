@@ -397,11 +397,26 @@ build-ghcr base_name stream flavor kernel_pin="":
     source_date_epoch="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct -- Containerfile packages system_files scripts config .gitmodules docs/agent)}"
     mapfile -t epoch_args < <(scripts/podman-epoch-args.sh "${source_date_epoch}" rewrite)
     gnome_extension_provenance="$(python3 scripts/verify-gnome-extensions.py --print-provenance)"
+    common_args=()
+    if [ -n "${COMMON_IMAGE_REF:-}" ]; then
+      # A Common override must name the digest it builds from, so the image's
+      # provenance.json records the candidate layer, not the pinned default.
+      if [ -z "${COMMON_IMAGE:-}" ] || [[ ! "${COMMON_IMAGE_SHA:-}" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+        echo "error: COMMON_IMAGE_REF needs COMMON_IMAGE and COMMON_IMAGE_SHA (sha256:<64 hex>) for provenance" >&2
+        exit 1
+      fi
+      common_args+=(
+        --build-arg COMMON_IMAGE="$COMMON_IMAGE"
+        --build-arg COMMON_IMAGE_SHA="$COMMON_IMAGE_SHA"
+        --build-arg COMMON_IMAGE_REF="$COMMON_IMAGE_REF"
+      )
+    fi
     podman build \
       "${epoch_args[@]}" \
       --build-arg SOURCE_DATE_EPOCH="${source_date_epoch}" \
       --build-arg UTAH_REWRITE_TIMESTAMPS=1 \
       "${base_args[@]}" \
+      "${common_args[@]}" \
       "${layer_cache_args[@]}" \
       --build-arg HUMMINGBIRD_REPO_DAY="$hb_revision" \
       --build-arg IMAGE_NAME="$image_name" \

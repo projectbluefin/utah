@@ -240,10 +240,18 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(job["with"]["test_ref"], workflow_sha)
         manager = next(m for m in json.loads((ROOT / "renovate.json").read_text())["customManagers"]
                        if m.get("depNameTemplate") == "projectbluefin/testsuite")
-        for name in ["post-testing-e2e", "execute-release"]:
+        for name in ["post-testing-e2e", "execute-release", "candidate-common"]:
             text = (ROOT / f".github/workflows/{name}.yml").read_text()
             pattern = re.sub(r"\(\?<(\w+)>", "(?P<\\1>", manager["matchStrings"][0])
             self.assertEqual(re.search(pattern, text)["currentDigest"], workflow_sha, name)
+            self.assertTrue(any(re.search(p.strip("/"), f".github/workflows/{name}.yml")
+                                for p in manager["managerFilePatterns"]), name)
+        # The candidate workflow's testsuite job holds packages: write, so it
+        # calls the same reviewed testsuite commit, never an unmerged one (#1214).
+        candidate = yaml.safe_load((ROOT / ".github/workflows/candidate-common.yml").read_text())
+        job = candidate["jobs"]["testsuite"]
+        self.assertEqual(job["uses"].rpartition("@")[2], workflow_sha)
+        self.assertEqual(job["with"]["test_ref"], workflow_sha)
 
     def test_build_explicitly_dispatches_iso_after_both_image_jobs(self):
         import yaml
