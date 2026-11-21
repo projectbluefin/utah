@@ -166,6 +166,7 @@ class PackageInstallPathTests(unittest.TestCase):
         fail_contract_write: OSError | None = None,
         major: str = "44",
         dnf_bin: str = "/usr/bin/dnf5",
+        installed_fn=None,
     ) -> tuple[int, list[list[str]], str]:
         """Drives installer.main() on the install path with boundaries mocked."""
         real_path = installer.Path
@@ -192,6 +193,7 @@ class PackageInstallPathTests(unittest.TestCase):
                 fail_contract_write=fail_contract_write,
                 major=major,
                 dnf_bin=dnf_bin,
+                installed_fn=installed_fn,
             )
 
     def _drive_main(
@@ -208,6 +210,7 @@ class PackageInstallPathTests(unittest.TestCase):
         fail_contract_write: OSError | None,
         major: str,
         dnf_bin: str,
+        installed_fn=None,
     ) -> tuple[int, list[list[str]], str]:
         def fake_path(arg, *rest):
             if str(arg) == RESOLVED_CONTRACT:
@@ -240,7 +243,7 @@ class PackageInstallPathTests(unittest.TestCase):
                 patch.object(installer, "dnf_path", return_value=dnf_bin), \
                 patch.object(installer, "fedora_major", return_value=major), \
                 patch.object(installer, "run", side_effect=fake_run), \
-                patch.object(installer, "installed", side_effect=fake_installed), \
+                patch.object(installer, "installed", side_effect=installed_fn or fake_installed), \
                 patch.object(installer, "swap_distro_logos", return_value=0), \
                 patch.object(installer, "repo_evr", return_value=None), \
                 patch.object(installer.sys, "argv", argv), \
@@ -593,6 +596,64 @@ class PackageInstallPathTests(unittest.TestCase):
             self.assertEqual(code, 0)
             install_cmd = commands[0]
             self.assertIn("overlay-default-pkg", install_cmd)
+
+    def swap_overlay(self, tmp_path: Path) -> Path:
+        overlay = write_overlay(tmp_path, parity=["uutils-coreutils-replace", "gnu-env"])
+        overlay.write_text(overlay.read_text()
+                           + '[swap]\ncoreutils-single = "uutils-coreutils-replace"\n')
+        return overlay
+
+    def test_swap_removes_the_base_package_in_the_install_transaction(self):
+        """#1229: a [swap] replacement conflicts with the base package, so the
+        one dnf5 transaction installs the contract and removes the base package."""
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            repos_dir = write_repos(tmp_path)
+            manifest = write_manifest(tmp_path, fedora=["base-pkg"])
+            overlay = self.swap_overlay(tmp_path)
+            answers = [["coreutils-single"], []]
+
+            def installed(pkgs):
+                return answers.pop(0) if pkgs == ["coreutils-single"] else []
+
+            code, commands, _ = self.run_main(manifest, overlay, repos_dir, installed_fn=installed)
+
+            self.assertEqual(code, 0)
+            install_cmd = commands[0]
+            action = install_cmd[install_cmd.index("PackageKit*") + 1:]
+            self.assertEqual(action, [
+                "do", "--action=install", "base-pkg", "uutils-coreutils-replace", "gnu-env",
+                "--action=remove", "coreutils-single",
+            ])
+
+    def test_swap_that_leaves_the_base_package_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            repos_dir = write_repos(tmp_path)
+            manifest = write_manifest(tmp_path, fedora=["base-pkg"])
+            overlay = self.swap_overlay(tmp_path)
+
+            def installed(pkgs):
+                return ["coreutils-single"] if pkgs == ["coreutils-single"] else []
+
+            with patch("sys.stderr", new_callable=io.StringIO) as stderr:
+                code, commands, _ = self.run_main(manifest, overlay, repos_dir, installed_fn=installed)
+
+            self.assertEqual(code, 1)
+            self.assertEqual(len(commands), 1)
+            self.assertIn("coreutils-single", stderr.getvalue())
+
+    def test_swap_already_done_is_a_plain_install(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            repos_dir = write_repos(tmp_path)
+            manifest = write_manifest(tmp_path, fedora=["base-pkg"])
+            overlay = self.swap_overlay(tmp_path)
+
+            code, commands, _ = self.run_main(manifest, overlay, repos_dir, installed_fn=lambda pkgs: [])
+
+            self.assertEqual(code, 0)
+            self.assertEqual(commands[0][commands[0].index("PackageKit*") + 1], "install")
 
 
 if __name__ == "__main__":

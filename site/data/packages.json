@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-20",
+  "generated_at": "2026-11-21",
   "generator": "scripts/generate-site-data.py",
   "groups": [
     {
@@ -210,6 +210,7 @@
         "gnome-os-config-systemd-presets",
         "gnome-os-config-uinput",
         "gnome-os-config-wpa-supplicant-config",
+        "gnu-env",
         "gnupg2-scdaemon",
         "gnupg2-smime",
         "gnupg2-utils",
@@ -380,6 +381,7 @@
         "sqlite",
         "stix-fonts",
         "stoken-libs",
+        "sudo-rs",
         "syncthing",
         "sysprof-cli",
         "sysstat",
@@ -403,6 +405,8 @@
         "uriparser",
         "usermode",
         "util-linux-script",
+        "uutils-coreutils",
+        "uutils-coreutils-replace",
         "v4l-utils",
         "veritysetup",
         "vim-enhanced",
@@ -474,7 +478,7 @@
     }
   ],
   "totals": {
-    "installed": 417,
+    "installed": 421,
     "unavailable": 6
   },
   "unavailable": [
