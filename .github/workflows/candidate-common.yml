@@ -15,7 +15,7 @@ jobs:
     if: github.repository == 'projectbluefin/utah' && github.ref == 'refs/heads/main'
     permissions:
       contents: read
-    uses: projectbluefin/actions/.github/workflows/reusable-pinned-fetches.yml@75348afb3a34c6006a3d3da51e51c9a3818b2616 # v1
+    uses: projectbluefin/actions/.github/workflows/reusable-pinned-fetches.yml@3ab43283cb0ec8bc62aa18208ccc4978a0fd4c44 # v1
     with:
       mode: fail
 
