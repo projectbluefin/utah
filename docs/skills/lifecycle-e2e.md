@@ -97,13 +97,18 @@ run the same guest checker via `python3 -m unittest discover -s tests -p test_bo
 
 Image-content gates belong to the candidate, never the baseline. The baseline
 is the previous `:testing`, so a rule that lands with the candidate (the
-`/efi` mountpoint from #1330, for one) is one the baseline cannot meet; failing
-it there failed every run, and because promotion needs the lifecycle,
-`:testing` could never advance (#1343). The ISO install of the baseline runs
-`luks-e2e.sh` with `UTAH_E2E_EFI_CHECK=""`, and `verify_efi_mount upgraded`
-checks `/efi`, `efi.automount` and `efi.mount` on the booted candidate
-(`evidence/efi-upgraded.txt`). Give any new content gate in `luks-e2e.sh` the
-same treatment.
+`/efi` mountpoint from #1330; the `initrc_t` bootc-probe rule the installer's
+boot receipt needs, #1131) is one the baseline cannot meet; failing it there
+failed every run, and because promotion needs the lifecycle, `:testing` could
+never advance (#1343, and again from run 44799050676). The ISO install of the
+baseline runs `luks-e2e.sh` with `UTAH_E2E_BASELINE=1`, which skips every
+content gate, and the upgraded candidate runs each one: `verify_efi_mount`
+(`evidence/efi-upgraded.txt`) and `verify_bootc_probe`, which reads only the
+candidate boot's AVCs because `audit.log` keeps the baseline's
+(`evidence/avc-upgraded.log`). A new gate in `luks-e2e.sh` that holds the image
+to a rule from this checkout goes behind `BASELINE_INSTALL == 0` with a
+`verify_* upgraded` twin here; checks against the image's own installed
+contract need neither. `tests/test_lifecycle_content_gates.py` pins both halves.
 
 The baseline image (default `ghcr.io/projectbluefin/utah:testing`, the target
 ref `just iso testing` builds with) is the ref a live ISO installs its offline
