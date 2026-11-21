@@ -29,6 +29,32 @@ lives in the os-installer fork. Bump it by moving `OSI_REF` in
 Type #1 entries on the ESP), and the disk page skips LVM2 when libudisks2
 lacks its types.
 
+### gnome-setup (installer=gnome-setup, experimental)
+
+The live layer also carries [gnome-setup](https://gitlab.gnome.org/Teams/STF/setup)
+(GNOME STF), built from the [hanthor/gnome-setup](https://github.com/hanthor/gnome-setup)
+mirror's `utah` branch (`GS_REF`), driving `systemd-sysinstall` and
+`systemd-cryptenroll` over Varlink. Hummingbird's systemd 261 has neither
+Varlink API (v262+), and v262 cannot mount an encrypted root (systemd#44337),
+so `systemd-sysinstall`, `systemd-repart` and `systemd-cryptenroll` come from
+a pinned [hanthor/systemd](https://github.com/hanthor/systemd) commit
+(`SYSTEMD_REF`: systemd main plus `--install-kernel=`/`--install-boot-loader=`),
+installed under `/usr/libexec/utah-sysinstall` next to the system's systemd.
+`UTAH_RAW_INSTALLER=gnome-setup` (workflow input `installer`) puts
+`utah.live.installer=gnome-setup` on the live entry, which starts:
+
+| Piece | File |
+|---|---|
+| Varlink sockets on the standard paths, live + gnome-setup only; sysinstall with the kernel and boot loader steps off (the copied ESP carries shim and GRUB) | `src/usr/lib/systemd/system/utah-{sysinstall,cryptenroll}.socket`, `@.service` |
+| repart.d written at boot: every medium partition but BIOS boot by PARTUUID with `CopyBlocks=`, root into LUKS2 (`key-file+tpm2`, `TPM2PCRs=7` with a TPM 2.0, else `key-file`); gnome-setup's definitions dir links to it | `src/usr/libexec/utah-live-definitions` |
+| install.sh's post-copy fixups, started by gnome-setup after sysinstall (`[page:installer] post-install-unit=`) and before its recovery key page wipes the empty passphrase | `src/usr/libexec/utah-sysinstall-post`, `utah-sysinstall-post@.service` |
+| Pages (language, keyboard, try-or-install, disk, recovery key, done), live user's polkit grants | `src/usr/share/utah/gnome-setup/pages.conf`, `src/usr/share/polkit-1/rules.d/50-utah-live-gnome-setup.rules` |
+
+The E2E (`--installer gnome-setup --tpm`) runs the VMs with swtpm: the first
+boot and the rollback boot must unlock through the TPM2 with no prompt, and
+the bootc switch boot runs without the TPM and is unlocked with the recovery
+key read from gnome-setup's recovery key page.
+
 ### composefs backend
 
 The medium is built with bootc's composefs backend when the image's kernel
