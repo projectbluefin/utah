@@ -113,7 +113,9 @@ In summary:
   grouped and weekly (`renovate.json`). Use `/hi` (signed), never the unsigned
   `quay.io/hummingbird/` mirror. Do not move a stage onto an RHHI image unless
   the image provides what the stage runs: check for a shell, dnf, the user,
-  and each tool.
+  and each tool. The shared pinned-fetches gate exempts only
+  `:latest@sha256:`, so a new `:latest-builder@sha256:` pin also needs a line
+  in `.github/pinned-fetches-allowlist.txt`.
 - Images kept off RHHI, and why: `BASE_IMAGE` (`os-minimal` is a
   hummingbird-community bootc image, not in `/hi`) and the `v4l2loopback`
   stage, which compiles against the base's kernel; `iso/raw/Containerfile`'s

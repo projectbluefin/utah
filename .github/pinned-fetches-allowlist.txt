@@ -2,8 +2,11 @@
 # suppresses any finding whose printed text contains it. Keep each entry
 # next to the reason it is safe.
 
-# Digest follows the tag on the same line; the pull is digest-locked.
+# Digest follows the tag on the same line; the pull is digest-locked. The gate
+# strips only ":latest@sha256:", so RHHI's ":latest-builder@sha256:" needs its
+# own entry.
 os-minimal:latest@sha256:
+registry.access.redhat.com/hi/core-runtime:latest-builder@sha256:
 
 # Developer-only VNC viewer for `just try-installed`; never runs in CI or
 # ends up in an image.
