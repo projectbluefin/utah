@@ -3,7 +3,7 @@
 `build.yml` opens with a container-based gate so a contract package that none of
 Utah's repositories provide fails in seconds instead of surfacing as an
 opaque `exit status 71` from the image build (comment,
-`.github/workflows/build.yml`). It runs two checks:
+`.github/workflows/build.yml`). It runs three checks:
 
 - `just check` -- manifest validation, including the workflow output check
   (`scripts/check_workflow_outputs.py`), the download integrity guard
@@ -13,6 +13,11 @@ opaque `exit status 71` from the image build (comment,
   parity gap missing from `baselines/triage.toml` (`image-baseline.py check`).
 - `just check-repos` -- the complete installation transaction against the
   digest-pinned base and package repository, including extension build tools.
+- `just verify-rhhi-signatures` -- `cosign verify` of every Red Hat Hardened
+  Images pin (`registry.access.redhat.com/hi/...@sha256:`) in the
+  Containerfiles against Red Hat's key, `config/redhat-hi-cosign.pub`, with
+  `--insecure-ignore-tlog` (Red Hat does not log to Rekor). A Renovate bump of
+  such a pin that Red Hat did not sign fails here, before any image build.
 
 Host-side unit tests in this gate must be wall-clock independent: a loaded
 runner can take over a second between setup and assertion, so any test that

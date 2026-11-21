@@ -225,6 +225,27 @@ check-repos:
     gate packages/base.toml packages/utah.toml || exit "$?"
     gate --check-unavailable packages/base.toml packages/utah.toml
 
+# Verify Red Hat's signature on every Red Hat Hardened Images pin
+# (registry.access.redhat.com/hi/<name>:<tag>@sha256:<digest>) in the
+# Containerfiles. config/redhat-hi-cosign.pub is the public key block of Red
+# Hat's release key 3 (https://security.access.redhat.com/data/63405576.txt).
+# Red Hat signs with that key and does not use the transparency log, hence
+# --insecure-ignore-tlog. Fails when no pin is left, so the CI step goes with
+# the last one. Needs cosign and network.
+verify-rhhi-signatures:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mapfile -t refs < <(grep -rhoE 'registry\.access\.redhat\.com/hi/[a-z0-9._-]+:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}' \
+      Containerfile Containerfile.kernel iso | sort -u)
+    if [ "${#refs[@]}" -eq 0 ]; then
+      echo "verify-rhhi-signatures: no Red Hat Hardened Images pin found" >&2
+      exit 1
+    fi
+    for ref in "${refs[@]}"; do
+      cosign verify --key config/redhat-hi-cosign.pub --insecure-ignore-tlog "$ref" >/dev/null
+      echo "verified: $ref"
+    done
+
 # Re-measure Utah against Dakota, its parity target: Dakota's element list from
 # its SBOM, then the user-visible files inside both images. Needs podman and
 # gh. Then review baselines/GAP.md and triage new gaps.
