@@ -778,6 +778,58 @@ class EvidenceTests(unittest.TestCase):
             self.assertNotEqual(bad.returncode, 0, unit)
             self.assertIn(f"{unit} failed during first boot", bad.stderr)
 
+    def test_setup_state_checks_template_units_by_enablement_and_instances(self):
+        # kmsconvt@.service (#1237) is a template: `systemctl show` reports
+        # nothing for it, which read as "unavailable" and failed the lifecycle
+        # candidate (run 44895186825). It must be enabled, and no instance may
+        # have failed.
+        script = (ROOT / "iso/scripts/e2e-services.sh").read_text()
+        block = script[script.index("check_system_unit_state() {"):]
+
+        def run(enabled, failed_instance, scope):
+            system, user = (("kmsconvt@.service", "pipewire.socket") if scope == "system"
+                            else ("gdm.service", "kmsconvt@.service"))
+            harness = (
+                "fail() { echo \"FAIL: $*\" >&2; exit 1; }\n"
+                "scp_target() { :; }\n"
+                "ssh_target() {\n"
+                "  cat >/dev/null\n"
+                "  case \"$1\" in\n"
+                f"    *\"--services 'enabled'\"*) echo {system} ;;\n"
+                f"    *\"--services 'user_enabled'\"*) echo {user} ;;\n"
+                "    *\"is-enabled 'kmsconvt@.service'\"*) echo \"$ENABLED\" ;;\n"
+                "    *is-enabled*) echo enabled ;;\n"
+                "    *\"list-units --state=failed\"*\"'kmsconvt@*.service'\"*) "
+                "[ -z \"$FAILED_INSTANCE\" ] || echo \"$FAILED_INSTANCE loaded failed failed\" ;;\n"
+                # Like systemd: a template has no runtime state to show.
+                "    *kmsconvt@.service*) ;;\n"
+                "    *) printf 'LoadState=loaded\\nActiveState=active\\nResult=success\\n"
+                "ExecMainStartTimestamp=Sat 2026-11-21 10:00:00 UTC\\n' ;;\n"
+                "  esac\n"
+                "}\n"
+                + block + "\nverify_setup_state first\n"
+            )
+            env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "ROOT": str(ROOT),
+                   "TEST_USER": "u", "TEST_PASSWORD": "pw", "ENABLED": enabled,
+                   "FAILED_INSTANCE": failed_instance}
+            return subprocess.run(["bash", "-eu", "-c", harness],
+                                  capture_output=True, text=True, env=env,
+                                  stdin=subprocess.DEVNULL)
+
+        for scope in ("system", "user"):
+            with self.subTest(scope=scope):
+                ok = run("enabled", "", scope)
+                self.assertEqual(ok.returncode, 0, ok.stderr)
+                self.assertIn("  kmsconvt@.service: enabled; no failed instance", ok.stdout)
+                disabled = run("disabled", "", scope)
+                self.assertNotEqual(disabled.returncode, 0)
+                self.assertIn(f"required {scope} unit kmsconvt@.service is disabled",
+                              disabled.stderr)
+                failed = run("enabled", "kmsconvt@tty2.service", scope)
+                self.assertNotEqual(failed.returncode, 0)
+                self.assertIn("kmsconvt@.service has a failed instance during first boot: "
+                              "kmsconvt@tty2.service", failed.stderr)
+
     def test_failure_diagnostics_run_from_the_exit_trap_not_only_fail(self):
         script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
         self.assertIn("preserve_failed_disk_diagnostics", script)

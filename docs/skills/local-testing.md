@@ -386,7 +386,9 @@ instead ([lifecycle-e2e.md](lifecycle-e2e.md)). The check lives in
 image's own `/usr/share/utah/bluefin-desktop.toml` through
 `verify-desktop-contract.py --services enabled|user_enabled` and requires each
 listed unit to be loaded, still enabled after first-boot presets, and not
-failed. `flatpak-preinstall`, `ublue-system-setup` and `ublue-user-setup` must
+failed. A template such as `kmsconvt@.service` has no runtime state of its
+own, so it must be enabled and none of its instances may have failed.
+`flatpak-preinstall`, `ublue-system-setup` and `ublue-user-setup` must
 also have run. `brew-preinstall.service` needs the network, so the offline VM
 only checks that it is enabled. When `UTAH_E2E_EXPECT_FLAVOR` is set (the
 `review_vm` workflow), the harness also checks the Flathub remote, then
