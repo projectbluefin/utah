@@ -75,15 +75,22 @@ for p in "${loop}"p*; do
     elif [[ "${fstype}" == btrfs ]]; then root="$p"
     fi
 done
-[[ -n "${esp}" && -n "${boot}" && -n "${root}" ]] || { echo "unexpected layout: esp=${esp} boot=${boot} root=${root}" >&2; exit 1; }
+[[ -n "${esp}" && -n "${root}" ]] || { echo "unexpected layout: esp=${esp} boot=${boot} root=${root}" >&2; exit 1; }
 mkdir -p "${mnt}/boot" "${mnt}/efi" "${mnt}/root"
-mount "${boot}" "${mnt}/boot"
+mount "${root}" "${mnt}/root"
 mount "${esp}" "${mnt}/efi"
+# bootc puts /boot on its own ext4 partition for some layouts and in the root
+# filesystem for others (btrfs root with bootc 1.17: no /boot partition).
+bootdir="${mnt}/root/boot"
+if [[ -n "${boot}" ]]; then
+    mount "${boot}" "${mnt}/boot"
+    bootdir="${mnt}/boot"
+fi
 
 # --- Live entry ---------------------------------------------------------------
-mapfile -t entries < <(find "${mnt}/boot/loader/entries/" -name '*.conf' ! -name "${LIVE_ENTRY}.conf")
+mapfile -t entries < <(find "${bootdir}/loader/entries/" -name '*.conf' ! -name "${LIVE_ENTRY}.conf")
 [[ ${#entries[@]} -eq 1 ]] || { echo "expected one deployment entry, found ${#entries[@]}" >&2; exit 1; }
-python3 - "${entries[0]}" "${mnt}/boot/loader/entries/${LIVE_ENTRY}.conf" "${LIVE_KARGS}" <<'PY'
+python3 - "${entries[0]}" "${bootdir}/loader/entries/${LIVE_ENTRY}.conf" "${LIVE_KARGS}" <<'PY'
 import sys
 src, dst, extra = sys.argv[1], sys.argv[2], sys.argv[3].split()
 out = []
@@ -101,9 +108,9 @@ for line in open(src).read().splitlines():
 open(dst, "w").write("\n".join(out) + "\n")
 PY
 cat "${entries[0]}" >"${EVIDENCE}/entry-installed.conf"
-cat "${mnt}/boot/loader/entries/${LIVE_ENTRY}.conf" | tee "${EVIDENCE}/entry-live.conf"
+cat "${bootdir}/loader/entries/${LIVE_ENTRY}.conf" | tee "${EVIDENCE}/entry-live.conf"
 
-grubenv="${mnt}/boot/grub2/grubenv"
+grubenv="${bootdir}/grub2/grubenv"
 python3 - "${grubenv}" "${LIVE_ENTRY}" <<'PY'
 import os, sys
 path, live = sys.argv[1], sys.argv[2]
@@ -122,24 +129,24 @@ install -d "${mnt}/efi/EFI/BOOT"
 [[ -f "${mnt}/efi/EFI/BOOT/BOOTX64.EFI" ]] || install -m 0644 "${vendor}/shimx64.efi" "${mnt}/efi/EFI/BOOT/BOOTX64.EFI"
 [[ -f "${mnt}/efi/EFI/BOOT/grubx64.efi" ]] || install -m 0644 "${vendor}/grubx64.efi" "${mnt}/efi/EFI/BOOT/grubx64.efi"
 find "${mnt}/efi" -type f | sed "s|${mnt}/efi||" | sort | tee "${EVIDENCE}/esp-files.txt"
-for f in "${mnt}"/efi/EFI/*/grub.cfg "${mnt}"/efi/EFI/*/bootuuid.cfg "${mnt}"/boot/grub2/*.cfg; do
+for f in "${mnt}"/efi/EFI/*/grub.cfg "${mnt}"/efi/EFI/*/bootuuid.cfg "${bootdir}"/grub2/*.cfg; do
     [[ -f "$f" ]] && { echo "== ${f#"${mnt}"/}"; cat "$f"; }
 done >"${EVIDENCE}/grub-configs.txt"
 
 # --- CI-only diagnostics on the deployment ------------------------------------
-if [[ "${UTAH_RAW_DEBUG_SSHD:-0}" == 1 ]]; then
-    mount -o subvol=/ "${root}" "${mnt}/root" 2>/dev/null || mount "${root}" "${mnt}/root"
-    for d in "${mnt}"/root/ostree/deploy/*/deploy/*.0; do
+for d in "${mnt}"/root/ostree/deploy/*/deploy/*.0; do
+    cat "$d/etc/fstab" >"${EVIDENCE}/fstab.txt" 2>/dev/null || true
+    printf '%s\n' "machine-id: '$(cat "$d/etc/machine-id" 2>/dev/null)'" >>"${EVIDENCE}/fstab.txt"
+    if [[ "${UTAH_RAW_DEBUG_SSHD:-0}" == 1 ]]; then
         install -d "$d/etc/systemd/system/graphical.target.wants"
         ln -sfn /usr/lib/systemd/system/sshd.service "$d/etc/systemd/system/graphical.target.wants/sshd.service"
-        cat "$d/etc/fstab" >"${EVIDENCE}/fstab.txt" 2>/dev/null || true
-        printf '%s\n' "machine-id: '$(cat "$d/etc/machine-id" 2>/dev/null)'" >>"${EVIDENCE}/fstab.txt"
-    done
-    find "${mnt}"/root/ostree/deploy/*/deploy -maxdepth 1 -name '*.origin' -exec cat {} + >"${EVIDENCE}/origin.txt"
-    umount "${mnt}/root"
-fi
+    fi
+done
+find "${mnt}"/root/ostree/deploy/*/deploy -maxdepth 1 -name '*.origin' -exec cat {} + >"${EVIDENCE}/origin.txt"
 sync
-umount "${mnt}/efi" "${mnt}/boot"
+umount "${mnt}/efi"
+[[ -n "${boot}" ]] && umount "${mnt}/boot"
+umount "${mnt}/root"
 
 {
     echo "apparent: $(du -h --apparent-size "${OUT}" | cut -f1)"

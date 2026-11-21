@@ -6,7 +6,7 @@
 # utah). In production these layers would live in Utah's own Containerfile; the
 # spike adds them on top of a published :testing digest instead.
 ARG SOURCE_IMAGE=ghcr.io/projectbluefin/utah:testing
-ARG BUILDER_IMAGE=registry.fedoraproject.org/fedora:43
+ARG BUILDER_IMAGE=registry.fedoraproject.org/fedora:43@sha256:a19e8544313a675e6529d3242f74f0015beebdd1834d0bf9b132e669f734f2bf
 
 # OS-Installer is Python + GTK4/libadwaita; every runtime library it loads is
 # already in Utah (gnome-desktop4, libgweather4, vte291-gtk4, udisks2, Atspi).
@@ -14,7 +14,8 @@ ARG BUILDER_IMAGE=registry.fedoraproject.org/fedora:43
 # Hummingbird repositories, so build it here and copy the result over.
 FROM ${BUILDER_IMAGE} AS os-installer
 ARG OSI_REPO=https://github.com/hanthor/os-installer.git
-ARG OSI_REF=utah
+# hanthor/os-installer branch utah; the workflow passes the commit it resolved.
+ARG OSI_REF=3f802b307ae34c38f78db9461af781bb28118371
 RUN dnf -y install --setopt=install_weak_deps=False \
         git meson ninja-build gettext blueprint-compiler glib2-devel \
         gtk4-devel libadwaita-devel gnome-desktop4-devel libgweather4-devel \
