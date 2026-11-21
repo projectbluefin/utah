@@ -18,6 +18,11 @@ ARG BREW_IMAGE_SHA=sha256:9e0492dbc471258657564c94dae18b58dd96ddb998a06f2b15e820
 # architecture-independent. Renovate keeps it current like the pins above.
 ARG WALLPAPERS_IMAGE=ghcr.io/projectbluefin/bluefin-wallpapers-gnome
 ARG WALLPAPERS_IMAGE_SHA=sha256:762ac2b2772291bd3a3ee46e8cc5bb0598ff19694a9a53f37d11da54c31a0d1a
+# Generic shell for the throwaway artwork stage: Red Hat Hardened Images'
+# signed core-runtime builder (bash, curl, coreutils, dnf), pinned to its
+# multi-arch index digest. CI verifies the signature against Red Hat's key
+# (`just verify-rhhi-signatures`); Renovate bumps it like the pins above.
+ARG ARTWORK_BUILDER_IMAGE=registry.access.redhat.com/hi/core-runtime:latest-builder@sha256:c869614f126dac92619f0935da52207ac79199a04683b0ed8f9a180b30edd8ab
 
 FROM ${COMMON_IMAGE_REF} AS common
 FROM ${BREW_IMAGE}@${BREW_IMAGE_SHA} AS brew
@@ -54,11 +59,15 @@ RUN /usr/local/libexec/utah-install-v4l2loopback base /out
 #    wordmarks, as Dakota's common.bst installs them (#1266).
 # Sources other than the wallpaper image are commit-pinned with sha256 in
 # config/artwork.lock and verified by scripts/fetch-artwork.sh.
-FROM ${BASE_IMAGE} AS artwork
+# The builder image runs as UID 65532 and has no awk, which fetch-artwork.sh
+# reads the lock with, so the stage runs as root and installs gawk first.
+FROM ${ARTWORK_BUILDER_IMAGE} AS artwork
+USER 0
 COPY scripts/fetch-artwork.sh /artwork/scripts/fetch-artwork.sh
 COPY config/artwork.lock /artwork/config/artwork.lock
 COPY --from=wallpapers / /wallpapers
 RUN set -eu; \
+    dnf -y -q install --setopt=install_weak_deps=False gawk; \
     bg=/out/overlay/usr/share/backgrounds/bluefin; \
     props=/out/overlay/usr/share/gnome-background-properties; \
     install -d "$bg" "$props"; \

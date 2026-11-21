@@ -1,7 +1,7 @@
 ---
 name: containerfile
 version: "1.0"
-last_updated: "2026-11-19"
+last_updated: "2026-11-21"
 id: containerfile
 one_line_purpose: Edit the Containerfile without regressing layer count or cache hits.
 entry_point: docs/skills/containerfile.md
@@ -101,6 +101,27 @@ In summary:
   `scripts/fetch-artwork.sh` (one commit, one sha256 per path, fails closed).
   Renovate does not touch the lock, because it cannot recompute checksums:
   bump the commit and the checksums together by hand.
+- The `artwork` stage runs on `ARTWORK_BUILDER_IMAGE`, a Red Hat Hardened
+  Images builder (`registry.access.redhat.com/hi/core-runtime:latest-builder`,
+  `tag@sha256` of the multi-arch index), not on `BASE_IMAGE`: it only needs a
+  shell, curl and coreutils, and off the base it no longer rebuilds with every
+  kernel cache or base bump. The image runs as UID 65532 and ships no awk, so
+  the stage sets `USER 0` and installs `gawk` with the image's dnf before
+  `fetch-artwork.sh` runs. The contract job verifies every `/hi` pin's
+  signature against Red Hat's key in `config/redhat-hi-cosign.pub` (`just
+  verify-rhhi-signatures`); Renovate's Dockerfile manager bumps the ARG,
+  grouped and weekly (`renovate.json`). Use `/hi` (signed), never the unsigned
+  `quay.io/hummingbird/` mirror. Do not move a stage onto an RHHI image unless
+  the image provides what the stage runs: check for a shell, dnf, the user,
+  and each tool.
+- Images kept off RHHI, and why: `BASE_IMAGE` (`os-minimal` is a
+  hummingbird-community bootc image, not in `/hi`) and the `v4l2loopback`
+  stage, which compiles against the base's kernel; `iso/raw/Containerfile`'s
+  Fedora builder, because the Hummingbird repositories lack
+  `blueprint-compiler` and the GTK4/libadwaita/gnome-desktop4/libgweather4/vte
+  `-devel` packages OS-Installer builds against; `ghcr.io/qemus/qemu`,
+  `easy-novnc` and tacklebox (no RHHI equivalent); and every image that runs
+  Utah itself (`check-repos`, `check-desktop-contract`, the ISO scripts).
 - The digest-pinned `packages` stage is the package factory's RPM repository,
   and it is **bind mounted, never copied**: `RUN --mount=type=bind,
   from=packages,source=/repository,target=/etc/utah-packages,ro` feeds it to the

@@ -133,6 +133,10 @@ jobs:
         run: just test
       - name: Check package availability in Utah's repositories
         run: just check-repos
+      - name: Install cosign
+        uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+      - name: Verify Red Hat Hardened Images signatures
+        run: just verify-rhhi-signatures
       # config/flavors.json is the single source for the build, promote and
       # release matrices. It used to be four literals in three files, which is
       # one place to narrow the set and three places to forget.

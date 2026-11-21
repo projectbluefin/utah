@@ -61,6 +61,19 @@
         "projectbluefin/testsuite"
       ],
       "groupName": "projectbluefin/testsuite"
+    },
+    {
+      "description": "Red Hat Hardened Images pins (registry.access.redhat.com/hi), extracted from Containerfile ARGs by the built-in Dockerfile manager. They rebuild daily; take the digest weekly.",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "registry.access.redhat.com/hi/**"
+      ],
+      "groupName": "Red Hat Hardened Images",
+      "schedule": [
+        "before 6am on monday"
+      ]
     }
   ]
 }

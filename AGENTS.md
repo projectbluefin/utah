@@ -61,9 +61,11 @@ checks (`scripts/check-skill-frontmatter.sh`, `scripts/check-skill-index.sh`,
   literally — `just check` fails on it. Retire a flavor by moving it under
   `retired` with the reason.
 - **Containerfile ARG digests are pinned** (`BASE_IMAGE`, `PACKAGE_IMAGE_SHA`,
-  `COMMON_IMAGE_SHA`, `BREW_IMAGE_SHA`, `WALLPAPERS_IMAGE_SHA`). Do not bump
-  them by hand unless the task is exactly that. All five pins are
-  Renovate-managed. Utah's regex
+  `COMMON_IMAGE_SHA`, `BREW_IMAGE_SHA`, `WALLPAPERS_IMAGE_SHA`,
+  `ARTWORK_BUILDER_IMAGE`). Do not bump them by hand unless the task is exactly
+  that. All six pins are Renovate-managed. `ARTWORK_BUILDER_IMAGE` is a signed
+  Red Hat Hardened Images builder (`registry.access.redhat.com/hi/`); CI
+  verifies it with `just verify-rhhi-signatures`. Utah's regex
   manager discovers `PACKAGE_IMAGE_SHA` and the repository's `# factory-pin:`
   stamp as one grouped Docker digest update, preserving the package ARG
   indirection and local image override. `Containerfile` and
