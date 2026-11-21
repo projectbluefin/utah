@@ -210,6 +210,17 @@ class Harness:
                 time.sleep(5)
         raise Fail(f"SSH as {user} not reachable within {timeout}s")
 
+    def collect_journal(self, tag):
+        """Best-effort guest journal for diagnosis (live user via sudo, or root)."""
+        for user, pw, cmd in (("liveuser", "live", "sudo journalctl -b --no-pager -o short-monotonic"),
+                              ("root", None, "journalctl -b --no-pager -o short-monotonic")):
+            try:
+                out = self.ssh(user, cmd, timeout=120, password=pw)
+                self.save(f"journal-{tag}.txt", out)
+                return
+            except Exception:  # noqa: BLE001
+                continue
+
     def save(self, name, text):
         (self.evidence / name).write_text(text)
 
@@ -637,6 +648,7 @@ def main():
                 h.shot("fail-final", f"FAILURE state: {e}")
             except Exception:  # noqa: BLE001
                 pass
+            h.collect_journal("failure")
         return 1
     finally:
         h.write_manifest()
