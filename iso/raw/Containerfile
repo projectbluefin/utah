@@ -26,7 +26,7 @@ ARG BUILDER_IMAGE=registry.fedoraproject.org/fedora:43@sha256:a19e8544313a675e65
 FROM ${BUILDER_IMAGE} AS sysinstall
 ARG SYSTEMD_REPO=https://github.com/hanthor/systemd.git
 # Full commit of hanthor/systemd (branch sysinstall-install-toggles).
-ARG SYSTEMD_REF=38e1c76a8ee44a0ca671f832e2263f1a63cd7201
+ARG SYSTEMD_REF=8998ad00ff2dee64115d74331d11a9bd8860c194
 RUN dnf -y install --setopt=install_weak_deps=False \
         git gcc meson ninja-build gperf diffutils patchelf pkgconf-pkg-config python3-jinja2 \
         libcap-devel libmount-devel libblkid-devel libfdisk-devel cryptsetup-devel \

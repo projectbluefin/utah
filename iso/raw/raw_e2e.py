@@ -300,16 +300,21 @@ class Harness:
         sock = self.work / f"{name}-swtpm.sock"
         sock.unlink(missing_ok=True)
         self.tpm_state.mkdir(exist_ok=True)
-        self.swtpm = subprocess.Popen(["swtpm", "socket", "--tpm2", "--tpmstate", f"dir={self.tpm_state}",
-                                       "--ctrl", f"type=unixio,path={sock}",
-                                       "--log", f"file={self.work / f'{name}-swtpm.log'},level=1"],
-                                      stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        out = self.evidence / f"{name}-swtpm.out"
+        with out.open("w") as stream:
+            self.swtpm = subprocess.Popen(["swtpm", "socket", "--tpm2", "--tpmstate", f"dir={self.tpm_state}",
+                                           "--ctrl", f"type=unixio,path={sock}",
+                                           "--log", f"file={self.evidence / f'{name}-swtpm.log'},level=1"],
+                                          stdout=stream, stderr=subprocess.STDOUT)
         for _ in range(50):
             if sock.exists():
                 break
+            if self.swtpm.poll() is not None:
+                break
             time.sleep(0.2)
-        else:
-            raise Fail("swtpm did not create its control socket")
+        if not sock.exists():
+            raise Fail(f"swtpm did not create its control socket (exit {self.swtpm.poll()}): "
+                       f"{out.read_text().strip()[-500:] or 'no output'}")
         return ["-chardev", f"socket,id=chrtpm,path={sock}",
                 "-tpmdev", "emulator,id=tpm0,chardev=chrtpm", "-device", "tpm-crb,tpmdev=tpm0"]
 
