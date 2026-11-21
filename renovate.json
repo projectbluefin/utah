@@ -74,6 +74,24 @@
       "schedule": [
         "before 6am on monday"
       ]
+    },
+    {
+      "description": "These 11 workflows are human-merge paths in the hive (they build, test, release or publish, or hold the App key). Give their updates their own branches, so a pin-only update to them is a PR of its own that the hive's pin-only exception can merge, instead of being held with other workflows. Renovate doesn't merge these updates itself, because its own merge would skip the hive's hold on these files. The hive merges a pin-only update (including the projectbluefin/testsuite test_ref lines that move with their uses: pin), and anything else, a major included, waits for a person. Keep this list equal to the hive's human_merge_paths for utah.",
+      "matchFileNames": [
+        ".github/workflows/build.yml",
+        ".github/workflows/execute-release.yml",
+        ".github/workflows/promote-testing-to-main.yml",
+        ".github/workflows/post-testing-e2e.yml",
+        ".github/workflows/sync-main-to-testing.yml",
+        ".github/workflows/image-baselines.yml",
+        ".github/workflows/update-armed-prs.yml",
+        ".github/workflows/update-gnome-extensions.yml",
+        ".github/workflows/prow.yml",
+        ".github/workflows/candidate-common.yml",
+        ".github/workflows/pages.yml"
+      ],
+      "additionalBranchPrefix": "human-merge-paths-",
+      "automerge": false
     }
   ]
 }
