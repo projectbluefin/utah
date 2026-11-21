@@ -24,8 +24,7 @@ check_system_unit_state() {
         esac
     done <<< "${state}"
     [[ "${load_state}" == loaded ]] || fail "required system unit ${unit} is ${load_state:-unavailable}"
-    # Result= is success/exit-code/signal/timeout/...; it is never "failed".
-    [[ "${active_state}" != failed && "${result}" == success ]] \
+    unit_state_ok "${unit}" "${active_state}" "${result}" \
         || fail "system unit ${unit} failed during ${boot_pass} boot (ActiveState=${active_state:-unknown} Result=${result:-unknown})"
     if [[ "${required_run}" == true && ( -z "${start_time}" || "${start_time}" == "n/a" ) ]]; then
         fail "required system unit ${unit} did not execute during ${boot_pass} boot"
@@ -34,7 +33,7 @@ check_system_unit_state() {
         state="$(ssh_target "printf '%s\\n' '${TEST_PASSWORD}' | sudo -S -p '' systemctl is-enabled '${unit}'" 2>/dev/null || true)"
         [[ "${state}" == enabled ]] || fail "required system unit ${unit} is ${state:-not enabled}"
     fi
-    echo "  ${unit}: ${result:-unknown}"
+    echo "  ${unit}: ${result:-${active_state}}"
 }
 
 check_user_unit_state() {
@@ -50,9 +49,8 @@ check_user_unit_state() {
         esac
     done <<< "${state}"
     [[ "${load_state}" == loaded ]] || fail "user unit ${unit} is ${load_state:-unavailable}"
-    # Result= is success/exit-code/signal/timeout/...; it is never "failed".
     if [[ "${offline_failure_ok}" != true ]]; then
-        [[ "${active_state}" != failed && "${result}" == success ]] \
+        unit_state_ok "${unit}" "${active_state}" "${result}" \
             || fail "user unit ${unit} failed during ${boot_pass} boot (ActiveState=${active_state:-unknown} Result=${result:-unknown})"
     fi
     if [[ "${required_run}" == true && ( -z "${start_time}" || "${start_time}" == "n/a" ) ]]; then
@@ -60,7 +58,20 @@ check_user_unit_state() {
     fi
     enabled="$(ssh_target "systemctl --user is-enabled '${unit}'" 2>/dev/null || true)"
     [[ "${enabled}" == enabled ]] || fail "user unit ${unit} is ${enabled:-not enabled}"
-    echo "  ${unit}: ${result:-unknown}; enabled"
+    echo "  ${unit}: ${result:-${active_state}}; enabled"
+}
+
+# Result= is success/exit-code/signal/timeout/...; it is never "failed". Only
+# unit types that run something have it: a target, slice or device shows no
+# Result= at all (nfs-client.target, run 44926686288), so its ActiveState
+# alone says whether it failed.
+unit_state_ok() {
+    local unit="$1" active_state="$2" result="$3"
+    [[ "${active_state}" != failed ]] || return 1
+    case "${unit}" in
+        *.target | *.slice | *.device) return 0 ;;
+    esac
+    [[ "${result}" == success ]]
 }
 
 # A template (name@.service) has no state of its own, so `systemctl show`
