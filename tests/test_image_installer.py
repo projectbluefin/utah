@@ -379,5 +379,75 @@ class NonBlockingTrackTests(unittest.TestCase):
         self.assertNotRegex(paths, r"medium\.raw|\.qcow2|id_ed25519")
 
 
+class OfflineFlatpakTests(unittest.TestCase):
+    """ADR-0001 decision 6: Flatpaks on the medium's /var, never in an image."""
+
+    def test_a_removed_app_must_stay_removed_and_the_rest_stay(self):
+        baked = ["org.gnome.Calculator", "org.mozilla.firefox", "com.mitchellh.ghostty"]
+        self.assertEqual(raw_e2e.flatpak_problems(baked, baked), [])
+        self.assertEqual(raw_e2e.flatpak_problems(baked, baked[1:], "org.gnome.Calculator"), [])
+        self.assertEqual(raw_e2e.flatpak_problems(baked, baked, "org.gnome.Calculator"),
+                         ["org.gnome.Calculator came back after it was removed"])
+        self.assertEqual(raw_e2e.flatpak_problems(baked, baked[:1]),
+                         ["missing com.mitchellh.ghostty", "missing org.mozilla.firefox"])
+
+    def test_results_carry_the_flatpak_checks(self):
+        results = raw_e2e.Results("gui")
+        results.flatpak("first boot", ["a", "b"], [])
+        self.assertEqual(results.as_dict()["flatpaks"], {"first boot": {"apps": 2, "problems": []}})
+
+    def test_no_image_layer_installs_flatpaks(self):
+        containerfile = (RAW / "Containerfile").read_text()
+        self.assertNotRegex(containerfile, r"(?i)flatpak")
+        for path in (ROOT / "Containerfile", ROOT / "Containerfile.kernel"):
+            self.assertNotRegex(path.read_text(), r"flatpak (install|preinstall)")
+
+    def test_the_medium_bakes_them_into_the_stateroot_var_with_labels(self):
+        bake = (RAW / "bake-flatpaks.sh").read_text()
+        self.assertIn('-v "${stateroot}/var/lib/flatpak:/var/lib/flatpak"', bake)
+        self.assertIn("flatpak preinstall --system", bake)
+        self.assertIn("setfiles -F -r /stateroot", bake)
+        self.assertNotRegex(bake, r"podman (build|commit|push)")
+
+    def test_the_medium_bakes_the_set_the_iso_bakes(self):
+        bake = (RAW / "bake-flatpaks.sh").read_text()
+        iso = (ROOT / "iso/live/Containerfile").read_text()
+        brewfile = "/usr/share/ublue-os/homebrew/system-flatpaks.Brewfile"
+        self.assertIn(f"--flatpaks {brewfile}", iso)
+        self.assertIn("/scripts/verify-desktop-contract.py", bake)
+        self.assertIn(brewfile, bake)
+        self.assertIn("--no-related --or-update flathub", bake)
+        # The OCI (TunaOS) remote needs a session bus in the container.
+        self.assertIn("dbus-daemon --session --fork --print-address", bake)
+
+    def test_the_workflow_asserts_no_image_flatpaks_and_bakes_before_shrinking(self):
+        steps = yaml.safe_load(WORKFLOW.read_text())["jobs"]["e2e"]["steps"]
+        names = [s.get("name", "") for s in steps]
+        assert_step = steps[names.index("Assert the published image and the live layer carry no Flatpaks")]
+        self.assertIn("/var/lib/flatpak", assert_step["run"])
+        bake = steps[names.index("Bake the Flatpaks into the medium and shrink it")]["run"]
+        self.assertLess(bake.index("bake-flatpaks.sh"), bake.rindex('shrink-raw-image.sh localhost/utah-raw:ci "$WORK/medium.raw"'))
+        e2e = steps[names.index("End-to-end with screenshots")]["run"]
+        self.assertIn("--flatpaks", e2e)
+
+    def test_flatpaks_are_on_by_default_and_a_dispatch_can_turn_them_off(self):
+        workflow = yaml.safe_load(WORKFLOW.read_text())
+        flag = workflow[True]["workflow_dispatch"]["inputs"]["flatpaks"]
+        self.assertEqual((flag["type"], flag["default"]), ("boolean", True))
+        # A bare inputs.flatpaks is null on schedule and pull_request, which
+        # would turn the bake off there.
+        self.assertEqual(workflow["jobs"]["e2e"]["env"]["FLATPAKS"],
+                         "${{ github.event_name != 'workflow_dispatch' || inputs.flatpaks }}")
+
+    def test_comparison_reports_baked_flatpaks_and_removal(self):
+        cell = compare.flatpak_cell({"baked": {"apps": 20, "bytes": 3 * 2**30, "seconds": 400},
+                                     "checks": {"first boot": {"problems": []},
+                                                "after bootc switch": {"problems": []},
+                                                "after bootc rollback": {"problems": []}}})
+        self.assertIn("20 apps, 3.00 GiB", cell)
+        self.assertIn("stayed removed through switch and rollback", cell)
+        self.assertEqual(compare.flatpak_cell({}), "none baked")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -16,6 +16,9 @@ Stages (every screenshot is listed in DIR/screenshots/manifest.json):
      `bootc status`.
   4. `bootc switch` to the candidate digest, reboot, unlock, log in at GDM:
      desktop + `bootc status`. Then `bootc rollback` and the same again.
+     With --flatpaks (the medium's baked app list), every installed boot
+     checks the baked apps are there; after the first boot one is removed
+     (--remove-flatpak) and must stay removed through switch and rollback.
 
 DIR/evidence/results.json records each stage (STAGES) as pass, fail or not
 run with its duration, plus SELinux mode and failed units for every boot;
@@ -88,6 +91,7 @@ class Results:
         self.clock = clock
         self.stages = {}
         self.boots = {}
+        self.flatpaks = {}
         self.current = None
         self.started = None
         self.error = None
@@ -113,11 +117,29 @@ class Results:
     def boot(self, phase, selinux, failed_units):
         self.boots[phase] = {"selinux": selinux, "failed_units": failed_units}
 
+    def flatpak(self, phase, installed, problems):
+        self.flatpaks[phase] = {"apps": len(installed), "problems": problems}
+
     def as_dict(self, timings=None):
         stages = [{"stage": s, **self.stages.get(s, {"status": "not run", "seconds": None})} for s in STAGES]
         passed = self.error is None and all(s["status"] == "pass" for s in stages)
         return {"result": "pass" if passed else "fail", "error": self.error, "install": self.install,
-                "stages": stages, "boots": self.boots, "timings": dict(timings or {})}
+                "stages": stages, "boots": self.boots, "flatpaks": self.flatpaks,
+                "timings": dict(timings or {})}
+
+
+def flatpak_problems(baked, installed, removed=None):
+    """What is wrong with the installed system's Flatpaks.
+
+    baked: apps the medium carries (bake-flatpaks.sh); removed: the app the
+    user removed before bootc switch, which must stay removed. Every other
+    baked app must still be there.
+    """
+    installed = set(installed)
+    problems = [f"missing {app}" for app in sorted(set(baked) - installed) if app != removed]
+    if removed and removed in installed:
+        problems.append(f"{removed} came back after it was removed")
+    return problems
 
 
 class Fail(Exception):
@@ -833,6 +855,39 @@ class Harness:
                 return
         raise Fail("installed system did not go down for reboot")
 
+    def check_flatpaks(self, phase, removed=None):
+        """The baked Flatpaks are all there, except the one the user removed."""
+        if not self.args.flatpaks:
+            return
+        baked = [a for a in Path(self.args.flatpaks).read_text().split() if a]
+        # flatpak-preinstall.service runs in the background on every boot and
+        # has the network here: let it finish, so a removed app it would
+        # reinstall is back before we look.
+        end = time.time() + 900
+        while time.time() < end:
+            state = self.ssh("root", "systemctl show -P ActiveState flatpak-preinstall.service", check=False).strip()
+            if state not in ("activating", "deactivating"):
+                break
+            time.sleep(10)
+        installed = self.ssh("root", "flatpak list --system --app --columns=application", check=False).split()
+        self.save(f"flatpaks-{slug(phase)}.txt", "\n".join(installed) + "\n\n" + self.ssh(
+            "root", "journalctl -b -u flatpak-preinstall.service --no-pager -n 40", check=False))
+        problems = flatpak_problems(baked, installed, removed)
+        self.results.flatpak(phase, installed, problems)
+        log(f"  {phase}: {len(installed)} Flatpak apps; problems: {problems or 'none'}")
+        if problems:
+            raise Fail(f"{phase}: Flatpaks: {'; '.join(problems)}")
+
+    def remove_flatpak(self):
+        """Remove one baked app the way a user would; it must stay removed."""
+        if not self.args.flatpaks:
+            return None
+        baked = sorted(a for a in Path(self.args.flatpaks).read_text().split() if a)
+        app = self.args.remove_flatpak if self.args.remove_flatpak in baked else baked[0]
+        self.save("flatpak-remove.log", self.ssh("root", f"flatpak uninstall --system --noninteractive -y {shlex.quote(app)} 2>&1"))
+        log(f"  removed Flatpak {app}")
+        return app
+
     def installed(self):
         log("=== Stage 3: first boot of the installed disk ===")
         self.results.begin("first boot unlock")
@@ -847,6 +902,8 @@ class Harness:
         self.initial_setup()
         self.results.begin("first boot desktop")
         self.baseline_digest = self.desktop_and_status("first boot", "14-first-boot")
+        self.check_flatpaks("first boot")
+        removed = self.remove_flatpak()
         log(f"  baseline digest {self.baseline_digest}")
 
         log("=== Stage 4: bootc switch to the candidate digest ===")
@@ -864,6 +921,7 @@ class Harness:
         self.installed_boot("after bootc switch", "20-switch-luks-prompt")
         self.gdm_login("after bootc switch", "21-switch-gdm")
         digest = self.desktop_and_status("after bootc switch", "22-switch")
+        self.check_flatpaks("after bootc switch", removed)
         if self.candidate_digest and digest != self.candidate_digest:
             raise Fail(f"after switch booted {digest}, expected {self.candidate_digest}")
 
@@ -874,6 +932,7 @@ class Harness:
         self.installed_boot("after bootc rollback", "30-rollback-luks-prompt")
         self.gdm_login("after bootc rollback", "31-rollback-gdm")
         digest = self.desktop_and_status("after bootc rollback", "32-rollback")
+        self.check_flatpaks("after bootc rollback", removed)
         if digest != self.baseline_digest:
             raise Fail(f"after rollback booted {digest}, expected baseline {self.baseline_digest}")
         self.stop_vm(lambda: self.ssh("root", "systemctl poweroff --no-block", check=False))
@@ -975,6 +1034,9 @@ def main():
     ap.add_argument("--cpus", type=int, default=4)
     ap.add_argument("--target-size", default="48G")
     ap.add_argument("--install", choices=("gui", "script"), default="gui")
+    ap.add_argument("--flatpaks", help="apps baked into the medium (bake-flatpaks.sh flatpak-apps.txt)")
+    ap.add_argument("--remove-flatpak", default="org.gnome.Calculator",
+                    help="baked app to remove after first boot (default: first baked app if absent)")
     args = ap.parse_args()
     h = Harness(args)
     try:

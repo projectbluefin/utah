@@ -12,6 +12,7 @@ nothing. Tracking issue: #1403. History: spike #1399.
 |---|---|
 | Live-capable layer on a published digest: OS-Installer from a pinned `hanthor/os-installer` commit (`OSI_REF`, fetched by commit and compared after checkout), `utah.live` units, initramfs with `systemd-volatile-root` | `iso/raw/Containerfile`, `iso/raw/src/` |
 | Raw medium: GPT BIOS-BOOT, 512 MiB ESP, 1 GiB ext4 `/boot`, btrfs root; one `bootc install to-filesystem --generic-image --karg rhgb --karg quiet`; "Utah Live" BLS entry as GRUB default; `EFI/BOOT` fallback | `iso/raw/build-raw-image.sh`, `iso/raw/medium.py` |
+| Offline Flatpaks in the medium's stateful `/var` (stateroot `var/lib/flatpak`), never in an image: the set the ISO bakes (`system-flatpaks.Brewfile` apps via `scripts/verify-desktop-contract.py --flatpaks`, `--no-related`, listed runtimes pinned) plus `flatpak preinstall` of the image's `preinstall.d`, run in the image with that directory bind-mounted, then `setfiles` with the image's contexts | `iso/raw/bake-flatpaks.sh` |
 | Shrink to content: fstrim, btrfs balance + resize to minimum (+256 MiB), cut the root partition and the file, rewrite the backup GPT; `size-breakdown.txt` shows what takes the space | `iso/raw/shrink-raw-image.sh`, `medium.py shrink-plan` |
 | End to end with screenshots and `evidence/results.json` | `iso/raw/raw_e2e.py`, `atspi_drive.py`, `vte_term.py` |
 | Size per step (raw, allocated, zstd -3, zstd -19 --long, xz -9, pack/unpack time) | `iso/raw/measure_medium.py` |
@@ -23,6 +24,25 @@ UUIDs and their references, drop the live entry, `rd.luks.uuid` + crypttab,
 grow root) lives in the os-installer fork. Bump it by moving `OSI_REF` in
 `iso/raw/Containerfile` to a full commit of the fork's `utah` branch.
 
+### Offline Flatpaks
+
+The published image and the live layer stay Flatpak-free; the workflow
+fails if either has content in `/var/lib/flatpak`. bootc copies an image's
+`/var` only at the first deployment and never touches it again, so Flatpaks
+in the medium's stateroot `/var` reach the installed disk through the block
+copy and can never be re-added or overwritten by an update. The set is the
+ISO's (`iso/live/src/install-flatpaks.sh`) plus the image's `preinstall.d`,
+which `flatpak preinstall` records as preinstalled, so
+flatpak-preinstall.service has nothing to fetch on first boot and a removed
+app stays removed. The E2E proves
+both: every installed boot checks the baked list (`flatpak-apps.txt`), and an
+app removed after first boot (`--remove-flatpak`, default
+`org.gnome.Calculator`) must still be absent after switch and rollback, once
+flatpak-preinstall.service has run with the network up.
+
+Each run also measures the same medium without Flatpaks (`size-2-no-flatpaks.json`)
+so the comparison shows what the offline set costs in download size.
+
 ## Running it
 
 `.github/workflows/image-installer.yml` runs nightly (07:41 UTC, after the
@@ -32,7 +52,9 @@ requests that touch `iso/raw/**`, the workflow, or
 `ghcr.io/projectbluefin/<image>@sha256:...`), `all_flavors`, `install`
 (`gui` drives OS-Installer's window through a QEMU USB tablet at AT-SPI
 extents; `script` runs the same `install.sh` over SSH), `btrfs_compress`
-(build the root with `compress-force=<value>`), `formats`.
+(build the root with `compress-force=<value>`), `flatpaks` (default on: bake
+the set above into the medium's `/var`; off leaves the image's `preinstall.d`
+to the online first-boot flatpak-preinstall.service), `formats`.
 
 The job summary holds the comparison table; the
 `image-installer-<image>` artifact holds screenshots, `contact-sheet.png`,
@@ -45,6 +67,7 @@ Locally, with a published digest and root (KVM, podman, qemu, OVMF, zstd, xz):
 ```bash
 sudo podman build -t localhost/utah-raw:ci --build-arg SOURCE_IMAGE=ghcr.io/projectbluefin/utah@sha256:... -f iso/raw/Containerfile iso/raw
 sudo bash iso/raw/build-raw-image.sh localhost/utah-raw:ci output/medium.raw ghcr.io/projectbluefin/utah:testing
+sudo bash iso/raw/bake-flatpaks.sh localhost/utah-raw:ci output/medium.raw   # needs Flathub
 sudo bash iso/raw/shrink-raw-image.sh localhost/utah-raw:ci output/medium.raw
 ```
 
