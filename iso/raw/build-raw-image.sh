@@ -153,6 +153,26 @@ for f in "${mnt}"/efi/EFI/*/grub.cfg "${mnt}"/efi/EFI/*/bootuuid.cfg "${bootdir}
     [[ -f "$f" ]] && { echo "== ${f#"${mnt}"/}"; cat "$f"; }
 done >"${EVIDENCE}/grub-configs.txt"
 
+# --- SELinux labels on /boot --------------------------------------------------
+# bootc labels the /boot filesystem root only on its ostree path, and the
+# /boot/efi mountpoint and the live entry written above are labeled by
+# nothing: logind is denied getattr on /boot as unlabeled_t on every
+# installed boot (#1368, tuna-os/fisherman#504). The install block-copies
+# /boot, so label all of it here from the image's own policy (the ESP is vfat,
+# labeled at mount, and not under ${bootdir}).
+podman run --rm --privileged --security-opt label=type:unconfined_t \
+    -v "${bootdir}:/target/boot" "${IMAGE}" bash -euc '
+        . /etc/selinux/config
+        setfiles -F -r /target "/etc/selinux/${SELINUXTYPE}/contexts/files/file_contexts" /target/boot
+        for d in /target/boot /target/boot/efi /target/boot/loader/entries; do
+            if [[ -e "$d" ]]; then
+                echo "${d#/target}: $(getfattr --absolute-names --only-values -n security.selinux "$d" | tr -d "\0")"
+            fi
+        done
+    ' | tee "${EVIDENCE}/boot-labels.txt"
+grep -q '^/boot: .*:boot_t:' "${EVIDENCE}/boot-labels.txt" \
+    || { echo "/boot is not labeled boot_t (boot-labels.txt above)" >&2; exit 1; }
+
 # --- CI-only diagnostics on the deployment ------------------------------------
 # A deployment's /etc: ostree/deploy/<stateroot>/deploy/<checksum>.0/etc, or
 # state/deploy/<verity digest>/etc on composefs (bind-mounted at boot).

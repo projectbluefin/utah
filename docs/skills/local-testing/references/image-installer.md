@@ -66,6 +66,17 @@ installed boot (run 44923414875). `build-raw-image.sh` removes them when
 empty, and the E2E fails a boot that logs it. The live session also skips
 `flatpak-preinstall.service`: it would download into the RAM overlay.
 
+bootc labels the `/boot` filesystem root only on its ostree path, and
+nothing labels the `/boot/efi` mountpoint or the live entry the build writes
+from the (SELinux-less) CI host. On composefs, logind was denied getattr on
+the `unlabeled_t` `/boot` root on every installed boot (#1368,
+tuna-os/fisherman#504; run 44923414875). After its last write to `/boot`,
+`build-raw-image.sh` runs `setfiles` from the image's own policy over the
+whole `/boot` filesystem (the ESP is vfat, labeled at mount), records the
+labels in `boot-labels.txt` and fails unless the root is `boot_t`. The
+install block-copies `/boot`, so the labels carry over, and the E2E fails a
+boot with any SELinux denial on a `/boot` path.
+
 ### Backend selection
 
 Since 7.2, btrfs reads data through large folios, and without mainline

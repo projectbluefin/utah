@@ -566,16 +566,22 @@ class Harness:
 
         Fails the boot if systemd-resolved could not read /etc/resolv.conf: a
         build-injected empty file in the deployment's /etc (build-raw-image.sh)
-        did that on every composefs boot without failing a unit."""
+        did that on every composefs boot without failing a unit. Fails it too
+        on any SELinux denial on /boot: an unlabeled /boot root denied logind
+        on every installed composefs boot (#1368); build-raw-image.sh labels it."""
         sudo = "" if user == "root" else "sudo "
         out = self.ssh(user, "getenforce; echo ---; systemctl --failed --no-legend --plain; echo ---; "
-                       f"{sudo}journalctl -b --no-pager -o cat -u systemd-resolved | grep -c 'resolv.conf: Permission denied'",
+                       f"{sudo}journalctl -b --no-pager -o cat -u systemd-resolved | grep -c 'resolv.conf: Permission denied'; echo ---; "
+                       f"{sudo}journalctl -b --no-pager -o cat _TRANSPORT=audit | grep -c 'avc: *denied.* path=\"/boot[/\"]'",
                        password=password, check=False)
         selinux, _, rest = out.partition("---")
-        failed, _, denied = rest.partition("---")
+        failed, _, rest = rest.partition("---")
+        denied, _, boot_avcs = rest.partition("---")
         self.results.boot(phase, selinux.strip() or "unknown", parse_failed_units(failed))
         if denied.strip() not in ("", "0"):
             raise Fail(f"{phase}: systemd-resolved could not open /etc/resolv.conf ({denied.strip()} times)")
+        if boot_avcs.strip() not in ("", "0"):
+            raise Fail(f"{phase}: {boot_avcs.strip()} SELinux denials on /boot (facts file)")
 
     # ---- Stages -------------------------------------------------------------
     def live(self):

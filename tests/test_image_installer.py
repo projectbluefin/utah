@@ -598,6 +598,18 @@ class ComposefsTests(unittest.TestCase):
         harness = (RAW / "raw_e2e.py").read_text()
         self.assertIn("resolv.conf: Permission denied", harness)
 
+    def test_boot_is_labeled_and_its_denials_fail_the_e2e(self):
+        # bootc labels the /boot root only on ostree; the medium labels all of
+        # /boot after its last write there, and the E2E fails on any denial (#1368).
+        build = (RAW / "build-raw-image.sh").read_text()
+        label = build.index("setfiles -F -r /target")
+        self.assertGreater(label, build.index('medium.py" grubenv'))
+        self.assertGreater(label, build.index('medium.py" live-entry'))
+        self.assertIn('-v "${bootdir}:/target/boot"', build)
+        self.assertIn("^/boot: .*:boot_t:", build)
+        harness = (RAW / "raw_e2e.py").read_text()
+        self.assertIn('path=\\"/boot[/\\"]', harness)
+
 
 class KernelVeritySelectorTests(unittest.TestCase):
     """scripts/kernel_verity.py: composefs only on a kernel with the btrfs fs-verity fix."""
