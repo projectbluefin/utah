@@ -1,7 +1,7 @@
 ---
 name: local-testing
 version: "1.0"
-last_updated: "2026-10-29"
+last_updated: "2026-11-21"
 id: local-testing
 one_line_purpose: Build, install, and boot Utah locally in a VM or live ISO.
 entry_point: docs/skills/local-testing.md
@@ -347,6 +347,14 @@ Shareable form: `https://iso.tunaos.org/?image=projectbluefin/<name>:<tag>`
 using a dated published tag (`testing-*`), since Utah publishes no floating
 `testing` tag. Verify a preset by confirming the relay mints a pull token for
 the scope (`/token?scope=repository:projectbluefin/<name>:pull`).
+
+## Image-based installer (experimental, ADR-0001)
+
+A raw bootc disk image that boots live with `utah.live` and installs by
+block copy into LUKS2 through OS-Installer runs beside the ISO path in
+`image-installer.yml`, which compares both on the same `:testing` digest.
+It gates nothing. Build, run and gotchas:
+[image-installer](local-testing/references/image-installer.md).
 
 ## Verification
 
