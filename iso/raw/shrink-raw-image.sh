@@ -66,9 +66,10 @@ fs_bytes="$(podman run --rm --privileged -v /dev:/dev -e LOOP="${loop}" -e ROOT=
         mount "${ROOT}" /m
         {
             echo "== used per top-level directory of the root filesystem (du -sx, MiB)"
-            du -sxm /m/* /m/ostree/* /m/ostree/deploy/*/var/* /m/ostree/deploy/*/var/lib/* 2>/dev/null | sort -rn | head -40
+            du -sxm /m/* /m/ostree/* /m/ostree/deploy/*/var/* /m/ostree/deploy/*/var/lib/* \
+                /m/composefs/* /m/state/* /m/state/os/default/var/* /m/state/os/default/var/lib/* 2>/dev/null | sort -rn | head -40
             echo "== btrfs filesystem du (shared extents are counted once in Set shared)"
-            btrfs filesystem du -s /m/ostree/repo /m/ostree/deploy 2>/dev/null || true
+            btrfs filesystem du -s /m/ostree/repo /m/ostree/deploy /m/composefs /m/state 2>/dev/null || true
             echo "== btrfs filesystem usage"
             btrfs filesystem usage -b /m
             for p in "${LOOP}"p*; do
@@ -89,13 +90,23 @@ fs_bytes="$(podman run --rm --privileged -v /dev:/dev -e LOOP="${loop}" -e ROOT=
         # the files compresses them (6.19 GB to 3.08 GB in 3 minutes locally),
         # and doing it here, after bake-flatpaks.sh, covers the Flatpaks too.
         # Defrag compresses at the algorithm default level (zstd: 3) on
-        # kernels before 6.15, which reject -L.
+        # kernels before 6.15, which reject -L. It also rewrites the composefs
+        # fs-verity objects: the data is the same, so the Merkle tree still
+        # matches and the verity flag stays (checked below, and by reading
+        # every object on the installed disk in raw_e2e.py). Reading verity
+        # data from compressed extents is what the Utah kernel fix is for (#1379).
         if [[ -n "${COMPRESS}" ]]; then
             start=$(date +%s)
             btrfs filesystem defragment -r -c"${COMPRESS%%:*}" /m >&2
             sync -f /m
             report "== compressed with ${COMPRESS%%:*} in $(( $(date +%s) - start ))s"
             btrfs filesystem usage -b /m >&2
+            if [[ -d /m/composefs/objects ]]; then
+                objects=$(find /m/composefs/objects -type f | wc -l)
+                verity=$(find /m/composefs/objects -type f -print0 | xargs -0r lsattr 2>/dev/null | awk "\$1 ~ /V/" | wc -l)
+                report "composefs objects with fs-verity after compression: ${verity} of ${objects}"
+                (( verity == objects )) || { report "compression dropped fs-verity"; exit 1; }
+            fi
         fi
         # A full balance packs data into as few chunks as possible, so the
         # allocation (not btrfs min-dev-size, which ran ~4 GB high in run

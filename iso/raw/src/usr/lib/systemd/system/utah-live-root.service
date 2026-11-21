@@ -1,12 +1,14 @@
 # utah.live: boot the installed disk image as live media. In the initrd, put an
-# overlayfs with a tmpfs upper layer over the physical root before
-# ostree-prepare-root sets up the deployment, so every write of the live
-# session (the deployment's /etc and /var included) lands in RAM and the medium
-# stays byte-for-byte what the installer copies.
+# overlayfs with a tmpfs upper layer over the physical root before the
+# backend's root setup (ostree-prepare-root, or bootc's initramfs-setup on a
+# composefs-backend medium) assembles the deployment, so every write of the
+# live session (the deployment's /etc and /var included) lands in RAM and the
+# medium stays byte-for-byte what the installer copies.
 #
 # This reuses systemd-volatile-root's overlay mode, passing the mode as an
 # argument instead of systemd.volatile=overlay on the command line: ostree's
-# generated var.mount carries ConditionKernelCommandLine=!systemd.volatile, so
+# generated var.mount carries ConditionKernelCommandLine=!systemd.volatile, and
+# bootc's initramfs-setup skips its /var bind mount for systemd.volatile, so
 # that karg would leave /var on the read-only composefs root.
 [Unit]
 Description=Utah live: tmpfs overlay over the medium root
@@ -15,7 +17,7 @@ ConditionKernelCommandLine=utah.live
 ConditionPathExists=/etc/initrd-release
 Requires=sysroot.mount
 After=sysroot.mount
-Before=ostree-prepare-root.service initrd-root-fs.target
+Before=ostree-prepare-root.service bootc-root-setup.service initrd-root-fs.target
 
 [Service]
 Type=oneshot

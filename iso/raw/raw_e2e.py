@@ -19,6 +19,9 @@ Stages (every screenshot is listed in DIR/screenshots/manifest.json):
      With --flatpaks (the medium's baked app list), every installed boot
      checks the baked apps are there; after the first boot one is removed
      (--remove-flatpak) and must stay removed through switch and rollback.
+     With --backend composefs, every installed boot must run the composefs
+     image with fs-verity enforced and every object must carry verity; the
+     first boot also reads every object (composefs_check.py --read).
 
 DIR/evidence/results.json records each stage (STAGES) as pass, fail or not
 run with its duration, plus SELinux mode and failed units for every boot;
@@ -92,6 +95,7 @@ class Results:
         self.stages = {}
         self.boots = {}
         self.flatpaks = {}
+        self.composefs = {}
         self.current = None
         self.started = None
         self.error = None
@@ -120,11 +124,14 @@ class Results:
     def flatpak(self, phase, installed, problems):
         self.flatpaks[phase] = {"apps": len(installed), "problems": problems}
 
+    def composefs_boot(self, phase, facts, problems):
+        self.composefs[phase] = {**{k: v for k, v in facts.items() if k != "cmdline"}, "problems": problems}
+
     def as_dict(self, timings=None):
         stages = [{"stage": s, **self.stages.get(s, {"status": "not run", "seconds": None})} for s in STAGES]
         passed = self.error is None and all(s["status"] == "pass" for s in stages)
         return {"result": "pass" if passed else "fail", "error": self.error, "install": self.install,
-                "stages": stages, "boots": self.boots, "flatpaks": self.flatpaks,
+                "stages": stages, "boots": self.boots, "flatpaks": self.flatpaks, "composefs": self.composefs,
                 "timings": dict(timings or {})}
 
 
@@ -139,6 +146,44 @@ def flatpak_problems(baked, installed, removed=None):
     problems = [f"missing {app}" for app in sorted(set(baked) - installed) if app != removed]
     if removed and removed in installed:
         problems.append(f"{removed} came back after it was removed")
+    return problems
+
+
+def composefs_karg(cmdline):
+    """(digest, strict) from the composefs karg on a kernel command line, or None."""
+    for arg in cmdline.split():
+        key, eq, value = arg.partition("=")
+        if eq and key in ("composefs", "composefs.digest"):
+            return value.lstrip("?"), not value.startswith("?")
+    return None
+
+
+def composefs_problems(facts):
+    """What is wrong with an installed composefs boot (composefs_check.py's facts).
+
+    The installed entries must enforce fs-verity (no `?` on the karg; only the
+    live entry relaxes it), the root must be the composefs image of that
+    digest, every object must carry verity, and a full read must find no
+    error and no "FILE CORRUPTED" report.
+    """
+    problems = []
+    karg = composefs_karg(facts.get("cmdline", ""))
+    if karg is None:
+        return ["no composefs karg on the kernel command line"]
+    digest, strict = karg
+    if not strict:
+        problems.append("the composefs karg does not enforce fs-verity ('?')")
+    if not facts.get("root_source", "").endswith(digest.rsplit(":", 1)[-1]):
+        problems.append(f"root is {facts.get('root_source')!r}, not the composefs image {digest}")
+    objects, verity = facts.get("objects", 0), facts.get("verity_objects", 0)
+    if not objects:
+        problems.append("no objects in /sysroot/composefs/objects")
+    elif verity != objects:
+        problems.append(f"{objects - verity} of {objects} composefs objects have no fs-verity")
+    if facts.get("read_errors"):
+        problems.append(f"{facts['read_errors']} composefs objects failed to read")
+    if facts.get("corrupted_reports"):
+        problems.append(f"{facts['corrupted_reports']} fs-verity FILE CORRUPTED reports this boot")
     return problems
 
 
@@ -712,6 +757,22 @@ class Harness:
         self.scp_to("root", HERE / "atspi_drive.py", "/var/tmp/atspi_drive.py")
         self.scp_to("root", HERE / "vte_term.py", "/var/tmp/vte_term.py")
         self.ssh("root", "chmod 0755 /var/tmp/atspi_drive.py /var/tmp/vte_term.py")
+        if self.args.backend == "composefs":
+            self.check_composefs(phase, read=phase == "first boot")
+
+    def check_composefs(self, phase, read):
+        """fs-verity is enforced on this boot; on the first boot, every object reads back clean."""
+        self.scp_to("root", HERE / "composefs_check.py", "/var/tmp/composefs_check.py")
+        out = self.ssh("root", "python3 /var/tmp/composefs_check.py" + (" --read" if read else ""), timeout=3600)
+        self.save(f"composefs-{slug(phase)}.json", out)
+        facts = json.loads(out)
+        problems = composefs_problems(facts)
+        self.results.composefs_boot(phase, facts, problems)
+        log(f"  {phase}: composefs {facts['verity_objects']}/{facts['objects']} objects with fs-verity"
+            + (f", read {facts['read_bytes'] / 1e9:.2f} GB in {facts['seconds']}s" if read else "")
+            + f"; problems: {'; '.join(problems) or 'none'}")
+        if problems:
+            raise Fail(f"{phase}: composefs: {'; '.join(problems)}")
 
     def user_runner(self, user):
         def run(command):
@@ -1034,6 +1095,8 @@ def main():
     ap.add_argument("--cpus", type=int, default=4)
     ap.add_argument("--target-size", default="48G")
     ap.add_argument("--install", choices=("gui", "script"), default="gui")
+    ap.add_argument("--backend", choices=("composefs", "ostree"), default="composefs",
+                    help="bootc backend the medium was built with (build-raw-image.sh UTAH_RAW_BACKEND)")
     ap.add_argument("--flatpaks", help="apps baked into the medium (bake-flatpaks.sh flatpak-apps.txt)")
     ap.add_argument("--remove-flatpak", default="org.gnome.Calculator",
                     help="baked app to remove after first boot (default: first baked app if absent)")

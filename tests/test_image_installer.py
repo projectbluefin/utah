@@ -463,5 +463,89 @@ class OfflineFlatpakTests(unittest.TestCase):
         self.assertEqual(compare.flatpak_cell({}), "none baked")
 
 
+DIGEST = "ab" * 64
+COMPOSEFS_ENTRY = f"""title Utah 44.20261120
+version 44.20261120
+sort-key bootc-utah-0
+options root=UUID=8f3e rw rhgb quiet composefs={DIGEST} systemd.mount-extra=UUID=1b2c:/boot:ext4:defaults
+linux /bootc_composefs-{DIGEST}/vmlinuz
+initrd /bootc_composefs-{DIGEST}/initrd
+"""
+
+
+class ComposefsTests(unittest.TestCase):
+    """The composefs backend: the medium's default, with ostree as the fallback."""
+
+    def test_the_live_entry_relaxes_fs_verity_only_there(self):
+        live = medium.live_entry(COMPOSEFS_ENTRY)
+        words = next(line for line in live.splitlines() if line.startswith("options ")).split()[1:]
+        self.assertIn(f"composefs=?{DIGEST}", words)
+        self.assertNotIn(f"composefs={DIGEST}", words)
+        self.assertEqual(words[-2:], ["ro", "utah.live"])
+        self.assertIn(f"linux /bootc_composefs-{DIGEST}/vmlinuz\n", live)
+        self.assertEqual(medium.live_karg(f"composefs.digest=v1-sha512-12:{DIGEST}"),
+                         f"composefs.digest=?v1-sha512-12:{DIGEST}")
+        self.assertEqual(medium.live_karg(f"composefs=?{DIGEST}"), f"composefs=?{DIGEST}")
+        self.assertEqual(medium.live_karg("ostree=/ostree/boot.1/default/abc/0"), "ostree=/ostree/boot.1/default/abc/0")
+        self.assertEqual(medium.live_entry(live), live)
+
+    def test_an_installed_boot_must_enforce_verity_on_every_object(self):
+        good = {"cmdline": f"root=UUID=1 rw composefs={DIGEST}", "root_source": f"composefs:{DIGEST}",
+                "objects": 10, "verity_objects": 10, "read_errors": 0, "corrupted_reports": 0}
+        self.assertEqual(raw_e2e.composefs_problems(good), [])
+        v1 = {**good, "cmdline": f"rw composefs.digest=v1-sha512-12:{DIGEST}"}
+        self.assertEqual(raw_e2e.composefs_problems(v1), [])
+        self.assertEqual(raw_e2e.composefs_problems({**good, "cmdline": "rw ostree=/x"}),
+                         ["no composefs karg on the kernel command line"])
+        bad = {**good, "cmdline": f"composefs=?{DIGEST}", "root_source": "/dev/vda4", "verity_objects": 7,
+               "read_errors": 1, "corrupted_reports": 2}
+        problems = raw_e2e.composefs_problems(bad)
+        self.assertEqual(len(problems), 5)
+        self.assertIn("3 of 10 composefs objects have no fs-verity", problems)
+        results = raw_e2e.Results("gui")
+        results.composefs_boot("first boot", good, [])
+        self.assertNotIn("cmdline", results.as_dict()["composefs"]["first boot"])
+
+    def test_the_medium_is_built_with_either_backend(self):
+        build = (RAW / "build-raw-image.sh").read_text()
+        self.assertIn('BACKEND="${UTAH_RAW_BACKEND:-composefs}"', build)
+        self.assertIn("install_args+=(--composefs-backend)", build)
+        self.assertIn('"${mnt}"/root/state/deploy/*', build)
+        self.assertIn("composefs-verity.json", build)
+        bake = (RAW / "bake-flatpaks.sh").read_text()
+        self.assertIn('"${mnt}/state/os/default"', bake)
+        workflow = yaml.safe_load(WORKFLOW.read_text())
+        backend = workflow[True]["workflow_dispatch"]["inputs"]["backend"]
+        self.assertEqual((backend["options"], backend["default"]), (["composefs", "ostree"], "composefs"))
+        env = workflow["jobs"]["e2e"]["env"]
+        self.assertEqual(env["BACKEND"], "${{ github.event_name != 'workflow_dispatch' && 'composefs' || inputs.backend }}")
+        steps = {s.get("name", ""): s.get("run", "") for s in workflow["jobs"]["e2e"]["steps"]}
+        self.assertIn('UTAH_RAW_BACKEND="$BACKEND"', steps["Build the raw medium (bootc install to-filesystem, once)"])
+        self.assertIn('--backend "$BACKEND"', steps["End-to-end with screenshots"])
+
+    def test_the_live_overlay_sits_under_both_root_setups(self):
+        units = RAW / "src/usr/lib/systemd/system"
+        live_root = (units / "utah-live-root.service").read_text()
+        self.assertIn("Before=ostree-prepare-root.service bootc-root-setup.service initrd-root-fs.target", live_root)
+        for dropin in ("ostree-prepare-root.service.d", "bootc-root-setup.service.d"):
+            text = (units / dropin / "10-utah-live.conf").read_text()
+            self.assertIn("Wants=utah-live-root.service", text)
+            self.assertIn("After=utah-live-root.service", text)
+        dracut = (RAW / "src/usr/lib/dracut/dracut.conf.d/60-utah-live.conf").read_text()
+        containerfile = (RAW / "Containerfile").read_text()
+        for path in ("/usr/lib/systemd/system/bootc-root-setup.service.d/10-utah-live.conf",
+                     "/usr/lib/systemd/system/ostree-prepare-root.service.d/10-utah-live.conf"):
+            self.assertIn(path, dracut)
+            self.assertIn(path.lstrip("/"), containerfile)
+
+    def test_the_checker_reads_every_object_only_on_request(self):
+        checker = (RAW / "composefs_check.py").read_text()
+        self.assertIn('OBJECTS = "/sysroot/composefs/objects"', checker)
+        self.assertIn('read = "--read" in argv[1:]', checker)
+        self.assertIn("FILE CORRUPTED", checker)
+        harness = (RAW / "raw_e2e.py").read_text()
+        self.assertIn('self.check_composefs(phase, read=phase == "first boot")', harness)
+
+
 if __name__ == "__main__":
     unittest.main()

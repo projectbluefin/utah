@@ -37,6 +37,11 @@ on:
         type: choice
         options: [gui, script]
         default: gui
+      backend:
+        description: bootc backend of the medium (composefs = --composefs-backend with fs-verity; ostree = the fallback)
+        type: choice
+        options: [composefs, ostree]
+        default: composefs
       btrfs_compress:
         description: Compress the medium's btrfs root after the Flatpak bake (defragment -c<algorithm>, default level); empty = off
         type: string
@@ -129,8 +134,10 @@ jobs:
     env:
       WORK: /mnt/image-installer
       INSTALL: ${{ inputs.install || 'gui' }}
-      # Scheduled and PR runs compress the root and bake the Flatpaks; a
-      # dispatch can turn either off (btrfs_compress empty, flatpaks false).
+      # Scheduled and PR runs use composefs, compress the root and bake the
+      # Flatpaks; a dispatch can pick ostree or turn either off (btrfs_compress
+      # empty, flatpaks false).
+      BACKEND: ${{ github.event_name != 'workflow_dispatch' && 'composefs' || inputs.backend }}
       BTRFS_COMPRESS: ${{ github.event_name != 'workflow_dispatch' && 'zstd:3' || inputs.btrfs_compress }}
       FLATPAKS: ${{ github.event_name != 'workflow_dispatch' || inputs.flatpaks }}
       FORMATS: ${{ inputs.formats || 'zstd-3,zstd-19-long' }}
@@ -184,6 +191,7 @@ jobs:
           # no Plymouth hiding it. SELinux stays enforcing: the raw image is labeled.
           sudo env UTAH_RAW_LIVE_KARGS="utah.live.debug systemd.journald.forward_to_console=1 plymouth.enable=0 rd.plymouth=0" \
             UTAH_RAW_SSH_PUBKEY="$WORK/id_ed25519.pub" UTAH_RAW_DEBUG_SSHD=1 UTAH_RAW_EVIDENCE="$WORK/raw-evidence" \
+            UTAH_RAW_BACKEND="$BACKEND" \
             bash iso/raw/build-raw-image.sh localhost/utah-raw:ci "$WORK/medium.raw" "${SOURCE_REF%@*}:testing"
       - name: Bake the Flatpaks into the medium and shrink it
         id: medium
@@ -200,7 +208,7 @@ jobs:
             sudo env UTAH_RAW_EVIDENCE="$ev/no-flatpaks" UTAH_RAW_BTRFS_COMPRESS="$BTRFS_COMPRESS" \
               bash iso/raw/shrink-raw-image.sh localhost/utah-raw:ci "$WORK/no-flatpaks.raw"
             sudo python3 iso/raw/measure_medium.py "$WORK/no-flatpaks.raw" "$ev/size-2-no-flatpaks.json" \
-              --label "shrunk, no Flatpaks (not tested)" --formats zstd-3,zstd-19-long
+              --label "$BACKEND, ${BTRFS_COMPRESS:-uncompressed}: shrunk, no Flatpaks (not tested)" --formats zstd-3,zstd-19-long
             sudo rm -f "$WORK/no-flatpaks.raw"
             sudo env UTAH_RAW_EVIDENCE="$ev" bash iso/raw/bake-flatpaks.sh localhost/utah-raw:ci "$WORK/medium.raw"
           fi
@@ -218,14 +226,15 @@ jobs:
           baked=()
           [[ "$FLATPAKS" != true ]] || baked=(--flatpaks "$WORK/raw-evidence/flatpak-apps.txt")
           python3 iso/raw/raw_e2e.py --raw "$WORK/medium.raw" --work "$WORK/e2e" --install "$INSTALL" \
-            --candidate "$CANDIDATE" --ssh-key "$WORK/id_ed25519" "${baked[@]}" 2>&1 | tee "$WORK/e2e.log"
+            --candidate "$CANDIDATE" --ssh-key "$WORK/id_ed25519" --backend "$BACKEND" "${baked[@]}" 2>&1 | tee "$WORK/e2e.log"
       - name: Measure the medium
         # A medium whose bake or shrink failed is not the one under test.
         if: always() && steps.medium.outcome == 'success'
         run: |
           set -euo pipefail
-          if [[ "$FLATPAKS" == true ]]; then out=size-3-flatpaks.json label="shrunk + Flatpaks (tested medium)"
-          else out=size-3-no-flatpaks.json label="shrunk, no Flatpaks (tested medium)"; fi
+          medium="$BACKEND, ${BTRFS_COMPRESS:-uncompressed}"
+          if [[ "$FLATPAKS" == true ]]; then out=size-3-flatpaks.json label="$medium: shrunk + Flatpaks (tested medium)"
+          else out=size-3-no-flatpaks.json label="$medium: shrunk, no Flatpaks (tested medium)"; fi
           python3 iso/raw/measure_medium.py "$WORK/medium.raw" "$WORK/raw-evidence/$out" \
             --label "$label" --formats "$FORMATS"
       - name: Compare with the ISO/fisherman path

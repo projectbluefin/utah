@@ -17,7 +17,7 @@ FROM ${BUILDER_IMAGE} AS os-installer
 ARG OSI_REPO=https://github.com/hanthor/os-installer.git
 # Full commit of hanthor/os-installer (branch utah). Fetched by commit and
 # compared after checkout, so the build never follows a moving branch.
-ARG OSI_REF=2af2fa3c2c085c80bb14a7d8b16e064a95360b31
+ARG OSI_REF=cc63a4ef37ab1eb95582c92e63f5f8c0fac004fa
 RUN dnf -y install --setopt=install_weak_deps=False \
         git meson ninja-build gettext blueprint-compiler glib2-devel \
         gtk4-devel libadwaita-devel gnome-desktop4-devel libgweather4-devel \
@@ -41,8 +41,10 @@ COPY src/usr/ /usr/
 
 # python3-pyyaml is OS-Installer's only runtime dependency Utah lacks.
 # Then rebuild the initramfs with the utah.live root overlay unit and its
-# ostree-prepare-root ordering (dracut.conf.d/60-utah-live.conf), using the
-# same dracut invocation as scripts/regenerate-initramfs.sh.
+# ordering before the ostree and the composefs (bootc-root-setup) root setup
+# (dracut.conf.d/60-utah-live.conf), using the same dracut invocation as
+# scripts/regenerate-initramfs.sh. /boot stays empty: bootc's composefs
+# backend refuses an image with Type #1 entries there.
 RUN set -euxo pipefail; \
     dnf5 install -y --setopt=install_weak_deps=False python3-pyyaml; \
     dnf5 clean all; rm -rf /var/cache/dnf /var/cache/libdnf5 /var/log/dnf5.log*; \
@@ -58,7 +60,10 @@ RUN set -euxo pipefail; \
     listing="$(lsinitrd "/usr/lib/modules/${kver}/initramfs.img")"; \
     for f in usr/lib/systemd/systemd-volatile-root \
              usr/lib/systemd/system/utah-live-root.service \
-             usr/lib/systemd/system/ostree-prepare-root.service.d/10-utah-live.conf; do \
+             usr/lib/systemd/system/ostree-prepare-root.service.d/10-utah-live.conf \
+             usr/lib/systemd/system/bootc-root-setup.service.d/10-utah-live.conf \
+             usr/lib/systemd/system/bootc-root-setup.service \
+             usr/lib/bootc/initramfs-setup; do \
         grep -q " ${f}\$" <<<"${listing}"; \
     done; \
     python3 -c 'import yaml, gi; gi.require_version("Vte", "3.91"); gi.require_version("GnomeDesktop", "4.0"); gi.require_version("GWeather", "4.0"); gi.require_version("UDisks", "2.0"); from gi.repository import Vte, GnomeDesktop, GWeather, UDisks'
