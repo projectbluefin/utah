@@ -1,0 +1,35 @@
+name: Raw-image installer spike
+
+# Experimental feasibility spike (not production): GNOME OS-style install by
+# block-copying a pre-installed bootc disk image instead of running
+# `bootc install` at install time. See the draft PR description.
+on:
+  workflow_dispatch:
+  push:
+    branches: [spike/gnomeos-style-installer]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Probe image tooling
+        run: |
+          set -euo pipefail
+          sudo podman pull -q ghcr.io/projectbluefin/utah:testing
+          sudo podman run --rm ghcr.io/projectbluefin/utah:testing bash -c '
+            set -x
+            rpm -q systemd systemd-udev bootc ostree bootupd grub2-efi-x64 shim-x64 btrfs-progs e2fsprogs dosfstools mtools efibootmgr cryptsetup gnome-initial-setup plymouth python3 python3-gobject at-spi2-core || true
+            ls -l /usr/bin/systemd-repart /usr/lib/systemd/systemd-volatile-root /usr/lib/systemd/system/systemd-volatile-root.service || true
+            cat /usr/lib/ostree/prepare-root.conf || true
+            cat /usr/lib/systemd/system/ostree-prepare-root.service || true
+            ls /usr/lib/bootc/install /usr/lib/bootc/kargs.d; cat /usr/lib/bootc/install/* /usr/lib/bootc/kargs.d/* || true
+            k=$(ls /usr/lib/modules); lsinitrd /usr/lib/modules/$k/initramfs.img 2>/dev/null | grep -E "volatile|ostree|cryptsetup|repart|tpm2|plymouth" | head -40
+            ls /usr/lib/dracut/modules.d | tr "\n" " "
+            dnf5 repolist || true
+            dnf5 install -y --assumeno gnome-desktop4 vte291-gtk4 python3-pyyaml python3-gobject meson gettext desktop-file-utils libgnome-desktop4 2>&1 | tail -30 || true
+            for p in gnome-desktop4 vte291-gtk4 python3-pyyaml python3-gobject meson blueprint-compiler gobject-introspection python3-dogtail; do dnf5 -q repoquery --latest-limit 1 "$p" 2>/dev/null | head -1 | sed "s/^/avail $p: /"; done
+            ls /usr/lib64/girepository-1.0 | tr "\n" " "
+          '
