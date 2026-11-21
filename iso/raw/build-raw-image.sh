@@ -63,7 +63,11 @@ cleanup() {
 trap cleanup EXIT
 udevadm settle
 
-install_args=(--generic-image --target-imgref "${TARGET_IMGREF}")
+# rhgb quiet: the graphical, branded Plymouth splash (and LUKS prompt). The
+# image's kargs.d does not set them; fisherman adds them with bootSplash
+# (docs/skills/desktop-contract/references/boot-splash.md). Install-time kargs
+# carry over bootc upgrades.
+install_args=(--generic-image --target-imgref "${TARGET_IMGREF}" --karg rhgb --karg quiet)
 volumes=(-v /dev:/dev -v /var/lib/containers:/var/lib/containers -v "${data}:/data")
 if [[ -n "${UTAH_RAW_SSH_PUBKEY:-}" ]]; then
     install -m 0644 "${UTAH_RAW_SSH_PUBKEY}" "${data}/root-key.pub"

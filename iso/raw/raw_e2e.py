@@ -574,9 +574,11 @@ class Harness:
         self.stop_vm(lambda: self.ssh("liveuser", "sudo systemctl poweroff --no-block", password="live", check=False))
 
     def grab_install_log(self):
-        try:
-            self.scp_from("liveuser", "/run/utah-install.log", self.evidence / "utah-install.log", password="live")
-        except subprocess.CalledProcessError:
+        # The script writes it as root (it re-executes through sudo).
+        out = self.ssh("liveuser", "sudo cat /run/utah-install.log", password="live", check=False)
+        if out:
+            self.save("utah-install.log", out)
+        else:
             log("  no /run/utah-install.log")
 
     def installed_boot(self, phase, unlock_label):
