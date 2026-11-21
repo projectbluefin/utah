@@ -332,6 +332,17 @@ class PackageResolutionTests(unittest.TestCase):
             with patch("sys.argv", argv), contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(installer.main(), 0)
 
+    def test_manifest_keeps_gnu_cp_for_bootupd(self):
+        # #1431: bootupd copies GRUB onto the vfat ESP with `cp -a`. uutils cp
+        # fails there with EOPNOTSUPP, so swapping coreutils-single for the
+        # uutils links broke every bootc install of the image.
+        overlay = ROOT / "packages/utah.toml"
+        self.assertNotIn("coreutils-single", installer.swaps(overlay))
+        manifest = tomllib.loads(overlay.read_text())
+        for table in manifest.values():
+            if isinstance(table, dict):
+                self.assertNotIn("uutils-coreutils-replace", table.get("packages", []))
+
 
 class ResolveOneTests(unittest.TestCase):
     """--resolve-one is the single-name probe the unavailable-entry gate loops over."""

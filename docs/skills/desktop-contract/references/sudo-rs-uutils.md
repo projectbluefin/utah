@@ -2,36 +2,29 @@
 
 Dakota ships sudo-rs as `sudo` (`elements/bluefin/sudo-rs.bst`) and uutils as
 coreutils (`elements/bluefin/uutils-coreutils.bst`). Both elements overwrite
-another element's files. Utah does the same: uutils replaces coreutils at the
-RPM level, and sudo-rs replaces `/usr/bin/sudo` in the image build.
+another element's files. Utah does the same for sudo-rs, which replaces
+`/usr/bin/sudo` in the image build. uutils is installed beside GNU coreutils,
+not in its place (#1431).
 
-### uutils is coreutils
+### uutils stays beside GNU coreutils (#1431)
 
-- **RPM swap.** The factory's `uutils-coreutils-replace` subpackage links GNU
-  coreutils' program names in `/usr/bin` (the set `coreutils-single` ships,
-  less `env`) to `uutils-coreutils`. It also adds Dakota's
-  `uutils-<utility>` names. It provides `coreutils = 9.12`, the GNU release
-  Hummingbird ships (unversioned, it would match util-linux's
-  `Conflicts: coreutils < 8.20`), and conflicts with
-  `coreutils-single`. `[swap]` in `packages/utah.toml` makes the package
-  transaction `dnf5 do --action=install … --action=remove coreutils-single`,
-  so everything that requires `coreutils` stays satisfied and the RPM database
-  owns every path. `rpm -qf /usr/bin/ls` names the replacement.
-- **Kept off uutils.** `kill` and `uptime` stay procps-ng's and util-linux's,
-  `hostname` stays the hostname package's, and `more` stays util-linux's.
-  Neither coreutils ships them. `env` stays GNU's: pkexec realpath()s its
-  target, and the multicall binary dispatches on the executed path, so a
-  symlinked `env` breaks `pkexec -u <user> /usr/bin/env <cmd>`, which uupd
-  runs (Dakota's reason). The factory's `gnu-env` builds `env` alone from the
-  GNU coreutils release Hummingbird ships, and the replacement requires it.
-- **When it applies.** The swap is in the main package transaction, so
-  everything after it runs on uutils: the remaining package scriptlets, the
-  GNOME extension build, `configure-services.sh`, the dracut initramfs rebuild,
-  SELinux labelling, `bootc container lint`, and every script on the booted
-  system.
-- `configure-services.sh` fails the build unless `/usr/bin/ls` links to
-  uutils and `gnu-env` owns `/usr/bin/env`. `install-packages.py` fails it if
-  `coreutils-single` survives the transaction.
+- **Why not the swap.** #1305 swapped `coreutils-single` for the factory's
+  `uutils-coreutils-replace`, which links the GNU names to uutils. bootupd,
+  which installs GRUB, copies the EFI tree onto the vfat ESP with `cp -a`
+  (from the target image, inside `bootc install`). GNU cp does not diagnose
+  xattrs vfat cannot hold; uutils cp fails with `Operation not supported (os
+  error 95)` on `EFI/fedora/grubx64.efi`. Every fisherman install, so every
+  LUKS E2E job, failed and `:testing` stopped advancing.
+- **What ships.** `uutils-coreutils` alone (the multicall binary). No `[swap]`
+  entry, no `uutils-coreutils-replace`, no `gnu-env`: `coreutils-single`
+  owns the GNU names, `env` included.
+- **Guards.** `configure-services.sh` fails the build if `/usr/bin/cp` links
+  to uutils, and `tests/test_package_resolution.py` fails if
+  `packages/utah.toml` swaps out `coreutils-single` again.
+- **To retry the swap,** first get a uutils cp that skips unsupported xattrs
+  under `-a` (or keep a GNU `cp`, as `gnu-env` keeps `env`), then run the LUKS
+  E2E (`post-testing-e2e.yml`) on the candidate before merging. The `[swap]`
+  mechanism in `install-packages.py` stays for that.
 
 ### sudo-rs is sudo
 
@@ -60,9 +53,10 @@ RPM level, and sudo-rs replaces `/usr/bin/sudo` in the image build.
 
 ### Evidence
 
-The contract asserts `uutils-coreutils`, `uutils-ls`, `uu_ls`, `env`,
-`sudo-rs`, C sudo's PAM stacks and `/etc/sudoers`. The local image build
-behind #1305 recorded the checks below.
+The contract asserts `uutils-coreutils`, `env`, `sudo-rs`, C sudo's PAM
+stacks and `/etc/sudoers`. The local image build behind #1305 recorded the
+checks below, with the swap #1431 later backed out; they did not cover a
+`bootc install`.
 
 - **Factory RPMs** (projectbluefin/utah-packages#1234, hermetic lane run
   44676259983). `uutils-coreutils-replace-0.7.0-9.hum1.bfin` owns 213 files:

@@ -48,12 +48,12 @@ class FlathubDescriptorIntegrityTests(unittest.TestCase):
         uupd = self.root / "tmp/uupd"
         uupd.mkdir(parents=True)
         (uupd / "uupd").write_text("#!/bin/sh\nexit 0\n")
-        # uutils-coreutils-replace links the GNU names to uutils; sudo-rs and
-        # C sudo's sudoedit link arrive with their packages (#1229).
+        # uutils sits beside GNU coreutils, whose cp bootupd needs (#1431);
+        # sudo-rs and C sudo's sudoedit link arrive with their packages (#1229).
         bindir = self.root / "usr/bin"
         bindir.mkdir(parents=True)
         (bindir / "uutils-coreutils").write_text("#!/bin/sh\n")
-        (bindir / "ls").symlink_to("uutils-coreutils")
+        (bindir / "cp").write_text("GNU cp\n")
         (bindir / "sudo").write_text("C sudo\n")
         (bindir / "sudoedit").symlink_to("sudo")
         for name in ("sudo-rs", "su-rs"):
@@ -74,10 +74,7 @@ matchpathcon() {
     echo "$1 system_u:object_r:swapfile_t:s0"
 }
 dnf5() { return 0; }
-rpm() {
-    if [[ "$1" == -qf ]]; then printf %s "$ENV_OWNER"; return 0; fi
-    return 1
-}
+rpm() { return 1; }
 curl() {
     while (( $# )); do
         if [[ "$1" == --output ]]; then
@@ -94,7 +91,7 @@ curl() {
         return subprocess.run(
             ["bash", str(script)], capture_output=True, text=True,
             env={**os.environ, "ENABLE_SSHD": "0", "DESCRIPTOR_INPUT": str(self.input),
-                 "ENV_OWNER": "gnu-env", "SUDO_LABEL": "system_u:object_r:sudo_exec_t:s0",
+                 "SUDO_LABEL": "system_u:object_r:sudo_exec_t:s0",
                  **environment},
         )
 
@@ -138,17 +135,15 @@ curl() {
         result = self.run_script(SUDO_LABEL="system_u:object_r:bin_t:s0")
         self.assertNotEqual(result.returncode, 0)
 
-    def test_env_not_from_gnu_env_fails(self):
-        # env stays GNU (pkexec realpath()s it; Dakota's reason).
-        result = self.run_script(ENV_OWNER="uutils-coreutils-replace")
-        self.assertNotEqual(result.returncode, 0)
-
-    def test_ls_not_uutils_fails(self):
-        ls = self.root / "usr/bin/ls"
-        ls.unlink()
-        ls.write_text("GNU ls\n")
+    def test_cp_linked_to_uutils_fails(self):
+        # #1431: bootupd copies GRUB onto the vfat ESP with `cp -a`; uutils cp
+        # fails there with EOPNOTSUPP, so no bootc install of the image works.
+        cp = self.root / "usr/bin/cp"
+        cp.unlink()
+        cp.symlink_to("uutils-coreutils")
         result = self.run_script()
         self.assertNotEqual(result.returncode, 0)
+        self.assertIn("/usr/bin/cp is uutils", result.stderr)
 
     def test_firewall_defaults_to_gnome_os_lax_zone_through_the_symlink(self):
         result = self.run_script()

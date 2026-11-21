@@ -488,15 +488,14 @@ packages = [
     # kmscon.conf and the gdm drop-in: system_files.
     "kmscon",
     "kmscon-pango",
-    # sudo-rs as sudo and uutils as coreutils, as Dakota ships them
-    # (bluefin/sudo-rs.bst, bluefin/uutils-coreutils.bst; #1229).
-    # uutils-coreutils-replace takes coreutils-single's place ([swap] below)
-    # and gnu-env keeps /usr/bin/env GNU's; configure-services.sh points sudo
-    # at sudo-rs. See docs/skills/desktop-contract/references/sudo-rs-uutils.md.
+    # sudo-rs as sudo, as Dakota ships it (bluefin/sudo-rs.bst; #1229);
+    # configure-services.sh points sudo at sudo-rs. uutils is installed beside
+    # GNU coreutils, not in its place: bootupd copies GRUB onto the vfat ESP
+    # with `cp -a`, which uutils cp fails with EOPNOTSUPP where GNU cp skips
+    # the xattrs it cannot keep, so every bootc install broke (#1431).
+    # See docs/skills/desktop-contract/references/sudo-rs-uutils.md.
     "sudo-rs",
     "uutils-coreutils",
-    "uutils-coreutils-replace",
-    "gnu-env",
     # Network file systems and Windows domain clients (the NFS family follows
     # in the second-wave block below).
     "cifs-utils",
@@ -878,10 +877,8 @@ packages = [
 # removes the base package in the same step (dnf5 do --action=remove), and
 # whatever requires it stays satisfied by the replacement's Provides.
 #
-# coreutils-single: uutils-coreutils-replace links the GNU coreutils names to
-# uutils and provides coreutils, as Dakota ships uutils (#1229). Its gnu-env
-# requirement keeps /usr/bin/env GNU's, as on Dakota.
-coreutils-single = "uutils-coreutils-replace"
+# Never coreutils-single while the bootloader is GRUB through bootupd: uutils
+# cp cannot copy GRUB onto the vfat ESP, so bootc install fails (#1431).
 
 [unavailable]
 # Parity gaps none of Utah's enabled repositories provide.  Two kinds of gap
@@ -1137,8 +1134,6 @@ parity = [
     "kmscon-pango",
     "sudo-rs",
     "uutils-coreutils",
-    "uutils-coreutils-replace",
-    "gnu-env",
     "cifs-utils",
     "rpcbind",
     "autofs",
