@@ -22,8 +22,9 @@ widget's on-screen position and QEMU `sendkey` types. AT-SPI (atspi_drive.py,
 run in the guest session) only observes: which page shows, what is sensitive,
 and where a widget is inside its window. Buttons are pressed through their
 AT-SPI "click" action. GTK 4 reports positions relative to the window, so the
-harness maximizes it first: a maximized window spans the screen width and ends
-at the bottom edge, which turns window coordinates into screen coordinates.
+harness maximizes it first: a maximized window spans the screen width and starts
+right under the top bar (the dock reserves the bottom of the work area, run
+44863382769), which turns window coordinates into screen coordinates.
 
 Reuses iso/scripts/qemu_monitor.py, plymouth-prompt.py and luks-unlock.py.
 """
@@ -52,7 +53,7 @@ INSTALLER_APP = "installer"   # AT-SPI app name of com.github.p3732.os_installer
 GIS_APP = "initial-setup"
 TARGET_DISK = "/dev/vdb"
 SCREEN_W, SCREEN_H = 1920, 1080
-TOP_BAR = 32                  # GNOME Shell top bar at scale 1 (fallback placement only)
+TOP_BAR = 32                  # GNOME Shell top bar at scale 1: top of the work area
 ABS_MAX = 0x7FFF              # QEMU absolute pointer axis range
 
 SSH_OPTS = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
@@ -298,7 +299,8 @@ class Harness:
 
     # ---- AT-SPI observation + pointer/keyboard input -------------------------
     def atspi(self, runner, *argv):
-        out = runner("python3 /var/tmp/atspi_drive.py " + " ".join(shlex.quote(a) for a in argv))
+        # `|| true`: a miss (exit 2/3) still prints its JSON error, which callers handle.
+        out = runner("python3 /var/tmp/atspi_drive.py " + " ".join(shlex.quote(a) for a in argv) + " || true")
         try:
             return json.loads(out) if out.strip() else None
         except json.JSONDecodeError:
@@ -336,8 +338,8 @@ class Harness:
         fx, fy, fw, fh = frame["ext"]
         x, y, w, h = node["ext"]
         if fw >= SCREEN_W - 2:
-            # Maximized or fullscreen: full width, bottom-aligned under the top bar.
-            ox, oy = 0, SCREEN_H - fh
+            # Fullscreen covers the screen; maximized starts under the top bar.
+            ox, oy = 0, (0 if fh >= SCREEN_H - 2 else TOP_BAR)
         else:
             # Mutter centers new windows in the work area (fallback; logged).
             ox, oy = (SCREEN_W - fw) // 2, TOP_BAR + (SCREEN_H - TOP_BAR - fh) // 2
@@ -484,9 +486,11 @@ class Harness:
         time.sleep(2)
         self.shot("02-installer-language", "OS-Installer autostarted in the live session: language page")
 
-        self.click_until(r, app, lambda n: row_containing(n, "English (United States)"),
-                         lambda n: has_text(n, "copying this live system"), "welcome page")
+        nodes = self.click_until(r, app, lambda n: row_containing(n, "English (United States)"),
+                                 lambda n: has_text(n, "copying this live system"), "welcome page")
         self.shot("03-installer-welcome", "Welcome page with the Utah logo and config text")
+        if not has_name(nodes, "Continue"):
+            raise Fail("the click picked another language than English (welcome page has no 'Continue')")
 
         self.press(r, app, "Continue", lambda n: has_text(n, "Test the Keyboard Layout Here"), "keyboard page")
         self.shot("04-installer-keyboard", "Keyboard layout page")

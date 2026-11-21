@@ -28,7 +28,8 @@ on:
         required: false
         default: utah
   push:
-    branches: [spike/gnomeos-style-installer]
+    # -wip-* branches iterate on the harness without cancelling the PR branch's run.
+    branches: [spike/gnomeos-style-installer, spike/gnomeos-style-installer-wip-*]
     paths:
       - iso/raw/**
       - .github/workflows/raw-installer-spike.yml
