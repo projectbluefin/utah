@@ -809,7 +809,11 @@ class Harness:
         self.press(r, app, "Next", lambda n: has_name(n, "Install Now"), "try-or-install page")
         self.shot("04-setup-try-or-install", "Try or install: Utah's name and logo from os-release")
         self.press(r, app, "Install Now", lambda n: has_text(n, "Select a Disk"), "disk page")
-        nodes = self.wait_for(r, app, lambda n: row_containing(n, TARGET_SIZE_TEXT) is not None, "target disk row", 120)
+        try:
+            nodes = self.wait_for(r, app, lambda n: row_containing(n, TARGET_SIZE_TEXT) is not None, "target disk row", 120)
+        except Fail:
+            self.debug_live_state("disk")
+            raise
         self.save("atspi-gs-disk.json", json.dumps(nodes, indent=1))
         self.shot("05-setup-disk", f"Disk selection from systemd-sysinstall's ListCandidateDevices: the empty {TARGET_SIZE_TEXT} target {TARGET_DISK}")
         self.click_until(r, app, lambda n: row_containing(n, TARGET_SIZE_TEXT),
@@ -878,6 +882,29 @@ class Harness:
                        "-u 'utah-sysinstall-post@*' -u 'utah-cryptenroll@*'; cat /run/utah-live/repart.d/*.conf",
                        password="live", check=False)
         self.save("sysinstall-journal.txt", out)
+
+    def debug_live_state(self, label):
+        """Best-effort live-VM state when a gnome-setup step fails: the sysinstall
+        socket/units, the repart definitions, the block layout, and every size-like
+        row text on screen. Distinguishes 'sysinstall lists no candidates' from
+        'the row is there but the size text differs from TARGET_SIZE_TEXT'."""
+        try:
+            nodes = self.snapshot(self.live_runner, GS_APP)
+        except (Fail, subprocess.TimeoutExpired):
+            nodes = []
+        sizes = sorted({f"{n['name']} {n['text']}".strip() for n in nodes
+                        if n.get("ext") and ("GB" in f"{n['name']} {n['text']}" or "GiB" in f"{n['name']} {n['text']}")})
+        log(f"  live debug [{label}]: size-like rows: {sizes or 'NONE'}")
+        self.save(f"atspi-gs-{label}-debug.json", json.dumps(nodes, indent=1))
+        out = self.ssh("liveuser",
+                       "echo '--- lsblk ---'; lsblk -rno NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT; "
+                       "echo '--- sysinstall socket ---'; systemctl status utah-sysinstall.socket --no-pager; "
+                       "echo '--- sysinstall instances ---'; systemctl list-units 'utah-sysinstall@*' --no-pager --all; "
+                       "echo '--- journal ---'; sudo journalctl -b --no-pager -o short-monotonic -u 'utah-sysinstall@*' -u utah-sysinstall.socket; "
+                       "echo '--- repart.d ---'; ls -la /run/utah-live/repart.d/; cat /run/utah-live/repart.d/*.conf; "
+                       "echo '--- definitions link ---'; ls -la /usr/lib/gnome-setup/definitions",
+                       password="live", check=False)
+        self.save(f"live-debug-{label}.txt", out)
 
     def check_slots(self):
         """The target's LUKS2 keyslots: a recovery key, TPM2 when there is one, else the user's passphrase.
