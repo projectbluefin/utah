@@ -12,7 +12,7 @@ nothing. Tracking issue: #1403. History: spike #1399.
 |---|---|
 | Live-capable layer on a published digest: OS-Installer from a pinned `hanthor/os-installer` commit (`OSI_REF`, fetched by commit and compared after checkout), `utah.live` units, initramfs with `systemd-volatile-root` | `iso/raw/Containerfile`, `iso/raw/src/` |
 | Raw medium: GPT BIOS-BOOT, 512 MiB ESP, 1 GiB ext4 `/boot`, btrfs root; one `bootc install to-filesystem --generic-image --karg rhgb --karg quiet`; "Utah Live" BLS entry as GRUB default; `EFI/BOOT` fallback | `iso/raw/build-raw-image.sh`, `iso/raw/medium.py` |
-| Offline Flatpaks in the medium's stateful `/var` (stateroot `var/lib/flatpak`), never in an image: `flatpak preinstall` of the image's own `preinstall.d` set, run in the image with that directory bind-mounted, then `setfiles` with the image's contexts | `iso/raw/bake-flatpaks.sh` |
+| Offline Flatpaks in the medium's stateful `/var` (stateroot `var/lib/flatpak`), never in an image: the set the ISO bakes (`system-flatpaks.Brewfile` apps via `scripts/verify-desktop-contract.py --flatpaks`, `--no-related`, listed runtimes pinned) plus `flatpak preinstall` of the image's `preinstall.d`, run in the image with that directory bind-mounted, then `setfiles` with the image's contexts | `iso/raw/bake-flatpaks.sh` |
 | Shrink to content: fstrim, btrfs balance + resize to minimum (+256 MiB), cut the root partition and the file, rewrite the backup GPT; `size-breakdown.txt` shows what takes the space | `iso/raw/shrink-raw-image.sh`, `medium.py shrink-plan` |
 | End to end with screenshots and `evidence/results.json` | `iso/raw/raw_e2e.py`, `atspi_drive.py`, `vte_term.py` |
 | Size per step (raw, allocated, zstd -3, zstd -19 --long, xz -9, pack/unpack time) | `iso/raw/measure_medium.py` |
@@ -30,9 +30,11 @@ The published image and the live layer stay Flatpak-free; the workflow
 fails if either has content in `/var/lib/flatpak`. bootc copies an image's
 `/var` only at the first deployment and never touches it again, so Flatpaks
 in the medium's stateroot `/var` reach the installed disk through the block
-copy and can never be re-added or overwritten by an update. `flatpak
-preinstall` records them as preinstalled, the state flatpak-preinstall.service
-leaves on a fisherman install, so a removed app stays removed. The E2E proves
+copy and can never be re-added or overwritten by an update. The set is the
+ISO's (`iso/live/src/install-flatpaks.sh`) plus the image's `preinstall.d`,
+which `flatpak preinstall` records as preinstalled, so
+flatpak-preinstall.service has nothing to fetch on first boot and a removed
+app stays removed. The E2E proves
 both: every installed boot checks the baked list (`flatpak-apps.txt`), and an
 app removed after first boot (`--remove-flatpak`, default
 `org.gnome.Calculator`) must still be absent after switch and rollback, once
@@ -51,8 +53,8 @@ requests that touch `iso/raw/**`, the workflow, or
 (`gui` drives OS-Installer's window through a QEMU USB tablet at AT-SPI
 extents; `script` runs the same `install.sh` over SSH), `btrfs_compress`
 (build the root with `compress-force=<value>`), `flatpaks` (default on: bake
-the preinstall set into the medium's `/var`; off leaves it to the online
-first-boot preinstall), `formats`.
+the set above into the medium's `/var`; off leaves the image's `preinstall.d`
+to the online first-boot flatpak-preinstall.service), `formats`.
 
 The job summary holds the comparison table; the
 `image-installer-<image>` artifact holds screenshots, `contact-sheet.png`,

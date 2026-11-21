@@ -186,6 +186,7 @@ jobs:
             UTAH_RAW_BTRFS_COMPRESS="$BTRFS_COMPRESS" \
             bash iso/raw/build-raw-image.sh localhost/utah-raw:ci "$WORK/medium.raw" "${SOURCE_REF%@*}:testing"
       - name: Bake the Flatpaks into the medium and shrink it
+        id: medium
         run: |
           set -euo pipefail
           ev="$WORK/raw-evidence"
@@ -217,10 +218,10 @@ jobs:
           python3 iso/raw/raw_e2e.py --raw "$WORK/medium.raw" --work "$WORK/e2e" --install "$INSTALL" \
             --candidate "$CANDIDATE" --ssh-key "$WORK/id_ed25519" "${baked[@]}" 2>&1 | tee "$WORK/e2e.log"
       - name: Measure the medium
-        if: always()
+        # A medium whose bake or shrink failed is not the one under test.
+        if: always() && steps.medium.outcome == 'success'
         run: |
           set -euo pipefail
-          test -f "$WORK/medium.raw" || exit 0
           if [[ "$FLATPAKS" == true ]]; then out=size-3-flatpaks.json label="shrunk + Flatpaks (tested medium)"
           else out=size-3-no-flatpaks.json label="shrunk, no Flatpaks (tested medium)"; fi
           python3 iso/raw/measure_medium.py "$WORK/medium.raw" "$WORK/raw-evidence/$out" \

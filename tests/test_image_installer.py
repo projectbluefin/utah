@@ -355,6 +355,17 @@ class OfflineFlatpakTests(unittest.TestCase):
         self.assertIn("setfiles -F -r /stateroot", bake)
         self.assertNotRegex(bake, r"podman (build|commit|push)")
 
+    def test_the_medium_bakes_the_set_the_iso_bakes(self):
+        bake = (RAW / "bake-flatpaks.sh").read_text()
+        iso = (ROOT / "iso/live/Containerfile").read_text()
+        brewfile = "/usr/share/ublue-os/homebrew/system-flatpaks.Brewfile"
+        self.assertIn(f"--flatpaks {brewfile}", iso)
+        self.assertIn("/scripts/verify-desktop-contract.py", bake)
+        self.assertIn(brewfile, bake)
+        self.assertIn("--no-related --or-update flathub", bake)
+        # The OCI (TunaOS) remote needs a session bus in the container.
+        self.assertIn("dbus-daemon --session --fork --print-address", bake)
+
     def test_the_workflow_asserts_no_image_flatpaks_and_bakes_before_shrinking(self):
         steps = yaml.safe_load(WORKFLOW.read_text())["jobs"]["e2e"]["steps"]
         names = [s.get("name", "") for s in steps]
