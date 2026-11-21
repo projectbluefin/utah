@@ -314,10 +314,10 @@ jobs:
     # The reviewed testsuite v1 commit, the one post-testing-e2e.yml runs: this
     # job holds packages: write, so it must never call unmerged testsuite code.
     # Renovate moves the uses: digest and test_ref together.
-    uses: projectbluefin/testsuite/.github/workflows/e2e.yml@5fe96d59b8741f3514f15687bf392f86cb42119a # v1
+    uses: projectbluefin/testsuite/.github/workflows/e2e.yml@f99c9f716547f1cec17823be1e2a1d3a765a135e # v1
     with:
       image: ${{ matrix.ref }}
       compose_image: false
       suites: ${{ matrix.suites }}
       test_repository: projectbluefin/testsuite
-      test_ref: 5fe96d59b8741f3514f15687bf392f86cb42119a # v1
+      test_ref: f99c9f716547f1cec17823be1e2a1d3a765a135e # v1
