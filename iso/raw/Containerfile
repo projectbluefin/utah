@@ -45,7 +45,7 @@ RUN set -euxo pipefail; \
     systemctl enable utah-live-setup.service utah-live-ready.service; \
     kver="$(ls /usr/lib/modules | sort -V | tail -1)"; \
     mkdir -p /var/roothome; \
-    dracut --no-hostonly --reproducible --zstd --kver "${kver}" --force \
+    dracut --no-hostonly --reproducible --zstd --tmpdir /tmp --kver "${kver}" --force \
         "/usr/lib/modules/${kver}/initramfs.img" 2>&1 | tee /tmp/dracut.log; \
     if grep -q 'dracut\[E\]: FAILED' /tmp/dracut.log; then exit 1; fi; \
     rm -f /tmp/dracut.log; rmdir /var/roothome 2>/dev/null || true; \
