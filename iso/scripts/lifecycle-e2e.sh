@@ -98,6 +98,7 @@ SSH_PORT="${UTAH_LIFECYCLE_SSH_PORT:-2224}"
 VNC_DISPLAY="${UTAH_LIFECYCLE_VNC:-4}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "${ROOT}/iso/scripts/e2e-exit.sh"
+source "${ROOT}/iso/scripts/e2e-services.sh"
 
 if [[ "${POLICY}" != "bootc" && "${POLICY}" != "uupd" ]]; then
     echo "ERROR: UTAH_LIFECYCLE_POLICY must be 'bootc' or 'uupd', got '${POLICY}'" >&2
@@ -162,6 +163,10 @@ ssh_target_sudo() {
     printf '%s\n' "${TEST_PASSWORD}" | ssh_target "sudo -S -p '' -- ${command}"
 }
 
+scp_target() {
+    sshpass -p "${TEST_PASSWORD}" scp "${SSH_OPTS[@]}" -P "${SSH_PORT}" "$@"
+}
+
 # Content gates: checks that hold an image to a rule from this checkout.
 # luks-e2e.sh runs them on the images it installs; for the lifecycle it skips
 # them on the baseline (UTAH_E2E_BASELINE=1), which is the previous :testing
@@ -169,6 +174,12 @@ ssh_target_sudo() {
 # rule and stalls promotion (#1343). Each one runs here on the upgraded
 # candidate instead.
 #
+# verify_setup_state (iso/scripts/e2e-services.sh): every unit in the
+# candidate contract's [services] lists is loaded, enabled and not failed
+# (#1282). Its failures come through fail, on stderr: contract_units calls it
+# inside a command substitution, which would swallow the report.
+fail() { diagnose_failure "$*" >&2; }
+
 # The candidate's /efi mountpoint and mount units (#1326).
 verify_efi_mount() {
     local phase="$1"
@@ -754,6 +765,7 @@ python3 "${ROOT}/scripts/bootc_lifecycle.py" validate-phase upgraded \
 verify_boot_files upgraded
 verify_efi_mount upgraded
 verify_bootc_probe upgraded
+verify_setup_state upgraded
 
 # Phase 3 (post-upgrade reboot) must check both `booted` and `rollback`:
 # the upgraded deployment is the booted slot, and the previous baseline

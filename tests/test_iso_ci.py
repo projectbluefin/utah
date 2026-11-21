@@ -697,7 +697,7 @@ class EvidenceTests(unittest.TestCase):
         # systemd's Result= is success/exit-code/signal/timeout/...; it is never
         # "failed" (that is an ActiveState). A setup unit that exited non-zero
         # must fail the gate on both the system and user helper.
-        script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
+        script = (ROOT / "iso/scripts/e2e-services.sh").read_text()
         start = script.index("check_system_unit_state() {")
         end = script.index("\nverify_setup_state() {", start)
         block = script[start:end]
@@ -734,10 +734,8 @@ class EvidenceTests(unittest.TestCase):
         # not a list copied into the script, and a failed contract unit fails
         # the gate. brew-preinstall.service needs the network, so in the
         # offline VM only its enablement counts.
-        script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
-        start = script.index("check_system_unit_state() {")
-        end = script.index("\nverify_flathub_remote() {", start)
-        block = script[start:end]
+        script = (ROOT / "iso/scripts/e2e-services.sh").read_text()
+        block = script[script.index("check_system_unit_state() {"):]
 
         def run(failed_unit):
             harness = (
