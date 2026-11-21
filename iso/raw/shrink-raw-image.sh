@@ -118,10 +118,13 @@ fs_bytes="$(podman run --rm --privileged -v /dev:/dev -e LOOP="${loop}" -e ROOT=
         # the setting lasts for this mount only and does not reach the
         # installed system) the same test packed to 94%.
         uuid=$(blkid -p -s UUID -o value "${ROOT}")
-        for kind in data metadata; do
-            echo "${CHUNK}" >"/sys/fs/btrfs/${uuid}/allocation/${kind}/chunk_size"
-            report "${kind} chunk size $(cat "/sys/fs/btrfs/${uuid}/allocation/${kind}/chunk_size")"
-        done
+        chunks() {
+            for kind in data metadata; do
+                echo "${CHUNK}" >"/sys/fs/btrfs/${uuid}/allocation/${kind}/chunk_size"
+                report "${kind} chunk size $(cat "/sys/fs/btrfs/${uuid}/allocation/${kind}/chunk_size")"
+            done
+        }
+        chunks
         btrfs balance start -dusage=100 -musage=100 /m >&2
         fstrim -v /m >&2
         dev=$(btrfs filesystem usage -b /m | awk "/Device size:/ {print \$3}")
@@ -129,6 +132,13 @@ fs_bytes="$(podman run --rm --privileged -v /dev:/dev -e LOOP="${loop}" -e ROOT=
         target=$(( (alloc + MARGIN + 1048575) / 1048576 * 1048576 ))
         report "btrfs allocated ${alloc} of ${dev}; shrinking to ${target}"
         until btrfs filesystem resize "${target}" /m >&2; do
+            # A resize that runs out of space can abort its transaction and
+            # leave the filesystem read-only (run 44917186176: ENOSPC, then
+            # every retry "Read-only file system"). The last commit is intact,
+            # so remount (the chunk size setting is per mount) and go on.
+            umount /m
+            mount "${ROOT}" /m
+            chunks
             target=$(( target + 268435456 ))
             (( target < dev )) || { report "cannot shrink below ${dev}"; exit 1; }
             report "retrying at ${target}"
