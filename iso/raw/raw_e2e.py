@@ -70,13 +70,12 @@ SSH_OPTS = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/nul
             "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=5",
             "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=8"]
 
-# /etc/resolv.conf on a boot (target, SELinux label), how often resolved
-# could not open it, and the boot's SELinux denials: the composefs live session
-# logged "Failed to open /etc/resolv.conf: Permission denied" 78 times (run
-# 44910214722), the ostree one never.
+# /etc/resolv.conf on a boot (target, SELinux label) and the boot's SELinux
+# denials, into the facts file. On composefs a build-injected empty
+# /etc/resolv.conf (build-raw-image.sh) made resolved log "Failed to open
+# /etc/resolv.conf: Permission denied" on every boot; record_boot fails on it.
 RESOLV_FACTS = ("echo '== /etc/resolv.conf'; ls -laZ /etc/resolv.conf; readlink -f /etc/resolv.conf; "
-                "ls -laZ /run/systemd/resolve 2>&1; "
-                "journalctl -b --no-pager -o cat -u systemd-resolved | grep -c 'resolv.conf: Permission denied'; "
+                "echo '== SELinux denials'; "
                 "journalctl -b --no-pager -o cat _TRANSPORT=audit | grep -o 'avc: *denied.*' "
                 "| sed -E 's/ (pid|ino)=[0-9]+//g' | sort | uniq -c | sort -rn | head -20")
 
@@ -563,11 +562,20 @@ class Harness:
         time.sleep(1)
 
     def record_boot(self, phase, user, password=None):
-        """SELinux mode and failed units of the running boot, into results.json."""
-        out = self.ssh(user, "getenforce; echo ---; systemctl --failed --no-legend --plain",
+        """SELinux mode and failed units of the running boot, into results.json.
+
+        Fails the boot if systemd-resolved could not read /etc/resolv.conf: a
+        build-injected empty file in the deployment's /etc (build-raw-image.sh)
+        did that on every composefs boot without failing a unit."""
+        sudo = "" if user == "root" else "sudo "
+        out = self.ssh(user, "getenforce; echo ---; systemctl --failed --no-legend --plain; echo ---; "
+                       f"{sudo}journalctl -b --no-pager -o cat -u systemd-resolved | grep -c 'resolv.conf: Permission denied'",
                        password=password, check=False)
-        selinux, _, failed = out.partition("---")
+        selinux, _, rest = out.partition("---")
+        failed, _, denied = rest.partition("---")
         self.results.boot(phase, selinux.strip() or "unknown", parse_failed_units(failed))
+        if denied.strip() not in ("", "0"):
+            raise Fail(f"{phase}: systemd-resolved could not open /etc/resolv.conf ({denied.strip()} times)")
 
     # ---- Stages -------------------------------------------------------------
     def live(self):

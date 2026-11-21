@@ -56,6 +56,16 @@ makes the shrink step's first resize fail with ENOSPC on composefs; it steps
 up and then trims again, or the chunks the resize moved stay allocated in
 the file.
 
+The live layer's `RUN` leaves podman's empty, mode 0700 `/etc/resolv.conf`
+and `/etc/hostname` mount targets in the image (buildah#4242). ostree's
+import deletes them; bootc's composefs backend copied them into the
+deployment's `/etc`, so tmpfiles never linked resolved's stub,
+NetworkManager wrote its own file into the 0700 one, and resolved logged
+"Failed to open /etc/resolv.conf: Permission denied" on every live and
+installed boot (run 44923414875). `build-raw-image.sh` removes them when
+empty, and the E2E fails a boot that logs it. The live session also skips
+`flatpak-preinstall.service`: it would download into the RAM overlay.
+
 ### Backend selection
 
 Since 7.2, btrfs reads data through large folios, and without mainline

@@ -175,6 +175,20 @@ if [[ "${BACKEND}" == composefs ]]; then
     verity=$(find "${mnt}/root/composefs/objects" -type f -print0 | xargs -0r lsattr 2>/dev/null | awk '$1 ~ /V/' | wc -l)
     printf '{"objects": %s, "verity_objects": %s}\n' "${objects}" "${verity}" | tee "${EVIDENCE}/composefs-verity.json"
     (( objects > 0 && verity == objects )) || { echo "composefs objects without fs-verity: ${verity} of ${objects}" >&2; exit 1; }
+    # A podman/buildah RUN leaves empty, mode 0700 /etc/resolv.conf and
+    # /etc/hostname behind when the image has none (buildah#4242), and the
+    # live layer's RUN does. ostree's import deletes them (ostree-ext
+    # cleanup_root); bootc's composefs backend copies them into the
+    # deployment's /etc. There the empty resolv.conf keeps tmpfiles from
+    # linking resolved's stub, NetworkManager writes its own into it, and
+    # resolved cannot read it: "Failed to open /etc/resolv.conf: Permission
+    # denied" on every live and installed boot (runs 44910214722, 44923414875).
+    for f in "${deployments[0]}/etc/resolv.conf" "${deployments[0]}/etc/hostname"; do
+        if [[ -f "$f" && ! -L "$f" && ! -s "$f" ]]; then
+            echo "removing the build-injected empty ${f#"${deployments[0]}"/}"
+            rm -f "$f"
+        fi
+    done
 fi
 sync
 umount "${mnt}/efi"

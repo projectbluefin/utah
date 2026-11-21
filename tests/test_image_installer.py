@@ -583,6 +583,21 @@ class ComposefsTests(unittest.TestCase):
         for unit in ("boot.mount.d", "boot.automount.d"):
             self.assertIn("ConditionKernelCommandLine=!utah.live", (units / unit / "50-utah-live.conf").read_text())
 
+    def test_the_live_session_does_not_download_flatpaks(self):
+        # The live session writes to RAM; the installed system preinstalls.
+        units = RAW / "src/usr/lib/systemd/system"
+        self.assertIn("ConditionKernelCommandLine=!utah.live",
+                      (units / "flatpak-preinstall.service.d/50-utah-live.conf").read_text())
+
+    def test_build_injected_etc_placeholders_are_removed(self):
+        # podman RUN leaves empty 0700 resolv.conf/hostname; ostree-ext drops
+        # them, bootc's composefs backend does not.
+        build = (RAW / "build-raw-image.sh").read_text()
+        self.assertIn('"${deployments[0]}/etc/resolv.conf" "${deployments[0]}/etc/hostname"', build)
+        self.assertIn('! -s "$f"', build)
+        harness = (RAW / "raw_e2e.py").read_text()
+        self.assertIn("resolv.conf: Permission denied", harness)
+
 
 class KernelVeritySelectorTests(unittest.TestCase):
     """scripts/kernel_verity.py: composefs only on a kernel with the btrfs fs-verity fix."""
