@@ -124,10 +124,11 @@ class SourceBuildTests(unittest.TestCase):
         self.assertIsNone(sweeper.source_build([{"id": 9}], lambda _id: []))
 
     def test_a_failed_build_whose_dispatch_iso_succeeded_is_the_source(self):
-        # Build 9 failed only in review_vm, which runs beside dispatch-iso; it still
-        # started the lost E2E, so the older green build 8 must not be chosen.
+        # Build 9 failed only in pinned_fetches, which nothing depends on; its
+        # dispatch-iso still started the lost E2E, so the older green build 8
+        # must not be chosen.
         builds = [{"id": 9, "conclusion": "failure"}, {"id": 8, "conclusion": "success"}]
-        jobs = {9: [{"name": "review_vm", "conclusion": "failure"},
+        jobs = {9: [{"name": "pinned_fetches / fetch", "conclusion": "failure"},
                     {"name": "dispatch-iso", "conclusion": "success"}],
                 8: [{"name": "dispatch-iso", "conclusion": "success"}]}
 

@@ -103,8 +103,8 @@ class GitHub:
         return gh_text("api", f"repos/{self.repo}/commits/{branch}", "--jq", ".sha").strip()
 
     def e2e_source_build(self, before: str) -> int | None:
-        # No status=success filter: review_vm runs beside dispatch-iso, so a build
-        # whose dispatch-iso started E2E can still conclude `failure` overall.
+        # No status=success filter: the build whose dispatch-iso started the lost E2E
+        # may still be running, or may conclude `failure` in another job.
         runs = gh("api", f"repos/{self.repo}/actions/workflows/{BUILD_WORKFLOW}/runs"
                          f"?branch=testing&created=%3C{before}&per_page=10",
                   "--jq", "[.workflow_runs[] | {id}]")
@@ -121,7 +121,7 @@ class GitHub:
 def e2e_inputs(api, lost: dict) -> dict[str, str]:
     build = api.e2e_source_build(lost["created_at"])
     if build is None:
-        raise Unrecoverable(f"no successful testing build before {lost['created_at']} "
+        raise Unrecoverable(f"no testing build before {lost['created_at']} "
                             f"ran {E2E_DISPATCH_JOB}; dispatch post-testing-e2e.yml by hand")
     return {"build_run_id": str(build)}
 
