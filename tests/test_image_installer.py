@@ -822,6 +822,33 @@ class GnomeSetupTests(unittest.TestCase):
         self.assertTrue(raw_e2e.has_name(ticked, "Done", sensitive=True, role="button"))
         self.assertEqual(raw_e2e.named(ticked, "Done", sensitive=True, role="button")["role"], "button")
 
+    def test_qr_dialog_done_is_the_dialogs_button(self):
+        # Run 44978556102's atspi-timeout-qr-code-dialog-closed.json: with the QR
+        # dialog open the page has a sensitive panel 'Done' (the whole window),
+        # the still-insensitive main button 'Done' behind the modal, and the
+        # dialog's own sensitive button 'Done'. The press must land on the last.
+        nodes = [
+            {"path": "0", "role": "panel", "name": "Done", "text": "",
+             "ext": [0, 0, 1920, 977], "states": ["sensitive", "showing"]},
+            {"path": "0.1", "role": "button", "name": "Done", "text": "",
+             "ext": [909, 699, 102, 44], "states": ["focusable", "showing"]},
+            {"path": "0.2", "role": "dialog", "name": "QR Code", "text": "",
+             "ext": [0, 0, 1920, 977], "states": ["sensitive", "showing"]},
+            {"path": "0.2.0", "role": "button", "name": "Done", "text": "",
+             "ext": [808, 619, 304, 44], "states": ["focusable", "sensitive", "showing"]},
+        ]
+        self.assertEqual(raw_e2e.named(nodes, "Done")["role"], "panel")  # the old pick
+        picked = raw_e2e.named(nodes, "Done", sensitive=True, role="button")
+        self.assertEqual(picked["ext"], [808, 619, 304, 44])
+
+    def test_every_done_press_names_a_role(self):
+        # The recovery page and its QR dialog each have several nodes named 'Done'.
+        source = (Path(raw_e2e.__file__)).read_text()
+        presses = [line for line in source.splitlines() if 'self.press(r, app, "Done"' in line]
+        self.assertGreaterEqual(len(presses), 2)
+        for line in presses:
+            self.assertIn('role="button"', line, line.strip())
+
     def test_timeout_summary_lists_buttons_and_labels(self):
         nodes = [
             {"path": "0.1", "role": "button", "name": "Install",

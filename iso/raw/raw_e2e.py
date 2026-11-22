@@ -864,7 +864,7 @@ class Harness:
         self.press(r, app, "Show QR Code for Recovery Key", lambda n: has_text(n, "Scan to Back Up"), "QR code dialog")
         time.sleep(2)
         self.shot("09-setup-recovery-qr", "The recovery key as a QR code")
-        self.press(r, app, "Done", lambda n: not has_text(n, "Scan to Back Up"), "QR code dialog closed")
+        self.press(r, app, "Done", lambda n: not has_text(n, "Scan to Back Up"), "QR code dialog closed", role="button")
         self.press(r, app, "I backed up my recovery key", lambda n: has_name(n, "Done", sensitive=True, role="button"), "recovery key confirmed")
         self.press(r, app, "Done", lambda n: has_text(n, "Installation Complete"), "done page", role="button")
         self.shot("10-setup-done", "Installation complete; the recovery key is enrolled and the empty passphrase wiped")
