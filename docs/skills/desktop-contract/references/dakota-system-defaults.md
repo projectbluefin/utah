@@ -77,7 +77,7 @@ Swap follows Dakota (#1224), not zram: `zram-generator(-defaults)` are gone.
   `/var/swap`, so the file would be `var_t` and swapon denied.
   `usr/share/selinux/packages/utah-swapfile.cil` labels
   `/var/swap/swapfile` `swapfile_t`; `configure-services.sh` installs it with
-  `semodule -n -i` into the store under `/usr/lib/selinux` (so ostree's
+  `semodule -n -i` into the store under `/etc/selinux` (#551; so ostree's
   per-deployment rebuild keeps it) and checks `matchpathcon`. The init
   script runs `restorecon` on the file before writing it.
 - The gaming flavors' OGC kernel is built from `x86_64_defconfig`, which has
