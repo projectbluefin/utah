@@ -775,6 +775,20 @@ class GnomeSetupTests(unittest.TestCase):
         self.assertEqual(out["installer"], "gnome-setup")
         self.assertIn("encryption", out)
 
+    def test_disk_rows_match_despite_glib_nbsp_size(self):
+        # glib's format_size separates value and unit with a non-breaking space
+        # (CI run 44964323210: 'Unknown Disk 51.5\\xa0GB'); the harness matches
+        # with a plain space.
+        nodes = [{
+            "path": "0.1", "role": "table row",
+            "name": "Unknown Disk 51.5\u00a0GB", "text": "",
+            "ext": [0, 0, 100, 20], "states": [],
+        }]
+        self.assertTrue(raw_e2e.has_text(nodes, "51.5 GB"))
+        row = raw_e2e.row_containing(nodes, raw_e2e.TARGET_SIZE_TEXT)
+        self.assertIsNotNone(row)
+        self.assertEqual(row["role"], "table row")
+
 
 if __name__ == "__main__":
     unittest.main()

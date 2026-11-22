@@ -1331,9 +1331,15 @@ def slug(text):
     return "".join(c if c.isalnum() else "-" for c in (text or "page").lower()).strip("-") or "page"
 
 
+def canon_space(text):
+    """AT-SPI text carries glib's size formatting, which separates the value from
+    the unit with a non-breaking space ('51.5\\xa0GB'); matchers use plain spaces."""
+    return (text or "").replace("\u00a0", " ").replace("\u202f", " ")
+
+
 def has_text(nodes, text):
-    t = text.lower()
-    return any(t in (n["name"] + " " + n["text"]).lower() for n in nodes)
+    t = canon_space(text).lower()
+    return any(t in canon_space(n["name"] + " " + n["text"]).lower() for n in nodes)
 
 
 def has_name(nodes, name, sensitive=False):
@@ -1352,10 +1358,10 @@ def named(nodes, name, sensitive=False):
 
 def row_containing(nodes, text):
     """The list row (or, failing that, the node) whose name/text contains text."""
-    t = text.lower()
+    t = canon_space(text).lower()
     by_path = {n["path"]: n for n in nodes}
     for n in nodes:
-        if t not in f"{n['name']} {n['text']}".lower() or not n.get("ext"):
+        if t not in canon_space(f"{n['name']} {n['text']}").lower() or not n.get("ext"):
             continue
         parts = n["path"].split(".")
         while parts:
