@@ -24,7 +24,14 @@ class KernelCacheSigningTests(unittest.TestCase):
             builds = base / "builds"
             verification = base / "verification"
             podman = tools / "podman"
-            podman.write_text('#!/bin/bash\nprintf \'%s\\n\' "$*" >> "$BUILDS"\n')
+            podman.write_text(
+                '#!/bin/bash\n'
+                'if [ "$1" = inspect ]; then\n'
+                '  printf \'[{"Config":{"Labels":{"org.opencontainers.image.revision":"%s"}}}]\\n\' '
+                '"$(git rev-parse HEAD)"\n'
+                '  exit 0\n'
+                'fi\n'
+                'printf \'%s\\n\' "$*" >> "$BUILDS"\n')
             podman.chmod(0o755)
             skopeo = tools / "skopeo"
             skopeo.write_text(
