@@ -168,8 +168,8 @@ post-build verification workflows, not the complete workflow inventory:
   `promote-to-testing`'s needs, read-only permissions, no tag moves;
   `tests/test_image_installer.py` holds that. Details:
   [image-installer](local-testing/references/image-installer.md).
-- `.github/workflows/publish-installer.yml` -- weekly Monday 09:41 UTC, manual
-  dispatch, and pull requests touching `iso/raw/**`. Ships the experimental
+- `.github/workflows/publish-installer.yml` -- weekly Monday 09:41 UTC and
+  manual dispatch. Ships the experimental
   image-based installer's live medium to ghcr so people outside CI can try it
   (docs/adr/0001-image-based-installer.md): per flavor it builds the same
   live-capable layer and raw medium on the exact `:testing` digest as the

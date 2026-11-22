@@ -29,11 +29,6 @@ on:
     # Weekly, Monday 09:41 UTC: after that morning's nightly E2E run has
     # already exercised the same :testing digest, before this week's tag ages.
     - cron: '41 9 * * 1'
-  pull_request:
-    paths:
-      - iso/raw/**
-      - .github/workflows/publish-installer.yml
-      - tests/test_image_installer.py
 permissions: {}
 
 concurrency:
@@ -70,7 +65,7 @@ jobs:
             repo="ghcr.io/projectbluefin/$image"
             digest=$(skopeo inspect --format '{{.Digest}}' "docker://$repo:testing") \
               || { echo "::error::no :testing digest for $repo"; exit 1; }
-            entries+=("$(jq -cn --arg image "$image" --arg ref "$repo@$digest" '{image:$image,ref:$ref,digest:$digest}')")
+            entries+=("$(jq -cn --arg image "$image" --arg ref "$repo@$digest" --arg digest "$digest" '{image:$image,ref:$ref,digest:$digest}')")
           done
           matrix=$(printf '%s\n' "${entries[@]}" | jq -cs '{include: .}')
           echo "$matrix" | jq .
@@ -118,9 +113,12 @@ jobs:
           df -h / /mnt
       - name: Log in to ghcr
         timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_ACTOR: ${{ github.actor }}
         run: |
           set -euo pipefail
-          echo "${{ github.token }}" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+          printf '%s' "$GH_TOKEN" | oras login ghcr.io -u "$GH_ACTOR" --password-stdin
       - name: Build the live-capable image layer
         timeout-minutes: 60
         env:
@@ -159,8 +157,6 @@ jobs:
         run: |
           set -euo pipefail
           ev="$WORK/raw-evidence"
-          sudo env UTAH_RAW_EVIDENCE="$ev" UTAH_RAW_BTRFS_COMPRESS="zstd:3" \
-            bash iso/raw/shrink-raw-image.sh localhost/utah-publish:ci "$WORK/medium.raw"
           sudo env UTAH_RAW_EVIDENCE="$ev" bash iso/raw/bake-flatpaks.sh localhost/utah-publish:ci "$WORK/medium.raw"
           sudo env UTAH_RAW_EVIDENCE="$ev" UTAH_RAW_BTRFS_COMPRESS="zstd:3" \
             bash iso/raw/shrink-raw-image.sh localhost/utah-publish:ci "$WORK/medium.raw"
@@ -177,17 +173,15 @@ jobs:
           # benchmarks (iso/raw/measure_medium.py, zstd-19-long).
           zstd -q -T0 -19 --long=31 -o "$WORK/medium.zst" "$WORK/medium.raw"
           ( cd "$WORK" && sha256sum medium.zst > medium.zst.sha256 )
-          # One upload: push the artifact, then tag the digest.
-          DIGEST="$(oras push --publish "ghcr.io/projectbluefin/${IMAGE}-installer" \
-            "application/vnd.projectbluefin.installer.medium" \
-            "$WORK/medium.zst:application/octet-stream" \
-            "$WORK/medium.zst.sha256:text/plain")"
-          DIGEST="${DIGEST#@}"
-          for tag in testing "testing-$(date +%Y%m%d)"; do
-            skopeo copy "docker://ghcr.io/projectbluefin/${IMAGE}-installer@${DIGEST}" \
-              "docker://ghcr.io/projectbluefin/${IMAGE}-installer:${tag}"
-            skopeo inspect --format '{{.Digest}}' "docker://ghcr.io/projectbluefin/${IMAGE}-installer:${tag}" \
-              | tee "$WORK/published-${tag}"
-          done
+          # Push the artifact and both tags in one oras call: v1.4.0 has no
+          # --publish flag (the artifact type is --artifact-type), and pushing
+          # straight to the tags makes skopeo copy unnecessary. Push from inside
+          # $WORK with relative names so oras keeps clean titles and the pulled
+          # checksum file still names medium.zst for `sha256sum -c`.
+          cd "$WORK"
+          DIGEST="$(oras push --artifact-type application/vnd.projectbluefin.installer.medium \
+            --format go-template='{{.digest}}' \
+            "ghcr.io/projectbluefin/${IMAGE}-installer:testing,testing-$(date +%Y%m%d)" \
+            medium.zst:application/zstd medium.zst.sha256:text/plain)"
           echo "medium size: $(du -h "$WORK/medium.zst" | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
           echo "published ghcr.io/projectbluefin/${IMAGE}-installer (digest ${DIGEST:0:20}…)" >> "$GITHUB_STEP_SUMMARY"

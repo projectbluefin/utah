@@ -444,6 +444,7 @@ class PublishTrackTests(unittest.TestCase):
         self.assertTrue(on["schedule"])
         self.assertEqual(on["schedule"][0]["cron"], "41 9 * * 1")
         self.assertNotIn("push", on)
+        self.assertNotIn("pull_request", on)
         self.assertNotIn("merge_group", on)
 
     def test_permissions_are_empty_except_the_publish_job(self):
@@ -462,7 +463,8 @@ class PublishTrackTests(unittest.TestCase):
 
     def test_the_medium_is_published_not_uploaded(self):
         text = self.WORKFLOW.read_text()
-        self.assertIn("oras push --publish", text)
+        self.assertIn("oras push --artifact-type application/vnd.projectbluefin.installer.medium", text)
+        self.assertNotIn("oras push --publish", text)
         self.assertIn("ghcr.io/projectbluefin/${IMAGE}-installer", text)
 
     def test_oras_is_pinned_to_v1_4_0(self):
