@@ -144,5 +144,5 @@ jobs:
       # The same testsuite commit post-testing-e2e.yml validated, not the
       # floating v1 tag, so the gate cannot drift from that evidence (#773).
       # tests/test_iso_ci.py keeps the two refs equal.
-      gate_test_ref: f99c9f716547f1cec17823be1e2a1d3a765a135e # v1
+      gate_test_ref: 8de17be57239df27efa0352beca012b9e90aff69 # v1
     secrets: inherit
