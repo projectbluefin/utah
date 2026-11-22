@@ -27,10 +27,11 @@ Each workflow is dispatched the way the chain itself dispatches it:
 sync-main-to-testing on `main` with no inputs; build on `testing` with the
 current `testing` SHA, as sync-main-to-testing does; post-testing-e2e on `main`
 with the build run it should have validated. The API does not return a run's
-inputs, so that build run is reconstructed: the newest successful `testing`
-build created before the lost E2E run whose `dispatch-iso` job (the job that
-starts E2E) succeeded. candidate-common is not swept: its `common_sha` input
-comes from projectbluefin/common and cannot be recovered from a lost run.
+inputs, so that build run is reconstructed: the newest `testing` build created
+before the lost E2E run whose `dispatch-iso` job (the job that starts E2E)
+succeeded, whatever the build's overall conclusion. candidate-common is not
+swept: its `common_sha` input comes from projectbluefin/common and cannot be
+recovered from a lost run.
 
 Usage:
   rerun-startup-failures.py [--dry-run]
@@ -102,8 +103,10 @@ class GitHub:
         return gh_text("api", f"repos/{self.repo}/commits/{branch}", "--jq", ".sha").strip()
 
     def e2e_source_build(self, before: str) -> int | None:
+        # No status=success filter: review_vm runs beside dispatch-iso, so a build
+        # whose dispatch-iso started E2E can still conclude `failure` overall.
         runs = gh("api", f"repos/{self.repo}/actions/workflows/{BUILD_WORKFLOW}/runs"
-                         f"?branch=testing&status=success&created=%3C{before}&per_page=10",
+                         f"?branch=testing&created=%3C{before}&per_page=10",
                   "--jq", "[.workflow_runs[] | {id}]")
         return source_build(runs, lambda run_id: gh(
             "api", f"repos/{self.repo}/actions/runs/{run_id}/jobs?per_page=100")["jobs"])

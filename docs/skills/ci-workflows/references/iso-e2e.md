@@ -389,8 +389,9 @@ sync-main-to-testing (on `main`), build (on `testing`) and Post-Testing E2E
 (on `main`). Only when that newest run is a startup failure with zero jobs
 does it re-dispatch, the same way the chain does: sync with no inputs, build
 with the current `testing` SHA, E2E with `build_run_id` set to the newest
-successful `testing` build created before the lost run whose `dispatch-iso`
-job succeeded (the API does not return a lost run's inputs). The dispatch
+`testing` build created before the lost run whose `dispatch-iso` job
+succeeded, even if the build failed elsewhere (the API does not return a lost
+run's inputs). The dispatch
 becomes the newest run, so the next sweep skips it and a manual restart is
 never duplicated; no state is kept. A run with any job is a real failure and
 stays red. Each workflow starts the next one, so only the most upstream lost

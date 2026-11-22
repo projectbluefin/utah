@@ -9,6 +9,7 @@ workflows that define them.
 import importlib.util
 import re
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -121,6 +122,25 @@ class SourceBuildTests(unittest.TestCase):
 
     def test_none_when_no_build_started_e2e(self):
         self.assertIsNone(sweeper.source_build([{"id": 9}], lambda _id: []))
+
+    def test_a_failed_build_whose_dispatch_iso_succeeded_is_the_source(self):
+        # Build 9 failed only in review_vm, which runs beside dispatch-iso; it still
+        # started the lost E2E, so the older green build 8 must not be chosen.
+        builds = [{"id": 9, "conclusion": "failure"}, {"id": 8, "conclusion": "success"}]
+        jobs = {9: [{"name": "review_vm", "conclusion": "failure"},
+                    {"name": "dispatch-iso", "conclusion": "success"}],
+                8: [{"name": "dispatch-iso", "conclusion": "success"}]}
+
+        def fake_gh(*args):
+            url = args[1]
+            if url.endswith("/jobs?per_page=100"):
+                return {"jobs": jobs[int(url.split("/")[-2])]}
+            listed = builds if "status=success" not in url else [
+                b for b in builds if b["conclusion"] == "success"]
+            return [{"id": b["id"]} for b in listed]
+
+        with mock.patch.object(sweeper, "gh", fake_gh):
+            self.assertEqual(sweeper.GitHub("o/r").e2e_source_build("2026-01-01T00:00:00Z"), 9)
 
 
 class DispatchContractTests(unittest.TestCase):
