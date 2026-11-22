@@ -416,6 +416,7 @@ build-ghcr base_name stream flavor kernel_pin="":
     # other documentation-only commits retain the cache key. The layer helper rejects any newer RPM payload
     # before timestamp rewriting could invalidate its Python caches.
     source_date_epoch="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct -- Containerfile packages system_files scripts config .gitmodules docs/agent)}"
+    # The created label reuses this epoch: the last build-input commit time, not wall-clock build time.
     mapfile -t epoch_args < <(scripts/podman-epoch-args.sh "${source_date_epoch}" rewrite)
     gnome_extension_provenance="$(python3 scripts/verify-gnome-extensions.py --print-provenance)"
     common_args=()
@@ -446,11 +447,18 @@ build-ghcr base_name stream flavor kernel_pin="":
       --build-arg IMAGE_VENDOR={{ repo_organization }} \
       --build-arg VERSION="$version" \
       --build-arg SHA_HEAD="$(git rev-parse HEAD)" \
+      --build-arg IMAGE_CREATED="$(date -u -d "@${source_date_epoch}" +%Y-%m-%dT%H:%M:%SZ)" \
       --build-arg GNOME_EXTENSION_PROVENANCE="${gnome_extension_provenance}" \
       --build-arg SHA_HEAD_SHORT="$(git rev-parse --short HEAD)" \
       --build-arg ENABLE_SSHD="${ENABLE_SSHD:-0}" \
       --tag "localhost/$image_name:{{ stream }}" \
       --file Containerfile .
+    # The revision label must name the commit that built the image (#1400).
+    built_revision="$(podman inspect "localhost/$image_name:{{ stream }}" | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["Config"]["Labels"].get("org.opencontainers.image.revision",""))')"
+    if [ "$built_revision" != "$(git rev-parse HEAD)" ]; then
+      echo "error: image revision label '${built_revision}' != HEAD $(git rev-parse HEAD)" >&2
+      exit 1
+    fi
 
 # Prove a rebuild that changes nothing produces the same image (utah#313).
 # Builds the flavor twice, uncached, with the wall-clock build args held
@@ -499,6 +507,7 @@ build-local stream="testing" package_image="localhost/utah-packages:local-merged
       --build-arg IMAGE_VENDOR="{{ repo_organization }}" \
       --build-arg VERSION="$version" \
       --build-arg SHA_HEAD="$(git rev-parse HEAD)" \
+      --build-arg IMAGE_CREATED="$(date -u -d "@${source_date_epoch}" +%Y-%m-%dT%H:%M:%SZ)" \
       --build-arg GNOME_EXTENSION_PROVENANCE="${gnome_extension_provenance}" \
       --build-arg SHA_HEAD_SHORT="$(git rev-parse --short HEAD)" \
       --build-arg ENABLE_SSHD="${ENABLE_SSHD:-1}" \
