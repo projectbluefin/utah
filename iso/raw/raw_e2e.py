@@ -53,6 +53,7 @@ Reuses iso/scripts/qemu_monitor.py, plymouth-prompt.py and luks-unlock.py.
 import argparse
 import json
 import os
+import re
 import shlex
 import shutil
 import socket
@@ -529,7 +530,10 @@ class Harness:
         nodes = self.poll(runner, app, predicate, timeout)
         if nodes is not None:
             return nodes
-        self.save(f"atspi-timeout-{slug(what)}.json", json.dumps(self.snapshot(runner, app), indent=1))
+        nodes = self.snapshot(runner, app)
+        self.save(f"atspi-timeout-{slug(what)}.json", json.dumps(nodes, indent=1))
+        for line in summarize_nodes(nodes):
+            log(f"  atspi [{slug(what)}]: {line}")
         self.shot(f"fail-{slug(what)}", f"FAILURE: {what} never appeared")
         raise Fail(f"{what} never appeared in {app}")
 
@@ -866,10 +870,21 @@ class Harness:
         self.check_slots()
         self.after_install()
 
+    # systemd-cryptenroll recovery keys: eight groups of eight lowercase letters.
+    KEY_RE = re.compile(r"[a-z]{8}(?:-[a-z]{8}){7}")
+
     @staticmethod
     def recovery_key_text(nodes):
         node = named(nodes, "Recovery Key")
-        return (node["text"] or "").strip() if node else ""
+        if node is not None and len((node["text"] or "").strip()) > 40:
+            return node["text"].strip()
+        # The key label's accessible name is the key itself (run 44972858422),
+        # so fall back to the key shape in any name or text.
+        for n in nodes:
+            for field in (n.get("name") or "", n.get("text") or ""):
+                if Harness.KEY_RE.fullmatch(field.strip()):
+                    return field.strip()
+        return ""
 
     def disk_passphrase(self, r, app, nodes):
         """No TPM: gnome-setup's disk passphrase page, both entries filled with PIN."""
@@ -1347,6 +1362,21 @@ def canon_space(text):
     """AT-SPI text carries glib's size formatting, which separates the value from
     the unit with a non-breaking space ('51.5\\xa0GB'); matchers use plain spaces."""
     return (text or "").replace("\u00a0", " ").replace("\u202f", " ")
+
+
+def summarize_nodes(nodes):
+    """One log line per button, check box and label: name plus showing/sensitive
+    states. Timeouts already save the full snapshot as json; this puts the
+    actionable part in the CI log itself so the next diagnosis starts there."""
+    lines = []
+    for n in nodes:
+        if n.get("role") not in ("button", "check box", "label"):
+            continue
+        states = n.get("states", [])
+        lines.append(
+            f"{n['role']} name={n.get('name', '')!r} "
+            f"showing={'showing' in states} sensitive={'sensitive' in states}")
+    return lines or ["no buttons, check boxes or labels"]
 
 
 def has_text(nodes, text):

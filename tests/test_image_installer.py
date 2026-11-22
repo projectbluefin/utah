@@ -785,6 +785,32 @@ class GnomeSetupTests(unittest.TestCase):
         self.assertIn('"Start Installation"', harness)
         self.assertIn('"Install"', harness)
 
+    def test_recovery_key_read_from_label_shaped_like_a_key(self):
+        # Run 44972858422's atspi-timeout-recovery-key.json: the key label's
+        # accessible name IS the key, so named(nodes, 'Recovery Key') misses it.
+        key = "reclhuld-icvnrelc-kjtnebnh-ucghgbnn-kffbvtuf-gbeuntuv-ukbkrgrk-kvhcerjg"
+        nodes = [
+            {"path": "0.1", "role": "label", "name": "Back Up Recovery Key",
+             "text": "Back Up Recovery Key", "ext": [0, 0, 10, 10], "states": []},
+            {"path": "0.2", "role": "label", "name": key, "text": key,
+             "ext": [0, 0, 10, 10], "states": ["sensitive", "showing", "visible"]},
+        ]
+        self.assertIsNone(raw_e2e.named(nodes, "Recovery Key"))
+        self.assertEqual(raw_e2e.Harness.recovery_key_text(nodes), key)
+
+    def test_timeout_summary_lists_buttons_and_labels(self):
+        nodes = [
+            {"path": "0.1", "role": "button", "name": "Install",
+             "text": "", "ext": [0, 0, 1, 1], "states": ["sensitive", "showing"]},
+            {"path": "0.2", "role": "panel", "name": "",
+             "text": "", "ext": [0, 0, 1, 1], "states": []},
+        ]
+        lines = raw_e2e.summarize_nodes(nodes)
+        self.assertEqual(len(lines), 1)
+        self.assertIn("button", lines[0])
+        self.assertIn("'Install'", lines[0])
+        self.assertIn("showing=True", lines[0])
+
     def test_disk_rows_match_despite_glib_nbsp_size(self):
         # glib's format_size separates value and unit with a non-breaking space
         # (CI run 44964323210: 'Unknown Disk 51.5\\xa0GB'); the harness matches
