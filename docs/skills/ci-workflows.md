@@ -1,7 +1,7 @@
 ---
 name: ci-workflows
 version: "1.4"
-last_updated: "2026-11-21"
+last_updated: "2026-11-22"
 id: ci-workflows
 one_line_purpose: Navigate Utah's build, promote, and sync workflow topology.
 entry_point: docs/skills/ci-workflows.md
@@ -151,6 +151,11 @@ post-build verification workflows, not the complete workflow inventory:
   failed job against a short infra signature list; only when all match does it
   re-run the failed jobs once, behind the `e2e-infra-retry-wait` environment's
   wait timer. See [infra re-run](ci-workflows/references/iso-e2e.md#infra-re-run).
+- `.github/workflows/rerun-startup-failures.yml` -- every three hours,
+  `scripts/rerun-startup-failures.py` re-dispatches sync-main-to-testing, the
+  testing build and Post-Testing E2E when GitHub never started their newest
+  run, which sends no `workflow_run` event for the re-run above to see. See
+  [startup failures](ci-workflows/references/iso-e2e.md#startup-failures).
 - `.github/workflows/image-installer.yml` -- nightly, manual dispatch, and
   pull requests touching `iso/raw/**`. The experimental image-based installer
   of ADR-0001 (`docs/adr/0001-image-based-installer.md`): builds a raw bootc
