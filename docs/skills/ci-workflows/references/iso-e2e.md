@@ -393,8 +393,9 @@ successful `testing` build created before the lost run whose `dispatch-iso`
 job succeeded (the API does not return a lost run's inputs). The dispatch
 becomes the newest run, so the next sweep skips it and a manual restart is
 never duplicated; no state is kept. A run with any job is a real failure and
-stays red. At most two are dispatched per sweep; the rest are logged as
-deferred and taken next time. A workflow it cannot read or dispatch, or an E2E
+stays red. Each workflow starts the next one, so only the most upstream lost
+workflow is dispatched; a lost run further down is logged as covered, and the
+chain replaces it. A workflow it cannot read or dispatch, or an E2E
 run with no source build, is logged as an error and fails the sweep after
 every workflow has had its turn. Native Common candidate is not swept: its
 `common_sha` comes from projectbluefin/common and a lost run does not keep it.

@@ -46,20 +46,19 @@ class FakeGitHub:
         self.dispatched.append((workflow, ref, inputs))
 
 
-def sweep(api, max_dispatch=sweeper.MAX_DISPATCH):
-    return sweeper.sweep(api, sweeper.TARGETS, max_dispatch, log=lambda _line: None)
+def sweep(api):
+    return sweeper.sweep(api, sweeper.TARGETS, log=lambda _line: None)
 
 
 class SweepTests(unittest.TestCase):
     def test_a_startup_failure_is_redispatched_the_way_the_chain_dispatches_it(self):
-        api = FakeGitHub({BUILD: [run(2), run(1, "success", "2026-11-22T10:00:00Z")],
-                          E2E: [run(4)]})
-        report = sweep(api)
-        self.assertEqual(api.dispatched, [
-            (BUILD, "testing", {"sha": "f" * 40}),
-            (E2E, "main", {"build_run_id": "111"}),
-        ])
-        self.assertEqual(report.dispatched, [BUILD, E2E])
+        for wf, ref, inputs in ((SYNC, "main", {}), (BUILD, "testing", {"sha": "f" * 40}),
+                                (E2E, "main", {"build_run_id": "111"})):
+            with self.subTest(wf):
+                api = FakeGitHub({wf: [run(2), run(1, "success", "2026-11-22T10:00:00Z")]})
+                report = sweep(api)
+                self.assertEqual(api.dispatched, [(wf, ref, inputs)])
+                self.assertEqual(report.dispatched, [wf])
 
     def test_the_older_failure_shape_counts_when_it_has_no_jobs(self):
         api = FakeGitHub({SYNC: [run(1, "failure")]})
@@ -86,17 +85,18 @@ class SweepTests(unittest.TestCase):
         sweep(api)
         self.assertEqual(api.dispatched, [])
 
-    def test_the_cap_defers_the_rest_and_reports_them(self):
+    def test_only_the_most_upstream_lost_workflow_is_dispatched(self):
+        # Sync starts build and build starts E2E: dispatching those too would run them twice.
         api = FakeGitHub({SYNC: [run(1)], BUILD: [run(2)], E2E: [run(3)]})
-        report = sweep(api, max_dispatch=2)
-        self.assertEqual([d[0] for d in api.dispatched], [SYNC, BUILD])
-        self.assertEqual(report.deferred, [E2E])
+        report = sweep(api)
+        self.assertEqual(api.dispatched, [(SYNC, "main", {})])
+        self.assertEqual(report.covered, [BUILD, E2E])
 
-    def test_an_e2e_run_with_no_source_build_fails_without_stopping_the_sweep(self):
-        api = FakeGitHub({E2E: [run(3)], SYNC: [run(1)]}, source_build=None)
+    def test_an_e2e_run_with_no_source_build_fails_the_sweep(self):
+        api = FakeGitHub({E2E: [run(3)]}, source_build=None)
         report = sweep(api)
         self.assertEqual(report.failed, [E2E])
-        self.assertEqual(api.dispatched, [(SYNC, "main", {})])
+        self.assertEqual(api.dispatched, [])
 
     def test_an_api_error_on_one_workflow_does_not_stop_the_sweep(self):
         class Broken(FakeGitHub):

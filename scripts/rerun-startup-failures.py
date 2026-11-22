@@ -18,8 +18,10 @@ runs this every three hours. Ported from tuna-os/tunaOS
   leaves it alone, and a run someone already restarted by hand is never
   duplicated. Nothing is stored between sweeps.
 - A run with any job is a real failure and stays red.
-- At most MAX_DISPATCH per sweep. The rest are reported as deferred, never
-  dropped, and the next sweep takes them.
+- Only the most upstream lost workflow is dispatched. Each workflow in the
+  chain starts the next one, so dispatching a downstream one as well would
+  run the same build and E2E twice. The lost downstream run is reported as
+  covered; the chain replaces it with a newer run.
 
 Each workflow is dispatched the way the chain itself dispatches it:
 sync-main-to-testing on `main` with no inputs; build on `testing` with the
@@ -31,7 +33,7 @@ starts E2E) succeeded. candidate-common is not swept: its `common_sha` input
 comes from projectbluefin/common and cannot be recovered from a lost run.
 
 Usage:
-  rerun-startup-failures.py [--dry-run] [--max-dispatch N]
+  rerun-startup-failures.py [--dry-run]
 
 Environment: GH_TOKEN (actions: write), GITHUB_REPOSITORY.
 """
@@ -44,10 +46,6 @@ import subprocess
 import sys
 from typing import Callable, NamedTuple
 
-# The 2026-08-21 tunaOS outage lost every nightly at once. Two per sweep
-# recovers the common single loss immediately and drains a mass one without
-# piling every rebuild onto the runners together.
-MAX_DISPATCH = 2
 # `startup_failure` is what the API reports now; `failure` with zero jobs is
 # the older shape tunaOS recorded. The zero-job check decides either way.
 STARTUP_CONCLUSIONS = {"startup_failure", "failure"}
@@ -147,11 +145,11 @@ def is_startup_failure(run: dict, job_count: int) -> bool:
 
 class Report(NamedTuple):
     dispatched: list[str]
-    deferred: list[str]
+    covered: list[str]  # lost, but an upstream dispatch this sweep starts it
     failed: list[str]
 
 
-def sweep(api, targets: list[Target], max_dispatch: int, dry_run: bool = False, log=print) -> Report:
+def sweep(api, targets: list[Target], dry_run: bool = False, log=print) -> Report:
     report = Report([], [], [])
     for target in targets:
         wf = target.workflow
@@ -171,10 +169,11 @@ def sweep(api, targets: list[Target], max_dispatch: int, dry_run: bool = False, 
             if not is_startup_failure(newest, jobs):
                 log(f"{wf}: newest run {newest['id']} failed with {jobs} job(s); a real failure, left red")
                 continue
-            if len(report.dispatched) >= max_dispatch:
-                log(f"::warning title=startup failure deferred::{wf}: run {newest['id']} never started; "
-                    f"deferred, {max_dispatch} already dispatched this sweep")
-                report.deferred.append(wf)
+            # Targets are in chain order: an upstream dispatch starts this one.
+            if report.dispatched:
+                log(f"{wf}: run {newest['id']} never started; {report.dispatched[-1]} was "
+                    f"re-dispatched this sweep and starts it downstream")
+                report.covered.append(wf)
                 continue
             inputs = target.inputs(api, newest)
             log(f"{wf}: run {newest['id']} never started and is still the newest; "
@@ -192,13 +191,12 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true",
                         help="report what would be dispatched without dispatching it")
-    parser.add_argument("--max-dispatch", type=int, default=MAX_DISPATCH)
     args = parser.parse_args(argv)
     api = GitHub(os.environ.get("GITHUB_REPOSITORY", "projectbluefin/utah"))
-    report = sweep(api, TARGETS, args.max_dispatch, args.dry_run)
-    print(f"\nre-dispatched {len(report.dispatched)}; deferred {len(report.deferred)}; "
+    report = sweep(api, TARGETS, args.dry_run)
+    print(f"\nre-dispatched {len(report.dispatched)}; covered downstream {len(report.covered)}; "
           f"failed {len(report.failed)}")
-    for label, names in (("dispatched", report.dispatched), ("deferred to the next sweep", report.deferred),
+    for label, names in (("dispatched", report.dispatched), ("covered downstream", report.covered),
                          ("FAILED", report.failed)):
         if names:
             print(f"  {label}: {', '.join(names)}")
