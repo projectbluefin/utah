@@ -6,7 +6,7 @@
 # it, done by OS-Installer's Utah config (hanthor/os-installer, utah_config/).
 # The layers sit on top of a published Utah digest; the published image and
 # the ISO/fisherman path are unchanged.
-ARG SOURCE_IMAGE=ghcr.io/projectbluefin/utah:testing@sha256:58195d307d98ad2a82aca325c7adf632420c044e2e2d9b28d1fffda92e1c452f
+ARG SOURCE_IMAGE=ghcr.io/projectbluefin/utah:testing@sha256:63c28ef3d8ebfbf2829483b0a64f3eb6af34a25ec7f1abfadd4410ffd96ed070
 ARG BUILDER_IMAGE=registry.fedoraproject.org/fedora:43@sha256:a19e8544313a675e6529d3242f74f0015beebdd1834d0bf9b132e669f734f2bf
 
 # OS-Installer is Python + GTK4/libadwaita; every runtime library it loads is
