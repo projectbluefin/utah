@@ -798,6 +798,30 @@ class GnomeSetupTests(unittest.TestCase):
         self.assertIsNone(raw_e2e.named(nodes, "Recovery Key"))
         self.assertEqual(raw_e2e.Harness.recovery_key_text(nodes), key)
 
+    def test_done_predicate_ignores_panel_before_checkbox_tick(self):
+        # Run 44972858422's atspi-timeout-recovery-key.json: three nodes share
+        # the name 'Done' (sensitive panel, insensitive button, sensitive
+        # label). Without a role filter the predicate is already true before
+        # 'I backed up my recovery key' is ticked, and act may target the panel.
+        panel = {"path": "0.0.0.0.0.0.0", "role": "panel", "name": "Done",
+                 "text": "", "ext": [0, 0, 1920, 977],
+                 "states": ["sensitive", "showing", "visible"]}
+        button = {"path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.2",
+                  "role": "button", "name": "Done", "text": "",
+                  "ext": [909, 699, 102, 44],
+                  "states": ["focusable", "showing", "visible"]}
+        label = {"path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.2.0",
+                 "role": "label", "name": "Done", "text": "Done",
+                 "ext": [909, 699, 38, 24],
+                 "states": ["sensitive", "showing", "visible"]}
+        nodes = [panel, button, label]
+        self.assertTrue(raw_e2e.has_name(nodes, "Done", sensitive=True))
+        self.assertFalse(raw_e2e.has_name(nodes, "Done", sensitive=True, role="button"))
+        self.assertIsNone(raw_e2e.named(nodes, "Done", sensitive=True, role="button"))
+        ticked = [dict(button, states=button["states"] + ["sensitive"])]
+        self.assertTrue(raw_e2e.has_name(ticked, "Done", sensitive=True, role="button"))
+        self.assertEqual(raw_e2e.named(ticked, "Done", sensitive=True, role="button")["role"], "button")
+
     def test_timeout_summary_lists_buttons_and_labels(self):
         nodes = [
             {"path": "0.1", "role": "button", "name": "Install",

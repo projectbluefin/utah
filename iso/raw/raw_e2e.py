@@ -593,10 +593,11 @@ class Harness:
         self.shot(f"fail-{slug(what)}", f"FAILURE: clicking never reached {what}")
         raise Fail(f"clicking never reached {what}")
 
-    def press(self, runner, app, name, done, what, timeout=120):
+    def press(self, runner, app, name, done, what, timeout=120, role=None):
         """Press a button by its AT-SPI click action (pointer if it has none)."""
+        act = ["act", app, name] if role is None else ["act", app, name, role]
         for attempt in range(3):
-            res = self.atspi(runner, "act", app, name)
+            res = self.atspi(runner, *act)
             if not res or "error" in res:
                 log(f"  press {name!r}: {res}")
                 time.sleep(3)
@@ -864,8 +865,8 @@ class Harness:
         time.sleep(2)
         self.shot("09-setup-recovery-qr", "The recovery key as a QR code")
         self.press(r, app, "Done", lambda n: not has_text(n, "Scan to Back Up"), "QR code dialog closed")
-        self.press(r, app, "I backed up my recovery key", lambda n: has_name(n, "Done", sensitive=True), "recovery key confirmed")
-        self.press(r, app, "Done", lambda n: has_text(n, "Installation Complete"), "done page")
+        self.press(r, app, "I backed up my recovery key", lambda n: has_name(n, "Done", sensitive=True, role="button"), "recovery key confirmed")
+        self.press(r, app, "Done", lambda n: has_text(n, "Installation Complete"), "done page", role="button")
         self.shot("10-setup-done", "Installation complete; the recovery key is enrolled and the empty passphrase wiped")
         self.check_slots()
         self.after_install()
@@ -1384,13 +1385,19 @@ def has_text(nodes, text):
     return any(t in canon_space(n["name"] + " " + n["text"]).lower() for n in nodes)
 
 
-def has_name(nodes, name, sensitive=False):
-    return named(nodes, name, sensitive) is not None
+def has_name(nodes, name, sensitive=False, role=None):
+    return named(nodes, name, sensitive, role) is not None
 
 
-def named(nodes, name, sensitive=False):
+def named(nodes, name, sensitive=False, role=None):
+    # Several nodes can share a name (recovery page: a panel, a button and a
+    # label are all 'Done'): pass role='button' for press targets and
+    # sensitivity predicates so a sensitive panel cannot stand in for a
+    # still-insensitive button (run 44978209923).
     want = norm(name)
     for n in nodes:
+        if role is not None and n.get("role") != role:
+            continue
         got = norm(n["name"])
         if (want[1:] in got if want.startswith("~") else got == want):
             if not sensitive or "sensitive" in n["states"]:
