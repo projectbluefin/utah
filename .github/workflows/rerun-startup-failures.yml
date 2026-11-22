@@ -6,7 +6,8 @@ name: Re-dispatch startup failures
 # moving until testing-freshness alarms 36 hours later. This polls instead:
 # scripts/rerun-startup-failures.py re-dispatches sync-main-to-testing, build
 # and post-testing-e2e only while a startup failure is still the newest run of
-# that workflow, at most two per sweep. A run with jobs stays red.
+# that workflow, and only the most upstream lost one per sweep. A run with
+# jobs stays red.
 on:
   schedule:
     - cron: "17 */3 * * *"
