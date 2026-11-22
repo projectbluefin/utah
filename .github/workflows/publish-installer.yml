@@ -1,0 +1,193 @@
+name: Publish installer medium
+
+# Publishes the experimental image-based installer's live medium to ghcr so
+# people outside CI can try it (docs/adr/0001). This is publishing, not
+# promotion: no OS image tag moves, nothing gates on it, and it never touches
+# the E2E track's medium or its logs.
+#
+# Per flavor:
+#   1. build the same live-capable layer on the exact :testing digest
+#      (iso/raw/Containerfile);
+#   2. build the raw medium the same way (iso/raw/build-raw-image.sh) but with
+#      no debug kargs, so the published medium offers gnome-setup with no
+#      baked-in root credentials;
+#   3. bake the Flatpaks (iso/raw/bake-flatpaks.sh) and shrink it
+#      (iso/raw/shrink-raw-image.sh);
+#   4. compress the finished medium with zstd -19 --long=31, the download
+#      format measure_medium.py benchmarks, write a SHA-256 checksum, and push
+#      both with oras (v1.4.0) as an OCI artifact to
+#      ghcr.io/projectbluefin/<image>-installer, tags testing and
+#      testing-YYYYMMDD.
+on:
+  workflow_dispatch:
+    inputs:
+      all_flavors:
+        description: Every flavor in config/flavors.json (default main only)
+        type: boolean
+        default: false
+  schedule:
+    # Weekly, Monday 09:41 UTC: after that morning's nightly E2E run has
+    # already exercised the same :testing digest, before this week's tag ages.
+    - cron: '41 9 * * 1'
+  pull_request:
+    paths:
+      - iso/raw/**
+      - .github/workflows/publish-installer.yml
+      - tests/test_image_installer.py
+permissions: {}
+
+concurrency:
+  group: publish-installer-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        timeout-minutes: 10
+        with:
+          persist-credentials: false
+      - id: matrix
+        timeout-minutes: 10
+        env:
+          ALL_FLAVORS: ${{ inputs.all_flavors && 'true' || 'false' }}
+        run: |
+          set -euo pipefail
+          # The :testing digest that the nightly E2E track just validated.
+          entries=()
+          if [[ "$ALL_FLAVORS" == true ]]; then
+            mapfile -t images < <(python3 scripts/flavors.py images | jq -r '.[].image')
+          else
+            mapfile -t images < <(python3 scripts/flavors.py list-main | jq -r '.[]' | xargs -n1 python3 scripts/flavors.py image)
+          fi
+          for image in "${images[@]}"; do
+            repo="ghcr.io/projectbluefin/$image"
+            digest=$(skopeo inspect --format '{{.Digest}}' "docker://$repo:testing") \
+              || { echo "::error::no :testing digest for $repo"; exit 1; }
+            entries+=("$(jq -cn --arg image "$image" --arg ref "$repo@$digest" '{image:$image,ref:$ref,digest:$digest}')")
+          done
+          matrix=$(printf '%s\n' "${entries[@]}" | jq -cs '{include: .}')
+          echo "$matrix" | jq .
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  publish:
+    name: publish (${{ matrix.image }})
+    needs: resolve
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    permissions:
+      contents: read
+      # Only this job can write: the OCI artifact is the whole point, and it
+      # is not an OS image tag, so it needs packages: write, not a tag move.
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
+    env:
+      WORK: /mnt/publish
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        timeout-minutes: 10
+        with:
+          persist-credentials: false
+      - name: Prepare host (podman storage and work dir on /mnt, QEMU, oras)
+        timeout-minutes: 40
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo apt-get update
+          sudo apt-get install -y podman skopeo qemu-system-x86 qemu-utils zstd xz-utils
+          # oras v1.4.0, pinned and verified against the sha256 from the
+          # official release checksums file at install time.
+          curl -fsSL -o /tmp/oras.tgz \
+            "https://github.com/oras-project/oras/releases/download/v1.4.0/oras_1.4.0_linux_amd64.tar.gz"
+          printf '%s  /tmp/oras.tgz\n' 'd8e1dce2fd8ce996f1d901845b688eb0cf505a6082897606f053825bb47935d1' \
+            | sha256sum -c -
+          tar -xzf /tmp/oras.tgz -C /tmp
+          sudo install -m 0755 /tmp/oras /usr/local/bin/oras
+          oras version
+          sudo mkdir -p /mnt/containers /var/lib/containers "$WORK"
+          sudo mount --bind /mnt/containers /var/lib/containers
+          sudo chown "$USER" "$WORK"
+          df -h / /mnt
+      - name: Log in to ghcr
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          echo "${{ github.token }}" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Build the live-capable image layer
+        timeout-minutes: 60
+        env:
+          SOURCE_REF: ${{ matrix.ref }}
+        run: |
+          set -euo pipefail
+          sudo podman pull -q "$SOURCE_REF"
+          sudo podman build --layers=false -t localhost/utah-publish:ci \
+            --build-arg SOURCE_IMAGE="$SOURCE_REF" -f iso/raw/Containerfile iso/raw 2>&1 | tail -150
+      # ADR-0001 decision 6: Flatpaks live on the medium's stateful /var, never
+      # in an image, so bootc updates cannot bring them back.
+      - name: Assert the published image and the live layer carry no Flatpaks
+        env:
+          SOURCE_REF: ${{ matrix.ref }}
+        run: |
+          set -euo pipefail
+          for ref in "$SOURCE_REF" localhost/utah-publish:ci; do
+            sudo podman run --rm --entrypoint sh "$ref" -c \
+              'test ! -e /var/lib/flatpak || test -z "$(ls -A /var/lib/flatpak)"' \
+              || { echo "::error::$ref has content in /var/lib/flatpak"; exit 1; }
+          done
+      - name: Build the clean raw medium (bootc install to-filesystem, once)
+        env:
+          SOURCE_REF: ${{ matrix.ref }}
+        run: |
+          set -euo pipefail
+          # Deliberately no root ssh key, no debug sshd and no debug kargs:
+          # the published medium must offer gnome-setup clean (see the script's
+          # CI-only options in iso/raw/build-raw-image.sh).
+          sudo UTAH_RAW_EVIDENCE="$WORK/raw-evidence" \
+            bash iso/raw/build-raw-image.sh localhost/utah-publish:ci "$WORK/medium.raw" "${SOURCE_REF%@*}:testing"
+          echo "MEDIUM_BACKEND=$(jq -r .backend "$WORK/raw-evidence/backend.json")" >> "$GITHUB_ENV"
+      - name: Bake the Flatpaks and shrink the medium
+        env:
+          SOURCE_REF: ${{ matrix.ref }}
+        run: |
+          set -euo pipefail
+          ev="$WORK/raw-evidence"
+          sudo env UTAH_RAW_EVIDENCE="$ev" UTAH_RAW_BTRFS_COMPRESS="zstd:3" \
+            bash iso/raw/shrink-raw-image.sh localhost/utah-publish:ci "$WORK/medium.raw"
+          sudo env UTAH_RAW_EVIDENCE="$ev" bash iso/raw/bake-flatpaks.sh localhost/utah-publish:ci "$WORK/medium.raw"
+          sudo env UTAH_RAW_EVIDENCE="$ev" UTAH_RAW_BTRFS_COMPRESS="zstd:3" \
+            bash iso/raw/shrink-raw-image.sh localhost/utah-publish:ci "$WORK/medium.raw"
+          sudo chown "$USER" "$WORK/medium.raw"
+          sudo chown -R "$USER" "$ev"
+          sudo podman rmi -af >/dev/null || true
+          df -h / /mnt
+      - name: Compress, checksum and publish the medium
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: |
+          set -euo pipefail
+          # zstd -19 --long=31, exactly the download format measure_medium.py
+          # benchmarks (iso/raw/measure_medium.py, zstd-19-long).
+          zstd -q -T0 -19 --long=31 -o "$WORK/medium.zst" "$WORK/medium.raw"
+          ( cd "$WORK" && sha256sum medium.zst > medium.zst.sha256 )
+          # One upload: push the artifact, then tag the digest.
+          DIGEST="$(oras push --publish "ghcr.io/projectbluefin/${IMAGE}-installer" \
+            "application/vnd.projectbluefin.installer.medium" \
+            "$WORK/medium.zst:application/octet-stream" \
+            "$WORK/medium.zst.sha256:text/plain")"
+          DIGEST="${DIGEST#@}"
+          for tag in testing "testing-$(date +%Y%m%d)"; do
+            skopeo copy "docker://ghcr.io/projectbluefin/${IMAGE}-installer@${DIGEST}" \
+              "docker://ghcr.io/projectbluefin/${IMAGE}-installer:${tag}"
+            skopeo inspect --format '{{.Digest}}' "docker://ghcr.io/projectbluefin/${IMAGE}-installer:${tag}" \
+              | tee "$WORK/published-${tag}"
+          done
+          echo "medium size: $(du -h "$WORK/medium.zst" | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
+          echo "published ghcr.io/projectbluefin/${IMAGE}-installer (digest ${DIGEST:0:20}…)" >> "$GITHUB_STEP_SUMMARY"

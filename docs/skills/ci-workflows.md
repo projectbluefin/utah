@@ -168,6 +168,19 @@ post-build verification workflows, not the complete workflow inventory:
   `promote-to-testing`'s needs, read-only permissions, no tag moves;
   `tests/test_image_installer.py` holds that. Details:
   [image-installer](local-testing/references/image-installer.md).
+- `.github/workflows/publish-installer.yml` -- weekly Monday 09:41 UTC, manual
+  dispatch, and pull requests touching `iso/raw/**`. Ships the experimental
+  image-based installer's live medium to ghcr so people outside CI can try it
+  (docs/adr/0001-image-based-installer.md): per flavor it builds the same
+  live-capable layer and raw medium on the exact `:testing` digest as the
+  E2E track, but with no debug kargs, bakes the Flatpaks into the medium's
+  stateful /var, shrinks it, compresses the finished medium with
+  `zstd -19 --long=31`, writes a SHA-256 checksum, and pushes both with oras
+  (v1.4.0) as an OCI artifact to `ghcr.io/projectbluefin/<image>-installer`,
+  tags `testing` and `testing-YYYYMMDD`. Like the E2E track it is deliberately
+  non-blocking: not a required check, not in `promote-to-testing`'s needs, no
+  OS image tag moves. Top-level `permissions: {}`; only the publish job gets
+  `packages: write`. `tests/test_image_installer.py` holds that.
 - `.github/workflows/execute-release.yml` -- promotion pushes to `main`,
   manual dispatch and a daily 06:00 UTC check retag `:stable`. The daily run
   releases only when `:stable` last moved over seven days ago (or is missing)

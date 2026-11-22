@@ -41,6 +41,7 @@ Utah is built across two repositories:
 ## Download and image streams
 
 - **Live ISO (AMD / Intel, Secure Boot off):** [`utah-live-latest.iso`](https://projectbluefin.dev/utah-live-latest.iso) ([SHA-256 checksum](https://projectbluefin.dev/utah-live-latest.iso-CHECKSUM)), built monthly from `:stable`
+- **Image-based installer medium (experimental):** [`ghcr.io/projectbluefin/utah-installer`](https://github.com/projectbluefin/utah/pkgs/container/utah-installer) (`testing` tag), published weekly and on demand from `:testing` — the live medium for [docs/adr/0001](https://github.com/projectbluefin/utah/blob/main/docs/adr/0001-image-based-installer.md), baked Flatpaks included
 - **Live versions & downloads:** [docs.projectbluefin.io/utah](https://docs.projectbluefin.io/utah)
 
 The live ISO is hosted on projectbluefin.dev and built by
