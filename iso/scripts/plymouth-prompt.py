@@ -39,7 +39,11 @@ SEARCH_RADIUS = 6         # pixels around the theme's computed watermark origin
 MATCH_RATIO = 0.25        # best difference must be under a quarter of the
                           # watermark's own contrast against black
 UNBRANDED_POLLS = 2       # a prompt without a watermark this many polls running fails
-TEXT_FALLBACK = "Please enter passphrase for disk"
+# Plymouth asks "Please enter passphrase for disk ..." for a passphrase slot and
+# "Please enter recovery key for disk ..." for a recovery key; either on the serial
+# console means the text fallback, and either on screen is the prompt.
+TEXT_FALLBACKS = ("Please enter passphrase for disk", "Please enter recovery key for disk")
+PROMPT_TEXT = re.compile(r"passphrase|recovery key", re.I)
 
 
 def read_ppm(data: bytes):
@@ -182,7 +186,8 @@ def ocr(frame_path: str) -> str:
 def serial_has_text_prompt(serial_log: str) -> bool:
     try:
         with open(serial_log, errors="replace") as handle:
-            return TEXT_FALLBACK in handle.read()
+            text = handle.read()
+        return any(fallback in text for fallback in TEXT_FALLBACKS)
     except OSError:
         return False
 
@@ -218,7 +223,7 @@ def wait(sock, serial_log, theme_path, watermark_path, evidence, timeout):
         except (OSError, ValueError):
             time.sleep(POLL_INTERVAL)
             continue
-        if re.search(r"passphrase", ocr(frame_path), re.I):
+        if PROMPT_TEXT.search(ocr(frame_path)):
             result = watermark_match(frame, watermark, theme_text)
             print(f"[plymouth-prompt] prompt on screen; {describe(*result)}", flush=True)
             os.replace(frame_path, evidence)
@@ -232,7 +237,7 @@ def wait(sock, serial_log, theme_path, watermark_path, evidence, timeout):
         time.sleep(POLL_INTERVAL)
     if os.path.exists(frame_path):
         os.replace(frame_path, evidence)
-    print(f"[plymouth-prompt] FAIL: no graphical passphrase prompt within {timeout}s;"
+    print(f"[plymouth-prompt] FAIL: no graphical passphrase or recovery key prompt within {timeout}s;"
           f" last frame: {evidence}", file=sys.stderr)
     return 1
 

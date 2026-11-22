@@ -87,6 +87,25 @@ class TextFallbackTests(unittest.TestCase):
                                  str(FIXTURES / "watermark.png"), str(Path(tmp) / "frame.ppm"), 5)
         self.assertEqual(status, 3)
 
+    def test_recovery_key_prompt_on_the_serial_console_is_also_the_text_fallback(self):
+        # gnome-setup's installed disks unlock with the recovery key once the TPM is
+        # not offered (the bootc switch boot), and Plymouth then says "recovery key",
+        # not "passphrase": run 5 of the local e2e waited 10 minutes for the word.
+        with tempfile.TemporaryDirectory() as tmp:
+            serial = Path(tmp) / "serial.log"
+            serial.write_text("Please enter recovery key for disk root (luks-d88370cb)::")
+            theme = Path(tmp) / "bgrt.plymouth"
+            theme.write_text(BGRT)
+            status = prompt.wait(str(Path(tmp) / "absent.sock"), str(serial), str(theme),
+                                 str(FIXTURES / "watermark.png"), str(Path(tmp) / "frame.ppm"), 5)
+        self.assertEqual(status, 3)
+
+    def test_prompt_text_accepts_both_wordings(self):
+        for text in ("Please enter passphrase for disk root", "Please enter recovery key for disk root (luks-1)",
+                     "PLEASE ENTER RECOVERY KEY FOR DISK ROOT"):
+            self.assertTrue(prompt.PROMPT_TEXT.search(text), text)
+        self.assertFalse(prompt.PROMPT_TEXT.search("Booting Utah"))
+
 
 if __name__ == "__main__":
     unittest.main()
