@@ -1,0 +1,29 @@
+// Utah live session (utah.live.installer=gnome-setup): let the live user run
+// gnome-setup without password dialogs. "liveuser" exists only in live
+// sessions (utah-live-setup creates it in the RAM overlay).
+//
+// gnome-setup's own 20-gnome-setup.rules grants the sysinstall and
+// cryptenroll actions on GNOME OS live media (/run/gnomeos/is-live, which
+// utah-live-setup creates too); this rule grants them by user so it does not
+// depend on polkitd spawning cat, and adds what the Utah flow needs on top:
+// localed for the language and keyboard pages, and starting
+// utah-sysinstall-post@<disk>.service (pages.conf post-install-unit).
+polkit.addRule(function(action, subject) {
+    if (subject.user != "liveuser" || !subject.active || !subject.local)
+        return undefined;
+
+    if (action.id == "io.systemd.sysinstall.Run" ||
+        action.id == "io.systemd.sysinstall.ListCandidateDevices" ||
+        action.id == "io.systemd.cryptenroll.enroll" ||
+        action.id == "io.systemd.cryptenroll.list-slots" ||
+        action.id == "org.freedesktop.locale1.set-locale" ||
+        action.id == "org.freedesktop.locale1.set-keyboard")
+        return polkit.Result.YES;
+
+    if (action.id == "org.freedesktop.systemd1.manage-units" &&
+        action.lookup("verb") == "start" &&
+        /^utah-sysinstall-post@[^/]+\.service$/.test(action.lookup("unit") || ""))
+        return polkit.Result.YES;
+
+    return undefined;
+});

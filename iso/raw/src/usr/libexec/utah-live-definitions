@@ -1,0 +1,65 @@
+#!/usr/bin/bash
+# Write the systemd-repart definitions gnome-setup hands to systemd-sysinstall
+# (utah.live.installer=gnome-setup): the medium's GPT mirrored partition by
+# partition with CopyBlocks=, the root into LUKS2.
+#
+# gnome-setup reads its definitions from /usr/lib/gnome-setup/definitions,
+# which the live layer links to /run/utah-live/repart.d (written here at boot):
+# the sources are this medium's own partitions, named by PARTUUID (unique per
+# medium, unlike labels the installed copy shares), and the encryption depends
+# on whether the machine has a TPM.
+#
+#   * BIOS boot is skipped (UEFI-only target, as install.sh does).
+#   * ESP and /boot keep their size; the root takes the rest of the disk
+#     (systemd-repart adds room for the LUKS2 header).
+#   * Root: Encrypt=key-file+tpm2 bound to PCR 7 (Secure Boot policy: the
+#     same shim/GRUB chain boots the medium and the copy) with a TPM 2.0,
+#     else Encrypt=key-file. No key file is passed, so systemd-repart
+#     enrolls an empty passphrase: utah-sysinstall-post unlocks with it, and
+#     gnome-setup's recovery key page then enrolls a recovery key and wipes
+#     it. Without a TPM gnome-setup's disk passphrase page first enrolls the
+#     passphrase the user picks, so the recovery key is the second key.
+set -euo pipefail
+
+out=/run/utah-live/repart.d
+bios_type=21686148-6449-6e6f-744e-656564454649
+
+root_uuid=""
+read -r -a cmdline </proc/cmdline
+for arg in "${cmdline[@]}"; do
+    case "${arg}" in root=UUID=*) root_uuid="${arg#root=UUID=}" ;; esac
+done
+[[ -n "${root_uuid}" ]] || { echo "no root=UUID= on the kernel command line" >&2; exit 1; }
+udevadm settle
+src_root_part="$(realpath "/dev/disk/by-uuid/${root_uuid}")"
+src_disk="/dev/$(lsblk -rno PKNAME "${src_root_part}")"
+
+tpm2=0
+if [[ "$(cat /sys/class/tpm/tpm0/tpm_version_major 2>/dev/null)" == 2 ]]; then tpm2=1; fi
+
+rm -rf "${out}"
+mkdir -p "${out}"
+# The heredoc is python's stdin (the script), so the table goes in as an argument.
+table="$(sfdisk --json "${src_disk}")"
+python3 - "${out}" "${src_root_part}" "${tpm2}" "${bios_type}" "${table}" <<'PY'
+import json, pathlib, sys
+table = json.loads(sys.argv[5])["partitiontable"]
+out, root_node, tpm2, bios = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3] == "1", sys.argv[4]
+sector = table.get("sectorsize", 512)
+for index, part in enumerate(table["partitions"], start=1):
+    ptype = part["type"].lower()
+    if ptype == bios:
+        continue
+    lines = ["[Partition]", f"Type={ptype}", f"CopyBlocks=/dev/disk/by-partuuid/{part['uuid'].lower()}"]
+    if part.get("name"):
+        lines.append(f"Label={part['name']}")
+    if part["node"] == root_node:
+        lines.append("Encrypt=key-file+tpm2" if tpm2 else "Encrypt=key-file")
+        if tpm2:
+            lines.append("TPM2PCRs=7")
+    else:
+        size = part["size"] * sector
+        lines += [f"SizeMinBytes={size}", f"SizeMaxBytes={size}"]
+    (out / f"{index:02d}-copy.conf").write_text("\n".join(lines) + "\n")
+PY
+for f in "${out}"/*.conf; do echo "$(basename "$f"): $(tr '\n' ' ' <"$f")"; done

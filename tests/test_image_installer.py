@@ -14,6 +14,7 @@ import io
 import json
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -213,6 +214,26 @@ class ShrinkPlanTests(unittest.TestCase):
         self.assertLess(bake, workflow.rindex('UTAH_RAW_BTRFS_COMPRESS="$BTRFS_COMPRESS"'))
         self.assertEqual(workflow.count('UTAH_RAW_BTRFS_COMPRESS="$BTRFS_COMPRESS"'), 2)
 
+    def test_btrfs_compress_off_turns_compression_off_and_empty_is_the_default(self):
+        # GitHub substitutes an input's default for an empty value, so runs
+        # dispatched with btrfs_compress empty ran at zstd:3 (44938602008,
+        # 44944477347): "off" is the explicit way out.
+        workflow = yaml.safe_load(WORKFLOW.read_text())
+        inputs = workflow[True]["workflow_dispatch"]["inputs"]
+        self.assertEqual(inputs["btrfs_compress"]["default"], "zstd:3")
+        job = workflow["jobs"]["e2e"]
+        self.assertEqual(job["env"]["BTRFS_COMPRESS_INPUT"],
+                         "${{ github.event_name == 'workflow_dispatch' && inputs.btrfs_compress || 'zstd:3' }}")
+        self.assertNotIn("BTRFS_COMPRESS", job["env"])
+        step = job["steps"][0]
+        self.assertEqual(step["name"], "Resolve the btrfs compression")
+        for given, want in (("off", ""), ("zstd:3", "zstd:3"), ("zstd:15", "zstd:15")):
+            with tempfile.TemporaryDirectory() as tmp:
+                env_file = Path(tmp) / "env"
+                subprocess.run(["bash", "-c", step["run"]], check=True, capture_output=True,
+                               env={"PATH": "/usr/bin:/bin", "BTRFS_COMPRESS_INPUT": given, "GITHUB_ENV": str(env_file)})
+                self.assertEqual(env_file.read_text(), f"BTRFS_COMPRESS={want}\n", given)
+
 
 class ResultsTests(unittest.TestCase):
     def test_stages_pass_fail_and_not_run(self):
@@ -396,6 +417,12 @@ class NonBlockingTrackTests(unittest.TestCase):
         self.assertNotRegex(containerfile, r"\bgit\s+clone\b")
         self.assertIn('test "$(git -C /src rev-parse HEAD)" = "${OSI_REF}"', containerfile)
         self.assertRegex(containerfile, r"(?m)^ARG BUILDER_IMAGE=\S+@sha256:[0-9a-f]{64}$")
+
+    def test_gnome_setup_and_systemd_are_pinned_by_commit(self):
+        containerfile = (RAW / "Containerfile").read_text()
+        for ref in ("GS_REF", "SYSTEMD_REF"):
+            self.assertRegex(containerfile, rf"(?m)^ARG {ref}=[0-9a-f]{{40}}$")
+            self.assertIn(f'test "$(git -C /src rev-parse HEAD)" = "${{{ref}}}"', containerfile)
 
     def test_the_medium_is_never_uploaded(self):
         upload = next(s for s in self.workflow["jobs"]["e2e"]["steps"] if "upload-artifact" in s.get("uses", ""))
@@ -684,6 +711,170 @@ class KernelVeritySelectorTests(unittest.TestCase):
         self.assertIn('ssh_live "python3 - select --backend composefs" <"${ROOT}/scripts/kernel_verity.py"', luks)
         build = (RAW / "build-raw-image.sh").read_text()
         self.assertIn('<"${HERE}/../../scripts/kernel_verity.py"', build)
+
+
+class GnomeSetupTests(unittest.TestCase):
+    """installer=gnome-setup: gnome-setup drives systemd-sysinstall on the live medium."""
+
+    workflow = yaml.safe_load(WORKFLOW.read_text())
+
+    def test_the_installer_is_a_dispatch_input_defaulting_to_gnome_setup(self):
+        inputs = self.workflow[True]["workflow_dispatch"]["inputs"]
+        self.assertEqual(inputs["installer"]["options"], ["gnome-setup", "os-installer"])
+        self.assertEqual(inputs["installer"]["default"], "gnome-setup")
+        self.assertIn("INSTALLER: ${{ inputs.installer || 'gnome-setup' }}", WORKFLOW.read_text())
+        self.assertIn('INSTALLER="${UTAH_RAW_INSTALLER:-gnome-setup}"', (RAW / "build-raw-image.sh").read_text())
+        text = WORKFLOW.read_text()
+        self.assertIn('UTAH_RAW_INSTALLER="$INSTALLER"', text)
+        self.assertIn('--installer "$INSTALLER"', text)
+
+    def test_the_live_karg_selects_the_installer(self):
+        build = (RAW / "build-raw-image.sh").read_text()
+        self.assertIn("utah.live.installer=gnome-setup", build)
+        setup = (RAW / "src/usr/libexec/utah-live-setup").read_text()
+        self.assertIn("utah.live.installer=gnome-setup", setup)
+        for unit in ("utah-sysinstall.socket", "utah-cryptenroll.socket"):
+            text = (RAW / "src/usr/lib/systemd/system" / unit).read_text()
+            self.assertIn("ConditionKernelCommandLine=utah.live.installer=gnome-setup", text)
+
+    def test_sysinstall_leaves_the_copied_boot_chain_alone(self):
+        service = (RAW / "src/usr/lib/systemd/system/utah-sysinstall@.service").read_text()
+        self.assertIn("--install-kernel=no --install-boot-loader=no", service)
+        self.assertIn("SYSTEMD_REPART_PATH=/usr/libexec/utah-sysinstall/systemd-repart", service)
+
+    def test_the_post_install_unit_is_the_one_gnome_setup_starts(self):
+        pages = (RAW / "src/usr/share/utah/gnome-setup/pages.conf").read_text()
+        self.assertIn("post-install-unit=utah-sysinstall-post@.service", pages)
+        self.assertTrue((RAW / "src/usr/lib/systemd/system/utah-sysinstall-post@.service").exists())
+        rules = (RAW / "src/usr/share/polkit-1/rules.d/50-utah-live-gnome-setup.rules").read_text()
+        self.assertIn("utah-sysinstall-post@", rules)
+        containerfile = (RAW / "Containerfile").read_text()
+        self.assertIn("ln -s /run/utah-live/repart.d /out/usr/lib/gnome-setup/definitions", containerfile)
+        self.assertIn("/usr/share/utah/gnome-setup/pages.conf /usr/lib/gnome-setup/pages.conf", containerfile)
+
+    def test_without_a_tpm_the_user_picks_a_passphrase_next_to_the_recovery_key(self):
+        pages = (RAW / "src/usr/share/utah/gnome-setup/pages.conf").read_text()
+        flow = next(line for line in pages.splitlines() if line.startswith("live-initial-setup="))
+        steps = flow.split("=", 1)[1].split(";")
+        self.assertLess(steps.index("installer"), steps.index("disk-passphrase"))
+        self.assertLess(steps.index("disk-passphrase"), steps.index("recovery-key"))
+        inputs = self.workflow[True]["workflow_dispatch"]["inputs"]
+        self.assertEqual(inputs["tpm"]["type"], "boolean")
+        self.assertTrue(inputs["tpm"]["default"])
+        self.assertIn('[[ "$INSTALLER" != gnome-setup || "$TPM" != true ]] || tpm=(--tpm)', WORKFLOW.read_text())
+
+    def test_installed_systems_do_not_offer_gnome_setup(self):
+        containerfile = (RAW / "Containerfile").read_text()
+        self.assertIn("mv /out/usr/share/applications/org.gnome.Setup.desktop", containerfile)
+        self.assertIn("rm -rf /out/usr/lib/systemd/user", containerfile)
+
+    def test_results_record_the_installer_and_encryption(self):
+        results = raw_e2e.Results("gui")
+        results.installer = "gnome-setup"
+        out = results.as_dict()
+        self.assertEqual(out["installer"], "gnome-setup")
+        self.assertIn("encryption", out)
+
+    def test_wipe_or_free_takes_free_space_without_a_confirm_dialog(self):
+        # The empty target reads as DataDetected ('Existing Data Found'), so the
+        # harness takes 'Install to Free Space' and starts installation directly;
+        # full wipe would ask 'Erase and Install' instead (run 44968690146).
+        harness = (RAW / "raw_e2e.py").read_text()
+        self.assertIn('"Existing Data Found"', harness)
+        self.assertIn('"Install to Free Space"', harness)
+        self.assertIn('"Start Installation"', harness)
+        self.assertIn('"Install"', harness)
+
+    def test_recovery_key_read_from_label_shaped_like_a_key(self):
+        # Run 44972858422's atspi-timeout-recovery-key.json: the key label's
+        # accessible name IS the key, so named(nodes, 'Recovery Key') misses it.
+        key = "reclhuld-icvnrelc-kjtnebnh-ucghgbnn-kffbvtuf-gbeuntuv-ukbkrgrk-kvhcerjg"
+        nodes = [
+            {"path": "0.1", "role": "label", "name": "Back Up Recovery Key",
+             "text": "Back Up Recovery Key", "ext": [0, 0, 10, 10], "states": []},
+            {"path": "0.2", "role": "label", "name": key, "text": key,
+             "ext": [0, 0, 10, 10], "states": ["sensitive", "showing", "visible"]},
+        ]
+        self.assertIsNone(raw_e2e.named(nodes, "Recovery Key"))
+        self.assertEqual(raw_e2e.Harness.recovery_key_text(nodes), key)
+
+    def test_done_predicate_ignores_panel_before_checkbox_tick(self):
+        # Run 44972858422's atspi-timeout-recovery-key.json: three nodes share
+        # the name 'Done' (sensitive panel, insensitive button, sensitive
+        # label). Without a role filter the predicate is already true before
+        # 'I backed up my recovery key' is ticked, and act may target the panel.
+        panel = {"path": "0.0.0.0.0.0.0", "role": "panel", "name": "Done",
+                 "text": "", "ext": [0, 0, 1920, 977],
+                 "states": ["sensitive", "showing", "visible"]}
+        button = {"path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.2",
+                  "role": "button", "name": "Done", "text": "",
+                  "ext": [909, 699, 102, 44],
+                  "states": ["focusable", "showing", "visible"]}
+        label = {"path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.2.0",
+                 "role": "label", "name": "Done", "text": "Done",
+                 "ext": [909, 699, 38, 24],
+                 "states": ["sensitive", "showing", "visible"]}
+        nodes = [panel, button, label]
+        self.assertTrue(raw_e2e.has_name(nodes, "Done", sensitive=True))
+        self.assertFalse(raw_e2e.has_name(nodes, "Done", sensitive=True, role="button"))
+        self.assertIsNone(raw_e2e.named(nodes, "Done", sensitive=True, role="button"))
+        ticked = [dict(button, states=button["states"] + ["sensitive"])]
+        self.assertTrue(raw_e2e.has_name(ticked, "Done", sensitive=True, role="button"))
+        self.assertEqual(raw_e2e.named(ticked, "Done", sensitive=True, role="button")["role"], "button")
+
+    def test_qr_dialog_done_is_the_dialogs_button(self):
+        # Run 44978556102's atspi-timeout-qr-code-dialog-closed.json: with the QR
+        # dialog open the page has a sensitive panel 'Done' (the whole window),
+        # the still-insensitive main button 'Done' behind the modal, and the
+        # dialog's own sensitive button 'Done'. The press must land on the last.
+        nodes = [
+            {"path": "0", "role": "panel", "name": "Done", "text": "",
+             "ext": [0, 0, 1920, 977], "states": ["sensitive", "showing"]},
+            {"path": "0.1", "role": "button", "name": "Done", "text": "",
+             "ext": [909, 699, 102, 44], "states": ["focusable", "showing"]},
+            {"path": "0.2", "role": "dialog", "name": "QR Code", "text": "",
+             "ext": [0, 0, 1920, 977], "states": ["sensitive", "showing"]},
+            {"path": "0.2.0", "role": "button", "name": "Done", "text": "",
+             "ext": [808, 619, 304, 44], "states": ["focusable", "sensitive", "showing"]},
+        ]
+        self.assertEqual(raw_e2e.named(nodes, "Done")["role"], "panel")  # the old pick
+        picked = raw_e2e.named(nodes, "Done", sensitive=True, role="button")
+        self.assertEqual(picked["ext"], [808, 619, 304, 44])
+
+    def test_every_done_press_names_a_role(self):
+        # The recovery page and its QR dialog each have several nodes named 'Done'.
+        source = (Path(raw_e2e.__file__)).read_text()
+        presses = [line for line in source.splitlines() if 'self.press(r, app, "Done"' in line]
+        self.assertGreaterEqual(len(presses), 2)
+        for line in presses:
+            self.assertIn('role="button"', line, line.strip())
+
+    def test_timeout_summary_lists_buttons_and_labels(self):
+        nodes = [
+            {"path": "0.1", "role": "button", "name": "Install",
+             "text": "", "ext": [0, 0, 1, 1], "states": ["sensitive", "showing"]},
+            {"path": "0.2", "role": "panel", "name": "",
+             "text": "", "ext": [0, 0, 1, 1], "states": []},
+        ]
+        lines = raw_e2e.summarize_nodes(nodes)
+        self.assertEqual(len(lines), 1)
+        self.assertIn("button", lines[0])
+        self.assertIn("'Install'", lines[0])
+        self.assertIn("showing=True", lines[0])
+
+    def test_disk_rows_match_despite_glib_nbsp_size(self):
+        # glib's format_size separates value and unit with a non-breaking space
+        # (CI run 44964323210: 'Unknown Disk 51.5\\xa0GB'); the harness matches
+        # with a plain space.
+        nodes = [{
+            "path": "0.1", "role": "table row",
+            "name": "Unknown Disk 51.5\u00a0GB", "text": "",
+            "ext": [0, 0, 100, 20], "states": [],
+        }]
+        self.assertTrue(raw_e2e.has_text(nodes, "51.5 GB"))
+        row = raw_e2e.row_containing(nodes, raw_e2e.TARGET_SIZE_TEXT)
+        self.assertIsNotNone(row)
+        self.assertEqual(row["role"], "table row")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,10 @@
+[Unit]
+Description=Utah live: Disk Encryption Enrollment
+DefaultDependencies=no
+Wants=modprobe@dm_mod.service
+After=modprobe@dm_mod.service systemd-tpm2-setup-early.service
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Service]
+ExecStart=/usr/libexec/utah-sysinstall/systemd-cryptenroll

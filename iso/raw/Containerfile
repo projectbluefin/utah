@@ -3,11 +3,95 @@
 #
 # The shipped bootc disk image is the live medium (booted with `ro utah.live`:
 # an initrd tmpfs overlay over the root), and installing is a block copy of
-# it, done by OS-Installer's Utah config (hanthor/os-installer, utah_config/).
+# it, done by OS-Installer's Utah config (hanthor/os-installer, utah_config/)
+# or, with utah.live.installer=gnome-setup on the live entry, by gnome-setup
+# driving systemd-sysinstall (hanthor/gnome-setup, hanthor/systemd). Both are
+# built into the layer; the live entry picks one.
 # The layers sit on top of a published Utah digest; the published image and
 # the ISO/fisherman path are unchanged.
 ARG SOURCE_IMAGE=ghcr.io/projectbluefin/utah:testing@sha256:ee2eba433a4d014cb8383aa97b7eb722a6796d4af5a462aeb141c8ede8671fbd
 ARG BUILDER_IMAGE=registry.fedoraproject.org/fedora:43@sha256:a19e8544313a675e6529d3242f74f0015beebdd1834d0bf9b132e669f734f2bf
+
+# systemd-sysinstall's Varlink API (io.systemd.SysInstall, which gnome-setup
+# drives) and systemd-cryptenroll's (io.systemd.CryptEnroll, its recovery key
+# page) arrived after Hummingbird's systemd 261, and installing a root into
+# LUKS2 needs systemd main (systemd#44337). So build those binaries and
+# systemd-repart from a pinned commit of hanthor/systemd: systemd main plus
+# --install-kernel=/--install-boot-loader= for sysinstall (proposed upstream),
+# because the copied ESP already carries shim and GRUB and Utah has no UKI.
+# Everything but libc is dlopen()ed, so the result runs on Hummingbird. It
+# lives apart from the system's systemd: binaries in
+# /usr/libexec/utah-sysinstall, the shared library under a tag of its own in
+# /usr/lib64/utah-sysinstall.
+FROM ${BUILDER_IMAGE} AS sysinstall
+ARG SYSTEMD_REPO=https://github.com/hanthor/systemd.git
+# Full commit of hanthor/systemd (branch sysinstall-install-toggles).
+ARG SYSTEMD_REF=8998ad00ff2dee64115d74331d11a9bd8860c194
+RUN dnf -y install --setopt=install_weak_deps=False \
+        git gcc meson ninja-build gperf diffutils patchelf pkgconf-pkg-config python3-jinja2 \
+        libcap-devel libmount-devel libblkid-devel libfdisk-devel cryptsetup-devel \
+        openssl-devel tpm2-tss-devel libxcrypt-devel libselinux-devel libseccomp-devel && \
+    [[ "${SYSTEMD_REF}" =~ ^[0-9a-f]{40}$ ]] && \
+    git init -q /src && \
+    git -C /src fetch -q --depth 1 "${SYSTEMD_REPO}" "${SYSTEMD_REF}" && \
+    git -C /src checkout -q FETCH_HEAD && \
+    test "$(git -C /src rev-parse HEAD)" = "${SYSTEMD_REF}" && \
+    meson setup /build /src --prefix=/usr --libdir=/usr/lib64 --buildtype=release \
+        -Dmode=release -Dshared-lib-tag=utah-sysinstall -Dtests=false -Dman=disabled -Dhtml=disabled \
+        -Dbootloader=disabled -Dukify=disabled -Dtranslations=false -Dpolkit=enabled \
+        -Dtpm2=enabled -Dlibcryptsetup=enabled -Dfdisk=enabled -Dblkid=enabled -Dopenssl=enabled && \
+    ninja -C /build systemd-sysinstall systemd-repart systemd-cryptenroll && \
+    install -D -m 0755 -t /out/usr/libexec/utah-sysinstall \
+        /build/systemd-sysinstall /build/systemd-repart /build/systemd-cryptenroll && \
+    install -D -m 0755 -t /out/usr/lib64/utah-sysinstall /build/src/shared/libsystemd-shared-utah-sysinstall.so && \
+    patchelf --set-rpath /usr/lib64/utah-sysinstall /out/usr/libexec/utah-sysinstall/systemd-* && \
+    install -D -m 0644 -t /out/usr/share/polkit-1/actions \
+        /src/src/sysinstall/io.systemd.sysinstall.policy /src/src/cryptenroll/io.systemd.cryptenroll.policy && \
+    echo "${SYSTEMD_REF}" > /out/usr/libexec/utah-sysinstall/SOURCE_REF
+
+# gnome-setup (GNOME STF's installer; Rust, GTK 4, libadwaita, blueprint),
+# from a pinned commit of the hanthor/gnome-setup mirror's utah branch: the
+# upstream main plus small fixes proposed upstream (no forced demo mode,
+# install errors shown, a distro post-install unit, the recovery key enrolled
+# on the installed disk, a disk passphrase page without a TPM). Built on
+# Fedora for the GTK -devel packages Hummingbird lacks; it runs against Utah's
+# GTK 4.24 and libadwaita 1.10 (it needs GTK 4.18 and libadwaita 1.5). Its
+# templates use translated strings in closures (blueprint-compiler 0.20+;
+# Fedora 43 ships 0.18), so blueprint-compiler comes from a pinned upstream
+# release commit. The session units are dropped (Utah autostarts it in the
+# live user's session) and so is the desktop file (installed systems must not
+# offer an installer); the GNOME OS definitions become a link to the ones
+# utah-live-definitions writes at boot.
+FROM ${BUILDER_IMAGE} AS gnome-setup
+ARG GS_REPO=https://github.com/hanthor/gnome-setup.git
+# Full commit of hanthor/gnome-setup (branch utah).
+ARG GS_REF=64952cd0402eda6403035e93b71d38bf78752942
+ARG BP_REPO=https://gitlab.gnome.org/GNOME/blueprint-compiler.git
+# blueprint-compiler v0.22.2.
+ARG BP_REF=ed35ac74de0c1bb1f5e852410b97edd1f08904c9
+RUN dnf -y install --setopt=install_weak_deps=False \
+        git cargo rust meson ninja-build gcc gettext gettext-devel desktop-file-utils python3-gobject \
+        glib2-devel gtk4-devel libadwaita-devel gnome-desktop4-devel appstream-devel && \
+    [[ "${BP_REF}" =~ ^[0-9a-f]{40}$ ]] && \
+    git init -q /bp && \
+    git -C /bp fetch -q --depth 1 "${BP_REPO}" "${BP_REF}" && \
+    git -C /bp checkout -q FETCH_HEAD && \
+    test "$(git -C /bp rev-parse HEAD)" = "${BP_REF}" && \
+    meson setup /bp/build /bp --prefix=/usr && \
+    meson install -C /bp/build && \
+    [[ "${GS_REF}" =~ ^[0-9a-f]{40}$ ]] && \
+    git init -q /src && \
+    git -C /src fetch -q --depth 1 "${GS_REPO}" "${GS_REF}" && \
+    git -C /src checkout -q FETCH_HEAD && \
+    test "$(git -C /src rev-parse HEAD)" = "${GS_REF}" && \
+    meson setup /src/build /src --prefix=/usr --libdir=lib --buildtype=release && \
+    meson compile -C /src/build && \
+    meson install -C /src/build --destdir /out && \
+    install -d /out/usr/share/utah/gnome-setup && \
+    mv /out/usr/share/applications/org.gnome.Setup.desktop /out/usr/share/utah/gnome-setup/ && \
+    rm -rf /out/usr/lib/systemd/user /out/usr/lib/gnome-setup/definitions && \
+    ln -s /run/utah-live/repart.d /out/usr/lib/gnome-setup/definitions && \
+    echo "${GS_REF}" > /out/usr/share/utah/gnome-setup/SOURCE_REF
 
 # OS-Installer is Python + GTK4/libadwaita; every runtime library it loads is
 # already in Utah (gnome-desktop4, libgweather4, vte291-gtk4, udisks2, Atspi).
@@ -37,6 +121,8 @@ RUN dnf -y install --setopt=install_weak_deps=False \
 
 FROM ${SOURCE_IMAGE}
 COPY --from=os-installer /out/usr/ /usr/
+COPY --from=sysinstall /out/usr/ /usr/
+COPY --from=gnome-setup /out/usr/ /usr/
 COPY src/usr/ /usr/
 
 # python3-pyyaml is OS-Installer's only runtime dependency Utah lacks.
@@ -48,13 +134,22 @@ COPY src/usr/ /usr/
 # in /boot"). scripts/clean-stage.sh empties it in images built since #1131;
 # older digests (the comparison's 1c7956e2 among them) still carry
 # kernel-install's entry, and the ostree backend never reads the image's /boot.
+# gnome-setup: Utah's pages.conf over its own, the live sockets enabled
+# (they only start with utah.live.installer=gnome-setup), and the TPM2
+# stack in the initramfs when dracut has it, so a root that gnome-setup
+# enrolled with TPM2 unlocks without a prompt.
 RUN set -euxo pipefail; \
     find /boot -mindepth 1 -delete; \
     dnf5 install -y --setopt=install_weak_deps=False python3-pyyaml; \
     dnf5 clean all; rm -rf /var/cache/dnf /var/cache/libdnf5 /var/log/dnf5.log*; \
     glib-compile-schemas /usr/share/glib-2.0/schemas; \
-    chmod 0755 /usr/libexec/utah-live-setup /usr/share/utah/os-installer/scripts/install.sh; \
-    systemctl enable utah-live-setup.service utah-live-ready.service; \
+    chmod 0755 /usr/libexec/utah-live-setup /usr/share/utah/os-installer/scripts/install.sh \
+        /usr/libexec/utah-live-definitions /usr/libexec/utah-sysinstall-post; \
+    install -m 0644 /usr/share/utah/gnome-setup/pages.conf /usr/lib/gnome-setup/pages.conf; \
+    systemctl enable utah-live-setup.service utah-live-ready.service utah-sysinstall.socket utah-cryptenroll.socket; \
+    if [[ -d /usr/lib/dracut/modules.d/91tpm2-tss ]]; then \
+        echo 'add_dracutmodules+=" tpm2-tss "' > /usr/lib/dracut/dracut.conf.d/61-utah-live-tpm2.conf; \
+    fi; \
     kver="$(ls /usr/lib/modules | sort -V | tail -1)"; \
     mkdir -p /var/roothome; \
     dracut --no-hostonly --reproducible --zstd --tmpdir /tmp --kver "${kver}" --force \
@@ -70,4 +165,8 @@ RUN set -euxo pipefail; \
              usr/lib/bootc/initramfs-setup; do \
         grep -q " ${f}\$" <<<"${listing}"; \
     done; \
-    python3 -c 'import yaml, gi; gi.require_version("Vte", "3.91"); gi.require_version("GnomeDesktop", "4.0"); gi.require_version("GWeather", "4.0"); gi.require_version("UDisks", "2.0"); from gi.repository import Vte, GnomeDesktop, GWeather, UDisks'
+    grep -E 'tpm2|cryptsetup' <<<"${listing}" || true; \
+    python3 -c 'import yaml, gi; gi.require_version("Vte", "3.91"); gi.require_version("GnomeDesktop", "4.0"); gi.require_version("GWeather", "4.0"); gi.require_version("UDisks", "2.0"); from gi.repository import Vte, GnomeDesktop, GWeather, UDisks'; \
+    if ldd /usr/bin/gnome-setup /usr/libexec/utah-sysinstall/systemd-* | grep 'not found'; then exit 1; fi; \
+    /usr/libexec/utah-sysinstall/systemd-sysinstall --version; \
+    test -L /usr/lib/gnome-setup/definitions

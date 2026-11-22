@@ -1,0 +1,15 @@
+# One systemd-sysinstall per Varlink connection (utah-sysinstall.socket).
+# The copied ESP already carries shim and GRUB and /boot the BLS entries, so
+# sysinstall only runs systemd-repart (utah-live-definitions); the Utah
+# fixups run afterwards in utah-sysinstall-post@.service.
+[Unit]
+Description=Utah live: System Install Tool
+DefaultDependencies=no
+Wants=modprobe@loop.service modprobe@dm_mod.service
+After=modprobe@loop.service modprobe@dm_mod.service systemd-tpm2-setup-early.service
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Service]
+Environment=SYSTEMD_REPART_PATH=/usr/libexec/utah-sysinstall/systemd-repart
+ExecStart=/usr/libexec/utah-sysinstall/systemd-sysinstall --install-kernel=no --install-boot-loader=no

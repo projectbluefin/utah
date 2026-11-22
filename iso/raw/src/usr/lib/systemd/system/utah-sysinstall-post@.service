@@ -1,0 +1,15 @@
+# Started by gnome-setup with the target disk as the instance once
+# systemd-sysinstall has copied the medium ([page:installer]
+# post-install-unit in /usr/lib/gnome-setup/pages.conf); gnome-setup waits for
+# it before the recovery key page. See /usr/libexec/utah-sysinstall-post.
+[Unit]
+Description=Utah live: finish the installation on %f
+ConditionKernelCommandLine=utah.live
+DefaultDependencies=no
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/utah-sysinstall-post %f
+TimeoutStartSec=30min
