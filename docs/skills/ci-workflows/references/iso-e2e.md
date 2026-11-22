@@ -132,10 +132,12 @@ tested commit as `ahead` and the flavors already moved are no-ops.
 **Recovering the commit behind a published image.** Every build bakes
 `org.opencontainers.image.version=testing-<yyyymmdd>-<sha7>` into the image
 config (`just build-ghcr`) and publishes the image under that same tag; the
-image digest carries the label. Do not use `org.opencontainers.image.revision`
-or `vcs-ref`: they are inherited from the Hummingbird base image and identical
-across Utah commits (verified on `testing-20261024-028d3f4` and `-9acbde2`,
-both `a7eaec5...`). The label is expanded to a full SHA through the GitHub API;
+image digest carries the label. Images built after #1400 also set
+`org.opencontainers.image.revision` to the building commit's full SHA, and
+`just build-ghcr` fails if it differs from `HEAD`. Older images keep the
+revision inherited from the Hummingbird base, identical across Utah commits
+(verified on `testing-20261024-028d3f4` and `-9acbde2`, both `a7eaec5...`), so
+use the `version` label for them. `vcs-ref` is still inherited and unusable. The label is expanded to a full SHA through the GitHub API;
 the dated tag is checked against the `:testing` digest as corroboration and
 a mismatch (a same-day rebuild re-pushed the tag) is a warning, not a refusal,
 because the label still names the commit.

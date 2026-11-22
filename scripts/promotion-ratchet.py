@@ -15,9 +15,10 @@ Which commit is behind a published image
 ----------------------------------------
 Every build bakes `org.opencontainers.image.version=testing-<yyyymmdd>-<sha>`
 into the image config (Justfile `build-ghcr`) and publishes the image under the
-same tag. That tag is the commit-addressed name of the image. The image's own
-`org.opencontainers.image.revision` and `vcs-ref` labels are NOT usable: they
-are inherited from the Hummingbird base image and identical across Utah commits.
+same tag. That tag is the commit-addressed name of the image. New images also carry
+the building commit in `org.opencontainers.image.revision`; older images keep a
+revision inherited from the Hummingbird base, identical across Utah commits, and
+`vcs-ref` is still inherited. This script reads only the `version` label.
 The label travels with the digest, so it still resolves after the dated tag has
 been re-pushed by a same-day rebuild; the dated tag is checked as corroboration.
 
