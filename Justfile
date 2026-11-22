@@ -446,6 +446,7 @@ build-ghcr base_name stream flavor kernel_pin="":
       --build-arg IMAGE_VENDOR={{ repo_organization }} \
       --build-arg VERSION="$version" \
       --build-arg SHA_HEAD="$(git rev-parse HEAD)" \
+      --build-arg IMAGE_CREATED="$(date -u -d "@${source_date_epoch}" +%Y-%m-%dT%H:%M:%SZ)" \
       --build-arg GNOME_EXTENSION_PROVENANCE="${gnome_extension_provenance}" \
       --build-arg SHA_HEAD_SHORT="$(git rev-parse --short HEAD)" \
       --build-arg ENABLE_SSHD="${ENABLE_SSHD:-0}" \
@@ -499,6 +500,7 @@ build-local stream="testing" package_image="localhost/utah-packages:local-merged
       --build-arg IMAGE_VENDOR="{{ repo_organization }}" \
       --build-arg VERSION="$version" \
       --build-arg SHA_HEAD="$(git rev-parse HEAD)" \
+      --build-arg IMAGE_CREATED="$(date -u -d "@${source_date_epoch}" +%Y-%m-%dT%H:%M:%SZ)" \
       --build-arg GNOME_EXTENSION_PROVENANCE="${gnome_extension_provenance}" \
       --build-arg SHA_HEAD_SHORT="$(git rev-parse --short HEAD)" \
       --build-arg ENABLE_SSHD="${ENABLE_SSHD:-1}" \

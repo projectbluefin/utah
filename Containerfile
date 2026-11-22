@@ -334,6 +334,7 @@ ARG IMAGE_VENDOR=projectbluefin
 ARG VERSION=testing
 ARG SHA_HEAD_SHORT=unknown
 ARG SHA_HEAD
+ARG IMAGE_CREATED
 ARG GNOME_EXTENSION_PROVENANCE
 # Production images keep SSH closed; local VM diagnostics can opt in with
 # ENABLE_SSHD=1, following tunaOS's debug-image convention.
@@ -486,6 +487,10 @@ LABEL org.opencontainers.image.source="https://github.com/projectbluefin/utah"
 LABEL io.projectbluefin.utah.factory-digest="${PACKAGE_IMAGE_SHA}"
 LABEL org.opencontainers.image.vendor="${IMAGE_VENDOR}"
 LABEL org.opencontainers.image.version="${VERSION}"
+# The base image carries its own revision and created labels; set ours so they
+# are never inherited stale (#1400).
+LABEL org.opencontainers.image.revision="${SHA_HEAD}"
+LABEL org.opencontainers.image.created="${IMAGE_CREATED}"
 LABEL containers.bootc=1
 
 CMD ["/sbin/init"]
