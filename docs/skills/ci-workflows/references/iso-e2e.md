@@ -378,6 +378,32 @@ re-run starts at once; the classify job prints a `no re-run delay` warning
 while that is so. Dispatch the workflow with a `run_id` to classify any run
 without re-running it.
 
+### Startup failures
+
+A run GitHub refuses to start is created completed with zero jobs and
+conclusion `startup_failure`: a deleted `gh-readonly-queue/*` ref or a
+workflow file that does not parse. GitHub sends no `workflow_run` event for
+it, so the infra re-run above never fires, and `:testing` stops until the
+freshness alarm. `rerun-startup-failures.yml` polls every three hours instead
+(ported from tuna-os/tunaOS `scripts/rerun-startup-failures.py`).
+`scripts/rerun-startup-failures.py` looks at the newest run of
+sync-main-to-testing (on `main`), build (on `testing`) and Post-Testing E2E
+(on `main`). Only when that newest run is a startup failure with zero jobs
+does it re-dispatch, the same way the chain does: sync with no inputs, build
+with the current `testing` SHA, E2E with `build_run_id` set to the newest
+`testing` build created before the lost run whose `dispatch-iso` job
+succeeded, even if the build failed elsewhere (the API does not return a lost
+run's inputs). The dispatch
+becomes the newest run, so the next sweep skips it and a manual restart is
+never duplicated; no state is kept. A run with any job is a real failure and
+stays red. Each workflow starts the next one, so only the most upstream lost
+workflow is dispatched; a lost run further down is logged as covered, and the
+chain replaces it. A workflow it cannot read or dispatch, or an E2E
+run with no source build, is logged as an error and fails the sweep after
+every workflow has had its turn. Native Common candidate is not swept: its
+`common_sha` comes from projectbluefin/common and a lost run does not keep it.
+Dispatch the workflow with `dry_run` to see what it would re-dispatch.
+
 ## Testsuite reporting (exact-digest VM suites)
 
 `post-testing-e2e.yml` runs the `testsuite` job asynchronously against each

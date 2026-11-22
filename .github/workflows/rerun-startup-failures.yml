@@ -1,0 +1,46 @@
+name: Re-dispatch startup failures
+
+# A run GitHub refuses to start (zero jobs; a deleted gh-readonly-queue ref or
+# an unparsable workflow file) sends no workflow_run event, so
+# rerun-e2e-infra-failures.yml never sees it and :testing silently stops
+# moving until testing-freshness alarms 36 hours later. This polls instead:
+# scripts/rerun-startup-failures.py re-dispatches sync-main-to-testing, build
+# and post-testing-e2e only while a startup failure is still the newest run of
+# that workflow, and only the most upstream lost one per sweep. A run with
+# jobs stays red.
+on:
+  schedule:
+    - cron: "17 */3 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Report what would be re-dispatched without dispatching it
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: rerun-startup-failures
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Re-dispatch workflows GitHub never started
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ inputs.dry_run || false }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [ "$DRY_RUN" = true ]; then args+=(--dry-run); fi
+          python3 scripts/rerun-startup-failures.py "${args[@]}"
