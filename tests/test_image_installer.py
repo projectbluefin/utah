@@ -775,6 +775,16 @@ class GnomeSetupTests(unittest.TestCase):
         self.assertEqual(out["installer"], "gnome-setup")
         self.assertIn("encryption", out)
 
+    def test_wipe_or_free_takes_free_space_without_a_confirm_dialog(self):
+        # The empty target reads as DataDetected ('Existing Data Found'), so the
+        # harness takes 'Install to Free Space' and starts installation directly;
+        # full wipe would ask 'Erase and Install' instead (run 44968690146).
+        harness = (RAW / "raw_e2e.py").read_text()
+        self.assertIn('"Existing Data Found"', harness)
+        self.assertIn('"Install to Free Space"', harness)
+        self.assertIn('"Start Installation"', harness)
+        self.assertIn('"Install"', harness)
+
     def test_disk_rows_match_despite_glib_nbsp_size(self):
         # glib's format_size separates value and unit with a non-breaking space
         # (CI run 44964323210: 'Unknown Disk 51.5\\xa0GB'); the harness matches

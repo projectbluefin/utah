@@ -816,11 +816,23 @@ class Harness:
             raise
         self.save("atspi-gs-disk.json", json.dumps(nodes, indent=1))
         self.shot("05-setup-disk", f"Disk selection from systemd-sysinstall's ListCandidateDevices: the empty {TARGET_SIZE_TEXT} target {TARGET_DISK}")
-        self.click_until(r, app, lambda n: row_containing(n, TARGET_SIZE_TEXT),
+        nodes = self.click_until(r, app, lambda n: row_containing(n, TARGET_SIZE_TEXT),
                          lambda n: has_text(n, "Begin Installation?") or has_text(n, "Existing Data Found"), "confirmation")
-        self.shot("06-setup-confirm", "Confirmation before systemd-sysinstall writes the disk")
         start = time.time()
-        self.press(r, app, "Install", lambda n: has_text(n, "Installing"), "install page")
+        if has_text(nodes, "Existing Data Found"):
+            # sysinstall reports the copy content size on the empty target, so it
+            # reads as DataDetected: take free space, which needs no confirm
+            # dialog (full wipe would ask "Erase and Install" instead).
+            self.shot("06-setup-wipe-or-free", "Existing data found on the empty target: install to free space")
+            snap = self.snapshot(r, app)
+            row = row_containing(snap, "Install to Free Space")
+            if row is None:
+                raise Fail("wipe-or-free page has no free-space row")
+            self.click_node(snap, row)
+            self.press(r, app, "Start Installation", lambda n: has_text(n, "Installing"), "install page")
+        else:
+            self.shot("06-setup-confirm", "Confirmation before systemd-sysinstall writes the disk")
+            self.press(r, app, "Install", lambda n: has_text(n, "Installing"), "install page")
         result_page = lambda n: (has_text(n, "Back Up Recovery Key") or has_text(n, "Choose a Disk Passphrase")  # noqa: E731
                                  or has_text(n, "Installation Failed"))
         progress = self.poll(r, app, lambda n: has_text(n, "Copying Partition") or result_page(n), 300)
