@@ -99,33 +99,12 @@ class PackageResolutionTests(unittest.TestCase):
         rc, command = self.resolve("Transaction Summary:\nInstall 12 Packages\nOperation aborted.\n")
         self.assertEqual(rc, 0)
         self.assertEqual(command[command.index("install") + 1:],
-                         ["--no-best", "base", "release-specific", "shell", "manpages", "firmware",
+                         ["base", "release-specific", "shell", "manpages", "firmware",
                           "resolver", "compiler"])
         self.assertIn("--assumeno", command)
         self.assertIn("--disablerepo=*", command)
         for repo in installer.REPOS:
             self.assertIn(f"--enablerepo={repo}", command)
-
-    def test_no_best_advisory_requires_every_requested_package(self):
-        output = ('Package "bootc-1.0-1.x86_64" is already installed.\n'
-                  'Problem: conflicting requests\n'
-                  '  - cannot install both libcbor versions\n\n'
-                  'Package Arch Version Repository Size\n'
-                  'Installing:\n'
-                  ' fido2-tools x86_64 1.17.0-8 repo 142 KiB\n'
-                  ' qemu-kvm x86_64 11.1 repo 1 MiB\n'
-                  'Skipping packages with broken dependencies:\n'
-                  ' fido2-tools x86_64 1.17.0-8.1 repo 142 KiB\n'
-                  ' missing x86_64 1.0 repo 1 MiB\n'
-                  'Transaction Summary:\nInstall 2 Packages\nOperation aborted.\n')
-        result = subprocess.CompletedProcess([], 1, stdout=output)
-        self.assertTrue(installer.transaction_resolves(
-            result, ["bootc", "fido2-tools", "qemu-kvm"]))
-        self.assertFalse(installer.transaction_resolves(result, ["missing"]))
-        self.assertFalse(installer.transaction_resolves(result, ["absent"]))
-        self.assertFalse(installer.transaction_resolves(result))
-        result.stdout = output.replace('Problem:', 'Error: Failed to resolve\nProblem:')
-        self.assertFalse(installer.transaction_resolves(result, ["fido2-tools"]))
 
     def test_resolution_failures_do_not_pass(self):
         for output in ("nothing provides libmissing.so.1\n",
@@ -385,7 +364,7 @@ class ResolveOneTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(command, ["dnf5", "--assumeno", "--disablerepo=*",
                                    "--enablerepo=utah-packages",
-                                   "-x", "PackageKit*", "install", "--no-best", "candidate"])
+                                   "-x", "PackageKit*", "install", "candidate"])
         self.assertIn("UTAH_RESOLVE_ONE candidate 0", log.splitlines())
 
     def test_already_installed_counts_as_resolves(self):

@@ -70,7 +70,9 @@ key page. Without `--tpm` (`tpm: false`) the harness fills the disk
 passphrase page, checks the slots are exactly password + recovery (the
 passphrase opens the root, the empty one no longer does), unlocks the first
 boot and the rollback boot with the passphrase and the bootc switch boot with
-the recovery key.
+the recovery key. Scheduled and PR CI runs always enable TPM; the TPM-less
+path requires a manual workflow dispatch with `tpm: false` or a local run
+without `--tpm`. Do not cite a default CI pass as TPM-less coverage.
 
 ### composefs backend
 

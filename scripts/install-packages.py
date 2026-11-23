@@ -177,41 +177,18 @@ def swaps(overlay: Path) -> dict[str, str]:
 
 
 def transaction(packages: list[str], removals: list[str] | tuple[str, ...]) -> list[str]:
-    """Resolve every requested package, allowing older compatible candidates.
-
-    The factory is pinned but Hummingbird rolls: its newest fido2-tools can
-    require a newer libcbor ABI than pinned QEMU. --no-best permits a coherent
-    transaction without skipping packages or erasing dependency conflicts.
-    Keep this policy shared by preflight, single-name probes and installation.
-    """
+    """The dnf subcommand and arguments: install, removing `removals` in the
+    same transaction (dnf5 do) when a replacement conflicts with them."""
     if not removals:
-        return ["install", "--no-best", *packages]
-    return ["do", "--no-best", "--action=install", *packages, "--action=remove", *removals]
+        return ["install", *packages]
+    return ["do", "--action=install", *packages, "--action=remove", *removals]
 
 
-def transaction_resolves(result: subprocess.CompletedProcess,
-                         packages: list[str] | tuple[str, ...] = ()) -> bool:
+def transaction_resolves(result: subprocess.CompletedProcess) -> bool:
     """Whether a declined dnf transaction resolved every argument."""
-    output = result.stdout
-    # --no-best reports rejected candidates as a Problem even when it selects
-    # compatible versions. Discount only that advisory, and only with positive
-    # evidence for EVERY requested name outside the skipped-candidate sections.
-    table = re.search(r"(?m)^Package\s+Arch\s+Version\s+Repository\s+Size\s*$", output)
-    if table and "Problem:" in output and packages:
-        before, after = output[:table.start()], output[table.start():]
-        selected = set(re.findall(r"(?m)^ (\S+)\s+\S+\s+\S+\s+\S+\s+.+$",
-                                 after.split("Skipping packages", 1)[0]))
-        accounted = all(name in selected or re.search(
-            rf'(?m)^Package "{re.escape(name)}-[^" ]+" is already installed\.$', before)
-            for name in packages)
-        if accounted:
-            prefix, advisory = before.split("Problem:", 1)
-            # Fatal errors must not be hidden by a transaction table.
-            if not re.search(r"No match for argument|Error:|Failed to", advisory, re.I):
-                output = prefix + after
     return (result.returncode in (0, 1)
-            and not re.search(RESOLVE_ERRORS, output, re.IGNORECASE)
-            and re.search(RESOLVE_SUMMARY, output) is not None)
+            and not re.search(RESOLVE_ERRORS, result.stdout, re.IGNORECASE)
+            and re.search(RESOLVE_SUMMARY, result.stdout) is not None)
 
 
 def run(*args: str) -> int:
@@ -373,7 +350,7 @@ def main() -> int:
         # what the gate parses.
         result = dnf_assumeno(dnf_path(), repos, [args.resolve_one])
         print(result.stdout, end="", flush=True)
-        verdict = 0 if transaction_resolves(result, [args.resolve_one]) else 1
+        verdict = 0 if transaction_resolves(result) else 1
         print(f"UTAH_RESOLVE_ONE {args.resolve_one} {verdict}", flush=True)
         return verdict
 
@@ -411,7 +388,7 @@ def main() -> int:
         result = dnf_assumeno(dnf, repos, [*packages, *build_deps],
                               removals=installed(list(swapped)))
         print(result.stdout, end="", flush=True)
-        if not transaction_resolves(result, [*packages, *build_deps]):
+        if not transaction_resolves(result):
             return 1
         print(f"Resolved {len(set(packages + build_deps))} runtime and build packages on the pinned base")
         return 0

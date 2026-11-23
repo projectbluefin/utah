@@ -333,15 +333,6 @@ releases or emit missing-module errors with empty kernel names.
 
 ## Failure semantics
 
-The shared install transaction uses `--no-best`: the factory is digest-pinned
-but Hummingbird's repository rolls. For example, pinned QEMU may still need
-`libcbor.so.0.14` when the newest `fido2-tools` needs `libcbor.so.0.15`.
-DNF must be allowed to select an older compatible candidate from the enabled
-repositories. Preflight, unavailable probes and installation share this policy;
-it does not skip missing packages or permit broken dependencies. Do not use
-`--skip-broken`, remove contract packages, or weaken only the preflight to
-work around ABI skew.
-
 - A contract package or dependency missing from the installation transaction
   is a **build failure**. `just check-repos` reads the base and package-image
   digests from `Containerfile`, copies the same repository configuration, and
@@ -354,10 +345,6 @@ work around ABI skew.
   factory must copy the same repodata into the leading layer and payload layer.
   DNF's `--assumeno` may return 1 for a valid declined transaction; the checker
   requires a transaction summary and rejects dependency and repository errors.
-  With `--no-best`, DNF may also warn about rejected newer candidates: that
-  advisory is accepted only if every requested name appears in the selected
-  transaction rows or an explicit already-installed message. Skipped rows
-  never count as evidence; fatal resolution and repository errors still fail.
 - `[unavailable]` entries still present in the install set are a validation
   error (`install-packages.py --check`).
 

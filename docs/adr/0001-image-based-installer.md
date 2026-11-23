@@ -343,9 +343,13 @@ The same PR records local ostree and composefs runs without baked Flatpaks;
 it does not establish ostree-with-Flatpaks CI coverage, consecutive nightly
 passes, real-hardware firmware behavior or Secure Boot support.
 
-The TPM-less E2E separately checks password + recovery slots, rejects the
-empty passphrase, boots with the passphrase, uses recovery after switch,
-and returns to the passphrase after rollback. See the
+The TPM-less E2E harness separately checks password + recovery slots,
+rejects the empty passphrase, boots with the passphrase, uses recovery after
+switch, and returns to the passphrase after rollback. This path is outside
+default CI: scheduled and PR runs enable the emulated TPM; a manual workflow
+dispatch with `tpm: false` (or a local run without `--tpm`) selects the
+TPM-less path. The successful TPM-enabled run above is not evidence that
+this separate path ran in default CI. See the
 [image-installer testing reference](../skills/local-testing/references/image-installer.md#gnome-setup-installergnome-setup-experimental)
 for the harness contract. These are disposable CI keys: the recovery page
 is captured in evidence, and CI disks/media must never be used for a real
