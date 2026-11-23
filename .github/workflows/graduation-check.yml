@@ -1,0 +1,59 @@
+name: Green Graduation
+
+# Weekly check of the "definition of green" contract. For every advisory gate
+# in .github/green-criteria.yml it asks the GitHub API how the gate's job has
+# been doing and reports the ones that have passed long enough to become
+# blocking. It never flips the enforcement field itself; it only recommends.
+
+on:
+  schedule:
+    - cron: '0 7 * * 1'  # Mondays 07:00 UTC
+  workflow_dispatch: {}
+
+permissions: {}
+
+jobs:
+  graduation:
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        timeout-minutes: 5
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@08d14def234f9b10d821938f6fb6751f55316b61 # v5
+        timeout-minutes: 5
+        with:
+          python-version: "3.12"
+
+      - name: Run graduation check
+        id: grad
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          pip install --quiet -r tests/requirements.txt
+          python3 scripts/graduation-check.py --repo "$REPOSITORY" --token "$GH_TOKEN" \
+            | tee grad-report.txt
+          cp grad-report.txt "$GITHUB_STEP_SUMMARY"
+          if grep -q 'READY to promote' grad-report.txt; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open a promotion request when a gate is ready
+        if: steps.grad.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ready=$(grep 'READY to promote' grad-report.txt | sed 's/.*: //')
+          report=$(cat grad-report.txt)
+          gh issue create \
+            --title "Green graduation: promote $ready to blocking" \
+            --body "The weekly green graduation check found the following advisory gates meeting the bar in .github/green-criteria.yml. Review and flip their enforcement to blocking (projectbluefin/utah#1449): $report" \
+            --label area/ci
