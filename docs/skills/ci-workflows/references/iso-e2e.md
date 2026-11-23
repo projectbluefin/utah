@@ -134,7 +134,9 @@ tested commit as `ahead` and the flavors already moved are no-ops.
 config (`just build-ghcr`) and publishes the image under that same tag; the
 image digest carries the label. Images built after #1400 also set
 `org.opencontainers.image.revision` to the building commit's full SHA, and
-`just build-ghcr` fails if it differs from `HEAD`. Older images keep the
+`just build-ghcr` fails if it differs from `HEAD`; after the push, the build
+workflow's `verify_revision` job re-reads it from the registry by digest
+(#1468, [kernel-and-build.md](kernel-and-build.md)). Older images keep the
 revision inherited from the Hummingbird base, identical across Utah commits
 (verified on `testing-20261024-028d3f4` and `-9acbde2`, both `a7eaec5...`), so
 use the `version` label for them. `vcs-ref` is still inherited and unusable. The label is expanded to a full SHA through the GitHub API;

@@ -69,6 +69,21 @@ come from the flavor alone -- so the only visible effect is the name of the
 digest artifact, which post-testing-e2e matches by glob (comment,
 `.github/workflows/build.yml`).
 
+## The pushed image's revision label is read back from the registry
+
+`just build-ghcr` fails when the local image's
+`org.opencontainers.image.revision` differs from `HEAD` (#1400), but the
+reusable build rechunks the image after that check and pushes the result.
+`verify_revision` (`.github/workflows/build.yml`) therefore reads the label
+back from ghcr.io by the exact digests both calls report in their `digests`
+output, and fails the run if any pushed image names a commit other than
+`inputs.sha || github.sha` (#1468). `scripts/verify-pushed-revision.py` does
+the comparison (`tests/test_pushed_revision.py`); a skipped call reports an
+empty string and is ignored, but a run that reports no pushed image at all
+fails. `dispatch-iso` needs `verify_revision` to succeed, so a mislabeled
+image never reaches E2E or promotion. Pull requests push nothing, so the job
+is skipped there.
+
 ## Registry caches are read-only on pull requests
 
 The kernel cache image and the layer cache are both published private by
