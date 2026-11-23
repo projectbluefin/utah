@@ -7,7 +7,7 @@ Status: Final. Accepted by the owner in the grill session of 2026-09-26
 > no longer a parity target. Dakota is: see `baselines/GAP.md` and
 > `baselines/triage.toml` for the current gap list, and #1236 for the
 > structural differences. The decisions below (D1 in particular, which
-> `scripts/configure-services.sh` and `tests/test_iso_ci.py` cite) still stand.
+> `scripts/configure-services.sh` and `tests/test_iso_ci_build.py` cite) still stand.
 
 ## Evidence
 
