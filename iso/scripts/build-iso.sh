@@ -132,12 +132,18 @@ mcopy -i "${ESP}" "${INITRD}" ::/images/pxeboot/initrd.img
 #
 # This applies for every DEBUG value, which was unremarkable while every ISO
 # was disposable. Since post-testing-e2e.yml began retaining the DEBUG=0 build
-# for 30 days as "production-iso-*", it is no longer only a test concern: a
+# for 3 days as "production-iso-*", it is no longer only a test concern: a
 # permissive live boot is a product decision, tracked with signing and Secure
 # Boot in #186, and must be settled there before any of these ISOs reach
 # users. DEBUG=0 does still exclude the test credentials and sshd path
 # (iso/live/src/configure-live.sh), so the retained artifact carries no
 # secrets; it is simply not release media.
+#
+# The E2E harness also depends on this: luks-e2e.sh logs in to the DEBUG=0
+# live session over AF_VSOCK with an SMBIOS credential key, and an enforcing
+# Utah system denies sshd that key (#1448). Making the live boot enforcing
+# needs an SELinux allowance for sshd reading the credential first, or every
+# luks/lifecycle/candidate/review_vm job fails at the live SSH wait.
 cat > "${WORK}/utah-live.conf" <<EOF
  title   ${TITLE}
  linux   /images/pxeboot/vmlinuz
