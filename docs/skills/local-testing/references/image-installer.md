@@ -65,6 +65,12 @@ passphrase opens the root, the empty one no longer does), unlocks the first
 boot and the rollback boot with the passphrase and the bootc switch boot with
 the recovery key.
 
+The GUI harness waits up to 300 seconds for any recognized setup page before
+sending Esc to dismiss the overview, settling for three seconds, and maximizing
+the installer window. Keep this startup budget separate from the page loop's
+shorter unknown-page timeout: an empty accessibility snapshot during slow
+application startup must not trigger clicks against fallback window offsets.
+
 ### composefs backend
 
 The medium is built with bootc's composefs backend when the image's kernel
