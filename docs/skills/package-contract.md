@@ -354,6 +354,10 @@ work around ABI skew.
   factory must copy the same repodata into the leading layer and payload layer.
   DNF's `--assumeno` may return 1 for a valid declined transaction; the checker
   requires a transaction summary and rejects dependency and repository errors.
+  With `--no-best`, DNF may also warn about rejected newer candidates: that
+  advisory is accepted only if every requested name appears in the selected
+  transaction rows or an explicit already-installed message. Skipped rows
+  never count as evidence; fatal resolution and repository errors still fail.
 - `[unavailable]` entries still present in the install set are a validation
   error (`install-packages.py --check`).
 
