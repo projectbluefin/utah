@@ -61,6 +61,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from enum import Enum, auto
 
 HERE = Path(__file__).resolve().parent
 SCRIPTS = HERE.parent / "scripts"
@@ -216,6 +217,48 @@ def composefs_problems(facts):
 
 class Fail(Exception):
     pass
+
+
+class Page(Enum):
+    FAILURE = auto()
+    DONE = auto()
+    LANGUAGE = auto()
+    KEYBOARD = auto()
+    TRY_OR_INSTALL = auto()
+    DISK = auto()
+    DATA_FOUND = auto()
+    CONFIRM = auto()
+    PASSPHRASE = auto()
+    RECOVERY_KEY = auto()
+    QR = auto()
+    PROGRESS = auto()
+    UNKNOWN = auto()
+
+
+def classify_setup_page(nodes):
+    """Visible headings win over navigation buttons and hidden old pages.
+
+    Adapted from dakota-iso's atspi-installer-driver: failure must win even
+    when the same snapshot still contains completion text.
+    """
+    visible = [n for n in nodes if "showing" in n.get("states", [])]
+    for page, headings in (
+        (Page.FAILURE, ("Installation Failed", "Could not install")),
+        (Page.DONE, ("Installation Complete",)),
+        (Page.QR, ("Scan to Back Up",)),
+        (Page.RECOVERY_KEY, ("Back Up Recovery Key",)),
+        (Page.PASSPHRASE, ("Choose a Disk Passphrase",)),
+        (Page.DATA_FOUND, ("Existing Data Found",)),
+        (Page.CONFIRM, ("Begin Installation", "Erase and Install")),
+        (Page.DISK, ("Select a Disk", "Unknown Disk")),
+        (Page.PROGRESS, ("Installing", "Copying Partition")),
+        (Page.TRY_OR_INSTALL, ("Install Now",)),
+        (Page.KEYBOARD, ("Keyboard Layout",)),
+        (Page.LANGUAGE, ("English",)),
+    ):
+        if any(has_text(visible, text) for text in headings):
+            return page
+    return Page.UNKNOWN
 
 
 def log(msg):
@@ -795,81 +838,152 @@ class Harness:
         log("=== Stage 2: gnome-setup GUI (systemd-sysinstall) ===")
         self.results.begin("install")
         r, app = self.live_runner, GS_APP
-        nodes = self.wait_for(r, app, lambda n: has_text(n, "English"), "language page", 300)
-        self.save("atspi-gs-language.json", json.dumps(nodes, indent=1))
-        self.key("esc")
-        time.sleep(3)
-        self.maximize(r, app)
-        time.sleep(2)
-        self.shot("02-setup-language", "gnome-setup autostarted in the live session: language page")
-        if not has_name(self.snapshot(r, app), "Next", sensitive=True):
-            self.click_until(r, app, lambda n: row_containing(n, "English (United States)"),
-                             lambda n: has_name(n, "Next", sensitive=True), "language selected")
-        self.press(r, app, "Next", lambda n: has_text(n, "Keyboard Layout"), "keyboard page")
-        nodes = self.snapshot(r, app)
-        if not has_name(nodes, "Next", sensitive=True):
-            self.click_until(r, app, lambda n: row_containing(n, "English (US)"),
-                             lambda n: has_name(n, "Next", sensitive=True), "keyboard selected")
-        self.shot("03-setup-keyboard", "Keyboard layout page")
-        self.press(r, app, "Next", lambda n: has_name(n, "Install Now"), "try-or-install page")
-        self.shot("04-setup-try-or-install", "Try or install: Utah's name and logo from os-release")
-        self.press(r, app, "Install Now", lambda n: has_text(n, "Select a Disk"), "disk page")
         try:
-            nodes = self.wait_for(r, app, lambda n: row_containing(n, TARGET_SIZE_TEXT) is not None, "target disk row", 120)
-        except Fail:
-            self.debug_live_state("disk")
+            self.key("esc")
+            self.maximize(r, app)
+            self.drive_setup(r)
+            self.grab_install_log()
+            self.grab_sysinstall_journal()
+            self.check_slots()
+        except Exception:
+            self.setup_diagnose(r, "failure")
             raise
-        self.save("atspi-gs-disk.json", json.dumps(nodes, indent=1))
-        self.shot("05-setup-disk", f"Disk selection from systemd-sysinstall's ListCandidateDevices: the empty {TARGET_SIZE_TEXT} target {TARGET_DISK}")
-        nodes = self.click_until(r, app, lambda n: row_containing(n, TARGET_SIZE_TEXT),
-                         lambda n: has_text(n, "Begin Installation?") or has_text(n, "Existing Data Found"), "confirmation")
-        start = time.time()
-        if has_text(nodes, "Existing Data Found"):
-            # sysinstall reports the copy content size on the empty target, so it
-            # reads as DataDetected: take free space, which needs no confirm
-            # dialog (full wipe would ask "Erase and Install" instead).
-            self.shot("06-setup-wipe-or-free", "Existing data found on the empty target: install to free space")
-            snap = self.snapshot(r, app)
-            row = row_containing(snap, "Install to Free Space")
-            if row is None:
-                raise Fail("wipe-or-free page has no free-space row")
-            self.click_node(snap, row)
-            self.press(r, app, "Start Installation", lambda n: has_text(n, "Installing"), "install page")
-        else:
-            self.shot("06-setup-confirm", "Confirmation before systemd-sysinstall writes the disk")
-            self.press(r, app, "Install", lambda n: has_text(n, "Installing"), "install page")
-        result_page = lambda n: (has_text(n, "Back Up Recovery Key") or has_text(n, "Choose a Disk Passphrase")  # noqa: E731
-                                 or has_text(n, "Installation Failed"))
-        progress = self.poll(r, app, lambda n: has_text(n, "Copying Partition") or result_page(n), 300)
-        if progress is not None and has_text(progress, "Copying Partition"):
-            time.sleep(5)
-            self.shot("07-setup-progress", "systemd-sysinstall's progress: systemd-repart block-copies the medium into LUKS2")
-        nodes = self.wait_for(r, app, result_page, "install result", 3600)
-        self.timings["gui-install-seconds-after-confirm"] = int(time.time() - start)
-        self.grab_install_log()
-        self.grab_sysinstall_journal()
-        if has_text(nodes, "Installation Failed"):
-            self.shot("08-setup-failed", "FAILURE: gnome-setup reported an install error")
-            raise Fail("gnome-setup: installation failed (evidence/sysinstall-journal.txt)")
-        log(f"  install finished {self.timings['gui-install-seconds-after-confirm']}s after confirmation")
-        if self.tpm:
-            if has_text(nodes, "Choose a Disk Passphrase"):
-                raise Fail("gnome-setup asked for a disk passphrase although the VM has a TPM")
-        else:
-            self.disk_passphrase(r, app, nodes)
-        nodes = self.wait_for(r, app, lambda n: len(self.recovery_key_text(n)) > 40, "recovery key", 120)
-        self.recovery_key = self.recovery_key_text(nodes)
-        self.save("recovery-key.txt", self.recovery_key + "\n")
-        self.shot("08-setup-recovery-key", "Recovery key page: systemd-cryptenroll's MakeRecoveryKey")
-        self.press(r, app, "Show QR Code for Recovery Key", lambda n: has_text(n, "Scan to Back Up"), "QR code dialog")
-        time.sleep(2)
-        self.shot("09-setup-recovery-qr", "The recovery key as a QR code")
-        self.press(r, app, "Done", lambda n: not has_text(n, "Scan to Back Up"), "QR code dialog closed", role="button")
-        self.press(r, app, "I backed up my recovery key", lambda n: has_name(n, "Done", sensitive=True, role="button"), "recovery key confirmed")
-        self.press(r, app, "Done", lambda n: has_text(n, "Installation Complete"), "done page", role="button")
-        self.shot("10-setup-done", "Installation complete; the recovery key is enrolled and the empty passphrase wiped")
-        self.check_slots()
         self.after_install()
+
+    def setup_diagnose(self, runner, label):
+        """Best effort: never replace the original failure with a diagnostic error."""
+        for collect in (
+            lambda: self.setup_dump(runner, label),
+            lambda: self.shot(f"fail-setup-{label}", "FAILURE: current installer page"),
+            self.grab_install_log,
+            self.grab_sysinstall_journal,
+        ):
+            try:
+                collect()
+            except Exception as error:  # noqa: BLE001
+                log(f"  setup diagnostics: {error}")
+
+    def setup_dump(self, runner, label):
+        nodes = self.atspi(runner, "snapshot-all", GS_APP)
+        self.save(f"atspi-gs-{label}.json", json.dumps(nodes, indent=1))
+        if isinstance(nodes, list):
+            for line in summarize_nodes(nodes):
+                log(f"  setup [{label}]: {line}")
+
+    def setup_press(self, runner, nodes, *names):
+        """One action only; the next poll decides which page actually appeared."""
+        for name in names:
+            node = next((n for n in nodes if norm(n["name"]) == norm(name)
+                         and n["role"] in ("button", "push button", "check box")
+                         and "sensitive" in n["states"]), None)
+            if node is None:
+                continue
+            result = self.atspi(runner, "act", GS_APP, name, node["role"])
+            if result and "error" not in result:
+                if result.get("how") == "none":
+                    self.click_node(nodes, node)
+                return True
+        self.setup_dump(runner, "miss")
+        return False
+
+    def drive_setup(self, runner):
+        start = time.monotonic()
+        deadline = start + 4200
+        previous, since = None, start
+        seen = set()
+        qr_seen = False
+        free_space_selected = False
+        passphrase_filled = False
+        confirmed_at = None
+        while time.monotonic() < deadline:
+            nodes = [n for n in self.snapshot(runner, GS_APP) if "showing" in n["states"]]
+            page = classify_setup_page(nodes)
+            now = time.monotonic()
+            if page != previous:
+                previous, since = page, now
+                log(f"  setup page: {page.name}")
+            if page not in seen:
+                self.save(f"atspi-gs-{page.name.lower()}.json", json.dumps(nodes, indent=1))
+                self.shot(f"setup-{page.name.lower()}", f"Installer page: {page.name.lower()}")
+                seen.add(page)
+            if page is Page.FAILURE:
+                raise Fail("gnome-setup: installation failed")
+            if page is Page.DONE:
+                if not self.recovery_key:
+                    raise Fail("installation completed without a recovery key")
+                self.timings["gui-install-seconds-after-confirm"] = int(now - (confirmed_at or start))
+                return
+            limit = 60 if page is Page.UNKNOWN else (3600 if page is Page.PROGRESS else 120)
+            if now - since >= limit:
+                raise Fail(f"gnome-setup stuck on {page.name.lower()} page")
+            if page in (Page.LANGUAGE, Page.KEYBOARD):
+                if has_name(nodes, "Next", sensitive=True, role="button"):
+                    self.setup_press(runner, nodes, "Next")
+                else:
+                    text = "English (United States)" if page is Page.LANGUAGE else "English (US)"
+                    row = row_containing(nodes, text)
+                    if row is not None:
+                        self.click_node(nodes, row)
+                    else:
+                        self.setup_dump(runner, "miss")
+            elif page is Page.TRY_OR_INSTALL:
+                self.setup_press(runner, nodes, "Install Now")
+            elif page is Page.DISK:
+                row = row_containing(nodes, TARGET_SIZE_TEXT)
+                if row is None:
+                    self.setup_dump(runner, "miss")
+                else:
+                    self.click_node(nodes, row)
+            elif page is Page.DATA_FOUND:
+                # Prefer the non-destructive free-space route; never silently
+                # fall back to erasing when that option is absent.
+                if free_space_selected:
+                    if self.setup_press(runner, nodes, "Start Installation"):
+                        confirmed_at = confirmed_at or now
+                else:
+                    row = row_containing(nodes, "Install to Free Space")
+                    if row is not None:
+                        self.click_node(nodes, row)
+                        free_space_selected = True
+                    else:
+                        self.setup_dump(runner, "miss")
+            elif page is Page.CONFIRM:
+                if not any(re.search(r"(?<![\w/])" + re.escape(TARGET_DISK) + r"(?![\w/])",
+                                     n["name"] + " " + n["text"]) for n in nodes):
+                    raise Fail(f"refusing destructive confirmation: page does not name {TARGET_DISK}")
+                if self.setup_press(runner, nodes, "Start Installation", "Install", "Erase and Install"):
+                    confirmed_at = confirmed_at or now
+            elif page is Page.PASSPHRASE:
+                if self.tpm:
+                    raise Fail("gnome-setup asked for a disk passphrase although the VM has a TPM")
+                if not passphrase_filled:
+                    entries = [named(nodes, name, sensitive=True) for name in ("Passphrase", "Confirm Passphrase")]
+                    if all(entries):
+                        for entry in entries:
+                            self.fill(runner, GS_APP, entry, PIN)
+                        passphrase_filled = True
+                    else:
+                        self.setup_dump(runner, "miss")
+                else:
+                    self.setup_press(runner, nodes, "Next")
+            elif page is Page.QR:
+                qr_seen = True
+                self.setup_press(runner, nodes, "Done")
+            elif page is Page.RECOVERY_KEY:
+                key = self.recovery_key_text(nodes)
+                if key:
+                    self.recovery_key = key
+                    self.save("recovery-key.txt", key + "\n")
+                    if not qr_seen:
+                        self.setup_press(runner, nodes, "Show QR Code for Recovery Key")
+                    elif has_name(nodes, "Done", sensitive=True, role="button"):
+                        self.setup_press(runner, nodes, "Done")
+                    else:
+                        checkbox = named(nodes, "I backed up my recovery key", role="check box")
+                        if checkbox is None or "checked" not in checkbox["states"]:
+                            self.setup_press(runner, nodes, "I backed up my recovery key")
+            time.sleep(2)
+        raise Fail("gnome-setup exceeded overall installation deadline")
 
     # systemd-cryptenroll recovery keys: eight groups of eight lowercase letters.
     KEY_RE = re.compile(r"[a-z]{8}(?:-[a-z]{8}){7}")
@@ -886,24 +1000,6 @@ class Harness:
                 if Harness.KEY_RE.fullmatch(field.strip()):
                     return field.strip()
         return ""
-
-    def disk_passphrase(self, r, app, nodes):
-        """No TPM: gnome-setup's disk passphrase page, both entries filled with PIN."""
-        if not has_text(nodes, "Choose a Disk Passphrase"):
-            self.shot("08-setup-no-passphrase-page", "FAILURE: no disk passphrase page without a TPM")
-            raise Fail("gnome-setup showed no disk passphrase page although the VM has no TPM")
-        self.save("atspi-gs-passphrase.json", json.dumps(nodes, indent=1))
-        self.shot("08-setup-passphrase", "No TPM: gnome-setup asks for a disk passphrase (the recovery key stays a second key)")
-        for label in ("Passphrase", "Confirm Passphrase"):
-            nodes = self.snapshot(r, app)
-            node = named(nodes, label, sensitive=True)
-            if node is None:
-                self.save("atspi-passphrase-missing.json", json.dumps(nodes, indent=1))
-                raise Fail(f"no sensitive {label!r} entry")
-            self.fill(r, app, node, PIN)
-        self.wait_for(r, app, lambda n: has_name(n, "Next", sensitive=True), "passphrases match", 30)
-        self.shot("08-setup-passphrase-filled", "Disk passphrase entered twice; Next is enabled once both match")
-        self.press(r, app, "Next", lambda n: has_text(n, "Back Up Recovery Key"), "recovery key page")
 
     def grab_sysinstall_journal(self):
         out = self.ssh("liveuser", "sudo journalctl -b --no-pager -o short-monotonic -u 'utah-sysinstall@*' "
@@ -1371,7 +1467,7 @@ def summarize_nodes(nodes):
     actionable part in the CI log itself so the next diagnosis starts there."""
     lines = []
     for n in nodes:
-        if n.get("role") not in ("button", "check box", "label"):
+        if n.get("role") not in ("button", "push button", "check box", "label"):
             continue
         states = n.get("states", [])
         lines.append(

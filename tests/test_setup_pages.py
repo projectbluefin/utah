@@ -1,0 +1,146 @@
+"""Replay installer page routes without a guest, SSH, or QEMU."""
+import importlib.util
+import json
+from pathlib import Path
+import unittest
+from unittest.mock import Mock, patch
+
+spec = importlib.util.spec_from_file_location(
+    "setup_raw_e2e", Path(__file__).resolve().parents[1] / "iso/raw/raw_e2e.py")
+raw = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(raw)
+
+KEY = "abcdefgh-abcdefgh-abcdefgh-abcdefgh-abcdefgh-abcdefgh-abcdefgh-abcdefgh"
+
+
+def node(name, role="label", states=None):
+    return {"name": name, "text": "", "role": role, "path": name,
+            "ext": [0, 0, 100, 30],
+            "states": ["showing", "sensitive"] if states is None else states}
+
+
+def page(heading, *buttons):
+    return [node(heading)] + [node(b, "button") for b in buttons]
+
+
+class SetupPages(unittest.TestCase):
+    def harness(self, snapshots):
+        h = object.__new__(raw.Harness)
+        h.tpm = True
+        h.recovery_key = None
+        h.timings = {}
+        h.snapshot = Mock(side_effect=snapshots)
+        h.atspi = Mock(return_value={"how": "action:click"})
+        h.save = Mock()
+        h.shot = Mock()
+        h.click_node = Mock()
+        h.fill = Mock()
+        return h
+
+    def run_loop(self, h, clock=None):
+        if clock is None:
+            clock = iter(range(10000))
+        with patch.object(raw.time, "sleep"), patch.object(raw.time, "monotonic", side_effect=clock):
+            h.drive_setup(None)
+
+    def recovery(self):
+        return [node("Back Up Recovery Key"), node(KEY),
+                node("Show QR Code for Recovery Key", "button")]
+
+    def test_confirmation_routes_complete_with_same_driver(self):
+        for data_found in (False, True):
+            with self.subTest(data_found=data_found):
+                route = [page("Language", "English", "Next"),
+                         page("Keyboard Layout", "Next"), page("Welcome", "Install Now"),
+                         [node("Select a Disk"), node(raw.TARGET_SIZE_TEXT, "row")]]
+                if data_found:
+                    found = [node("Existing Data Found"), node("Install to Free Space", "row"),
+                             node("Start Installation", "button")]
+                    route += [found, found]
+                else:
+                    route += [page("Begin Installation? " + raw.TARGET_DISK, "Install")]
+                route += [page("Installing"), self.recovery(),
+                          page("Scan to Back Up", "Done"),
+                          [node("Back Up Recovery Key"), node(KEY),
+                           node("I backed up my recovery key", "check box")],
+                          [node("Back Up Recovery Key"), node(KEY), node("Done", "button")],
+                          page("Installation Complete")]
+                h = self.harness(route)
+                self.run_loop(h)
+                self.assertEqual(h.recovery_key, KEY)
+                names = [c.args[3] for c in h.atspi.call_args_list]
+                self.assertIn("Start Installation" if data_found else "Install", names)
+                self.assertEqual(names.count("Done"), 2)
+                if data_found:
+                    self.assertEqual(h.click_node.call_args_list[-1].args[1]["name"], "Install to Free Space")
+                labels = [c.args[0] for c in h.shot.call_args_list]
+                self.assertEqual(len(labels), len(set(labels)))
+
+    def test_failure_wins_and_hidden_text_is_ignored(self):
+        self.assertIs(raw.classify_setup_page(page("Installation Complete Installation Failed")), raw.Page.FAILURE)
+        self.assertIs(raw.classify_setup_page([
+            node("Installation Failed", states=[]), node("Back Up Recovery Key"), node(KEY)]), raw.Page.RECOVERY_KEY)
+        self.assertIs(raw.classify_setup_page(page("Something new")), raw.Page.UNKNOWN)
+        self.assertIs(raw.classify_setup_page(page("Scan to Back Up Back Up Recovery Key")), raw.Page.QR)
+
+    def test_wrong_or_ambiguous_target_is_refused(self):
+        for disk in ("/dev/vda", "/dev/vdb1", ""):
+            h = self.harness([page("Begin Installation? " + disk, "Install")])
+            with self.assertRaisesRegex(raw.Fail, "refusing destructive"):
+                self.run_loop(h)
+            h.atspi.assert_not_called()
+
+    def test_skipped_pages_and_transient_unknown_are_allowed(self):
+        h = self.harness([page("Drawing..."), self.recovery(),
+                          page("Scan to Back Up", "Done"),
+                          [node("Back Up Recovery Key"), node(KEY), node("Done", "button")],
+                          page("Installation Complete")])
+        self.run_loop(h)
+
+    def test_unknown_and_progress_have_bounded_waits(self):
+        for heading, ticks in (("New page", [0, 0, 0, 61, 61]),
+                               ("Installing", [0, 0, 0, 3601, 3601])):
+            h = self.harness([page(heading), page(heading)])
+            with self.assertRaisesRegex(raw.Fail, "stuck on"):
+                self.run_loop(h, ticks)
+
+    def test_no_tpm_fills_passphrase_before_advancing(self):
+        entries = [node("Choose a Disk Passphrase"), node("Passphrase", "password text"),
+                   node("Confirm Passphrase", "password text"), node("Next", "button")]
+        h = self.harness([entries, entries, page("Installation Failed")])
+        h.tpm = False
+        with self.assertRaisesRegex(raw.Fail, "installation failed"):
+            self.run_loop(h)
+        self.assertEqual(h.fill.call_count, 2)
+        self.assertEqual(h.atspi.call_args.args[3], "Next")
+
+    def test_missing_button_dumps_hidden_and_insensitive_states(self):
+        h = self.harness([])
+        nodes = [node("Install", "push button", ["showing"]),
+                 node("Old button", "push button", [])]
+        h.atspi.return_value = nodes
+        self.assertFalse(h.setup_press(None, nodes, "Install"))
+        saved = json.loads(h.save.call_args.args[1])
+        self.assertEqual(saved, nodes)
+        self.assertIn("sensitive=False", raw.summarize_nodes(saved)[0])
+        h.atspi.assert_called_once_with(None, "snapshot-all", raw.GS_APP)
+
+    def test_failure_collects_tree_screenshot_and_logs(self):
+        h = self.harness([page("Installation Failed")])
+        h.live_runner = None
+        h.key = Mock()
+        h.maximize = Mock()
+        h.results = Mock()
+        h.grab_install_log = Mock()
+        h.grab_sysinstall_journal = Mock()
+        with patch.object(raw.time, "sleep"):
+            with self.assertRaisesRegex(raw.Fail, "installation failed"):
+                h.gnome_setup_install()
+        self.assertTrue(any(c.args[0] == "atspi-gs-failure.json" for c in h.save.call_args_list))
+        self.assertTrue(any(c.args[0] == "fail-setup-failure" for c in h.shot.call_args_list))
+        h.grab_install_log.assert_called_once()
+        h.grab_sysinstall_journal.assert_called_once()
+
+
+if __name__ == "__main__":
+    unittest.main()
