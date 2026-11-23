@@ -143,3 +143,4 @@ journalctl "${journal_window[@]}" _PID=1 -o short-iso-precise --no-pager 2>&1 | 
 echo
 echo "=== kernel log${SINCE:+ since ${SINCE}} ==="
 journalctl "${journal_window[@]}" -k -o short-iso-precise --no-pager 2>&1 | tail -n 500
+exit 0
