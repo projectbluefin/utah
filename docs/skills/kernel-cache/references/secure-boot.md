@@ -41,11 +41,12 @@ binary.
 | --- | --- | --- | --- |
 | btrfs fs-verity fix (drop Utah's kernel rebuild) | Into the **Fedora** kernel that `os-minimal` ships: kernel-ark `fedora-7.3` backport and a stable request. The same fix is offered as a patch on Hummingbird's draft kernel import | [hanthor/hummingbird-rpms#2](https://github.com/hanthor/hummingbird-rpms/pull/2); kernel-ark and stable texts prepared | #1379 |
 | Signed systemd-boot | Hummingbird imports Fedora's `systemd-boot` signing wrapper and signs it with a CA its shim trusts. Fallback: Fedora's signed `systemd-boot-x64` once the base is Fedora 45, or an ISO ESP of Fedora shim + GRUB | [hanthor/hummingbird-rpms#3](https://github.com/hanthor/hummingbird-rpms/pull/3) | #1380 |
-| NVIDIA open and v4l2loopback modules; signing a Hummingbird kernel | Hummingbird decides whether it signs kernels and kmods (ADR-0005). Kmod packages need a Hummingbird kernel with a persistent module key first | [hanthor/hummingbird-documentation#2](https://github.com/hanthor/hummingbird-documentation/pull/2) | #1381 |
+| NVIDIA open and v4l2loopback modules; signing a Hummingbird kernel | Hummingbird decides whether it signs kernels and kmods (ADR-0005). Kmod packages need a Hummingbird kernel with a persistent module key first. Open question to Hummingbird: will it package and sign these two kmods once it owns a kernel, or do derived images keep building them? | [redhat/hummingbird/documentation!61](https://gitlab.com/redhat/hummingbird/documentation/-/merge_requests/61) (open; staged as the closed mirror PR [hanthor/hummingbird-documentation#2](https://github.com/hanthor/hummingbird-documentation/pull/2)) | #1381 |
 | OGC kernel | Not acceptable upstream: a third-party fork that neither Fedora nor Hummingbird signs. Stays unsigned and Secure-Boot-off. The open alternative is to boot Fedora's signed kernel, which has sched_ext, ntsync and Rust binder | none | #1225 |
 
 The GitHub repositories are hand-refreshed mirrors of the GitLab ones, used to
-stage the proposals. The GitLab MRs follow once Hummingbird picks a route.
+stage the proposals. When a proposal is filed on GitLab its mirror PR is
+closed, and its row should link the GitLab MR, which is where review happens.
 
 ## When a piece lands
 
