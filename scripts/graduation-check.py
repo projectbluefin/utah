@@ -99,18 +99,20 @@ def _run_gate_conclusion(token, run: dict, gate_job: str):
     """The conclusion of one gate job within a workflow run.
 
     A gate job's real GitHub name may carry a matrix suffix such as
-    ``e2e (${{ matrix.image }})``; match on the base name so the gate is still
-    found. Returns the first non-success conclusion, or None.
+    ``e2e (${{ matrix.image }})``; match the base name followed by " (" so an
+    unrelated job like ``e2e-cleanup`` is not confused with the gate.
+    A matrix gate passes only when every leg passes, so the first non-success
+    conclusion wins and an all-passing run is "success".
     """
     jobs_url = run.get("jobs_url", "").replace("{?page,per_page}", "")
     data = _http_get_json(jobs_url + "?per_page=100", token)
-    for job in data.get("jobs", []):
-        name = job.get("name", "")
-        if name == gate_job or name.startswith(gate_job):
-            conclusion = job.get("conclusion")
-            if conclusion != "success":
-                return conclusion
-    return None
+    legs = [j.get("conclusion") for j in data.get("jobs", [])
+            if j.get("name", "") == gate_job
+            or j.get("name", "").startswith(gate_job + " (")]
+    if not legs:
+        return None
+    bad = [c for c in legs if c != "success"]
+    return bad[0] if bad else "success"
 
 
 def fetch_workflow_runs(token, owner, repo, workflow, per_page: int,

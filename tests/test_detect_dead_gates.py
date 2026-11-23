@@ -14,6 +14,7 @@ import sys
 import unittest
 from datetime import timezone
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -76,6 +77,45 @@ class ClassifyGateTests(unittest.TestCase):
                                         age_seconds=3600),
                                 sla_days=2)
         self.assertEqual(cls["state"], "failed")
+
+
+class LatestRunSummaryTests(unittest.TestCase):
+    def test_matrix_gate_reports_failed_leg(self):
+        # A matrix gate whose first leg passed but a later leg failed is
+        # reported as failed, not healthy. The old code stopped at the first
+        # matching leg and missed the failure.
+        def fake(url, token):
+            if "/jobs" in url:
+                return {"jobs": [
+                    {"name": "e2e (fedora)", "conclusion": "success"},
+                    {"name": "e2e (rhel)", "conclusion": "failure"},
+                ]}
+            return {"workflow_runs": [{
+                "status": "completed",
+                "jobs_url": "https://api.github.com/repos/o/r/actions/runs/1/jobs",
+                "started_at": "2026-01-01T00:00:00Z",
+            }]}
+        gate = {"workflow": ".github/workflows/image-installer.yml", "job": "e2e"}
+        with patch.object(ddg, "_http_get_json", side_effect=fake):
+            summ = ddg.latest_run_summary("t", "o", "r", gate)
+        self.assertEqual(summ["last_conclusion"], "failure")
+
+    def test_all_matrix_legs_pass_is_healthy(self):
+        def fake(url, token):
+            if "/jobs" in url:
+                return {"jobs": [
+                    {"name": "e2e (fedora)", "conclusion": "success"},
+                    {"name": "e2e (rhel)", "conclusion": "success"},
+                ]}
+            return {"workflow_runs": [{
+                "status": "completed",
+                "jobs_url": "https://api.github.com/repos/o/r/actions/runs/1/jobs",
+                "started_at": "2026-01-01T00:00:00Z",
+            }]}
+        gate = {"workflow": ".github/workflows/image-installer.yml", "job": "e2e"}
+        with patch.object(ddg, "_http_get_json", side_effect=fake):
+            summ = ddg.latest_run_summary("t", "o", "r", gate)
+        self.assertEqual(summ["last_conclusion"], "success")
 
 
 class TapTests(unittest.TestCase):

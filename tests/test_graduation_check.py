@@ -14,6 +14,7 @@ import importlib.util
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -98,6 +99,39 @@ class GraduationBarTests(unittest.TestCase):
         self.assertEqual(bar["required_consecutive_passes"], 2)
         # Unoverridden fields fall back to the global bar.
         self.assertEqual(bar["maximum_failure_rate"], 0.10)
+
+
+class GateJobConclusionTests(unittest.TestCase):
+    def test_all_matrix_legs_pass_returns_success(self):
+        # A matrix gate with two passing legs counts as a pass, so the
+        # graduation check can mark it READY (this is what the function used to
+        # never return before the fix).
+        jobs = [
+            {"name": "e2e (${{ matrix.image }})", "conclusion": "success"},
+            {"name": "e2e (${{ matrix.image }})", "conclusion": "success"},
+        ]
+        run = {"jobs_url": "https://api.github.com/repos/o/r/actions/runs/1/jobs"}
+        with patch.object(gc, "_http_get_json",
+                          side_effect=lambda url, token: {"jobs": jobs}):
+            self.assertEqual(gc._run_gate_conclusion("t", run, "e2e"), "success")
+
+    def test_a_failed_leg_reports_the_failure(self):
+        jobs = [
+            {"name": "e2e (fedora)", "conclusion": "success"},
+            {"name": "e2e (rhel)", "conclusion": "failure"},
+        ]
+        run = {"jobs_url": "https://api.github.com/repos/o/r/actions/runs/1/jobs"}
+        with patch.object(gc, "_http_get_json",
+                          side_effect=lambda url, token: {"jobs": jobs}):
+            self.assertEqual(gc._run_gate_conclusion("t", run, "e2e"), "failure")
+
+    def test_unrelated_prefix_job_is_not_matched(self):
+        # e2e-cleanup must not be confused with the e2e gate.
+        jobs = [{"name": "e2e-cleanup", "conclusion": "success"}]
+        run = {"jobs_url": "https://api.github.com/repos/o/r/actions/runs/1/jobs"}
+        with patch.object(gc, "_http_get_json",
+                          side_effect=lambda url, token: {"jobs": jobs}):
+            self.assertIsNone(gc._run_gate_conclusion("t", run, "e2e"))
 
 
 if __name__ == "__main__":

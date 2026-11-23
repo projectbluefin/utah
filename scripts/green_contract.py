@@ -206,14 +206,29 @@ def check_spec(spec: dict, root: Path, promote_job: str = PROMOTE_JOB_DEFAULT) -
                     f"can fail silently"
                 )
 
-            # The promote job must wait for this gate's job to *succeed*, not
-            # merely run. ``if: always()`` lets promotion proceed after a
-            # failure, so a dead or failing gate would still graduate.
-            if (promote_condition is None
-                    or f"needs.{job}.result == 'success'" not in promote_condition):
+            # A promote job that runs unconditionally (no `if:`) or that runs on
+            # always()/failure() lets promotion proceed after this gate fails,
+            # so a dead or failing gate would still graduate. A bare
+            # `!cancelled()` is handled by the requires-success check below (a
+            # `!cancelled()` that does not also require the gate to succeed is
+            # caught there); the shipped promote job uses `!cancelled()`
+            # alongside the gate-success requirement, so flagging `!cancelled()`
+            # here would be a false positive. See
+            # .github/green-criteria.yml rule.skipped_is_not_green.
+            if not promote_condition:
                 errors.append(
                     f"{cid}: blocking gate {job!r} is not required to succeed "
                     f"in {promote_job}'s if: (promote runs unconditionally)"
+                )
+            elif any(tok in promote_condition for tok in ("always()", "failure()")):
+                errors.append(
+                    f"{cid}: {promote_job} if: {promote_condition!r} lets "
+                    f"promotion proceed when {job!r} fails"
+                )
+            if f"needs.{job}.result == 'success'" not in (promote_condition or ""):
+                errors.append(
+                    f"{cid}: blocking gate {job!r} is not required to succeed "
+                    f"in {promote_job}'s if:"
                 )
 
             schedule = get_schedule(wf)

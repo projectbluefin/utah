@@ -198,6 +198,10 @@ class RuleTests(unittest.TestCase):
                     "jobs:\n  lifecycle:\n    runs-on: ubuntu-26.04\n")
         errors = self._check(criteria, workflow, ["lifecycle"],
                              promote_if="always()")
+        # A promote if: that runs always()/failure() lets promotion proceed
+        # after the gate fails. The old check only caught this via "not
+        # required to succeed"; now it also names the dangerous token.
+        self.assertTrue(any("lets promotion proceed" in e for e in errors))
         self.assertTrue(any("not required to succeed" in e for e in errors))
 
     def test_promote_if_requires_gate_success(self):
@@ -214,6 +218,40 @@ class RuleTests(unittest.TestCase):
         self.assertEqual(
             self._check(criteria, workflow, ["lifecycle"],
                         promote_if="needs.lifecycle.result == 'success'"),
+            [])
+
+    def test_bare_cancelled_without_gate_success_is_caught(self):
+        # A bare `!cancelled()` that does not also require the gate to succeed
+        # lets a skipped or failed gate still promote. The token check below
+        # does not flag `!cancelled()`, but the requires-success check does.
+        criteria = """  - id: g
+    enforcement: blocking
+    gates:
+      - workflow: .github/workflows/post-testing-e2e.yml
+        job: lifecycle"""
+        workflow = ("name: x\n"
+                    "on:\n"
+                    "  workflow_dispatch: {}\n"
+                    "jobs:\n  lifecycle:\n    runs-on: ubuntu-26.04\n")
+        errors = self._check(criteria, workflow, ["lifecycle"],
+                             promote_if="!cancelled()")
+        self.assertTrue(any("not required to succeed" in e for e in errors))
+
+    def test_cancelled_with_gate_success_passes(self):
+        # The shipped promote job uses `!cancelled()` alongside the gate-success
+        # requirement; that combination is intentional and must stay green.
+        criteria = """  - id: g
+    enforcement: blocking
+    gates:
+      - workflow: .github/workflows/post-testing-e2e.yml
+        job: lifecycle"""
+        workflow = ("name: x\n"
+                    "on:\n"
+                    "  workflow_dispatch: {}\n"
+                    "jobs:\n  lifecycle:\n    runs-on: ubuntu-26.04\n")
+        promote_if = ("!cancelled() && needs.lifecycle.result == 'success'")
+        self.assertEqual(
+            self._check(criteria, workflow, ["lifecycle"], promote_if=promote_if),
             [])
 
 

@@ -61,7 +61,7 @@ jobs:
             cat grad-report.txt
           } > "$body"
           # Do not open a duplicate promotion issue if one is already open.
-          if gh issue list --state open --label area/ci \
+          if gh issue list --state open --label area/ci --json number,title \
             --jq '.[] | select(.title | test("Green graduation: promote"; "i")) | .number' \
             | grep -q .; then
             echo "A promotion issue already exists; leaving it for a human to triage."

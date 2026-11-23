@@ -88,13 +88,18 @@ def latest_run_summary(token, owner, repo, gate) -> dict:
         jobs_url = run.get("jobs_url", "").replace("{?page,per_page}", "")
         jobs = _http_get_json(jobs_url + "?per_page=100", token).get("jobs", [])
         # A gate job's real name may carry a matrix suffix such as
-        # ``e2e (${{ matrix.image }})``; match on the base name.
-        for job in jobs:
-            name = job.get("name", "")
-            if name == gate.get("job") or name.startswith(gate.get("job", "")):
-                job_conclusion = job.get("conclusion")
-                job_date = run.get("started_at")
-                break
+        # ``e2e (${{ matrix.image }})``; match the base name followed by " ("
+        # so an unrelated job like ``e2e-cleanup`` is not confused with the gate.
+        # A matrix gate passes only when every leg passes, so the first
+        # non-success conclusion wins and an all-passing run is "success".
+        job = gate.get("job", "")
+        legs = [j.get("conclusion") for j in jobs
+                if j.get("name", "") == job
+                or j.get("name", "").startswith(job + " (")]
+        if legs:
+            bad = [c for c in legs if c != "success"]
+            job_conclusion = bad[0] if bad else "success"
+            job_date = run.get("started_at")
     return {
         "has_run": True,
         "last_conclusion": job_conclusion,
