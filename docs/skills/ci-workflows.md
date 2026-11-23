@@ -179,6 +179,27 @@ post-build verification workflows, not the complete workflow inventory:
   the E2E evidence recorded for the exact digests `:testing` points at, not on
   the `testing` branch tip, then hands the reusable release the
   commit-addressed source tags it verified.
+- `.github/workflows/rollback-stable.yml` -- manual dispatch from trusted
+  `main` only. Leave `dry_run=true` to preview every active flavor's current
+  stable digest and proposed target. Supply a previous `testing-<yyyymmdd>-<sha>`
+  tag and a non-empty reason; a `sha256` digest is also accepted, but is applied
+  to every flavor, so normally use the shared dated tag. The read-only preflight
+  resolves each target once, verifies cosign with the same anchored reusable-build
+  identity as execute-release, and requires both trusted per-digest post-testing
+  and testsuite statuses through `promotion-ratchet.py`'s shared `require_status`.
+  Older images lacking either status are refused; no override is provided.
+  It does not require the dated tag still to name an old digest when given a
+  digest directly. Only explicitly disabling dry-run enables the write job.
+  All flavors must verify before any copy; copies use `--preserve-digests --all`
+  and the verified digest, never the input tag. The workflow shares
+  `utah-stable-release` concurrency with execute-release, checks stable has not
+  changed since preflight, and checks every destination afterward. A successful
+  live rollback creates a non-latest audit prerelease with actor, reason, run
+  link, build commits and before/after digests. Registry updates are not atomic:
+  a failed copy or post-check may leave a partial set. Inspect the step logs and
+  current digests before retrying; audit-release failure does not undo copies.
+  Rollback does not pause future releases: a later manual/promotion release can
+  move stable forward again. Tests live in `tests/test_rollback_stable.py`.
 - `.github/workflows/prow.yml` -- slash commands on issues and pull requests,
   roster authorization via `projectbluefin/.project/.github/workflows/prow-authorize.yml`,
   issue transfers via `prow-transfer.yml`, and label syncing via

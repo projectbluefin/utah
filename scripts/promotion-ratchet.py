@@ -377,6 +377,22 @@ def _has_evidence(statuses: list[dict], context: str, description: str) -> bool:
     )
 
 
+def require_status(image: str, digest: str, ref: str, registry: Registry, github: GitHub) -> Commit:
+    """Require the existing trusted, per-digest gates without consulting a tag."""
+    if not DIGEST_RE.fullmatch(digest) or ref != f"{_image_base(ref)}@{digest}":
+        raise PromotionError("evidence requires an exact digest reference")
+    commit = commit_behind(ref, registry, github)
+    statuses = github.statuses(commit.sha)
+    for base_context in (EVIDENCE_CONTEXT, TESTSUITE_CONTEXT):
+        context = f"{base_context}/{image}"
+        if not _has_evidence(statuses, context, digest):
+            raise PromotionError(
+                f"no green E2E evidence for {image}@{digest}: commit {commit.sha[:7]} has no "
+                f"successful {context} status recorded by {ACTIONS_BOT} for that digest"
+            )
+    return commit
+
+
 def release_gate(
     variants: list[dict],
     registry_prefix: str,
@@ -398,15 +414,7 @@ def release_gate(
         digest = registry.digest(f"{base}:{source_tag}")
         if digest is None:
             raise PromotionError(f"{base}:{source_tag} does not exist; nothing to release")
-        commit = commit_behind(f"{base}@{digest}", registry, github)
-        statuses = github.statuses(commit.sha)
-        for base_context in (EVIDENCE_CONTEXT, TESTSUITE_CONTEXT):
-            context = f"{base_context}/{image}"
-            if not _has_evidence(statuses, context, digest):
-                raise PromotionError(
-                    f"no green E2E evidence for {image}@{digest}: commit {commit.sha[:7]} has no "
-                    f"successful {context} status recorded by {ACTIONS_BOT} for that digest"
-                )
+        commit = require_status(image, digest, f"{base}@{digest}", registry, github)
         named = registry.digest(f"{base}:{commit.version}")
         if named != digest:
             raise PromotionError(
