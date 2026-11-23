@@ -50,6 +50,13 @@ installed under `/usr/libexec/utah-sysinstall` next to the system's systemd.
 | install.sh's post-copy fixups, started by gnome-setup after sysinstall (`[page:installer] post-install-unit=`) and before its recovery key page wipes the empty passphrase | `src/usr/libexec/utah-sysinstall-post`, `utah-sysinstall-post@.service` |
 | Pages (language, keyboard, try-or-install, disk, disk passphrase without a TPM, recovery key, done), live user's polkit grants | `src/usr/share/utah/gnome-setup/pages.conf`, `src/usr/share/polkit-1/rules.d/50-utah-live-gnome-setup.rules` |
 
+The recorded encryption policy and the limits of the merged CI evidence
+are in [ADR-0001's TPM2 update](../../../adr/0001-image-based-installer.md#update-tpm2-enrollment-and-recovery-key-1405).
+PCR 7 unlock is not proof of Secure Boot support: retain the separate
+upstream-signing requirement and retest recovery after firmware policy
+changes. Recovery-page screenshots contain a working disk key; keep them
+confined to disposable test installs, never real user disks.
+
 Keys on the installed root: with a TPM 2.0, the TPM (PCR 7) plus the
 recovery key. Without one, gnome-setup's disk passphrase page (shown only
 then) enrolls the passphrase the user picks, and the recovery key is a second
