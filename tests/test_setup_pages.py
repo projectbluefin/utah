@@ -125,8 +125,35 @@ class SetupPages(unittest.TestCase):
         self.assertIn("sensitive=False", raw.summarize_nodes(saved)[0])
         h.atspi.assert_called_once_with(None, "snapshot-all", raw.GS_APP)
 
+    def test_startup_waits_for_recognized_page_before_window_actions(self):
+        h = self.harness([])
+        h.live_runner = None
+        h.results = Mock()
+        h.wait_for = Mock(return_value=page("Welcome", "Install Now"))
+        h.key = Mock()
+        h.maximize = Mock()
+        h.drive_setup = Mock()
+        h.grab_install_log = Mock()
+        h.grab_sysinstall_journal = Mock()
+        h.check_slots = Mock()
+        h.after_install = Mock()
+        order = Mock()
+        for name in ("wait_for", "key", "maximize", "drive_setup"):
+            order.attach_mock(getattr(h, name), name)
+        with patch.object(raw.time, "sleep") as sleep:
+            h.gnome_setup_install()
+        args = h.wait_for.call_args.args
+        self.assertEqual(args[3:], ("first setup page", 300))
+        self.assertFalse(args[2]([]))
+        self.assertFalse(args[2](page("Drawing...")))
+        self.assertTrue(args[2](page("Welcome", "Install Now")))
+        self.assertTrue(args[2](page("Installation Failed")))
+        self.assertEqual([c[0] for c in order.mock_calls],
+                         ["wait_for", "key", "maximize", "drive_setup"])
+        sleep.assert_called_once_with(3)
+
     def test_failure_collects_tree_screenshot_and_logs(self):
-        h = self.harness([page("Installation Failed")])
+        h = self.harness([page("Installation Failed")] * 2)
         h.live_runner = None
         h.key = Mock()
         h.maximize = Mock()

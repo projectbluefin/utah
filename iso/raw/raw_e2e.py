@@ -839,7 +839,10 @@ class Harness:
         self.results.begin("install")
         r, app = self.live_runner, GS_APP
         try:
+            self.wait_for(r, app, lambda nodes: classify_setup_page(nodes) is not Page.UNKNOWN,
+                          "first setup page", 300)
             self.key("esc")
+            time.sleep(3)
             self.maximize(r, app)
             self.drive_setup(r)
             self.grab_install_log()
