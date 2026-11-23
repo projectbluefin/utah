@@ -356,6 +356,20 @@ block copy into LUKS2 through OS-Installer runs beside the ISO path in
 It gates nothing. Build, run and gotchas:
 [image-installer](local-testing/references/image-installer.md).
 
+`iso/raw/raw_e2e.py` classifies visible gnome-setup pages on each poll,
+accepting free-space and plain-confirmation routes. Destructive confirmation
+requires `/dev/vdb` exactly; free-space selection never falls back to erase.
+Recovery keys come from the key-shaped label; the QR dialog takes precedence
+over its parent page. Each distinct page gets one screenshot in the manifest.
+Run `python3 -m unittest discover -s tests -p 'test_setup_pages.py'` for
+host-only route replays; these do not replace VM runs through both routes.
+Unknown pages time out after 60 seconds, interactive pages after 120 seconds,
+and progress after an hour, within a 70-minute total budget. Missing controls
+save `atspi-gs-miss.json` and log button names and showing/sensitive states.
+Failures save `atspi-gs-failure.json` (including hidden nodes), a
+`fail-setup-failure` screenshot, the installer log, and the sysinstall journal.
+Treat evidence as sensitive: recovery pages and snapshots contain the disk key.
+
 ## Verification
 
 ### Encrypted install and screenshot harness

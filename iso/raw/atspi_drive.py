@@ -14,6 +14,7 @@ Run it as the session's user with DBUS_SESSION_BUS_ADDRESS pointing at that
 session's bus.
 
   atspi_drive.py snapshot APP              JSON list of showing nodes
+  atspi_drive.py snapshot-all APP          full tree, including hidden button states
   atspi_drive.py act APP NAME [ROLE]       run a named widget's click action
   atspi_drive.py frame-action APP ACTION   run one of the window's GActions
 
@@ -88,13 +89,13 @@ def extents_of(node):
         return None
 
 
-def walk(node, path="0", depth=0, out=None):
+def walk(node, path="0", depth=0, out=None, include_hidden=False):
     out = [] if out is None else out
     if node is None or len(out) >= MAX_NODES or depth > 60:
         return out
     st = states(node)
     out.append((node, path, st))
-    if depth > 0 and "showing" not in st and "visible" not in st:
+    if not include_hidden and depth > 0 and "showing" not in st and "visible" not in st:
         return out
     try:
         n = node.get_child_count()
@@ -105,11 +106,11 @@ def walk(node, path="0", depth=0, out=None):
             child = node.get_child_at_index(i)
         except Exception:
             continue
-        walk(child, f"{path}.{i}", depth + 1, out)
+        walk(child, f"{path}.{i}", depth + 1, out, include_hidden)
     return out
 
 
-def showing_nodes(app_substr):
+def showing_nodes(app_substr, include_hidden=False):
     found = apps(app_substr)
     if not found:
         print(json.dumps({"error": f"no application matching {app_substr!r}",
@@ -117,7 +118,8 @@ def showing_nodes(app_substr):
         sys.exit(3)
     nodes = []
     for app in found:
-        nodes += [(n, p, s) for n, p, s in walk(app) if "showing" in s]
+        nodes += [(n, p, s) for n, p, s in walk(app, include_hidden=include_hidden)
+                  if include_hidden or "showing" in s]
     return nodes
 
 
@@ -145,8 +147,8 @@ def main(argv):
         print(__doc__, file=sys.stderr)
         return 1
     cmd, app = argv[1], argv[2]
-    if cmd == "snapshot":
-        print(json.dumps([describe(*n) for n in showing_nodes(app)], indent=1))
+    if cmd in ("snapshot", "snapshot-all"):
+        print(json.dumps([describe(*n) for n in showing_nodes(app, cmd == "snapshot-all")], indent=1))
         return 0
     if cmd == "act":
         role = argv[4] if len(argv) > 4 else None

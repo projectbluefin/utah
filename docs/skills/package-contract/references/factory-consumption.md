@@ -21,6 +21,14 @@ still fail on a `Requires` that neither the factory nor Hummingbird carries.
    the image build. Move `PACKAGE_IMAGE_SHA` and the `# factory-pin:` stamp in
    `packages/utah-packages.repo` to the same digest in one commit.
 
+For a SONAME conflict after Hummingbird updates, inspect the pinned and current
+factory repodata's `Requires`, not just RPM names or versions. A rebuild can
+retain the same NEVRA while linking a newer ABI: QEMU 11.1.3-3 switched from
+`libcbor.so.0.14` to `.0.15`, allowing it to coexist with the newer
+`fido2-tools`. Consume the compatible published digest with both pin locations
+above, then rerun the complete transaction. Do not hide the conflict with
+`--skip-broken`, remove required packages, or enable Fedora repositories.
+
 Rules applied while choosing names:
 
 - Flatpak-first: no RPM for an app Utah ships as a Flatpak (for example
