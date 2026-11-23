@@ -22,7 +22,7 @@ ARG WALLPAPERS_IMAGE_SHA=sha256:f53a8a0053baf7cf16f2c3d831c3c4f9ab80b69afe79f84f
 # signed core-runtime builder (bash, curl, coreutils, dnf), pinned to its
 # multi-arch index digest. CI verifies the signature against Red Hat's key
 # (`just verify-rhhi-signatures`); Renovate bumps it like the pins above.
-ARG ARTWORK_BUILDER_IMAGE=registry.access.redhat.com/hi/core-runtime:latest-builder@sha256:c869614f126dac92619f0935da52207ac79199a04683b0ed8f9a180b30edd8ab
+ARG ARTWORK_BUILDER_IMAGE=registry.access.redhat.com/hi/core-runtime:latest-builder@sha256:4a25abae7c3221e0d1138b0331c12cb66afe5382d617888cbe37df96494baa03
 
 FROM ${COMMON_IMAGE_REF} AS common
 FROM ${BREW_IMAGE}@${BREW_IMAGE_SHA} AS brew
