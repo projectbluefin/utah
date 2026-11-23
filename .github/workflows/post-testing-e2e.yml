@@ -209,6 +209,10 @@ jobs:
           UTAH_E2E_REQUIRE_FASTFETCH: "1"
           UTAH_E2E_RAM: "6144"
           UTAH_E2E_CPUS: "2"
+          # Reboot the installed disk once more and recheck first-boot
+          # services and default Flatpaks: the repeat-boot proof #19 needs
+          # on every candidate, not only on a dispatched review VM.
+          UTAH_E2E_REPEAT_BOOT: "1"
         run: |
           set -euo pipefail
           bash iso/scripts/luks-e2e.sh "$PWD/output/utah-live.iso" "$IMAGE_REF" \

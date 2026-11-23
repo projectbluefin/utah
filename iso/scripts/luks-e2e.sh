@@ -16,6 +16,10 @@
 # because it deploys asynchronously on first boot and checking right after
 # login undercounts it. Then every unit the installed contract's [services]
 # lists as enabled is checked: still enabled after first boot, and not failed.
+# With UTAH_E2E_REPEAT_BOOT=1 (or a review flavor), the installed system then
+# reboots gracefully, unlocks again, and the same services, the Flathub remote
+# and the default Flatpaks are rechecked, proving first-boot work repeats
+# safely (#19).
 #
 # A failure in phase N exits 10 + N; E2E_WALL_CLOCK_DEADLINE (epoch seconds)
 # makes the harness fail with exit 75 and its evidence once it passes, and a
@@ -105,6 +109,13 @@ VNC_INSTALLED="${UTAH_E2E_VNC_INSTALLED:-3}"
 # installs. Install, boot, unlock, login, the desktop and the default Flatpak
 # set still run.
 BASELINE_INSTALL="${UTAH_E2E_BASELINE:-0}"
+# UTAH_E2E_REPEAT_BOOT=1: after the first-boot checks, reboot the installed
+# system once more and recheck first-boot state (#19). The post-testing luks
+# job sets it for every candidate; UTAH_E2E_EXPECT_FLAVOR (review VM) implies
+# it. Plain `just luks-test` stays a single boot. Never on the baseline: the
+# repeat boot reruns the contract-service gate.
+REPEAT_BOOT="${UTAH_E2E_REPEAT_BOOT:-0}"
+[[ -n "${UTAH_E2E_EXPECT_FLAVOR:-}" ]] && REPEAT_BOOT=1
 VARS="${WORK}/ovmf-vars.fd"
 
 QEMU="$(command -v qemu-system-x86_64 /usr/libexec/qemu-kvm 2>/dev/null | head -1)"
@@ -1480,14 +1491,14 @@ fi
 # proves it for each candidate (#19). A content gate: the lifecycle's baseline
 # (UTAH_E2E_BASELINE=1) is an earlier :testing built before this check
 # (#1282), whose contract may list a unit a later commit fixed, so the
-# lifecycle checks the upgraded candidate. The review VM adds the graceful
+# lifecycle checks the upgraded candidate. REPEAT_BOOT adds the graceful
 # second boot that proves first-boot work is idempotent.
 if [[ "${BASELINE_INSTALL}" == 0 ]]; then
     verify_setup_state first
 else
     echo "  contract service gate: skipped on the lifecycle baseline; the upgraded candidate is checked"
 fi
-if [[ -n "${UTAH_E2E_EXPECT_FLAVOR:-}" ]]; then
+if [[ "${BASELINE_INSTALL}" == 0 && "${REPEAT_BOOT}" == 1 ]]; then
     verify_flathub_remote
     repeat_installed_boot
     verify_setup_state repeat
