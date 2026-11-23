@@ -146,10 +146,22 @@ def promote_needs(root: Path, promote_job: str) -> set:
     return set(needs) if isinstance(needs, list) else set()
 
 
+def promote_if(root: Path, promote_job: str) -> str | None:
+    """The promote job's ``if:`` condition, or None if the job/condition is
+    absent. A promote job that runs unconditionally (no ``if:`` or
+    ``if: always()``) lets promotion proceed even after a gated job fails."""
+    wf = load_yaml(root / ".github" / "workflows" / "post-testing-e2e.yml")
+    job = wf.get("jobs", {}).get(promote_job)
+    if not job:
+        return None
+    return job.get("if")
+
+
 def check_spec(spec: dict, root: Path, promote_job: str = PROMOTE_JOB_DEFAULT) -> list:
     """Return a list of human-readable contract violations (empty = green)."""
     errors: list = []
     needs = promote_needs(root, promote_job)
+    promote_condition = promote_if(root, promote_job)
 
     for crit in spec.get("criteria", []):
         cid = crit.get("id", "<unnamed>")
@@ -192,6 +204,16 @@ def check_spec(spec: dict, root: Path, promote_job: str = PROMOTE_JOB_DEFAULT) -
                 errors.append(
                     f"{cid}: blocking gate {job!r} sets continue-on-error and "
                     f"can fail silently"
+                )
+
+            # The promote job must wait for this gate's job to *succeed*, not
+            # merely run. ``if: always()`` lets promotion proceed after a
+            # failure, so a dead or failing gate would still graduate.
+            if (promote_condition is None
+                    or f"needs.{job}.result == 'success'" not in promote_condition):
+                errors.append(
+                    f"{cid}: blocking gate {job!r} is not required to succeed "
+                    f"in {promote_job}'s if: (promote runs unconditionally)"
                 )
 
             schedule = get_schedule(wf)

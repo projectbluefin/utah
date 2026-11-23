@@ -46,6 +46,10 @@ def classify_gate(summary: dict, sla_days) -> dict:
     conclusion = summary.get("last_conclusion")
     if conclusion in FAILURE_CONCLUSIONS:
         return {"state": "failed", "detail": f"last run: {conclusion}"}
+    # A completed run with no recorded conclusion is not green: report it as
+    # failed rather than healthy so a silent gate cannot pass the detector.
+    if conclusion is None:
+        return {"state": "failed", "detail": "no conclusion recorded"}
     last_date = summary.get("last_date")
     if sla_days is not None and last_date is not None:
         age = (dt.datetime.now(timezone.utc) - last_date).days
@@ -68,8 +72,11 @@ def _http_get_json(url: str, token: str):
 
 def latest_run_summary(token, owner, repo, gate) -> dict:
     """The latest run of a gate's workflow and the conclusion of its job."""
+    # Only the workflow file name is valid in a workflow URL; the full path is
+    # a 404.
     url = (f"https://api.github.com/repos/{owner}/{repo}"
-           f"/actions/workflows/{gate['workflow']}/runs?per_page=1")
+           f"/actions/workflows/{Path(gate['workflow']).name}"
+           f"/runs?per_page=100")
     data = _http_get_json(url, token)
     runs = data.get("workflow_runs", [])
     if not runs:
@@ -79,9 +86,12 @@ def latest_run_summary(token, owner, repo, gate) -> dict:
     job_date = None
     if run.get("status") == "completed":
         jobs_url = run.get("jobs_url", "").replace("{?page,per_page}", "")
-        jobs = _http_get_json(jobs_url + "?per_page=1", token).get("jobs", [])
+        jobs = _http_get_json(jobs_url + "?per_page=100", token).get("jobs", [])
+        # A gate job's real name may carry a matrix suffix such as
+        # ``e2e (${{ matrix.image }})``; match on the base name.
         for job in jobs:
-            if job.get("name") == gate.get("job"):
+            name = job.get("name", "")
+            if name == gate.get("job") or name.startswith(gate.get("job", "")):
                 job_conclusion = job.get("conclusion")
                 job_date = run.get("started_at")
                 break

@@ -52,8 +52,22 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           ready=$(grep 'READY to promote' grad-report.txt | sed 's/.*: //')
-          report=$(cat grad-report.txt)
+          body=$(mktemp)
+          {
+            echo "The weekly green graduation check found the following advisory "
+            echo "gates meeting the bar in .github/green-criteria.yml."
+            echo "Review and flip their enforcement to blocking (projectbluefin/utah#1449):"
+            echo
+            cat grad-report.txt
+          } > "$body"
+          # Do not open a duplicate promotion issue if one is already open.
+          if gh issue list --state open --label area/ci \
+            --jq '.[] | select(.title | test("Green graduation: promote"; "i")) | .number' \
+            | grep -q .; then
+            echo "A promotion issue already exists; leaving it for a human to triage."
+            exit 0
+          fi
           gh issue create \
             --title "Green graduation: promote $ready to blocking" \
-            --body "The weekly green graduation check found the following advisory gates meeting the bar in .github/green-criteria.yml. Review and flip their enforcement to blocking (projectbluefin/utah#1449): $report" \
+            --body-file "$body" \
             --label area/ci

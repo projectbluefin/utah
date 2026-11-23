@@ -30,19 +30,26 @@ def write(path: Path, text: str):
 
 
 def make_repo(tmp: Path, *, criteria, workflow_text, promote_needs,
-              workflow_path=".github/workflows/post-testing-e2e.yml"):
+              workflow_path=".github/workflows/post-testing-e2e.yml",
+              promote_if=None):
     write(tmp / ".github" / "green-criteria.yml", f"version: 1\n\n"
               f"criteria:\n{criteria}")
     # The contract reads the promote-to-testing job's `needs` from the same
     # workflow file, so merge that job into the workflow's jobs without
-    # clobbering the gate jobs the test supplies.
+    # clobbering the gate jobs the test supplies. When no explicit `if:` is
+    # given, build one that requires each needed job to succeed, mirroring the
+    # shipped promote job.
     wf = (yaml.safe_load(workflow_text) if isinstance(workflow_text, str)
           else workflow_text)
-    wf.setdefault("jobs", {})["promote-to-testing"] = {
-        "needs": list(promote_needs),
-        "runs-on": "ubuntu-26.04",
-        "steps": [{"run": "echo ok"}],
-    }
+    promote = {"needs": list(promote_needs),
+               "runs-on": "ubuntu-26.04",
+               "steps": [{"run": "echo ok"}]}
+    if promote_if is not None:
+        promote["if"] = promote_if
+    elif promote_needs:
+        promote["if"] = " && ".join(
+            f"needs.{n}.result == 'success'" for n in promote_needs)
+    wf.setdefault("jobs", {})["promote-to-testing"] = promote
     write(tmp / workflow_path, yaml.safe_dump(wf))
     return tmp
 
@@ -61,9 +68,11 @@ class RuleTests(unittest.TestCase):
         self.root = Path(self.tmp.name)
 
     def _check(self, criteria, workflow_text, promote_needs,
-               workflow_path=".github/workflows/post-testing-e2e.yml"):
+               workflow_path=".github/workflows/post-testing-e2e.yml",
+               promote_if=None):
         make_repo(self.root, criteria=criteria, workflow_text=workflow_text,
-                  promote_needs=promote_needs, workflow_path=workflow_path)
+                  promote_needs=promote_needs, workflow_path=workflow_path,
+                  promote_if=promote_if)
         spec = gc.load_spec(self.root)
         return gc.check_spec(spec, self.root)
 
@@ -174,6 +183,38 @@ class RuleTests(unittest.TestCase):
                     "  workflow_dispatch: {}\n"
                     "jobs:\n  lifecycle:\n    runs-on: ubuntu-26.04\n")
         self.assertEqual(self._check(criteria, workflow, ["lifecycle"]), [])
+
+    def test_promote_if_always_allows_failed_promotion(self):
+        # A promote job that runs `if: always()` lets promotion proceed even
+        # after the gate's job fails, so a dead gate would still graduate.
+        criteria = """  - id: g
+    enforcement: blocking
+    gates:
+      - workflow: .github/workflows/post-testing-e2e.yml
+        job: lifecycle"""
+        workflow = ("name: x\n"
+                    "on:\n"
+                    "  workflow_dispatch: {}\n"
+                    "jobs:\n  lifecycle:\n    runs-on: ubuntu-26.04\n")
+        errors = self._check(criteria, workflow, ["lifecycle"],
+                             promote_if="always()")
+        self.assertTrue(any("not required to succeed" in e for e in errors))
+
+    def test_promote_if_requires_gate_success(self):
+        # A promote job whose if: requires the gate's job to succeed passes.
+        criteria = """  - id: g
+    enforcement: blocking
+    gates:
+      - workflow: .github/workflows/post-testing-e2e.yml
+        job: lifecycle"""
+        workflow = ("name: x\n"
+                    "on:\n"
+                    "  workflow_dispatch: {}\n"
+                    "jobs:\n  lifecycle:\n    runs-on: ubuntu-26.04\n")
+        self.assertEqual(
+            self._check(criteria, workflow, ["lifecycle"],
+                        promote_if="needs.lifecycle.result == 'success'"),
+            [])
 
 
 class CronIntervalTests(unittest.TestCase):

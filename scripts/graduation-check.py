@@ -96,26 +96,39 @@ def _http_get_json(url: str, token: str):
 
 
 def _run_gate_conclusion(token, run: dict, gate_job: str):
-    """The conclusion of one job within a workflow run."""
+    """The conclusion of one gate job within a workflow run.
+
+    A gate job's real GitHub name may carry a matrix suffix such as
+    ``e2e (${{ matrix.image }})``; match on the base name so the gate is still
+    found. Returns the first non-success conclusion, or None.
+    """
     jobs_url = run.get("jobs_url", "").replace("{?page,per_page}", "")
     data = _http_get_json(jobs_url + "?per_page=100", token)
     for job in data.get("jobs", []):
-        if job.get("name") == gate_job:
-            return job.get("conclusion")
+        name = job.get("name", "")
+        if name == gate_job or name.startswith(gate_job):
+            conclusion = job.get("conclusion")
+            if conclusion != "success":
+                return conclusion
     return None
 
 
-def fetch_workflow_runs(token, owner, repo, workflow, per_page: int):
+def fetch_workflow_runs(token, owner, repo, workflow, per_page: int,
+                        gate_job: str):
     """Newest-first recent runs of a workflow, reduced to the gate job's
-    conclusion. Returns a list of run dicts."""
+    conclusion. Returns a list of run dicts.
+
+    ``workflow`` is a path under ``.github/workflows``; only the file name is
+    valid in a workflow URL (the full path is a 404).
+    """
     url = (f"https://api.github.com/repos/{owner}/{repo}"
-           f"/actions/workflows/{workflow}/runs?per_page={per_page}")
+           f"/actions/workflows/{Path(workflow).name}/runs?per_page={per_page}")
     data = _http_get_json(url, token)
     runs = []
     for run in data.get("workflow_runs", []):
         runs.append({
             "status": run.get("status"),
-            "conclusion": run.get("conclusion"),
+            "conclusion": _run_gate_conclusion(token, run, gate_job),
             "started_at": run.get("started_at"),
             "run_id": run.get("id"),
         })
@@ -193,7 +206,7 @@ def main(argv=None) -> int:
             continue
         runs = fetch_workflow_runs(
             args.token, owner, repo, gate["workflow"],
-            int(bar["lookback_runs"]),
+            int(bar["lookback_runs"]), gate["job"],
         )
         reports.append(report_for(crit, runs, bar))
 

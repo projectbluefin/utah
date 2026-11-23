@@ -47,6 +47,12 @@ class ClassifyGateTests(unittest.TestCase):
         cls = ddg.classify_gate(summary(True, "failure"), sla_days=2)
         self.assertEqual(cls["state"], "failed")
 
+    def test_missing_conclusion_is_not_healthy(self):
+        # A completed run with no recorded conclusion is not green: report it
+        # as failed rather than healthy so a silent gate cannot pass.
+        cls = ddg.classify_gate(summary(True, None), sla_days=2)
+        self.assertEqual(cls["state"], "failed")
+
     def test_never_ran(self):
         cls = ddg.classify_gate(summary(False, None), sla_days=2)
         self.assertEqual(cls["state"], "never")
