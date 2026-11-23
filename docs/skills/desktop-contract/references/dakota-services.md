@@ -231,5 +231,5 @@ Run `systemctl --root=/ preset-all` inside both images and diff
 leaves on needs nothing; a unit that must stay off needs a `disable` line in
 the right file and an entry in `[services].disabled`.
 
-`ServiceMaskParityTests` in `tests/test_desktop_contract.py` resolves every
+`ServiceMaskParityTests` in `tests/test_desktop_contract_services.py` resolves every
 contract unit against the preset files the way systemd does.

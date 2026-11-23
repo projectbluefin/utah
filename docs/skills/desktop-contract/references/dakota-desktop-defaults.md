@@ -17,7 +17,7 @@ an untouched profile follows the default.
 
 `[gsettings.values]` in `contracts/bluefin-desktop.toml` pins the exact list
 `gsettings get org.gnome.shell enabled-extensions` prints in the image.
-`GnomeExtensionTests` (`tests/test_desktop_contract.py`) keeps the override,
+`GnomeExtensionTests` (`tests/test_desktop_contract_shell.py`) keeps the override,
 the contract and the shipped UUIDs in step.
 
 ### Installed extensions
