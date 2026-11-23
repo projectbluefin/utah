@@ -22,7 +22,7 @@ def update(text, provenance, record_commit="verification"):
              f"*LUKS ISO test passed for commit `{sha[:12]}`. "
              f"[CI run](https://github.com/projectbluefin/utah/actions/runs/{run}) "
              "also runs independent desktop tests that do not gate this record; "
-             "the LUKS and production ISO jobs passed; "
+             "the LUKS test passed on the production ISO it retains; "
              f"[screenshots and provenance](https://github.com/projectbluefin/utah/tree/{record_commit}).*\n"
              f"{end}")
     pattern = re.compile(re.escape(begin) + r".*?" + re.escape(end), re.S)

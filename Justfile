@@ -520,9 +520,10 @@ build-local stream="testing" package_image="localhost/utah-packages:local-merged
       --file Containerfile .
 
 # Install Utah from its live ISO onto an encrypted disk in QEMU, boot the
-# result, answer Plymouth's passphrase prompt, and confirm it comes up. Needs a
-# debug ISO -- `just iso testing 1` -- because the install phase drives the
-# installer over SSH.
+# result, answer Plymouth's passphrase prompt, and confirm it comes up. The
+# install phase drives the live session over SSH: with a writable
+# /dev/vhost-vsock any ISO works, `just iso testing` included, through a
+# per-run key over AF_VSOCK; without it, only a debug ISO (`just iso testing 1`).
 luks-test iso_path="output/utah-live.iso" image="ghcr.io/projectbluefin/utah:testing":
     bash iso/scripts/luks-e2e.sh "{{ iso_path }}" "{{ image }}"
 
@@ -534,9 +535,10 @@ try-installed:
 # Validate bootc upgrade and rollback lifecycle between two immutable digests in QEMU.
 # Boots a known Utah deployment, stages/upgrades to candidate digest via bootc/uupd,
 # verifies graphical desktop, rolls back, and verifies the previous deployment.
-# Defaults to the debug live ISO -- `just iso testing 1` -- because the harness
-# logs in over SSH as the `utahtest` account the installer provisions. The disk
-# from `just generate-bootable-image` has no such account and cannot be used.
+# Defaults to the live ISO (see luks-test for which ISO the host can drive),
+# because the harness logs in over SSH as the `utahtest` account the installer
+# provisions. The disk from `just generate-bootable-image` has no such account
+# and cannot be used.
 # The ISO installs its payload as baseline_image, then the harness stages
 # candidate_image; the candidate has no default because staging the baseline
 # ref again is a no-op and would never exercise an upgrade.

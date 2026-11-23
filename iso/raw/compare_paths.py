@@ -13,7 +13,7 @@ outputs, and e2e evidence/results.json (raw_e2e.py).
 The fisherman side is the latest Post-Testing E2E `luks` job for the same
 image and digest, read through `gh api` (GH_TOKEN): the job's conclusion,
 its `=== Phase N/7` markers (install time is phase 3 to phase 4), the `ISO
-ready` line, the "Compose disposable debug ISO" step's duration and the
+ready` line, the "Compose production ISO" step's duration and the
 `production-iso-<image>` artifact size from the same run.
 
 GNOME OS's published ISO sizes are read with HEAD requests, as a reference.
@@ -40,7 +40,7 @@ LUKS_PHASES = {
     6: "graphical target, offline payload",
     7: "login, desktop, trailing checks",
 }
-ISO_STEP = "Compose disposable debug ISO"
+ISO_STEP = "Compose production ISO"
 GNOME_OS_ISOS = {
     "GNOME OS nightly": "https://os.gnome.org/download/latest/gnome_os_x86_64.iso",
     "GNOME OS stable": "https://os.gnome.org/download/stable/50/gnome_os_50.0-x86_64.iso",

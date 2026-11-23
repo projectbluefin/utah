@@ -126,7 +126,7 @@ the next ISO milestone (comment above `iso` in `Justfile`):
 ```bash
 just iso testing
 just boot-iso        # QEMU/noVNC live-session validation
-just iso testing 1   # optional live-session SSH diagnostics (debug=1)
+just iso testing 1   # debug=1: liveuser password + sshd, for hosts without vhost-vsock
 just measure-iso     # #875 squashfs size per store/compression strategy
 ```
 
@@ -360,8 +360,17 @@ It gates nothing. Build, run and gotchas:
 
 ### Encrypted install and screenshot harness
 
-`just luks-test` runs `iso/scripts/luks-e2e.sh` against a debug live ISO
-(`just iso testing 1`). It checks the live GNOME session, installs to a
+`just luks-test` runs `iso/scripts/luks-e2e.sh` against the live ISO. With a
+writable `/dev/vhost-vsock` (`sudo modprobe vhost_vsock`) and
+`systemd-ssh-proxy` or a vsock-capable socat, any ISO works, `just iso
+testing` included: a per-run key reaches the live guest as the
+`ssh.ephemeral-authorized_keys-all` SMBIOS credential and the harness logs in
+as root over AF_VSOCK (#1448; mechanism in
+[iso-e2e](ci-workflows/references/iso-e2e.md)). Otherwise only a debug ISO
+(`just iso testing 1`) answers. `UTAH_E2E_LIVE_SSH` is `auto` (default),
+`vsock` (CI; exits 77 without host support) or `password`;
+`UTAH_E2E_VSOCK_CID` (default SSH port + 1000) must be unique on the host.
+The harness checks the live GNOME session, installs to a
 disposable LUKS2 disk from the embedded payload, boots without the ISO,
 requires Plymouth's graphical passphrase prompt with the theme's watermark on
 screen (`iso/scripts/plymouth-prompt.py`; the text fallback fails, see

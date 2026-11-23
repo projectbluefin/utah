@@ -24,13 +24,15 @@ usage() {
 Usage: lifecycle-e2e.sh <disk-or-iso> <baseline-image> <candidate-target-image> [passphrase]
 
 Arguments:
-  disk-or-iso             Live debug ISO, or an already installed disk (.qcow2,
+  disk-or-iso             Live ISO, or an already installed disk (.qcow2,
                           .raw) that carries the UTAH_LIFECYCLE_USER password
                           account -- the harness drives the guest over SSH with
                           that account. The disk from `just
                           generate-bootable-image` provisions no such account,
-                          so pass the debug ISO instead and let the install
-                          phase create one.
+                          so pass the ISO instead and let the install phase
+                          create one. The install phase (luks-e2e.sh) reaches
+                          a production ISO over vsock; a host without
+                          /dev/vhost-vsock needs the debug ISO.
   baseline-image          Image ref the baseline deployment tracks. A live ISO
                           installs its offline payload under this ref, so it
                           must be the target ref the ISO was built with (`just
@@ -57,6 +59,8 @@ Environment variables:
   UTAH_LIFECYCLE_VNC      VNC display offset (default: 4)
   UTAH_E2E_WORK           Work directory for the ISO install phase when a live
                           ISO is given (default: <UTAH_LIFECYCLE_WORK>/install)
+  UTAH_E2E_LIVE_SSH       How the install phase reaches the live ISO: auto
+                          (default), vsock or password (luks-e2e.sh LIVE_SSH)
 EOF
 }
 

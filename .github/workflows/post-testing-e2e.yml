@@ -177,10 +177,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y podman skopeo uidmap slirp4netns fuse-overlayfs \
             squashfs-tools xorriso dosfstools mtools qemu-system-x86 qemu-utils \
-            ovmf sshpass ffmpeg tesseract-ocr
+            ovmf sshpass socat ffmpeg tesseract-ocr
           test -c /dev/kvm
           sudo chmod a+rw /dev/kvm
           test -r /dev/kvm && test -w /dev/kvm
+          # The LUKS harness reaches the production ISO's live session over
+          # AF_VSOCK with a per-run key (its LIVE_SSH setting).
+          sudo modprobe vhost_vsock
+          sudo chmod a+rw /dev/vhost-vsock
+          test -w /dev/vhost-vsock
           mkdir -p output evidence
           df -h .
       - name: Pull exact published payload
@@ -193,14 +198,17 @@ jobs:
           echo "$GH_TOKEN" | podman login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           podman pull "$IMAGE_REF"
           podman logout ghcr.io
-      - name: Compose disposable debug ISO
+      # The very media the production-iso artifact below keeps: DEBUG=0, so it
+      # carries no test password and no enabled sshd. The harness logs in to
+      # its live session with a per-run key over vsock instead (#1448).
+      - name: Compose production ISO
         env:
           IMAGE_REF: ${{ matrix.ref }}
           UTAH_ISO_WORKDIR: ${{ runner.temp }}
         run: |
           set -euo pipefail
           bash iso/scripts/build-iso.sh "$IMAGE_REF" "$PWD/output/utah-live.iso" \
-            "Utah CI Live" 1 "$IMAGE_REF" 2>&1 | tee evidence/iso-build.log
+            "Utah Live" 0 "$IMAGE_REF" 2>&1 | tee evidence/iso-build.log
       - name: Run existing LUKS install and desktop test
         env:
           IMAGE_REF: ${{ matrix.ref }}
@@ -213,6 +221,7 @@ jobs:
           # services and default Flatpaks: the repeat-boot proof #19 needs
           # on every candidate, not only on a dispatched review VM.
           UTAH_E2E_REPEAT_BOOT: "1"
+          UTAH_E2E_LIVE_SSH: vsock
         run: |
           set -euo pipefail
           bash iso/scripts/luks-e2e.sh "$PWD/output/utah-live.iso" "$IMAGE_REF" \
@@ -224,7 +233,8 @@ jobs:
           BUILD_RUN: ${{ needs.resolve.outputs.run }}
         run: |
           set -euo pipefail
-          sha256sum output/utah-live.iso > evidence/iso.sha256
+          (cd output && sha256sum utah-live.iso > utah-live.iso.sha256)
+          cp output/utah-live.iso.sha256 evidence/iso.sha256
           jq -n --arg image "$IMAGE_REF" --arg sha "$SOURCE_SHA" \
             --arg build "$BUILD_RUN" --arg run "$GITHUB_RUN_ID" \
             '{image:$image,source_sha:$sha,build_run:$build,e2e_run:$run}' \
@@ -249,11 +259,30 @@ jobs:
           if-no-files-found: error
           retention-days: 30
           path: docs/verification/
-      # Never upload debug ISOs or test disks: they contain test passwords.
+      # Kept only when this leg passed, so a retained ISO is media that booted
+      # live, installed offline to LUKS and reached a desktop -- these bytes,
+      # not a rebuild. "Production" names the DEBUG=0 build, not shippable
+      # media: build-iso.sh applies `enforcing=0 console=ttyS0,115200n8` for
+      # every DEBUG value, so it boots SELinux-permissive. Whether the live
+      # environment ships that way is a product decision tracked in #186
+      # alongside signing and Secure Boot; a green job here is not evidence
+      # the media is release-ready. Multi-GB per flavor per dispatch: revisit
+      # the retention window before widening the matrix.
+      - name: Retain the tested production ISO
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: production-iso-${{ matrix.image }}
+          retention-days: 3
+          if-no-files-found: error
+          path: |
+            output/utah-live.iso
+            output/utah-live.iso.sha256
+      # Never upload the test disk: it carries the test LUKS passphrase and
+      # account password, and the vsock key stays in the work directory.
 
   # Prove a booted machine can move from the last promoted build to this one
-  # and back again: install the baseline (:testing before this run) from a
-  # debug live ISO, stage the candidate with bootc, reboot into it, roll back,
+  # and back again: install the baseline (:testing before this run) from its
+  # production live ISO, stage the candidate with bootc, reboot into it, roll back,
   # and reboot into the baseline (iso/scripts/lifecycle-e2e.sh,
   # docs/skills/lifecycle-e2e.md). Main flavor only for now; composefs can be
   # a second matrix entry (UTAH_E2E_COMPOSEFS_BACKEND=1) once #1131 lands.
@@ -294,10 +323,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y podman skopeo uidmap slirp4netns fuse-overlayfs \
             squashfs-tools xorriso dosfstools mtools qemu-system-x86 qemu-utils \
-            ovmf sshpass ffmpeg tesseract-ocr
+            ovmf sshpass socat ffmpeg tesseract-ocr
           test -c /dev/kvm
           sudo chmod a+rw /dev/kvm
           test -r /dev/kvm && test -w /dev/kvm
+          # See the luks job: the install phase logs in to the live ISO over vsock.
+          sudo modprobe vhost_vsock
+          sudo chmod a+rw /dev/vhost-vsock
+          test -w /dev/vhost-vsock
           mkdir -p output evidence
           df -h .
       - name: Name the baseline and candidate digests
@@ -327,16 +360,17 @@ jobs:
           podman pull "$BASELINE_REF"
           podman logout ghcr.io
       # The ISO installs its payload under the baseline ref, which phase 1 of
-      # the harness checks the booted deployment tracks. DEBUG=1 provisions
-      # the utahtest account the harness logs in with.
-      - name: Compose disposable debug ISO of the baseline
+      # the harness checks the booted deployment tracks. The installer recipe,
+      # not the ISO, provisions the utahtest account the harness logs in with,
+      # so this is DEBUG=0 media like the luks job's.
+      - name: Compose production ISO of the baseline
         env:
           BASELINE_REF: ${{ needs.resolve.outputs.lifecycle_baseline }}
           UTAH_ISO_WORKDIR: ${{ runner.temp }}
         run: |
           set -euo pipefail
           bash iso/scripts/build-iso.sh "$BASELINE_REF" "$PWD/output/utah-live.iso" \
-            "Utah CI Live" 1 "$BASELINE_REF" 2>&1 | tee evidence/iso-build.log
+            "Utah CI Live" 0 "$BASELINE_REF" 2>&1 | tee evidence/iso-build.log
       - name: Run the upgrade and rollback lifecycle
         env:
           BASELINE_REF: ${{ needs.resolve.outputs.lifecycle_baseline }}
@@ -345,6 +379,7 @@ jobs:
           UTAH_LIFECYCLE_POLICY: bootc
           UTAH_LIFECYCLE_RAM: "6144"
           UTAH_LIFECYCLE_CPUS: "2"
+          UTAH_E2E_LIVE_SSH: vsock
         run: |
           set -euo pipefail
           bash iso/scripts/lifecycle-e2e.sh "$PWD/output/utah-live.iso" \
@@ -364,15 +399,15 @@ jobs:
             ${{ runner.temp }}/utah-lifecycle-e2e/*.log
             ${{ runner.temp }}/utah-lifecycle-e2e/install/*.log
             ${{ runner.temp }}/utah-lifecycle-e2e/install/screenshots/
-      # Never upload debug ISOs or test disks: they contain test passwords.
+      # Never upload test disks: they carry the test passphrase and password.
 
   # Build the main image with tuna-os/tacklebox and prove the live-boot path:
   # the ISO comes up and the UTAH_LIVE_READY marker appears on serial (#229).
   # build-iso-tacklebox.sh runs two stages: a rootless Flatpak bake (bwrap
   # needs the userns that tacklebox's rootful customize containers lack),
   # then root assembly with configure-live.sh as the live_customize script.
-  # This is a DEBUG=1 build (test sshd/password), so unlike production-iso
-  # below the ISO itself is never uploaded -- diagnostics only.
+  # This is a DEBUG=1 build (test sshd/password), so unlike the luks job's
+  # production ISO the ISO itself is never uploaded -- diagnostics only.
   tacklebox-iso:
     needs: [resolve, verify-provenance]
     runs-on: ubuntu-26.04
@@ -454,73 +489,6 @@ jobs:
             evidence/
             ${{ runner.temp }}/utah-tbx-boot/serial.log
 
-  # Test credentials are only present in the DEBUG=1 ISO above. Build this
-  # artifact after the whole matrix passes, so a retained ISO is production
-  # media and every configured image has completed its offline-install gate.
-  production-iso:
-    needs: [resolve, luks]
-    runs-on: ubuntu-26.04
-    timeout-minutes: 90
-    permissions:
-      contents: read
-      packages: read
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        timeout-minutes: 10
-        with:
-          ref: ${{ needs.resolve.outputs.sha }}
-          persist-credentials: false
-      - name: Prepare production ISO host
-        timeout-minutes: 40
-        run: |
-          set -euo pipefail
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
-          sudo apt-get update
-          sudo apt-get install -y podman skopeo uidmap slirp4netns fuse-overlayfs \
-            squashfs-tools xorriso dosfstools mtools
-          mkdir -p output
-          df -h .
-      - name: Pull exact published payload
-        timeout-minutes: 20
-        env:
-          GH_TOKEN: ${{ github.token }}
-          IMAGE_REF: ${{ matrix.ref }}
-        run: |
-          set -euo pipefail
-          echo "$GH_TOKEN" | podman login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
-          podman pull "$IMAGE_REF"
-          podman logout ghcr.io
-      - name: Compose production ISO and checksum
-        env:
-          IMAGE_REF: ${{ matrix.ref }}
-          UTAH_ISO_WORKDIR: ${{ runner.temp }}
-        run: |
-          set -euo pipefail
-          bash iso/scripts/build-iso.sh "$IMAGE_REF" "$PWD/output/utah-live.iso" \
-            "Utah Live" 0 "$IMAGE_REF"
-          (cd output && sha256sum utah-live.iso > utah-live.iso.sha256)
-      # "production" is the DEBUG=0 build, not shippable media. DEBUG=0 keeps
-      # the test credentials and sshd path out (iso/live/src/configure-live.sh),
-      # so nothing secret is retained -- but build-iso.sh applies
-      # `enforcing=0 console=ttyS0,115200n8` for every DEBUG value, so this
-      # boots SELinux-permissive. Whether the live environment ships that way
-      # is a product decision tracked in #186 alongside signing and Secure
-      # Boot; a green job here is not evidence the media is release-ready.
-      # Multi-GB per flavor per dispatch at 30 days: revisit the window before
-      # widening the matrix.
-      - name: Retain production ISO
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-        with:
-          name: production-iso-${{ matrix.image }}
-          retention-days: 3
-          if-no-files-found: error
-          path: |
-            output/utah-live.iso
-            output/utah-live.iso.sha256
-
   # Run the testsuite against each exact built digest, in parallel with the
   # ISO jobs. It surfaces scenario results and desktop screenshots for every
   # flavor, and it gates promotion: promote-to-testing needs it, so a red leg
@@ -564,7 +532,7 @@ jobs:
   # or skipped leg skips this job, so no evidence is recorded and no tag moves.
   # There is no override; fix or scope the failing scenario upstream instead.
   promote-to-testing:
-    needs: [resolve, luks, production-iso, lifecycle, testsuite]
+    needs: [resolve, luks, lifecycle, testsuite]
     # The lifecycle job may only be absent when resolve skipped it on purpose
     # (:testing already serves the candidate, or does not exist yet); a
     # failed, cancelled or upstream-skipped lifecycle blocks this job. The
@@ -573,7 +541,6 @@ jobs:
       ${{ !cancelled()
       && needs.resolve.result == 'success'
       && needs.luks.result == 'success'
-      && needs.production-iso.result == 'success'
       && needs.testsuite.result == 'success'
       && (needs.lifecycle.result == 'success'
       || (needs.lifecycle.result == 'skipped' && needs.resolve.outputs.lifecycle == 'skip')) }}
@@ -602,8 +569,8 @@ jobs:
           command -v skopeo >/dev/null || { sudo apt-get update && sudo apt-get install -y skopeo; }
           echo "$GH_TOKEN" | skopeo login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
       # Recorded before the ratchet decides, because it is true whatever the
-      # ratchet says: this exact digest passed LUKS, production-ISO and the
-      # testsuite. The release gate reads it back per digest and per commit.
+      # ratchet says: this exact digest passed LUKS on its production ISO and
+      # the testsuite. The release gate reads it back per digest and per commit.
       - name: Record E2E evidence for the tested digests
         if: github.ref == 'refs/heads/main'
         env:
@@ -637,7 +604,7 @@ jobs:
           done < <(jq -r '.include[].ref' <<< "$MATRIX")
 
   documentation:
-    needs: [resolve, luks, production-iso, lifecycle]
+    needs: [resolve, luks, lifecycle]
     # The lifecycle job may only be absent when resolve skipped it on purpose
     # (:testing already serves the candidate, or does not exist yet); a
     # failed, cancelled or upstream-skipped lifecycle blocks this job.
@@ -645,7 +612,6 @@ jobs:
       ${{ !cancelled()
       && needs.resolve.result == 'success'
       && needs.luks.result == 'success'
-      && needs.production-iso.result == 'success'
       && (needs.lifecycle.result == 'success'
       || (needs.lifecycle.result == 'skipped' && needs.resolve.outputs.lifecycle == 'skip')) }}
     runs-on: ubuntu-26.04

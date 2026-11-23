@@ -274,7 +274,7 @@ Recreate `target.qcow2` (and copy a fresh `vars.fd`) to install again.
 | Metric | Image-based | ISO/fisherman (`luks` job, same digest) |
 |---|---|---|
 | Medium | raw and allocated bytes after bootc install and after shrinking; compressed bytes and pack/unpack time per format | `ISO ready` line; `production-iso-<image>` artifact bytes |
-| Build time | image layer + `bootc install` | "Compose disposable debug ISO" step |
+| Build time | image layer + `bootc install` | "Compose production ISO" step |
 | Install time | GUI confirm-to-done | `=== Phase 3/7` to `=== Phase 4/7` |
 | Stages | live boot, install, first boot unlock, initial setup, first boot desktop, bootc switch, bootc rollback | phases 1-7 (failed phase from the last marker) |
 | SELinux, failed units | `getenforce`, `systemctl --failed` on every boot | live permissive by construction (#22); not recorded |

@@ -432,9 +432,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y podman skopeo uidmap slirp4netns fuse-overlayfs \
             squashfs-tools xorriso dosfstools mtools qemu-system-x86 qemu-utils \
-            ovmf sshpass ffmpeg tesseract-ocr
+            ovmf sshpass socat ffmpeg tesseract-ocr
           test -c /dev/kvm
           sudo chmod a+rw /dev/kvm
+          # The LUKS harness logs in to the DEBUG=0 live session over AF_VSOCK
+          # with a per-run key (its LIVE_SSH setting).
+          sudo modprobe vhost_vsock
+          sudo chmod a+rw /dev/vhost-vsock
+          test -w /dev/vhost-vsock
           mkdir -p evidence output
           df -h .
       - name: Build candidate locally and record immutable bytes
@@ -456,7 +461,7 @@ jobs:
             --arg manifest "$(cut -d ' ' -f1 evidence/payload-manifest.sha256)" \
             '{source_sha:$sha,flavor:$flavor,vm_run:$run,image_ref:$ref,manifest_sha256:$manifest,publication:false}' \
             > evidence/provenance.json
-      - name: Compose offline debug ISO from the local candidate
+      - name: Compose offline production ISO from the local candidate
         env:
           UTAH_ISO_WORKDIR: ${{ runner.temp }}
           # Test-only compression keeps every flavor under the ISO ceiling so
@@ -470,7 +475,7 @@ jobs:
           image_name=$(python3 scripts/flavors.py image "$REVIEW_FLAVOR")
           rc=0
           bash iso/scripts/build-iso.sh "localhost/${image_name}:testing" "$PWD/output/utah-review.iso" \
-            "Utah Review $REVIEW_FLAVOR" 1 "$image_ref" 2>&1 | tee evidence/iso-build.log || rc=$?
+            "Utah Review $REVIEW_FLAVOR" 0 "$image_ref" 2>&1 | tee evidence/iso-build.log || rc=$?
           # Record the size before honoring the budget guard so diagnostics
           # still answer how far above/below budget the image landed.
           if [ -f output/utah-review.iso ]; then
@@ -492,6 +497,7 @@ jobs:
           UTAH_E2E_EXPECT_FLAVOR: ${{ matrix.flavor }}
           UTAH_E2E_README: none
           UTAH_E2E_COMPOSEFS_BACKEND: ${{ inputs.review_composefs_backend && '1' || '0' }}
+          UTAH_E2E_LIVE_SSH: vsock
         run: |
           set -euo pipefail
           image_ref=$(cat evidence/image-ref.txt)

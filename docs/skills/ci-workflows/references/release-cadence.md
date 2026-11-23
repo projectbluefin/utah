@@ -14,8 +14,8 @@ The cadence is RFC'd in #336. What runs today:
   job returns, which is the path that actually produces the images.
 - `:testing` is the latest E2E-green commit, not the branch tip, and it only
   moves forward. The tags move in `post-testing-e2e.yml`, after the LUKS ISO
-  matrix, the production-ISO composition and the testsuite matrix all pass
-  (#1329), and only if the tested
+  matrix (run on the production ISO it retains) and the testsuite matrix
+  both pass (#1329), and only if the tested
   commit is the promoted commit or a descendant of it
   (`scripts/promotion-ratchet.py`; see `iso-e2e.md`). Merges to `main` while an
   E2E runs are safe and never block it: contribution is never paused to

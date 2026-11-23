@@ -10,15 +10,28 @@ to finish and still requires a successful conclusion before reading artifacts.
 wrong branches/workflows, mutable references, conflicting digests, and missing
 flavors. The expected set comes from `scripts/flavors.py images`.
 
-Each configured image is pulled by digest, composed into a disposable debug
-ISO, and passed to the existing `iso/scripts/luks-e2e.sh`. Both guests have
-restricted networking. CI requires KVM, PNG screenshots, and OCR evidence
-that fastfetch ran in the graphical terminal. The live-boot gate observes the
-`UTAH_LIVE_READY` ready marker on the serial console in addition to
-`graphical.target`: the marker is written only by the `utah-live-ready.service`
-oneshot that runs after `display-manager.service`, so it catches a boot that
-stopped just short of a usable display. Test credentials are confined to the
-disposable ISO/disk; neither is uploaded or released.
+Each configured image is pulled by digest, composed into a `DEBUG=0`
+(production) ISO, and passed to the existing `iso/scripts/luks-e2e.sh`. Both
+guests have restricted networking. CI requires KVM, PNG screenshots, and OCR
+evidence that fastfetch ran in the graphical terminal. The live-boot gate
+observes the `UTAH_LIVE_READY` ready marker on the serial console in addition
+to `graphical.target`: the marker is written only by the
+`utah-live-ready.service` oneshot that runs after `display-manager.service`,
+so it catches a boot that stopped just short of a usable display.
+
+The production ISO has no test password and no enabled sshd, so the harness
+reaches its live session over AF_VSOCK instead (#1448, `UTAH_E2E_LIVE_SSH:
+vsock`): it makes a fresh ed25519 key per run, passes it to the guest as the
+`ssh.ephemeral-authorized_keys-all` systemd credential in an SMBIOS type 11
+string, and logs in as root through the `sshd-vsock.socket` that
+systemd-ssh-generator starts in any VM. The runner loads `vhost_vsock` and
+opens `/dev/vhost-vsock` to the job user, as it does `/dev/kvm`; the host side
+connects with `systemd-ssh-proxy` (socat with vsock support is the fallback).
+This relies on the live boot being permissive (below): on an enforcing
+installed Utah system sshd is denied the credential's key, so the installed
+disk keeps its TCP login as the `utahtest` account this run's installer recipe
+creates. Test credentials -- that account's password and the LUKS passphrase
+-- live only on the disposable disk, which is never uploaded.
 
 The installed disk's first boot must show Plymouth's graphical passphrase
 prompt with the payload's watermark (`iso/scripts/plymouth-prompt.py`:
@@ -30,14 +43,15 @@ The harness therefore keeps `rhgb` on the installed entry and drops only
 `quiet`; Plymouth then holds the console until GDM starts, so the graphical
 target is read over SSH as well as from serial.
 
-Only after the entire LUKS matrix succeeds, `production-iso` composes a fresh
-`DEBUG=0` x86_64 UEFI ISO from each same digest, writes its SHA-256 checksum,
-and retains both as a 3-day Actions artifact. It is deliberately an artifact,
-not a release: destination, flavor policy, naming, signing, and Secure Boot
-are product decisions tracked by #186. Production-ISO composition is a
-promotion prerequisite, so a failed production build cannot advance testing
-tags. Debug ISOs and guest disks are never uploaded because they contain test
-credentials.
+The `luks` job keeps the ISO it tested: once its leg passes, it uploads those
+same bytes and their SHA-256 checksum as the `production-iso-<image>` 3-day
+Actions artifact, so the retained media is exactly what booted live, installed
+offline and reached a desktop, not a later rebuild. A leg that fails uploads
+no ISO. Artifacts are per leg, so a passing flavor keeps its ISO even when
+another flavor fails; promotion still needs every leg. It is deliberately an
+artifact, not a release: destination, flavor policy, naming, signing, and
+Secure Boot are product decisions tracked by #186. Guest disks are never
+uploaded because they contain test credentials.
 
 **"Production" names the `DEBUG=0` build, not shippable media.** `DEBUG=0`
 does exclude the test credentials and sshd path (`iso/live/src/configure-live.sh`),
@@ -50,8 +64,8 @@ That was unremarkable while ISOs were disposable; retaining them under the
 name "production" makes it worth stating plainly. Running
 the live environment permissive is a product decision, and it belongs to #186
 along with signing and Secure Boot — it must be settled there before any of
-these ISOs reach users. Do not treat a green `production-iso` job as evidence
-that the media is release-ready.
+these ISOs reach users. Do not treat a green `luks` job's retained ISO as
+evidence that the media is release-ready.
 
 Each retained ISO is multi-GB (5.5 GB on average; the size budget in
 `iso/scripts/build-iso.sh` is the ceiling), per flavor, per dispatch. At 30-day
@@ -79,7 +93,7 @@ failure still blocks that acceptance and tag promotion.
 Every matrix job preserves build/test logs, serial logs, and screenshots,
 including on failure. Only passing jobs upload `docs/verification` with the
 source commit, original build run, E2E run, image digest and ISO checksum.
-The promotion job depends on the LUKS, production-ISO and testsuite matrices
+The promotion job depends on the LUKS and testsuite matrices
 (#1329): a red or skipped leg skips it, so nothing is recorded and no tag
 moves. Then it runs the ratchet described next.
 
@@ -180,7 +194,7 @@ there.
 **Upgrade and rollback gate.** The `lifecycle` job proves a booted machine
 can move from the last promoted build to this one and back. `resolve` reads the
 digest `:testing` serves before the run (the baseline) and compares it with the
-run's `utah` digest (the candidate). The job builds a debug ISO of the baseline,
+run's `utah` digest (the candidate). The job builds a production ISO of the baseline,
 then runs `iso/scripts/lifecycle-e2e.sh`: install the baseline, `bootc switch`
 to the candidate, reboot into it with a graphical check, roll back, and reboot
 into the baseline. It runs for `utah` on the default install backend only; a
@@ -202,15 +216,14 @@ A separate least-privilege job publishes the main desktop's record to a
 `verification` branch and proposes a documentation PR that relinks the README
 evidence block to it. The branch is an orphan: each passing run force-pushes it
 as a single commit holding only the newest record, so screenshots never
-accumulate in `main`'s history and clones stop growing. It also depends on
-`production-iso`, so a failed production-ISO composition blocks this relink PR
-too, not just testing-tag promotion — the record still has to wait on the whole
-matrix composing cleanly. It updates only the README evidence link, preserving
+accumulate in `main`'s history and clones stop growing. It depends on the
+`luks` matrix, so a failed LUKS leg blocks this relink PR too, not just
+testing-tag promotion. It updates only the README evidence link, preserving
 the current README's other content; the superseded `docs/verification/` path is
 replaced by the branch. The README links to the whole run, which also holds the
 independent testsuite legs; those do not gate the record and may still be
 running or red, so the README says so without predicting either outcome. The
-evidence update requires the LUKS and production-ISO jobs to pass.
+evidence update requires the LUKS jobs to pass.
 The job token only pushes the `verification` branch. Trusted `main` alone
 mints a repository-scoped Mergeraptor App token (contents and pull-request
 write) to open the PR, so its normal pull_request checks run and Hive's
