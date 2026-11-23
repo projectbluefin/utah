@@ -49,12 +49,21 @@ def prepare(target, flavors, registry, github, runner=subprocess.run):
     return plan
 
 
+def active_images():
+    """Active flavors as [{"image": ...}], from the same source as promote."""
+    out = subprocess.run([sys.executable, str(Path(__file__).with_name("flavors.py")), "images"],
+                         capture_output=True, text=True, check=False)
+    if out.returncode:
+        raise ratchet.PromotionError(f"cannot read flavors: {out.stderr.strip()}")
+    return json.loads(out.stdout)
+
+
 def main():
     try:
         reason = os.environ["REASON"]
         if not reason.strip():
             raise ratchet.PromotionError("a non-empty reason is required")
-        flavors = json.loads(Path("config/flavors.json").read_text())["flavors"]
+        flavors = active_images()
         plan = prepare(os.environ["TARGET"], flavors, ratchet.Registry(),
                        ratchet.GitHub(os.environ["GITHUB_REPOSITORY"]))
         notes = ["# Stable rollback plan", "", f"Actor: @{os.environ['GITHUB_ACTOR']}",

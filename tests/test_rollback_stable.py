@@ -52,6 +52,14 @@ class RollbackTests(unittest.TestCase):
                 for call in self.registry.labels.call_args_list:
                     self.assertTrue(call.args[0].endswith("@" + DIGEST))
 
+    def test_main_reads_real_flavors_config(self):
+        expected = json.loads(subprocess.run(
+            ["python3", str(ROOT / "scripts/flavors.py"), "images"],
+            capture_output=True, text=True, check=True).stdout)
+        self.assertEqual(rollback.active_images(), expected)
+        self.assertTrue(all(isinstance(f, dict) and f["image"].startswith("utah") for f in expected))
+        self.assertIn({"image": "utah"}, expected)
+
     def test_signature_failure_refuses(self):
         self.runner.return_value.returncode = 1
         with self.assertRaisesRegex(ratchet.PromotionError, "signature"):
@@ -123,7 +131,9 @@ else:
         trigger = workflow.get("on", workflow.get(True))
         self.assertEqual(list(trigger), ["workflow_dispatch"])
         self.assertIs(trigger["workflow_dispatch"]["inputs"]["dry_run"]["default"], True)
-        self.assertEqual(workflow["concurrency"], release["concurrency"])
+        self.assertNotIn("concurrency", workflow)
+        self.assertNotIn("concurrency", workflow["jobs"]["verify"])
+        self.assertEqual(workflow["jobs"]["rollback"]["concurrency"], release["concurrency"])
         self.assertFalse(any(value == "write" for value in workflow["jobs"]["verify"]["permissions"].values()))
         apply = workflow["jobs"]["rollback"]
         self.assertIn("!inputs.dry_run", apply["if"])
