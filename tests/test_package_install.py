@@ -356,9 +356,10 @@ class PackageInstallPathTests(unittest.TestCase):
             self.assertEqual(install_cmd[pk_index + 1], "PackageKit*")
             self.assertEqual(install_cmd[pk_index + 2], "install")
 
-            # Arguments after 'install' are packages followed by build deps
+            # Both preflight and installation allow older compatible candidates.
             installed_args = install_cmd[install_cmd.index("install") + 1:]
             expected_args = [
+                "--no-best",
                 "base-pkg",
                 "release-pkg",
                 "gnome-shell",
@@ -622,7 +623,7 @@ class PackageInstallPathTests(unittest.TestCase):
             install_cmd = commands[0]
             action = install_cmd[install_cmd.index("PackageKit*") + 1:]
             self.assertEqual(action, [
-                "do", "--action=install", "base-pkg", "uutils-coreutils-replace", "gnu-env",
+                "do", "--no-best", "--action=install", "base-pkg", "uutils-coreutils-replace", "gnu-env",
                 "--action=remove", "coreutils-single",
             ])
 

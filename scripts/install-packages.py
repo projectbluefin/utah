@@ -177,11 +177,16 @@ def swaps(overlay: Path) -> dict[str, str]:
 
 
 def transaction(packages: list[str], removals: list[str] | tuple[str, ...]) -> list[str]:
-    """The dnf subcommand and arguments: install, removing `removals` in the
-    same transaction (dnf5 do) when a replacement conflicts with them."""
+    """Resolve every requested package, allowing older compatible candidates.
+
+    The factory is pinned but Hummingbird rolls: its newest fido2-tools can
+    require a newer libcbor ABI than pinned QEMU. --no-best permits a coherent
+    transaction without skipping packages or erasing dependency conflicts.
+    Keep this policy shared by preflight, single-name probes and installation.
+    """
     if not removals:
-        return ["install", *packages]
-    return ["do", "--action=install", *packages, "--action=remove", *removals]
+        return ["install", "--no-best", *packages]
+    return ["do", "--no-best", "--action=install", *packages, "--action=remove", *removals]
 
 
 def transaction_resolves(result: subprocess.CompletedProcess) -> bool:

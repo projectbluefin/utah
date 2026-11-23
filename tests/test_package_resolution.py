@@ -99,7 +99,7 @@ class PackageResolutionTests(unittest.TestCase):
         rc, command = self.resolve("Transaction Summary:\nInstall 12 Packages\nOperation aborted.\n")
         self.assertEqual(rc, 0)
         self.assertEqual(command[command.index("install") + 1:],
-                         ["base", "release-specific", "shell", "manpages", "firmware",
+                         ["--no-best", "base", "release-specific", "shell", "manpages", "firmware",
                           "resolver", "compiler"])
         self.assertIn("--assumeno", command)
         self.assertIn("--disablerepo=*", command)
@@ -364,7 +364,7 @@ class ResolveOneTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(command, ["dnf5", "--assumeno", "--disablerepo=*",
                                    "--enablerepo=utah-packages",
-                                   "-x", "PackageKit*", "install", "candidate"])
+                                   "-x", "PackageKit*", "install", "--no-best", "candidate"])
         self.assertIn("UTAH_RESOLVE_ONE candidate 0", log.splitlines())
 
     def test_already_installed_counts_as_resolves(self):

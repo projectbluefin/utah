@@ -333,6 +333,15 @@ releases or emit missing-module errors with empty kernel names.
 
 ## Failure semantics
 
+The shared install transaction uses `--no-best`: the factory is digest-pinned
+but Hummingbird's repository rolls. For example, pinned QEMU may still need
+`libcbor.so.0.14` when the newest `fido2-tools` needs `libcbor.so.0.15`.
+DNF must be allowed to select an older compatible candidate from the enabled
+repositories. Preflight, unavailable probes and installation share this policy;
+it does not skip missing packages or permit broken dependencies. Do not use
+`--skip-broken`, remove contract packages, or weaken only the preflight to
+work around ABI skew.
+
 - A contract package or dependency missing from the installation transaction
   is a **build failure**. `just check-repos` reads the base and package-image
   digests from `Containerfile`, copies the same repository configuration, and
