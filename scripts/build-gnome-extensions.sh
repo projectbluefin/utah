@@ -16,9 +16,17 @@ echo "::group:: ===$(basename "$0")==="
 mv /usr/share/gnome-shell/extensions/tmp/bazaar-integration@kolunmi.github.io/src/ /usr/share/gnome-shell/extensions/bazaar-integration@kolunmi.github.io/
 
 # Blur My Shell
-make -C /usr/share/gnome-shell/extensions/blur-my-shell@aunetx
-unzip -o /usr/share/gnome-shell/extensions/blur-my-shell@aunetx/build/blur-my-shell@aunetx.shell-extension.zip -d /usr/share/gnome-shell/extensions/blur-my-shell@aunetx
-rm -rf /usr/share/gnome-shell/extensions/blur-my-shell@aunetx/build
+# Upstream moved the extension zip out of `make build` into a new `pack`
+# target (aunetx/blur-my-shell#1282). Use `pack` when the pinned Makefile
+# has it, so the old and new pins both produce the same zip.
+blur_dir="/usr/share/gnome-shell/extensions/blur-my-shell@aunetx"
+if grep -q '^pack:' "${blur_dir}/Makefile"; then
+    make -C "${blur_dir}" pack
+else
+    make -C "${blur_dir}"
+fi
+unzip -o "${blur_dir}/build/blur-my-shell@aunetx.shell-extension.zip" -d "${blur_dir}"
+rm -rf "${blur_dir}/build"
 
 # Caffeine
 # The Caffeine extension is built/packaged into a temporary subdirectory (tmp/caffeine/caffeine@patapon.info).
