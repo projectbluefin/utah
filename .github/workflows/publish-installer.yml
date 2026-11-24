@@ -37,7 +37,7 @@ concurrency:
 
 jobs:
   resolve:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     permissions:
       contents: read
@@ -74,7 +74,7 @@ jobs:
   publish:
     name: publish (${{ matrix.image }})
     needs: resolve
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 300
     permissions:
       contents: read
