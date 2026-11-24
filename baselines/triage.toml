@@ -21,6 +21,9 @@
 #                        test, example and conversion CLIs land in the image;
 #                        Fedora splits them into a -tools/-utils subpackage
 #                        that is not a desktop feature
+#   removed upstream     the shared image dropped the integration, so Utah's
+#                        snapshot no longer lists it while Dakota's still
+#                        does; drop the entry once Dakota's baseline loses it
 
 [item]
 
@@ -304,3 +307,6 @@ xmlto = { status = "waived", reason = "Developer toolchain (#1263)" }
 "/usr/bin/manette-test" = { status = "waived", reason = "Developer toolchain (#1263)" }
 "/usr/bin/rpcgen" = { status = "waived", reason = "Developer toolchain (#1263)" }
 "/usr/bin/substrings.pl" = { status = "waived", reason = "Developer toolchain (#1263): hyphenation dictionary build script" }
+
+# Removed upstream: the shared image dropped it, Dakota's baseline still lists it.
+"/usr/lib/systemd/user/damask.service" = { status = "waived", reason = "Removed upstream: the Damask wallpaper app was dropped in projectbluefin/common#1685; Dakota's baseline still lists the unit until its next common update" }
