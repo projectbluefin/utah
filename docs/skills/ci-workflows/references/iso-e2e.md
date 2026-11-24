@@ -301,8 +301,8 @@ granted `/dev/kvm`: GitHub-hosted runners do not make it readable by the job
 user, so the gate logged `No /dev/kvm; falling back to TCG` and booted
 emulated. Every job that runs
 QEMU (`luks`, `lifecycle`, `tacklebox-iso`) runs `sudo chmod a+rw /dev/kvm`
-in its "Prepare ISO and QEMU host" step, and `tests/test_iso_ci.py` asserts
-that. Under KVM the `luks` job's live boot reaches the marker in about
+in its "Prepare ISO and QEMU host" step, and `tests/test_iso_ci_boot_gates.py`
+asserts that. Under KVM the `luks` job's live boot reaches the marker in about
 35 seconds.
 
 ### Utah image provenance

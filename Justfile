@@ -46,6 +46,11 @@ check:
     # the E2E matrix, and iso/scripts/live-kernel.py, which runs mid-ISO-build
     # -- so a parse error in them surfaced minutes into a build instead of here.
     python3 scripts/check-script-syntax.py
+    # The "definition of green" contract: every declared blocking gate must
+    # really block (see .github/green-criteria.yml). Fails before a build if a
+    # gate is missing, skippable, or stale.
+    python3 scripts/green_contract.py --repo .
+    test -f .github/green-criteria.yml
     test -f Containerfile
     test -f packages/base.toml
     test -f packages/utah.toml

@@ -1,0 +1,98 @@
+# Machine-readable definition of "green" for projectbluefin/utah.
+#
+# A gate is a (workflow, job, optional script) triple that proves one
+# acceptance criterion. This file is the single source of truth for three CI
+# tools:
+#
+#   scripts/green_contract.py   -- fails `just check` when a declared blocking
+#                                  gate does not really block: its job is not in
+#                                  the promotion job's needs, it can fail
+#                                  silently, its workflow never runs, or its
+#                                  scheduled cadence is slower than its
+#                                  freshness_sla_days.
+#   scripts/graduation-check.py -- each week, lists advisory gates that have
+#                                  passed long enough to become blocking.
+#   scripts/detect-dead-gates.py -- a TAP report of every gate whose latest
+#                                  run is red or that never produced a pass.
+#
+# The enforcement field is the contract:
+#
+#   blocking      the gate must be in the promotion job's `needs` and must not
+#                 be skippable. If it is missing or skippable, green is not
+#                 green.
+#   advisory      the gate is evidence that is not yet trusted to stop a
+#                 release. It is checked for existence and reachability but is
+#                 not required to block promotion.
+#   unimplemented the gate has no working job yet.
+#
+# A gate may back more than one criterion (image-installer.yml's e2e job backs
+# both image_installer_gnome_setup and composefs_lifecycle).
+
+version: 1
+
+rule:
+  summary: >
+    Green means every declared gate actually ran and passed. A gate that is
+    declared but never runs, is skipped, or fails silently is not green, and a
+    gate whose scheduled run is older than its freshness window is stale.
+  never_tested_is_not_green: true
+  skipped_is_not_green: true
+  stale_is_not_green: true
+
+graduation:
+  summary: >
+    An advisory gate graduates when it has passed on its own in several
+    consecutive runs and has failed in only a small share of recent runs.
+    Each criterion may tighten these numbers.
+  required_consecutive_passes: 3
+  maximum_failure_rate: 0.10
+  lookback_runs: 20
+
+criteria:
+  - id: installed_lifecycle
+    name: An installed system can update, rebase and roll back
+    proves: >
+      The tested commit upgrades, rebases and rolls back on a real installed
+      system without losing the user's data.
+    enforcement: blocking
+    freshness_sla_days: 2
+    gates:
+      - workflow: .github/workflows/post-testing-e2e.yml
+        job: lifecycle
+        script: iso/scripts/lifecycle-e2e.sh
+    notes: >
+      The lifecycle job tests the ostree upgrade and the rebase/rollback paths
+      on installed media. It runs from post-testing-e2e.yml, which the merge
+      queue and trusted dispatch feed into promote-to-testing.
+
+  - id: image_installer_gnome_setup
+    name: The experimental image-based installer writes a working desktop
+    proves: >
+      The image-based installer writes a bootable system and GNOME initial
+      setup completes on it.
+    enforcement: advisory
+    freshness_sla_days: 8
+    gates:
+      - workflow: .github/workflows/image-installer.yml
+        job: e2e
+    notes: >
+      Advisory by intent: the installer is experimental and its runs are not
+      yet required to stop a release.
+
+  - id: composefs_lifecycle
+    name: A composefs system can update and roll back
+    proves: >
+      A composefs-backed system upgrades and rolls back like the ostree
+      system, so its lifecycle is proven before it is trusted to gate a
+      release.
+    enforcement: advisory
+    freshness_sla_days: 14
+    graduation:
+      required_consecutive_passes: 2
+    gates:
+      - workflow: .github/workflows/image-installer.yml
+        job: e2e
+    notes: >
+      composefs is not yet in the lifecycle matrix, so its upgrade path is
+      currently exercised only through the image-installer e2e job. It
+      graduates when that job has passed long enough on its own.
