@@ -486,11 +486,14 @@ preserve_failed_disk_diagnostics() {
 # the mapping open, so whatever held it is still in the guest now and gone
 # once QEMU is killed. iso/scripts/target-holders.sh reads metadata only.
 # Written under WORK, which CI already uploads as "*.log"; the report's
-# sections up to the journal also go to the job log. `timeout` because a
-# guest stuck in filesystem I/O must not hang the harness past its deadline.
+# sections up to the journal also go to the job log. It logs in over the
+# route phase 1 settled on (use_live_route), so the vsock route that tests
+# the production ISO gets the report too. `timeout` because a guest stuck in
+# filesystem I/O must not hang the harness past its deadline; it wraps the
+# route's command itself because timeout cannot run the ssh_live function.
 keep_target_holders() {
     local since="$1" out="${WORK}/install-target-holders-$(date +%Y%m%d-%H%M%S).log"
-    timeout 300 sshpass -p live ssh "${SSH_OPTS[@]}" -p "${SSH_PORT}" liveuser@127.0.0.1 \
+    timeout 300 "${LIVE_SSH_CMD[@]}" "${LIVE_LOGIN}" \
         "sudo bash -s -- '${since}' btrfs" < "${ROOT}/iso/scripts/target-holders.sh" > "${out}" 2>&1 || true
     sed '/^=== systemd unit activity/,$d' "${out}" >&2
     echo "  installer target holders kept (metadata only): ${out}" >&2
