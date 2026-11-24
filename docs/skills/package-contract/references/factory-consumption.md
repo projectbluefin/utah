@@ -74,6 +74,22 @@ check does not mean the triage cleanup is complete. If the refresh is
 still in an open PR, validate the cleanup with its snapshots and land
 the refresh first; the old snapshots still require those triage entries.
 
+A waiver can also be recorded *before* the refresh that exposes the gap
+lands, and then `check` on `main` reports it under "no longer gaps"
+even though the pending refresh needs it. That happens when the shared
+image drops a file the other image still ships: `main`'s committed Utah
+snapshot predates the removal, so the item is not a gap there yet, and
+the advisory asks for a drop the next refresh would contradict. Land the
+waiver on `main` anyway and ignore that one notice — the refresh picks
+it up, because `just baselines` rewrites only the snapshot files and
+`baselines/GAP.md`, never `baselines/triage.toml`, so the refresh
+workflow's branch carries `main`'s triage file unchanged and the gap
+resolves against it. The contract job checks out the pull request's
+merge ref (the PR head merged into `main`), so `main`'s triage file is
+inside the tree CI validates and the refresh passes. Drop the entry when
+the item stops being a gap, which for a removed upstream file means when
+the other image's baseline loses it too.
+
 To triage new gaps, map each Dakota path to the package that ships it. Start a
 container from the pinned `BASE_IMAGE` with the factory's metadata layer
 mounted at `/etc/utah-packages` and `packages/` at `/etc/yum.repos.d`, the

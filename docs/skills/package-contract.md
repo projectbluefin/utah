@@ -1,7 +1,7 @@
 ---
 name: package-contract
-version: "2.0"
-last_updated: "2026-11-20"
+version: "2.1"
+last_updated: "2026-11-24"
 id: package-contract
 one_line_purpose: Maintain Utah's base manifest, overlay and Dakota parity triage.
 entry_point: docs/skills/package-contract.md
@@ -372,6 +372,14 @@ even where Dakota builds them natively), `unavailable` for names in `[unavailabl
 Closing a gap means shipping the files Utah lacks,
 usually by adding the Fedora package to `base.toml` or `utah.toml`, then
 re-measuring and dropping the entry `check` reports as no longer a gap.
+
+A file the shared image dropped is waived instead: the other image still
+ships it, so the item is a gap Utah cannot close by shipping anything. Record
+that waiver on `main` even when `check` there reports the entry under "no
+longer gaps" — `main`'s snapshot predates the removal, so the pending refresh
+is what makes it a gap, and the refresh carries `main`'s triage file into its
+branch. See
+[closing baseline gaps](package-contract/references/factory-consumption.md#closing-baseline-gaps).
 
 Never append rows from a newer image to an older snapshot: `image.txt` must
 describe the same image as its `surface.tsv`; after a refresh,
