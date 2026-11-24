@@ -74,6 +74,26 @@ the recovery key. Scheduled and PR CI runs always enable TPM; the TPM-less
 path requires a manual workflow dispatch with `tpm: false` or a local run
 without `--tpm`. Do not cite a default CI pass as TPM-less coverage.
 
+The GUI harness waits up to 300 seconds for any recognized setup page before
+sending Esc to dismiss the overview, settling for three seconds, and maximizing
+the installer window. Keep this startup budget separate from the page loop's
+shorter unknown-page timeout: an empty accessibility snapshot during slow
+application startup must not trigger clicks against fallback window offsets.
+
+`iso/raw/raw_e2e.py` classifies visible gnome-setup pages on each poll,
+accepting free-space and plain-confirmation routes. Destructive confirmation
+requires `/dev/vdb` exactly; free-space selection never falls back to erase.
+Recovery keys come from the key-shaped label; the QR dialog takes precedence
+over its parent page. Each distinct page gets one screenshot in the manifest.
+Run `python3 -m unittest discover -s tests -p 'test_setup_pages.py'` for
+host-only route replays; these do not replace VM runs through both routes.
+Unknown pages time out after 60 seconds, interactive pages after 120 seconds,
+and progress after an hour, within a 70-minute total budget. Missing controls
+save `atspi-gs-miss.json` and log button names and showing/sensitive states.
+Failures save `atspi-gs-failure.json` (including hidden nodes), a
+`fail-setup-failure` screenshot, the installer log, and the sysinstall journal.
+Treat evidence as sensitive: recovery pages and snapshots contain the disk key.
+
 ### composefs backend
 
 The medium is built with bootc's composefs backend when the image's kernel

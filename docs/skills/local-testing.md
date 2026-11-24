@@ -393,11 +393,14 @@ A target, slice or device has no `Result=` property, so only its
 none of its instances may have failed.
 `flatpak-preinstall`, `ublue-system-setup` and `ublue-user-setup` must
 also have run. `brew-preinstall.service` needs the network, so the offline VM
-only checks that it is enabled. When `UTAH_E2E_EXPECT_FLAVOR` is set (the
-`review_vm` workflow), the harness also checks the Flathub remote, then
-performs a graceful second boot, unlocks the same LUKS disk, and rechecks
-services, Flathub, and the default Flatpaks. This is the repeat-boot
-idempotence gate; plain `just luks-test` remains a single boot.
+only checks that it is enabled. When `UTAH_E2E_REPEAT_BOOT=1` (set by the
+post-testing `luks` job for every candidate) or `UTAH_E2E_EXPECT_FLAVOR` (the
+`review_vm` and candidate workflows) is set, the harness also checks the
+Flathub remote, then performs a graceful second boot, unlocks the same LUKS
+disk, and rechecks services, Flathub, and the default Flatpaks. This is the
+repeat-boot idempotence gate. It never runs on the lifecycle baseline; plain
+`just luks-test` remains a single boot unless `UTAH_E2E_REPEAT_BOOT=1` is
+exported.
 Read the recipe and script prerequisites before running it: it creates test
 accounts and requires local QEMU/KVM access, not a production installation.
 

@@ -16,6 +16,10 @@
 # because it deploys asynchronously on first boot and checking right after
 # login undercounts it. Then every unit the installed contract's [services]
 # lists as enabled is checked: still enabled after first boot, and not failed.
+# With UTAH_E2E_REPEAT_BOOT=1 (or a review flavor), the installed system then
+# reboots gracefully, unlocks again, and the same services, the Flathub remote
+# and the default Flatpaks are rechecked, proving first-boot work repeats
+# safely (#19).
 #
 # A failure in phase N exits 10 + N; E2E_WALL_CLOCK_DEADLINE (epoch seconds)
 # makes the harness fail with exit 75 and its evidence once it passes, and a
@@ -105,6 +109,13 @@ VNC_INSTALLED="${UTAH_E2E_VNC_INSTALLED:-3}"
 # installs. Install, boot, unlock, login, the desktop and the default Flatpak
 # set still run.
 BASELINE_INSTALL="${UTAH_E2E_BASELINE:-0}"
+# UTAH_E2E_REPEAT_BOOT=1: after the first-boot checks, reboot the installed
+# system once more and recheck first-boot state (#19). The post-testing luks
+# job sets it for every candidate; UTAH_E2E_EXPECT_FLAVOR (review VM) implies
+# it. Plain `just luks-test` stays a single boot. Never on the baseline: the
+# repeat boot reruns the contract-service gate.
+REPEAT_BOOT="${UTAH_E2E_REPEAT_BOOT:-0}"
+[[ -n "${UTAH_E2E_EXPECT_FLAVOR:-}" ]] && REPEAT_BOOT=1
 VARS="${WORK}/ovmf-vars.fd"
 
 QEMU="$(command -v qemu-system-x86_64 /usr/libexec/qemu-kvm 2>/dev/null | head -1)"
@@ -369,10 +380,26 @@ preserve_failed_disk_diagnostics() {
     echo "  disk diagnostics kept (metadata only, never the disk itself): ${out}" >&2
 }
 
+# When the installer fails, record what still holds its target before the
+# EXIT trap stops the live VM (#1467). The installer's own teardown has
+# already lazily unmounted the target and, when the LUKS close failed, left
+# the mapping open, so whatever held it is still in the guest now and gone
+# once QEMU is killed. iso/scripts/target-holders.sh reads metadata only.
+# Written under WORK, which CI already uploads as "*.log"; the report's
+# sections up to the journal also go to the job log. `timeout` because a
+# guest stuck in filesystem I/O must not hang the harness past its deadline.
+keep_target_holders() {
+    local since="$1" out="${WORK}/install-target-holders-$(date +%Y%m%d-%H%M%S).log"
+    timeout 300 sshpass -p live ssh "${SSH_OPTS[@]}" -p "${SSH_PORT}" liveuser@127.0.0.1 \
+        "sudo bash -s -- '${since}' btrfs" < "${ROOT}/iso/scripts/target-holders.sh" > "${out}" 2>&1 || true
+    sed '/^=== systemd unit activity/,$d' "${out}" >&2
+    echo "  installer target holders kept (metadata only): ${out}" >&2
+}
+
 cleanup() {
     # $? must be read before anything else runs in this function, or it
     # stops reflecting the exit that triggered the trap. A bare command
-    # failing under `set -e` (the installer step in phase 3, for one) aborts
+    # failing under `set -e` (an scp of the recipe in phase 3, for one) aborts
     # here directly without ever calling `fail()` -- so diagnostics belong in
     # the trap that always runs, not only in the helper that sometimes does.
     # The same holds for the exit status: e2e_status reports the phase's code
@@ -800,7 +827,13 @@ scp_live liveuser@127.0.0.1:/tmp/utah-plymouth-theme "${PLYMOUTH_THEME_FILE}"
 scp_live liveuser@127.0.0.1:/tmp/utah-plymouth-watermark.png "${PLYMOUTH_WATERMARK}"
 
 echo "Running the installer from the ISO's embedded payload store..."
-ssh_live 'sudo /usr/local/bin/fisherman /tmp/luks-recipe.json'
+# The guest's clock, so the holder report's journal window starts here.
+install_since="$(ssh_live 'date +@%s' 2>/dev/null || true)"
+ssh_live 'sudo /usr/local/bin/fisherman /tmp/luks-recipe.json' || {
+    install_status=$?
+    keep_target_holders "${install_since}"
+    fail "the installer exited ${install_status}"
+}
 
 # The installed system already boots with console=ttyS0, but also with
 # "quiet", which suppresses the systemd messages phase 6 and the failure
@@ -1480,14 +1513,14 @@ fi
 # proves it for each candidate (#19). A content gate: the lifecycle's baseline
 # (UTAH_E2E_BASELINE=1) is an earlier :testing built before this check
 # (#1282), whose contract may list a unit a later commit fixed, so the
-# lifecycle checks the upgraded candidate. The review VM adds the graceful
+# lifecycle checks the upgraded candidate. REPEAT_BOOT adds the graceful
 # second boot that proves first-boot work is idempotent.
 if [[ "${BASELINE_INSTALL}" == 0 ]]; then
     verify_setup_state first
 else
     echo "  contract service gate: skipped on the lifecycle baseline; the upgraded candidate is checked"
 fi
-if [[ -n "${UTAH_E2E_EXPECT_FLAVOR:-}" ]]; then
+if [[ "${BASELINE_INSTALL}" == 0 && "${REPEAT_BOOT}" == 1 ]]; then
     verify_flathub_remote
     repeat_installed_boot
     verify_setup_state repeat
