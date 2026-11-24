@@ -210,8 +210,11 @@ packages = [
     "langpacks-fonts-en",
     # Input methods also shipped by Dakota (#1256). Keep the base manifest's
     # Mozc and Unikey engines: removing them would drop existing language support.
-    # Anthy, Typing Booster and Rime still need runtime dependencies (#1256).
+    # Anthy's dictionary tool (kasumi-unicode) is now in the pinned factory.
+    # Typing Booster waits on cldr-emoji-annotation (utah-packages#1294) and
+    # Rime on brise, which has no factory recipe yet (#1256).
     "anthy-unicode",
+    "ibus-anthy",
     "fcitx5-gtk",
     "ibus-hangul",
     "ibus-libpinyin",
