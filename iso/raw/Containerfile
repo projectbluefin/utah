@@ -9,7 +9,7 @@
 # built into the layer; the live entry picks one.
 # The layers sit on top of a published Utah digest; the published image and
 # the ISO/fisherman path are unchanged.
-ARG SOURCE_IMAGE=ghcr.io/projectbluefin/utah:testing@sha256:3c683c5fd02bef7f4c28be1b10b9a13ab2f4cf6c6230343781c5cca1a85afc9c
+ARG SOURCE_IMAGE=ghcr.io/projectbluefin/utah:testing@sha256:e19f4b76496286557f0292470db92355760d697af93460d6fe23a0d8901f63aa
 ARG BUILDER_IMAGE=registry.fedoraproject.org/fedora:43@sha256:ef37658952c5debb727f508f76b9fbe502ccb10f92029bc8c308560c14a79862
 
 # systemd-sysinstall's Varlink API (io.systemd.SysInstall, which gnome-setup
