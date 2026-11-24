@@ -312,13 +312,57 @@ jobs:
       # projectbluefin/actions#557, which the pinned reusable-build digest includes.
       rechunk: "true"
 
-  dispatch-iso:
+  # `just build-ghcr` checks the revision label on the local image before the
+  # push (#1400). The bytes that reach ghcr.io are produced after that check --
+  # the reusable build rechunks the image and pushes the result -- so read the
+  # label back from the registry, by the exact digests both build calls report,
+  # and fail the run if any pushed image names another commit (#1468).
+  # dispatch-iso waits on this, so a mislabeled image never reaches E2E or
+  # promotion. Pull requests push nothing, so there is nothing to read back.
+  verify_revision:
     needs: [build_main, build_kernel]
+    if: >-
+      !cancelled() && github.event_name != 'pull_request' &&
+      (needs.build_main.result == 'success' || needs.build_kernel.result == 'success')
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+          persist-credentials: false
+      - name: Compare each pushed image's revision label to this commit
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          # Contract validates inputs.sha equals github.sha, the commit the
+          # reusable build checked out and stamped into SHA_HEAD.
+          EXPECTED_SHA: ${{ inputs.sha || github.sha }}
+          OWNER: ${{ github.repository_owner }}
+          # A skipped build call reports an empty string; the script skips it.
+          MAIN_DIGESTS: ${{ needs.build_main.outputs.digests }}
+          KERNEL_DIGESTS: ${{ needs.build_kernel.outputs.digests }}
+        run: |
+          set -euo pipefail
+          command -v skopeo >/dev/null || { sudo apt-get update && sudo apt-get install -y skopeo; }
+          auth_dir="${RUNNER_TEMP}/utah-registry"
+          mkdir -p "$auth_dir"
+          trap 'rm -rf "$auth_dir"' EXIT
+          export REGISTRY_AUTH_FILE="$auth_dir/auth.json"
+          echo "$GITHUB_TOKEN" | skopeo login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          python3 scripts/verify-pushed-revision.py "$EXPECTED_SHA" "$OWNER" \
+            "$MAIN_DIGESTS" "$KERNEL_DIGESTS"
+
+  dispatch-iso:
+    needs: [build_main, build_kernel, verify_revision]
     if: >-
       !cancelled() && github.ref == 'refs/heads/testing' &&
       github.event_name != 'pull_request' && !inputs.contract_only &&
       needs.build_main.result == 'success' &&
-      (needs.build_kernel.result == 'success' || needs.build_kernel.result == 'skipped')
+      (needs.build_kernel.result == 'success' || needs.build_kernel.result == 'skipped') &&
+      needs.verify_revision.result == 'success'
     runs-on: ubuntu-26.04
     permissions:
       actions: write

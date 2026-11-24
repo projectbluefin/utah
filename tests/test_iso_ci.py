@@ -255,10 +255,12 @@ class EvidenceTests(unittest.TestCase):
         import yaml
         build = yaml.safe_load((ROOT / ".github/workflows/build.yml").read_text())
         job = build["jobs"]["dispatch-iso"]
-        self.assertEqual(set(job["needs"]), {"build_main", "build_kernel"})
+        self.assertEqual(set(job["needs"]), {"build_main", "build_kernel", "verify_revision"})
         self.assertIn("refs/heads/testing", job["if"])
         self.assertIn("needs.build_main.result == 'success'", job["if"])
         self.assertIn("needs.build_kernel.result == 'success'", job["if"])
+        # A pushed image labelled with another commit never reaches E2E (#1468).
+        self.assertIn("needs.verify_revision.result == 'success'", job["if"])
         self.assertIn("build_run_id=$GITHUB_RUN_ID", job["steps"][0]["run"])
         workflow = (ROOT / ".github/workflows/post-testing-e2e.yml").read_text()
         self.assertNotIn("workflow_run:", workflow)
