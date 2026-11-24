@@ -113,7 +113,7 @@ jobs:
             exit 1
           fi
       - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # Fetches from extension hosts can transiently return 5xx. Keep the
           # repository checkout independent from those hosts so the retry
@@ -196,7 +196,7 @@ jobs:
       available: ${{ steps.cache.outputs.available }}
     steps:
       - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # Contract validates this equals github.sha before any publisher can run.
           ref: ${{ inputs.sha || github.sha }}
@@ -375,7 +375,7 @@ jobs:
       contents: read
       packages: read
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.sha || github.sha }}
           submodules: recursive
