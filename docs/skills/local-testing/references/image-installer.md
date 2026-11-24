@@ -50,6 +50,13 @@ installed under `/usr/libexec/utah-sysinstall` next to the system's systemd.
 | install.sh's post-copy fixups, started by gnome-setup after sysinstall (`[page:installer] post-install-unit=`) and before its recovery key page wipes the empty passphrase | `src/usr/libexec/utah-sysinstall-post`, `utah-sysinstall-post@.service` |
 | Pages (language, keyboard, try-or-install, disk, disk passphrase without a TPM, recovery key, done), live user's polkit grants | `src/usr/share/utah/gnome-setup/pages.conf`, `src/usr/share/polkit-1/rules.d/50-utah-live-gnome-setup.rules` |
 
+The recorded encryption policy and the limits of the merged CI evidence
+are in [ADR-0001's TPM2 update](../../../adr/0001-image-based-installer.md#update-tpm2-enrollment-and-recovery-key-1405).
+PCR 7 unlock is not proof of Secure Boot support: retain the separate
+upstream-signing requirement and retest recovery after firmware policy
+changes. Recovery-page screenshots contain a working disk key; keep them
+confined to disposable test installs, never real user disks.
+
 Keys on the installed root: with a TPM 2.0, the TPM (PCR 7) plus the
 recovery key. Without one, gnome-setup's disk passphrase page (shown only
 then) enrolls the passphrase the user picks, and the recovery key is a second
@@ -63,7 +70,29 @@ key page. Without `--tpm` (`tpm: false`) the harness fills the disk
 passphrase page, checks the slots are exactly password + recovery (the
 passphrase opens the root, the empty one no longer does), unlocks the first
 boot and the rollback boot with the passphrase and the bootc switch boot with
-the recovery key.
+the recovery key. Scheduled and PR CI runs always enable TPM; the TPM-less
+path requires a manual workflow dispatch with `tpm: false` or a local run
+without `--tpm`. Do not cite a default CI pass as TPM-less coverage.
+
+The GUI harness waits up to 300 seconds for any recognized setup page before
+sending Esc to dismiss the overview, settling for three seconds, and maximizing
+the installer window. Keep this startup budget separate from the page loop's
+shorter unknown-page timeout: an empty accessibility snapshot during slow
+application startup must not trigger clicks against fallback window offsets.
+
+`iso/raw/raw_e2e.py` classifies visible gnome-setup pages on each poll,
+accepting free-space and plain-confirmation routes. Destructive confirmation
+requires `/dev/vdb` exactly; free-space selection never falls back to erase.
+Recovery keys come from the key-shaped label; the QR dialog takes precedence
+over its parent page. Each distinct page gets one screenshot in the manifest.
+Run `python3 -m unittest discover -s tests -p 'test_setup_pages.py'` for
+host-only route replays; these do not replace VM runs through both routes.
+Unknown pages time out after 60 seconds, interactive pages after 120 seconds,
+and progress after an hour, within a 70-minute total budget. Missing controls
+save `atspi-gs-miss.json` and log button names and showing/sensitive states.
+Failures save `atspi-gs-failure.json` (including hidden nodes), a
+`fail-setup-failure` screenshot, the installer log, and the sysinstall journal.
+Treat evidence as sensitive: recovery pages and snapshots contain the disk key.
 
 ### composefs backend
 

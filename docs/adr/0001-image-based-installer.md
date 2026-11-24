@@ -295,6 +295,66 @@ was 13.10 GB allocated and 3.87 GB at zstd -19 --long. The ISO is 5.56 GB.
   would download every Flatpak into the RAM overlay of a medium without
   baked Flatpaks; it is skipped under `utah.live`.
 
+## Update: TPM2 enrollment and recovery key (#1405)
+
+### Recorded policy
+
+The gnome-setup implementation merged in #1437 supplies the encryption
+policy for this experimental track; this records that existing behavior,
+not a change to the ISO/fisherman installer or its defaults.
+
+- **Encrypt root on every install.** With a TPM 2.0, systemd-repart uses
+  `Encrypt=key-file+tpm2` and enrolls the TPM during the copy. Without one,
+  it uses `Encrypt=key-file`, and gnome-setup asks for a disk passphrase.
+  TPM enrollment is automatic when the hardware is present, not a separate
+  opt-in page. The workflow defaults to `installer=gnome-setup`, `tpm=true`.
+- **Always enroll a generated recovery key.** gnome-setup presents the
+  systemd-cryptenroll recovery key and QR code on its recovery-key page.
+  The user must save it outside the installed disk. After post-copy fixups,
+  enrollment removes the temporary empty passphrase: the final keys are
+  TPM2 + recovery with a TPM, or the user's passphrase + recovery without
+  one. A recovery key must never be the only boot key on a TPM-less machine.
+- **Bind the TPM to PCR 7, not pcrlock.** The current repart definitions
+  set `TPM2PCRs=7`. This is the implemented policy for the existing
+  shim/GRUB chain; it does not bind unlock to each bootc deployment's kernel
+  or root digest. Changes to the firmware's Secure Boot policy can require
+  the recovery key. Revisit the policy with the systemd-boot/UKI work
+  (#1404), rather than silently introducing pcrlock here.
+- **Do not equate TPM unlock with Secure Boot support.** PCR 7 enrollment
+  alone does not make an unsigned kernel trusted or protect every part of
+  the boot chain. Utah still needs the upstream signing work tracked in
+  #1379; no Utah signing key or MOK enrollment is introduced by this track.
+
+The definitions and post-copy glue live in
+`iso/raw/src/usr/libexec/utah-live-definitions` and `utah-sysinstall-post`;
+key presentation and enrollment belong to gnome-setup, not a new
+proto-installer daemon. The selectable os-installer fallback retains its
+passphrase-only contract; do not extend it with a second encryption UI.
+
+### Evidence and limits
+
+Merged #1437 records CI run
+[44990062805](https://github.com/projectbluefin/utah/actions/runs/44990062805)
+on `5c8f59a`: a composefs medium with baked Flatpaks passes GUI installation,
+unattended TPM2 unlock on first boot, recovery-key unlock without the TPM
+after `bootc switch`, and unattended TPM2 unlock after rollback. The
+workflow runs an emulated TPM (`swtpm`), retaining its state across TPM boots.
+The same PR records local ostree and composefs runs without baked Flatpaks;
+it does not establish ostree-with-Flatpaks CI coverage, consecutive nightly
+passes, real-hardware firmware behavior or Secure Boot support.
+
+The TPM-less E2E harness separately checks password + recovery slots,
+rejects the empty passphrase, boots with the passphrase, uses recovery after
+switch, and returns to the passphrase after rollback. This path is outside
+default CI: scheduled and PR runs enable the emulated TPM; a manual workflow
+dispatch with `tpm: false` (or a local run without `--tpm`) selects the
+TPM-less path. The successful TPM-enabled run above is not evidence that
+this separate path ran in default CI. See the
+[image-installer testing reference](../skills/local-testing/references/image-installer.md#gnome-setup-installergnome-setup-experimental)
+for the harness contract. These are disposable CI keys: the recovery page
+is captured in evidence, and CI disks/media must never be used for a real
+installation or uploaded as distributable installer images.
+
 ## What remains before it can replace fisherman
 
 1. **Medium format** (#1404): an El Torito hybrid (`systemd-repart
@@ -303,7 +363,10 @@ was 13.10 GB allocated and 3.87 GB at zstd -19 --long. The ISO is 5.56 GB.
 2. **Offline Flatpaks on the medium** (decision item 6): done in #1413,
    installed into the medium's stateful `/var` at build time from the list
    the ISO bakes, with the image itself kept Flatpak-free.
-3. **Encryption UX** (#1405): TPM2 enrollment, recovery key, PCR policy.
+3. **Encryption UX** (#1405): policy and implementation recorded
+   [above](#update-tpm2-enrollment-and-recovery-key-1405), with TPM2 and
+   recovery-key switch/rollback evidence from #1437. Hardware validation
+   and any policy change for systemd-boot/UKIs remain separate work.
 4. **Medium layout and `rhgb quiet` in the real build**: today they are set by
    `iso/raw/build-raw-image.sh`, held by tests; they move into the published
    build when the path is adopted.

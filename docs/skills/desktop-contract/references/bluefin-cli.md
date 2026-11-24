@@ -30,4 +30,4 @@ with Utah as the reference.
   `packages/utah.toml` installs it from `[parity]` and `[factory].parity`. A
   `/usr/bin` install never updates itself; bluefin-cli updates with the image.
 - **Tests.** `tests/test_ujust_overrides.py` (the recipe) and
-  `tests/test_desktop_contract.py` (shims and removals).
+  `tests/test_desktop_contract_services.py` (shims and removals).

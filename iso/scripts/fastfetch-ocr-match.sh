@@ -3,7 +3,7 @@
 # that fastfetch ran inside the installed session.
 #
 # Kept separate from luks-e2e.sh so the decision can be exercised against real
-# transcripts (tests/test_iso_ci.py) without booting a VM.
+# transcripts (tests/test_iso_ci_boot_gates.py) without booting a VM.
 #
 # Two independent tokens must be present, because either alone lies:
 #

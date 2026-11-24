@@ -113,7 +113,7 @@ jobs:
             exit 1
           fi
       - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # Fetches from extension hosts can transiently return 5xx. Keep the
           # repository checkout independent from those hosts so the retry
@@ -124,7 +124,7 @@ jobs:
       - name: Checkout submodules with retry
         run: bash .github/scripts/update-submodules-with-retry.sh
       - name: Install just
-        uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3
+        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
       - name: Install host test dependencies
         run: python3 -m pip install -q -r tests/requirements.txt
       - name: Validate manifests
@@ -196,7 +196,7 @@ jobs:
       available: ${{ steps.cache.outputs.available }}
     steps:
       - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # Contract validates this equals github.sha before any publisher can run.
           ref: ${{ inputs.sha || github.sha }}
@@ -312,13 +312,57 @@ jobs:
       # projectbluefin/actions#557, which the pinned reusable-build digest includes.
       rechunk: "true"
 
-  dispatch-iso:
+  # `just build-ghcr` checks the revision label on the local image before the
+  # push (#1400). The bytes that reach ghcr.io are produced after that check --
+  # the reusable build rechunks the image and pushes the result -- so read the
+  # label back from the registry, by the exact digests both build calls report,
+  # and fail the run if any pushed image names another commit (#1468).
+  # dispatch-iso waits on this, so a mislabeled image never reaches E2E or
+  # promotion. Pull requests push nothing, so there is nothing to read back.
+  verify_revision:
     needs: [build_main, build_kernel]
+    if: >-
+      !cancelled() && github.event_name != 'pull_request' &&
+      (needs.build_main.result == 'success' || needs.build_kernel.result == 'success')
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+          persist-credentials: false
+      - name: Compare each pushed image's revision label to this commit
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          # Contract validates inputs.sha equals github.sha, the commit the
+          # reusable build checked out and stamped into SHA_HEAD.
+          EXPECTED_SHA: ${{ inputs.sha || github.sha }}
+          OWNER: ${{ github.repository_owner }}
+          # A skipped build call reports an empty string; the script skips it.
+          MAIN_DIGESTS: ${{ needs.build_main.outputs.digests }}
+          KERNEL_DIGESTS: ${{ needs.build_kernel.outputs.digests }}
+        run: |
+          set -euo pipefail
+          command -v skopeo >/dev/null || { sudo apt-get update && sudo apt-get install -y skopeo; }
+          auth_dir="${RUNNER_TEMP}/utah-registry"
+          mkdir -p "$auth_dir"
+          trap 'rm -rf "$auth_dir"' EXIT
+          export REGISTRY_AUTH_FILE="$auth_dir/auth.json"
+          echo "$GITHUB_TOKEN" | skopeo login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          python3 scripts/verify-pushed-revision.py "$EXPECTED_SHA" "$OWNER" \
+            "$MAIN_DIGESTS" "$KERNEL_DIGESTS"
+
+  dispatch-iso:
+    needs: [build_main, build_kernel, verify_revision]
     if: >-
       !cancelled() && github.ref == 'refs/heads/testing' &&
       github.event_name != 'pull_request' && !inputs.contract_only &&
       needs.build_main.result == 'success' &&
-      (needs.build_kernel.result == 'success' || needs.build_kernel.result == 'skipped')
+      (needs.build_kernel.result == 'success' || needs.build_kernel.result == 'skipped') &&
+      needs.verify_revision.result == 'success'
     runs-on: ubuntu-26.04
     permissions:
       actions: write
@@ -375,12 +419,12 @@ jobs:
       contents: read
       packages: read
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.sha || github.sha }}
           submodules: recursive
           persist-credentials: false
-      - uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
       - name: Prepare disposable VM host
         run: |
           set -euo pipefail

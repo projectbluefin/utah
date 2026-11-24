@@ -1,7 +1,7 @@
 ---
 name: lifecycle-e2e
 version: "1.0"
-last_updated: "2026-11-20"
+last_updated: "2026-11-24"
 id: lifecycle-e2e
 one_line_purpose: Run the QEMU lifecycle harness and validate bootc upgrade, rollback, and BLS boot files.
 entry_point: docs/skills/lifecycle-e2e.md
@@ -206,6 +206,22 @@ command tripped `set -e`; read it before the log.
 
 `lifecycle-e2e.sh` keeps `luks-e2e.sh`'s code when its ISO install fails, so
 a lifecycle job that exits 13 failed installing the baseline.
+
+**An installer failure keeps what held the target.** fisherman's finalize
+can fail with `mount: /var/mnt/fisherman-target: mount point is busy`, then
+`Device fisherman-root is still in use` from its LUKS close (#1467,
+tuna-os/fisherman#505). Its teardown has lazily unmounted the target by then,
+and the holder is still in the live guest until the harness stops the VM, so
+`luks-e2e.sh` first runs `iso/scripts/target-holders.sh` there and keeps
+`install-target-holders-*.log` in its work directory (`install/` for the
+lifecycle). It lists, metadata only: the crypt mapping's open count, every
+mount namespace still mounting btrfs (the live media has no other) with its
+processes and their units, every descriptor, working directory, root or
+mapping on btrfs with its access mode (a writer or an open deleted file fails
+`remount,ro`), and the journal's unit activity and kernel log since the
+install began. The job log shows it up to the journal. Do not trust the
+installer's `fuser -km /dev/mapper/...`: btrfs files report a subvolume's
+anonymous device, so it matches nothing. The exit code stays 13.
 
 **Wall-clock deadline.** A job killed by `timeout-minutes` is cancelled with
 nothing uploaded. The `luks` and `lifecycle` jobs therefore start with a "Set

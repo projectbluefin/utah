@@ -1,9 +1,9 @@
 # Utahraptor
 
 <!-- BEGIN E2E VERIFICATION -->
-[![Verified ISO desktop](https://github.com/projectbluefin/utah/raw/02b6aad7766d115a84597794f1a6741a77c951c0/screenshots/installed-fastfetch.png)](https://github.com/projectbluefin/utah/blob/02b6aad7766d115a84597794f1a6741a77c951c0/README.md)
+[![Verified ISO desktop](https://github.com/projectbluefin/utah/raw/eaba7c11e04d477b86fabeecf24866bfa4edef9a/screenshots/installed-fastfetch.png)](https://github.com/projectbluefin/utah/blob/eaba7c11e04d477b86fabeecf24866bfa4edef9a/README.md)
 
-*LUKS ISO test passed for commit `9e672b76a996`. [CI run](https://github.com/projectbluefin/utah/actions/runs/45079703820) also runs independent desktop tests that do not gate this record; the LUKS and production ISO jobs passed; [screenshots and provenance](https://github.com/projectbluefin/utah/tree/02b6aad7766d115a84597794f1a6741a77c951c0).*
+*LUKS ISO test passed for commit `99ff871aab97`. [CI run](https://github.com/projectbluefin/utah/actions/runs/45377831742) also runs independent desktop tests that do not gate this record; the LUKS and production ISO jobs passed; [screenshots and provenance](https://github.com/projectbluefin/utah/tree/eaba7c11e04d477b86fabeecf24866bfa4edef9a).*
 <!-- END E2E VERIFICATION -->
 
 †Utahraptor ostrommaysi
@@ -41,6 +41,17 @@ Utah is built across two repositories:
 ## Download and image streams
 
 - **Live ISO (AMD / Intel, Secure Boot off):** [`utah-live-latest.iso`](https://projectbluefin.dev/utah-live-latest.iso) ([SHA-256 checksum](https://projectbluefin.dev/utah-live-latest.iso-CHECKSUM)), built monthly from `:stable`
+- **Image-based installer medium (experimental):** [`ghcr.io/projectbluefin/utah-installer`](https://github.com/projectbluefin/utah/pkgs/container/utah-installer) (`testing` tag), published weekly and on demand from `:testing` — the live medium for [docs/adr/0001](https://github.com/projectbluefin/utah/blob/main/docs/adr/0001-image-based-installer.md), baked Flatpaks included
+
+  ```sh
+  # Fetch the OCI artifact, verify its checksum, decompress, then flash it.
+  oras pull ghcr.io/projectbluefin/utah-installer:testing
+  sha256sum -c medium.zst.sha256
+  zstd -d --long=31 medium.zst -o utah-installer.raw
+  sudo dd if=utah-installer.raw of=/dev/sdX bs=4M status=progress conv=fsync
+  ```
+
+  `--long=31` is required to decompress, because the medium was compressed with it.
 - **Live versions & downloads:** [docs.projectbluefin.io/utah](https://docs.projectbluefin.io/utah)
 
 The live ISO is hosted on projectbluefin.dev and built by

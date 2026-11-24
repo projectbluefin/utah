@@ -36,7 +36,7 @@ jobs:
     outputs:
       list: ${{ steps.resolve.outputs.list }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - id: resolve
         run: echo "list=$(python3 scripts/flavors.py releases)" >> "$GITHUB_OUTPUT"
 
@@ -65,7 +65,7 @@ jobs:
     outputs:
       is-promotion: ${{ steps.check.outputs.is-promotion }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Authenticate to GHCR
         if: github.event_name == 'schedule'
         env:
@@ -104,7 +104,7 @@ jobs:
     outputs:
       variants: ${{ steps.gate.outputs.variants }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
       - name: Authenticate to GHCR
@@ -144,5 +144,5 @@ jobs:
       # The same testsuite commit post-testing-e2e.yml validated, not the
       # floating v1 tag, so the gate cannot drift from that evidence (#773).
       # tests/test_iso_ci.py keeps the two refs equal.
-      gate_test_ref: 525c6b074ead63e50f0d90b54218d2c344454a5d # v1
+      gate_test_ref: ea304fc98579f27adb867dce8f8533c05b0af9aa # v1
     secrets: inherit
