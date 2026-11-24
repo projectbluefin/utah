@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-21",
+  "generated_at": "2026-11-24",
   "generator": "scripts/generate-site-data.py",
   "groups": [
     {
@@ -244,6 +244,7 @@
         "hplip-libs",
         "htop",
         "hyperv-daemons",
+        "ibus-anthy",
         "ibus-gtk4",
         "ibus-hangul",
         "ibus-libpinyin",
@@ -485,7 +486,7 @@
     }
   ],
   "totals": {
-    "installed": 428,
+    "installed": 429,
     "unavailable": 4
   },
   "unavailable": [
