@@ -31,7 +31,7 @@ jobs:
       lifecycle: ${{ steps.baseline.outputs.lifecycle }}
       lifecycle_baseline: ${{ steps.baseline.outputs.baseline }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         timeout-minutes: 10
         with:
           persist-credentials: false
@@ -127,7 +127,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         timeout-minutes: 10
         with:
           ref: ${{ needs.resolve.outputs.sha }}
@@ -158,7 +158,7 @@ jobs:
         env:
           TIMEOUT_MINUTES: "180"
         run: echo "E2E_WALL_CLOCK_DEADLINE=$(( $(date +%s) + (TIMEOUT_MINUTES - 10) * 60 ))" >> "$GITHUB_ENV"
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         timeout-minutes: 10
         with:
           ref: ${{ needs.resolve.outputs.sha }}
@@ -281,7 +281,7 @@ jobs:
         env:
           TIMEOUT_MINUTES: "240"
         run: echo "E2E_WALL_CLOCK_DEADLINE=$(( $(date +%s) + (TIMEOUT_MINUTES - 10) * 60 ))" >> "$GITHUB_ENV"
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         timeout-minutes: 10
         with:
           ref: ${{ needs.resolve.outputs.sha }}
@@ -381,7 +381,7 @@ jobs:
       contents: read
       packages: read
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         timeout-minutes: 10
         with:
           ref: ${{ needs.resolve.outputs.sha }}
@@ -468,7 +468,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         timeout-minutes: 10
         with:
           ref: ${{ needs.resolve.outputs.sha }}
@@ -587,7 +587,7 @@ jobs:
         if: github.ref != 'refs/heads/main'
         run: |
           echo "::warning::Not running from main (${GITHUB_REF}); E2E evidence is kept, but no status is recorded and no tag moves."
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         timeout-minutes: 10
         if: github.ref == 'refs/heads/main'
         with:
@@ -657,7 +657,7 @@ jobs:
       contents: write
       actions: read
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         timeout-minutes: 10
         with:
           ref: main

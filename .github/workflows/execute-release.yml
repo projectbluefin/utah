@@ -36,7 +36,7 @@ jobs:
     outputs:
       list: ${{ steps.resolve.outputs.list }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - id: resolve
         run: echo "list=$(python3 scripts/flavors.py releases)" >> "$GITHUB_OUTPUT"
 
@@ -65,7 +65,7 @@ jobs:
     outputs:
       is-promotion: ${{ steps.check.outputs.is-promotion }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Authenticate to GHCR
         if: github.event_name == 'schedule'
         env:
@@ -104,7 +104,7 @@ jobs:
     outputs:
       variants: ${{ steps.gate.outputs.variants }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
       - name: Authenticate to GHCR
