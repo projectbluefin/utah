@@ -5,7 +5,7 @@ before it installs them. Utah copies Common unedited and applies the same
 edits afterwards, so the composed image matches what Dakota actually ships.
 `configure-services.sh` guards each one: already applied is a no-op, and an
 upstream file of a different shape fails the build. `DakotaCommonEditTests`
-in `tests/test_desktop_contract.py` runs the blocks against Common-shaped and
+in `tests/test_desktop_contract_service_edits.py` runs the blocks against Common-shaped and
 foreign input.
 
 - **Monthly wallpaper.** Utah ships both of Dakota's month units:

@@ -491,7 +491,7 @@ The daemon (`fwupd.service`) is unaffected: it runs as root with no
 `DynamicUser=` and uses `CacheDirectory=fwupd`, so its cache lives under
 `/var/cache/fwupd` directly with no dynamic-user migration path. Firmware
 flashing still goes through the daemon, which keeps its existing root
-lifecycle. The pairing is asserted by `FwupdRefreshDropInTests` in `tests/test_desktop_contract.py`.
+lifecycle. The pairing is asserted by `FwupdRefreshDropInTests` in `tests/test_desktop_contract_service_edits.py`.
 
 ## Verification
 

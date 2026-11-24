@@ -1,0 +1,73 @@
+name: Green Graduation
+
+# Weekly check of the "definition of green" contract. For every advisory gate
+# in .github/green-criteria.yml it asks the GitHub API how the gate's job has
+# been doing and reports the ones that have passed long enough to become
+# blocking. It never flips the enforcement field itself; it only recommends.
+
+on:
+  schedule:
+    - cron: '0 7 * * 1'  # Mondays 07:00 UTC
+  workflow_dispatch: {}
+
+permissions: {}
+
+jobs:
+  graduation:
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        timeout-minutes: 5
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        timeout-minutes: 5
+        with:
+          python-version: "3.15"
+
+      - name: Run graduation check
+        id: grad
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          pip install --quiet -r tests/requirements.txt
+          python3 scripts/graduation-check.py --repo "$REPOSITORY" --token "$GH_TOKEN" \
+            | tee grad-report.txt
+          cp grad-report.txt "$GITHUB_STEP_SUMMARY"
+          if grep -q 'READY to promote' grad-report.txt; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open a promotion request when a gate is ready
+        if: steps.grad.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ready=$(grep 'READY to promote' grad-report.txt | sed 's/.*: //')
+          body=$(mktemp)
+          {
+            echo "The weekly green graduation check found the following advisory "
+            echo "gates meeting the bar in .github/green-criteria.yml."
+            echo "Review and flip their enforcement to blocking (projectbluefin/utah#1449):"
+            echo
+            cat grad-report.txt
+          } > "$body"
+          # Do not open a duplicate promotion issue if one is already open.
+          if gh issue list --state open --label area/ci --json number,title \
+            --jq '.[] | select(.title | test("Green graduation: promote"; "i")) | .number' \
+            | grep -q .; then
+            echo "A promotion issue already exists; leaving it for a human to triage."
+            exit 0
+          fi
+          gh issue create \
+            --title "Green graduation: promote $ready to blocking" \
+            --body-file "$body" \
+            --label area/ci
