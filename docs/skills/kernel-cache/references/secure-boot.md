@@ -39,7 +39,7 @@ binary.
 
 | Piece | Route | Submission | Tracking |
 | --- | --- | --- | --- |
-| btrfs fs-verity fix (drop Utah's kernel rebuild) | Into the **Fedora** kernel that `os-minimal` ships: kernel-ark `fedora-7.3` backport and a stable request. The same fix is offered as a patch on Hummingbird's draft kernel import | [hanthor/hummingbird-rpms#2](https://github.com/hanthor/hummingbird-rpms/pull/2); kernel-ark and stable texts prepared | #1379 |
+| btrfs fs-verity fix (drop Utah's kernel rebuild) | Into the **Fedora** kernel that `os-minimal` ships: kernel-ark `fedora-7.3` backport and a stable request. Kernel-ark merged the backport on 2026-11-23; its first tag with it is `kernel-7.3.6-0`, so Fedora 44's `kernel-7.3.6-200.fc44` should be the first Fedora-signed build that carries the fix. The stable request for 7.3.y and 7.2.y is not sent yet. Hummingbird has a note on its draft kernel import; carrying the fix there would need Hummingbird signing | [cki-project/kernel-ark!4899](https://gitlab.com/cki-project/kernel-ark/-/merge_requests/4899) (merged into `fedora-7.3`); note on [redhat/hummingbird/rpms!4636](https://gitlab.com/redhat/hummingbird/rpms/-/merge_requests/4636#note_4287181888) (draft). Staged as the closed mirror PR [hanthor/hummingbird-rpms#2](https://github.com/hanthor/hummingbird-rpms/pull/2) | #1379 |
 | Signed systemd-boot | Hummingbird imports Fedora's `systemd-boot` signing wrapper and signs it with a CA its shim trusts. As filed, the build signs with pesign's Red Hat Test Certificate and puts the `grubx64.efi` hardlink that shim loads in `EFI/hummingbird/` while the shim is in `EFI/fedora/`, so it needs a real Hummingbird signing step (ADR-0005). Open question to Hummingbird: is a signed systemd-boot in scope, and with which CA, or do derived images wait for Fedora 45's `systemd-boot-x64`? Fallback: Fedora's signed `systemd-boot-x64` once the base is Fedora 45, or an ISO ESP of Fedora shim + GRUB | [redhat/hummingbird/rpms!5683](https://gitlab.com/redhat/hummingbird/rpms/-/merge_requests/5683) (open; staged as the closed mirror PR [hanthor/hummingbird-rpms#3](https://github.com/hanthor/hummingbird-rpms/pull/3)) | #1380 |
 | NVIDIA open and v4l2loopback modules; signing a Hummingbird kernel | Hummingbird decides whether it signs kernels and kmods (ADR-0005). Kmod packages need a Hummingbird kernel with a persistent module key first. Open question to Hummingbird: will it package and sign these two kmods once it owns a kernel, or do derived images keep building them? | [redhat/hummingbird/documentation!61](https://gitlab.com/redhat/hummingbird/documentation/-/merge_requests/61) (open; staged as the closed mirror PR [hanthor/hummingbird-documentation#2](https://github.com/hanthor/hummingbird-documentation/pull/2)) | #1381 |
 | OGC kernel | Not acceptable upstream: a third-party fork that neither Fedora nor Hummingbird signs. Stays unsigned and Secure-Boot-off. The open alternative is to boot Fedora's signed kernel, which has sched_ext, ntsync and Rust binder | none | #1225 |
@@ -50,8 +50,11 @@ closed, and its row should link the GitLab MR, which is where review happens.
 
 ## When a piece lands
 
-- **Fedora kernel with `254e15591ee4`** (a 7.3.y stable with the backport, a
-  kernel-ark `fedora-7.3` build, or the 7.4 rebase) reaches `BASE_IMAGE`:
+- **Fedora kernel with `254e15591ee4`** (`kernel-7.3.6-200.fc44` or a later
+  7.3.y, a 7.3.y stable with the backport, or the 7.4 rebase) reaches
+  `BASE_IMAGE`: confirm `scripts/kernel_verity.py select --root <base rootfs>`
+  reports `"fixed": true` for the pristine base kernel (it finds the fix in the
+  package changelog), then
   remove the rebuild as [kernel-cache.md](../../kernel-cache.md#the-patched-fedora-kernel)
   describes. `main` and `nvidia` then boot Fedora's signed kernel through
   Fedora's shim and get sched_ext back.
