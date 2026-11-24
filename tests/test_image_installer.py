@@ -5,7 +5,9 @@ the harness's per-stage results (iso/raw/raw_e2e.py), the size measurement
 (iso/raw/measure_medium.py), the comparison with the ISO/fisherman luks job
 (iso/raw/compare_paths.py), and the promise that the track never gates
 anything: image-installer.yml is not a required check, not in
-promote-to-testing's needs, and publishes nothing.
+promote-to-testing's needs, and publishes nothing. It also covers the publish
+track that ships the clean medium to ghcr (publish-installer.yml) and what it
+must not bake into it.
 """
 
 import contextlib
@@ -428,6 +430,63 @@ class NonBlockingTrackTests(unittest.TestCase):
         upload = next(s for s in self.workflow["jobs"]["e2e"]["steps"] if "upload-artifact" in s.get("uses", ""))
         paths = upload["with"]["path"]
         self.assertNotRegex(paths, r"medium\.raw|\.qcow2|id_ed25519")
+
+
+class PublishTrackTests(unittest.TestCase):
+    """publish-installer.yml: ship the clean medium to ghcr, never gate on it."""
+
+    WORKFLOW = ROOT / ".github/workflows/publish-installer.yml"
+    workflow = yaml.safe_load(WORKFLOW.read_text())
+
+    def test_it_runs_on_dispatch_and_weekly_but_not_on_push(self):
+        on = self.workflow[True]
+        self.assertIn("workflow_dispatch", on)
+        self.assertTrue(on["schedule"])
+        self.assertEqual(on["schedule"][0]["cron"], "41 9 * * 1")
+        self.assertNotIn("push", on)
+        self.assertNotIn("pull_request", on)
+        self.assertNotIn("merge_group", on)
+
+    def test_permissions_are_empty_except_the_publish_job(self):
+        self.assertEqual(self.workflow["permissions"], {})
+        for name, job in self.workflow["jobs"].items():
+            scope = job.get("permissions") or {}
+            if name == "publish":
+                self.assertEqual(scope, {"contents": "read", "packages": "write"})
+            else:
+                self.assertEqual(scope, {"contents": "read"})
+
+    def test_nothing_gates_on_the_publish_track(self):
+        e2e = yaml.safe_load((ROOT / ".github/workflows/post-testing-e2e.yml").read_text())
+        needs = e2e["jobs"]["promote-to-testing"]["needs"]
+        self.assertFalse([n for n in needs if "publish" in n])
+
+    def test_the_medium_is_published_not_uploaded(self):
+        text = self.WORKFLOW.read_text()
+        self.assertIn("oras push --artifact-type application/vnd.projectbluefin.installer.medium", text)
+        self.assertNotIn("oras push --publish", text)
+        self.assertIn("ghcr.io/projectbluefin/${IMAGE}-installer", text)
+
+    def test_oras_is_pinned_to_v1_4_0(self):
+        self.assertIn("oras_1.4.0_linux_amd64.tar.gz", self.WORKFLOW.read_text())
+
+    def test_the_published_medium_is_clean_no_debug(self):
+        text = self.WORKFLOW.read_text()
+        # The E2E track bakes in a root key, sshd and debug kargs; the published
+        # medium must not.
+        self.assertNotIn("UTAH_RAW_DEBUG_SSHD", text)
+        self.assertNotIn("UTAH_RAW_SSH_PUBKEY", text)
+        self.assertNotIn("utah.live.debug", text)
+        for step in self.workflow["jobs"]["publish"]["steps"]:
+            if "build-raw-image.sh" in step.get("run", ""):
+                self.assertNotIn("UTAH_RAW_DEBUG_SSHD", step["run"])
+                self.assertNotIn("UTAH_RAW_SSH_PUBKEY", step["run"])
+
+    def test_no_other_workflow_mentions_it(self):
+        for other in (ROOT / ".github/workflows").glob("*.yml"):
+            if other.name == "publish-installer.yml":
+                continue
+            self.assertNotIn("publish-installer", other.read_text(), other.name)
 
 
 class OfflineFlatpakTests(unittest.TestCase):
