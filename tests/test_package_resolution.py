@@ -635,7 +635,7 @@ class DesktopUnitEnablementTests(unittest.TestCase):
     Utah enables every unit no preset disables (98-utah-enable-default.preset,
     #1233), but Hummingbird's 90-default.preset sorts earlier and disables a
     few units Utah runs. Only 85-utah-desktop.preset can turn those back on.
-    ServiceMaskParityTests in test_desktop_contract.py covers the rest.
+    ServiceMaskParityTests in test_desktop_contract_services.py covers the rest.
     """
 
     PRESET = ROOT / (

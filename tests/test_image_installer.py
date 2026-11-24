@@ -841,13 +841,17 @@ class GnomeSetupTests(unittest.TestCase):
         picked = raw_e2e.named(nodes, "Done", sensitive=True, role="button")
         self.assertEqual(picked["ext"], [808, 619, 304, 44])
 
-    def test_every_done_press_names_a_role(self):
-        # The recovery page and its QR dialog each have several nodes named 'Done'.
-        source = (Path(raw_e2e.__file__)).read_text()
-        presses = [line for line in source.splitlines() if 'self.press(r, app, "Done"' in line]
-        self.assertGreaterEqual(len(presses), 2)
-        for line in presses:
-            self.assertIn('role="button"', line, line.strip())
+    def test_setup_done_press_ignores_panels_and_insensitive_buttons(self):
+        from unittest.mock import Mock
+        harness = object.__new__(raw_e2e.Harness)
+        harness.atspi = Mock(return_value={"how": "action:click"})
+        nodes = [
+            {"name": "Done", "role": "panel", "states": ["sensitive"]},
+            {"name": "Done", "role": "button", "states": []},
+            {"name": "Done", "role": "button", "states": ["sensitive"]},
+        ]
+        harness.setup_press(None, nodes, "Done")
+        harness.atspi.assert_called_once_with(None, "act", raw_e2e.GS_APP, "Done", "button")
 
     def test_timeout_summary_lists_buttons_and_labels(self):
         nodes = [
