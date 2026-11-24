@@ -356,20 +356,6 @@ block copy into LUKS2 through OS-Installer runs beside the ISO path in
 It gates nothing. Build, run and gotchas:
 [image-installer](local-testing/references/image-installer.md).
 
-`iso/raw/raw_e2e.py` classifies visible gnome-setup pages on each poll,
-accepting free-space and plain-confirmation routes. Destructive confirmation
-requires `/dev/vdb` exactly; free-space selection never falls back to erase.
-Recovery keys come from the key-shaped label; the QR dialog takes precedence
-over its parent page. Each distinct page gets one screenshot in the manifest.
-Run `python3 -m unittest discover -s tests -p 'test_setup_pages.py'` for
-host-only route replays; these do not replace VM runs through both routes.
-Unknown pages time out after 60 seconds, interactive pages after 120 seconds,
-and progress after an hour, within a 70-minute total budget. Missing controls
-save `atspi-gs-miss.json` and log button names and showing/sensitive states.
-Failures save `atspi-gs-failure.json` (including hidden nodes), a
-`fail-setup-failure` screenshot, the installer log, and the sysinstall journal.
-Treat evidence as sensitive: recovery pages and snapshots contain the disk key.
-
 ## Verification
 
 ### Encrypted install and screenshot harness
@@ -407,11 +393,14 @@ A target, slice or device has no `Result=` property, so only its
 none of its instances may have failed.
 `flatpak-preinstall`, `ublue-system-setup` and `ublue-user-setup` must
 also have run. `brew-preinstall.service` needs the network, so the offline VM
-only checks that it is enabled. When `UTAH_E2E_EXPECT_FLAVOR` is set (the
-`review_vm` workflow), the harness also checks the Flathub remote, then
-performs a graceful second boot, unlocks the same LUKS disk, and rechecks
-services, Flathub, and the default Flatpaks. This is the repeat-boot
-idempotence gate; plain `just luks-test` remains a single boot.
+only checks that it is enabled. When `UTAH_E2E_REPEAT_BOOT=1` (set by the
+post-testing `luks` job for every candidate) or `UTAH_E2E_EXPECT_FLAVOR` (the
+`review_vm` and candidate workflows) is set, the harness also checks the
+Flathub remote, then performs a graceful second boot, unlocks the same LUKS
+disk, and rechecks services, Flathub, and the default Flatpaks. This is the
+repeat-boot idempotence gate. It never runs on the lifecycle baseline; plain
+`just luks-test` remains a single boot unless `UTAH_E2E_REPEAT_BOOT=1` is
+exported.
 Read the recipe and script prerequisites before running it: it creates test
 accounts and requires local QEMU/KVM access, not a production installation.
 

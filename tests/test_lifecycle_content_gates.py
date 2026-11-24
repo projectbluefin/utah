@@ -23,6 +23,7 @@ BASELINE_SWITCH = 'BASELINE_INSTALL="${UTAH_E2E_BASELINE:-0}"\n'
 EFI_GATE_START = 'if [[ "${BASELINE_INSTALL}" == 0 ]]; then\n    echo "Verifying the installed EFI'
 PROBE_GATE_START = 'if [[ "${BASELINE_INSTALL}" == 0 ]]; then\n    echo "Verifying bootc\'s SELinux'
 SETUP_GATE_START = 'if [[ "${BASELINE_INSTALL}" == 0 ]]; then\n    verify_setup_state first'
+REPEAT_GATE_START = 'if [[ "${BASELINE_INSTALL}" == 0 && "${REPEAT_BOOT}" == 1 ]]; then\n'
 DENIAL = ('type=AVC msg=audit(1795247042.592:77): avc:  denied  { mac_admin } for  pid=2690 '
           'comm="chcon" capability=33  scontext=system_u:system_r:initrc_t:s0 '
           'tcontext=system_u:system_r:initrc_t:s0 tclass=capability2 permissive=0')
@@ -107,9 +108,44 @@ class LifecycleContentGateTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertTrue(result.stdout.endswith("passed\n"), result.stdout)
 
+    def repeat_boot_gate(self, **env: str) -> str:
+        # The switch lines and the repeat block, with the boot and checks
+        # stubbed to record what ran.
+        switch = block(LUKS, 'REPEAT_BOOT="${UTAH_E2E_REPEAT_BOOT:-0}"\n', "\nVARS=")
+        repeat = block(LUKS, REPEAT_GATE_START, "\nfi\n") + "\nfi\n"
+        harness = ("verify_flathub_remote() { :; }\n"
+                   "repeat_installed_boot() { echo rebooted; }\n"
+                   'verify_setup_state() { echo "checked $1"; }\n'
+                   "verify_flatpaks_after_repeat() { :; }\n"
+                   "expected_flatpaks=x\n"
+                   + BASELINE_SWITCH + switch + "\n" + repeat)
+        result = self.run_bash(harness, **env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout
+
+    def test_repeat_boot_runs_for_the_switch_or_a_review_flavor(self):
+        # #19: post-testing E2E proves first-boot work repeats safely on every
+        # candidate, not only when a review VM names a flavor.
+        for env in ({"UTAH_E2E_REPEAT_BOOT": "1"}, {"UTAH_E2E_EXPECT_FLAVOR": "utah"}):
+            with self.subTest(env=env):
+                self.assertEqual(self.repeat_boot_gate(**env), "rebooted\nchecked repeat\n")
+        self.assertEqual(self.repeat_boot_gate(), "")
+
+    def test_baseline_install_never_runs_the_repeat_boot(self):
+        # The repeat boot reruns the contract-service gate the baseline skips.
+        out = self.repeat_boot_gate(UTAH_E2E_BASELINE="1", UTAH_E2E_REPEAT_BOOT="1",
+                                    UTAH_E2E_EXPECT_FLAVOR="utah")
+        self.assertEqual(out, "")
+
+    def test_post_testing_luks_job_requests_the_repeat_boot(self):
+        import yaml
+        workflow = yaml.safe_load((ROOT / ".github/workflows/post-testing-e2e.yml").read_text())
+        step = next(s for s in workflow["jobs"]["luks"]["steps"] if "luks-e2e.sh" in s.get("run", ""))
+        self.assertEqual(step["env"]["UTAH_E2E_REPEAT_BOOT"], "1")
+
     def test_luks_e2e_runs_the_service_check_only_behind_the_switch(self):
-        # The review VM's repeat boot (UTAH_E2E_EXPECT_FLAVOR) is never the
-        # lifecycle's baseline; any other first-boot call must be gated.
+        # The repeat boot is never the lifecycle's baseline; any other
+        # first-boot call must be gated.
         calls = [line.strip() for line in LUKS.splitlines() if "verify_setup_state " in line
                  and not line.lstrip().startswith("#")]
         self.assertEqual(calls, ["verify_setup_state first", "verify_setup_state repeat"])
