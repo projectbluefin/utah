@@ -874,7 +874,7 @@ class EvidenceTests(unittest.TestCase):
         self.assertIn("preserve_failed_disk_diagnostics", script)
         self.assertIn("qemu-img info", script)
         self.assertIn("never the disk itself", script)
-        # A bare command failing under `set -e` (the installer step, for one)
+        # A bare command failing under `set -e` (an scp step, for one)
         # aborts straight to the EXIT trap without ever calling fail(), so
         # the capture must live in cleanup(), not only in fail()'s body.
         cleanup_at = script.index("cleanup() {")

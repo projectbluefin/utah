@@ -369,10 +369,26 @@ preserve_failed_disk_diagnostics() {
     echo "  disk diagnostics kept (metadata only, never the disk itself): ${out}" >&2
 }
 
+# When the installer fails, record what still holds its target before the
+# EXIT trap stops the live VM (#1467). The installer's own teardown has
+# already lazily unmounted the target and, when the LUKS close failed, left
+# the mapping open, so whatever held it is still in the guest now and gone
+# once QEMU is killed. iso/scripts/target-holders.sh reads metadata only.
+# Written under WORK, which CI already uploads as "*.log"; the report's
+# sections up to the journal also go to the job log. `timeout` because a
+# guest stuck in filesystem I/O must not hang the harness past its deadline.
+keep_target_holders() {
+    local since="$1" out="${WORK}/install-target-holders-$(date +%Y%m%d-%H%M%S).log"
+    timeout 300 sshpass -p live ssh "${SSH_OPTS[@]}" -p "${SSH_PORT}" liveuser@127.0.0.1 \
+        "sudo bash -s -- '${since}' btrfs" < "${ROOT}/iso/scripts/target-holders.sh" > "${out}" 2>&1 || true
+    sed '/^=== systemd unit activity/,$d' "${out}" >&2
+    echo "  installer target holders kept (metadata only): ${out}" >&2
+}
+
 cleanup() {
     # $? must be read before anything else runs in this function, or it
     # stops reflecting the exit that triggered the trap. A bare command
-    # failing under `set -e` (the installer step in phase 3, for one) aborts
+    # failing under `set -e` (an scp of the recipe in phase 3, for one) aborts
     # here directly without ever calling `fail()` -- so diagnostics belong in
     # the trap that always runs, not only in the helper that sometimes does.
     # The same holds for the exit status: e2e_status reports the phase's code
@@ -800,7 +816,13 @@ scp_live liveuser@127.0.0.1:/tmp/utah-plymouth-theme "${PLYMOUTH_THEME_FILE}"
 scp_live liveuser@127.0.0.1:/tmp/utah-plymouth-watermark.png "${PLYMOUTH_WATERMARK}"
 
 echo "Running the installer from the ISO's embedded payload store..."
-ssh_live 'sudo /usr/local/bin/fisherman /tmp/luks-recipe.json'
+# The guest's clock, so the holder report's journal window starts here.
+install_since="$(ssh_live 'date +@%s' 2>/dev/null || true)"
+ssh_live 'sudo /usr/local/bin/fisherman /tmp/luks-recipe.json' || {
+    install_status=$?
+    keep_target_holders "${install_since}"
+    fail "the installer exited ${install_status}"
+}
 
 # The installed system already boots with console=ttyS0, but also with
 # "quiet", which suppresses the systemd messages phase 6 and the failure
