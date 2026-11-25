@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-24",
+  "generated_at": "2026-11-25",
   "generator": "scripts/generate-site-data.py",
   "groups": [
     {
@@ -487,7 +487,7 @@
   ],
   "totals": {
     "installed": 429,
-    "unavailable": 4
+    "unavailable": 6
   },
   "unavailable": [
     {
@@ -507,6 +507,18 @@
         253
       ],
       "name": "grub2-efi-x64-cdboot"
+    },
+    {
+      "issues": [
+        1256
+      ],
+      "name": "ibus-rime"
+    },
+    {
+      "issues": [
+        1256
+      ],
+      "name": "ibus-typing-booster"
     },
     {
       "issues": [

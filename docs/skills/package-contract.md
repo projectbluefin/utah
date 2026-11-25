@@ -73,6 +73,10 @@ installing the Fcitx daemon. Keep the base manifest's Mozc and Unikey.
 Do not treat a published engine RPM as installable on its own: `ibus-anthy`
 needs Kasumi, `ibus-typing-booster` needs `cldr-emoji-annotation`, and
 `ibus-rime` needs `brise` and the OpenCC library through `librime`.
+Kasumi is in the pinned factory, so `ibus-anthy` ships. The other two wait on
+packages no enabled repository carries, so they sit in `[unavailable]` with
+their tracking issue, where the gate watches them: when the factory publishes
+the missing package, the gate fails and the engine moves into `[parity]`.
 
 ## Wi-Fi documentation currency
 
@@ -86,7 +90,12 @@ hardware establishes that its radio works.
 
 ## [unavailable] rules
 
-`[unavailable]` means "no repository Utah enables provides this name at all".
+`[unavailable]` means "Utah cannot install this name from the repositories it
+enables". That covers a name no enabled repository carries, and a name the
+factory publishes but Utah cannot install, because the repository policy
+excludes it (`grub2-efi-x64-cdboot`) or because a package it requires is
+published nowhere (`ibus-typing-booster` needs `cldr-emoji-annotation`,
+`ibus-rime` needs `brise`).
 It covers both kinds of parity gap: names in `base.toml`, and names a measured
 image ships outside that manifest (Dakota's gaps are triaged in
 `baselines/triage.toml`; `nss-mdns` came from the retired Bluefin image
@@ -94,6 +103,11 @@ baseline). Each entry
 **MUST carry a tracking issue**: the list is the documented parity debt, not
 a dumping ground for packages that are merely inconvenient (header comment,
 `packages/utah.toml`).
+
+The gate in `scripts/check-repo-availability.py` probes every entry with a real
+transaction against the pinned inputs, so an entry that becomes installable
+fails the build and names itself: that is the signal to move it into
+`[parity]`. A gap that is only written down in prose rots.
 
 ## Media packages and codec parity
 
@@ -387,7 +401,7 @@ describe the same image as its `surface.tsv`; after a refresh,
 
 Current counts, per the README "Parity with Dakota" section: 57 base manifest
 packages installed, 372 Utah additions (GNOME 51, base-image parity, device
-firmware, desktop services), 4 genuinely unavailable. After changing a manifest,
+firmware, desktop services), 6 genuinely unavailable. After changing a manifest,
 run `python3 scripts/generate-site-data.py`, then
 `python3 scripts/check-doc-counts.py --write` to refresh both documents.
 `just check` validates the inventory and both sets of counts.
