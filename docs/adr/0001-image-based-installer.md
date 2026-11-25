@@ -200,7 +200,7 @@ Since 7.2, btrfs reads data through large folios, and without mainline
 verified", first in v7.4-rc2, no `Cc: stable`) fs-verity reports intact
 files as `FILE CORRUPTED` and sometimes returns `EIO`. A composefs root is
 nothing but fs-verity objects. Utah's kernel is Fedora's rebuilt with the
-patch (`7.3.3-200.1.utah1.fc44`, `docs/skills/kernel-cache.md`); the
+patch (`7.3.4-200.1.utah1.fc44`, `docs/skills/kernel-cache.md`); the
 Fedora-signed kernel `os-minimal` ships lacks it. The
 upstream route is the kernel-ark `fedora-7.3` backport,
 [kernel-ark!4899](https://gitlab.com/cki-project/kernel-ark/-/merge_requests/4899),
