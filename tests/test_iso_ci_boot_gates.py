@@ -84,6 +84,38 @@ AMD EPYC 7763 64-Core (2) @ 2.
 » 44 (Flatpa
 """
 
+    # Verbatim from fastfetch-ocr.txt in the iso-diagnostics-utah-nvidia artifact
+    # of run 45636142672: the kernel line is garbled and no desktop, terminal or
+    # shell field was read. The screenshot showed all of fastfetch.
+    TRUNCATED_BODY_TRANSCRIPT = """ujust bluefin-c
+brey
+ujust
++ DReport an issue
++ B Documentation h
+UTAH-E2E-FASTFETCH
+[utahtest@utah-luk
+Wed Nov 25 3:35PM
+Q Type to search
+utahtest@utah-luks-test:~
+Enable terminal bling
+Manage command line packages
+Report an issue to the contri
+> uti
+> Bluefin (Version: testing-
+> Linu 200.1.utah1.fc4:
+nin
+Forged on Nov 25 2026
+KVM/QEMU Standard PC (Q35 + ICH9,
+Intel(R) Xeon(R) 6973P-C (2) @ 2
+troll
+60
+e95e91)
+109) (pe
+GHz
+2
+” oO
+"""
+
     def matches(self, transcript):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "fastfetch-ocr.txt"
@@ -113,6 +145,9 @@ AMD EPYC 7763 64-Core (2) @ 2.
 
     def test_accepts_the_sentinel_with_no_kernel_line(self):
         self.assertTrue(self.matches(self.MISSING_KERNEL_TRANSCRIPT))
+
+    def test_accepts_the_sentinel_with_only_the_hardware_block(self):
+        self.assertTrue(self.matches(self.TRUNCATED_BODY_TRANSCRIPT))
 
     def test_rejects_suffix_with_kernel_but_no_second_body_token(self):
         self.assertFalse(self.matches(

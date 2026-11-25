@@ -79,6 +79,12 @@ SIGNATURES = (
         "codeberg.org DNS failure (fuzzy-application-search submodule)",
     ),
     Signature(
+        "gnome-gitlab-5xx",
+        re.compile(r"unable to access 'https://gitlab\.gnome\.org/\S*': "
+                   r"The requested URL returned error: 5\d\d"),
+        "GNOME GitLab 503 cloning gnome-ponytail-daemon failed 12 testsuite legs (utah run 45673646964)",
+    ),
+    Signature(
         "libpod-lock",
         re.compile(r"libpod_lock"),
         "podman lock exhaustion on hosted runners (tuna-os/tunaOS run 31766602231)",

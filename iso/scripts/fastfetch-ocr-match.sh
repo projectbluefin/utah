@@ -21,7 +21,9 @@
 #      "Linux 7.3.3-200.1.utah1.fc44.x86_64" came back as
 #      "Linu 200.1.utah1.fc4:" or not at all, failing seven straight
 #      post-testing runs (44691397660 to 44751145611) on screenshots that
-#      plainly showed fastfetch.
+#      plainly showed fastfetch. Run 45636142672 lost every field below the
+#      hardware block as well, so the build date ("Forged on") and the machine
+#      model ("KVM/QEMU"), which nothing else on screen prints, count too.
 #
 # Fallback rule (#375): tesseract then substituted inside the fragment itself,
 # reading "E2E" as "£26" on four consecutive flavors and runs while reading the
@@ -39,7 +41,7 @@ OCR_TEXT="${1:?path to the tesseract transcript is required}"
 [[ -s "${OCR_TEXT}" ]] || exit 1
 
 KERNEL='kernel|Linux[[:space:]]+[0-9]+\.[0-9]+'
-BODY='Mutter|Wayland|GNOME [0-9]+|ghostty|\(flatpak\)|bash [0-9]+\.[0-9]+'
+BODY='Mutter|Wayland|GNOME [0-9]+|ghostty|\(flatpak\)|bash [0-9]+\.[0-9]+|Forged on|KVM/QEMU'
 
 if grep -qiE 'E2E[^A-Za-z0-9]?FASTFETCH' "${OCR_TEXT}" \
     && grep -qiE "${KERNEL}|${BODY}" "${OCR_TEXT}"; then

@@ -1,0 +1,4 @@
+2026-11-25T18:49:38.7611158Z ##[group]Run SSH_COMMON="-i /tmp/vm_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -o ControlMaster=auto -o ControlPersist=600 -o ControlPath=/tmp/ssh-ctrl-%C -o ConnectTimeout=3"
+2026-11-25T18:49:59.4922437Z done.
+2026-11-25T18:49:59.6253019Z fatal: unable to access 'https://gitlab.gnome.org/ofourdan/gnome-ponytail-daemon.git/': The requested URL returned error: 503
+2026-11-25T18:49:59.9207968Z ##[error]Process completed with exit code 1.

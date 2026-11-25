@@ -347,6 +347,25 @@ you do. The script finds its issue through the REST issues listing (label
 `area/ci` plus a body marker), not issue search. Dispatch the workflow with
 another `max_age_hours` to try a different threshold.
 
+### Lost Flatpak copy
+
+fisherman logs `Warning: could not copy flatpaks: ...` and exits 0, and the
+installed system then has no Ghostty to show fastfetch in. `luks-e2e.sh` keeps
+the installer's output as `installer.log` and fails phase 3 on that line, so
+"fastfetch output was not visible" (phase 7) now means an OCR or terminal
+problem. The known cause is GNU tar's exit status 1 (`tar: .: file changed as
+we read it`): fisherman killed the extractor before it wrote its deferred
+symlinks. Fix it in tuna-os/fisherman, then bump the bootc-installer pin in
+`iso/live/src/install-flatpaks.sh`; do not retry around it here.
+
+### Busy target at finalize
+
+`mount point is busy` (exit 13, #1467) is fwupd: the holder reports of runs
+45597802154 and 45605020265 both show fwupd.service's PrivateTmp `/var/tmp`
+mounted from the target's `.fisherman-scratch/var-tmp-override`, because
+fisherman bound its scratch directory over the live host's `/var/tmp`. The fix
+is tuna-os/fisherman#530.
+
 ### Infra re-run
 
 One red leg skips `promote-to-testing`, so a transient fault wastes the whole
@@ -360,7 +379,9 @@ from cannot excuse a later product failure. The signatures, each tied to the
 run that showed it, live in `SIGNATURES` in the script: runner shutdown or
 lost communication, a job with no log at all (HTTP 404/410), a registry 5xx,
 a Sigstore 5xx, `All mirrors were tried` / `Librepo error: Curl error`,
-`Could not resolve host: codeberg.org`, and `libpod_lock`. Add one only with a
+`Could not resolve host: codeberg.org`, a GNOME GitLab 5xx on a `git clone`
+(run 45673646964: 12 testsuite legs, the gnome-ponytail-daemon clone), and
+`libpod_lock`. Add one only with a
 run that shows it, and a fixture under `tests/fixtures/e2e-infra/`.
 
 When every failed job matches, the `rerun` job runs `gh run rerun --failed`
