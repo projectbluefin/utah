@@ -21,7 +21,7 @@ filesystem has been shrunk to its content:
 The live entry is the deployment's own entry with `ro utah.live` in place of
 `rw` (utah-live-root.service overlays the root with tmpfs in the initrd). Its
 version is raised so GRUB's blscfg, which sorts highest first, lists it first.
-OS-Installer's Utah install.sh removes the entry and the grubenv default from
+utah-sysinstall-post removes the entry and the grubenv default from
 the installed copy and fails if any entry still carries `utah.live`.
 """
 

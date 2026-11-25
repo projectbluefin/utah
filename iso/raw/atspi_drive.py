@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Read a GTK 4 application's accessibility tree from inside the guest session.
 
-The raw-image E2E uses this to see the real OS-Installer and
+The raw-image E2E uses this to see the real gnome-setup and
 gnome-initial-setup windows: which page is showing, which widgets are
 sensitive or focused, and where each widget sits in its window. The host does
 the input itself, like a user would: it clicks with a QEMU USB tablet at the

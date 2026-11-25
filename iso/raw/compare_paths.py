@@ -8,7 +8,7 @@
 
 The image-based side comes from this run: raw-evidence/medium.json and
 shrink.json (build-raw-image.sh, shrink-raw-image.sh), the measure_medium.py
-outputs, and e2e evidence/results.json and utah-install.log (raw_e2e.py).
+outputs, and e2e evidence/results.json (raw_e2e.py).
 
 The fisherman side is the latest Post-Testing E2E `luks` job for the same
 image and digest, read through `gh api` (GH_TOKEN): the job's conclusion,
@@ -48,8 +48,6 @@ GNOME_OS_ISOS = {
 PHASE_RE = re.compile(r"^(\S+)\s+=== Phase (\d)/7:")
 ERROR_RE = re.compile(r"^(\S+)\s+##\[error\]Process completed with exit code (\d+)")
 ISO_READY_RE = re.compile(r"ISO ready: \S+ \(([^)]+)\)")
-INSTALLED_RE = re.compile(r"Utah installed to \S+ in (\d+)s")
-BLOCK_COPY_RE = re.compile(r"Block copy finished in (\d+)s")
 
 
 def ts(stamp):
@@ -180,24 +178,18 @@ def image_metrics(evidence, raw_evidence, sizes, image_build_seconds):
     shrink = read_json(Path(raw_evidence) / "shrink.json") or {}
     flatpaks = read_json(Path(raw_evidence) / "flatpaks.json") or {}
     backend = read_json(Path(raw_evidence) / "backend.json") or results.get("backend")
-    log_path = Path(evidence) / "utah-install.log"
-    log_text = log_path.read_text(errors="replace") if log_path.exists() else ""
-    installed = INSTALLED_RE.search(log_text)
-    copied = BLOCK_COPY_RE.search(log_text)
     timings = results.get("timings") or {}
     return {
         "result": results.get("result", "not run"),
         "error": results.get("error"),
         "install": results.get("install"),
-        "installer": results.get("installer", "os-installer"),
+        "installer": results.get("installer", "gnome-setup"),
         "encryption": results.get("encryption"),
         "backend": backend,
         "sizes": [s for s in (read_json(p) for p in sizes) if s],
         "shrink": shrink or None,
         "image_build_seconds": image_build_seconds,
         "bootc_install_seconds": medium.get("bootc_install_seconds"),
-        "install_seconds": int(installed.group(1)) if installed else None,
-        "block_copy_seconds": int(copied.group(1)) if copied else None,
         "gui_confirm_to_done_seconds": timings.get("gui-install-seconds-after-confirm"),
         "bootc_switch_seconds": timings.get("bootc-switch-seconds"),
         "stages": results.get("stages") or [],
@@ -253,12 +245,12 @@ def render(comparison):
     iso_text = f"{fm.get('iso_size') or 'n/a'} (production ISO artifact {gib(iso)})"
     lines += [
         f"| Result | {img['result']} | {fm.get('conclusion') or 'n/a'} |",
-        f"| Installer | {img.get('installer') or 'os-installer'} ({img.get('install') or 'gui'}) | bootc-installer + fisherman |",
+        f"| Installer | {img.get('installer') or 'gnome-setup'} ({img.get('install') or 'gui'}) | bootc-installer + fisherman |",
         f"| bootc backend | {backend_cell(img.get('backend'))} | ostree (composefs is opt-in, #1129) |",
         f"| Medium, raw | {gib(final.get('apparent_bytes'))} (allocated {gib(final.get('allocated_bytes'))}) | {iso_text} |",
         f"| Medium, zstd -3 | {gib(zstd3)} | ISO is already compressed |",
         f"| Build time | image layer {secs(img['image_build_seconds'])} + bootc install {secs(img['bootc_install_seconds'])} | ISO compose {secs(fm.get('iso_build_seconds'))} |",
-        f"| Install time | {secs(img['install_seconds'])} install.sh (block copy {secs(img['block_copy_seconds'])}; GUI confirm-to-done {secs(img['gui_confirm_to_done_seconds'])}) | {secs(fm.get('install_seconds'))} phase 3 to 4 ({fm.get('install_status', 'n/a')}) |",
+        f"| Install time | GUI confirm-to-done {secs(img['gui_confirm_to_done_seconds'])} | {secs(fm.get('install_seconds'))} phase 3 to 4 ({fm.get('install_status', 'n/a')}) |",
     ]
     boots = img["boots"]
     selinux = ", ".join(f"{k}: {v['selinux']}" for k, v in boots.items()) or "n/a"

@@ -351,7 +351,7 @@ the scope (`/token?scope=repository:projectbluefin/<name>:pull`).
 ## Image-based installer (experimental, ADR-0001)
 
 A raw bootc disk image that boots live with `utah.live` and installs by
-block copy into LUKS2 through OS-Installer runs beside the ISO path in
+block copy into LUKS2 through gnome-setup runs beside the ISO path in
 `image-installer.yml`, which compares both on the same `:testing` digest.
 It gates nothing. Build, run and gotchas:
 [image-installer](local-testing/references/image-installer.md).

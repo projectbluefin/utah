@@ -5,7 +5,7 @@
 #
 # bootc installs into a sparse file sized for headroom (UTAH_RAW_SIZE). The
 # medium only has to hold what is on it: the live session writes to a tmpfs
-# overlay, and OS-Installer's install.sh grows the root on the target
+# overlay, and utah-sysinstall-post grows the root on the target
 # (systemd-repart gives root the rest of the disk, then
 # `btrfs filesystem resize max`). So:
 #

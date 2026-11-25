@@ -101,6 +101,9 @@ Build, in parallel with the ISO/fisherman path and without changing it, an
    daemon is dropped. os-installer stays in the track only as the working
    fallback, behind an input, until gnome-setup passes the seven-stage E2E;
    do not grow its shell contract beyond what the comparison needs.
+   *Update 2026-11-25:* gnome-setup has passed every stage in each nightly run
+   on main since 2026-11-22 (44999435952, 45133035521, 45350056413,
+   45570236605), so os-installer is removed.
 5. **bootc remains the updater.** The copied deployment keeps its origin;
    `bootc upgrade`/`switch`/`rollback` work as on a fisherman install. No
    systemd-sysupdate A/B partitions.

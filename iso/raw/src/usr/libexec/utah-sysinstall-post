@@ -10,8 +10,7 @@
 # already carries shim and GRUB, and /boot the deployment's BLS entries.
 # gnome-setup then starts this script as utah-sysinstall-post@<TARGET>.service
 # (pages.conf: [page:installer] post-install-unit) and waits for it, before
-# the recovery key page. It does what a block copy cannot get right by itself,
-# as OS-Installer's install.sh does after its own copy:
+# the recovery key page. It does what a block copy cannot get right by itself:
 #
 #   * new filesystem UUIDs/serials (the live medium may stay plugged in), and
 #     every boot-config reference to the old ones rewritten (BLS entries,

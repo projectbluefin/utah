@@ -6,17 +6,12 @@
 Stages (every screenshot is listed in DIR/screenshots/manifest.json):
   1. Boot the raw disk image as live media (read-only virtio disk, GRUB's
      default "Utah Live" entry: ro utah.live, tmpfs overlay over the root).
-  2. Install with the real OS-Installer window (--install gui): language,
-     welcome, keyboard, disk, encryption with a passphrase, confirmation,
-     summary, progress, completion. With --install script the same Utah
-     install.sh runs over SSH instead, which exercises the installed disk
-     independently of the GUI driver.
-     With --installer gnome-setup (live entry with utah.live.installer=
-     gnome-setup) the installer is gnome-setup driving systemd-sysinstall:
-     language, keyboard, try-or-install, disk, confirmation, progress, the
-     recovery key with its QR code, done. --install script then runs the same
-     systemd-sysinstall Run, utah-sysinstall-post@ and a recovery key
-     enrollment over SSH. With a TPM (--tpm, swtpm) the root is bound to it:
+  2. Install with the real gnome-setup window driving systemd-sysinstall
+     (--install gui): language, keyboard, try-or-install, disk, confirmation,
+     progress, the recovery key with its QR code, done. --install script runs
+     the same systemd-sysinstall Run, utah-sysinstall-post@ and a recovery key
+     enrollment over SSH, which exercises the installed disk independently of
+     the GUI driver. With a TPM (--tpm, swtpm) the root is bound to it:
      every boot with the TPM must unlock without a prompt, and the bootc switch
      boot runs without the TPM and unlocks with the recovery key. Without one,
      gnome-setup's disk passphrase page sets a passphrase next to the recovery
@@ -72,7 +67,6 @@ PIN = "utahluks2026"
 USER_FULL = "Utah Tester"
 USER = "tester"
 PASSWORD = "utahtest2026"
-INSTALLER_APP = "installer"   # AT-SPI app name of com.github.p3732.os_installer
 GS_APP = "setup"              # AT-SPI app name of gnome-setup (org.gnome.Setup)
 GIS_APP = "initial-setup"
 TARGET_DISK = "/dev/vdb"
@@ -121,7 +115,7 @@ class Results:
         self.flatpaks = {}
         self.composefs = {}
         self.backend = None
-        self.installer = "os-installer"
+        self.installer = "gnome-setup"
         self.encryption = {}
         self.current = None
         self.started = None
@@ -299,8 +293,6 @@ class Harness:
         if decision and decision.get("backend") != args.backend:
             raise SystemExit(f"--backend {args.backend} contradicts {args.backend_decision}: {decision}")
         self.results.backend = {"backend": args.backend, **decision}
-        self.results.installer = args.installer
-        self.gnome_setup = args.installer == "gnome-setup"
         self.tpm = bool(args.tpm)
         if self.tpm and not shutil.which("swtpm"):
             raise SystemExit("--tpm needs swtpm")
@@ -619,23 +611,6 @@ class Harness:
         log(f"  {app} window could not be maximized; clicks use the centered-window fallback")
         return nodes
 
-    def click_until(self, runner, app, pick, done, what, tries=3, settle=20):
-        """Click the node pick(nodes) returns until done(nodes) holds."""
-        for attempt in range(tries):
-            nodes = self.snapshot(runner, app)
-            node = pick(nodes)
-            if node is None:
-                self.save(f"atspi-missing-{slug(what)}.json", json.dumps(nodes, indent=1))
-                raise Fail(f"{what}: nothing to click")
-            self.click_node(nodes, node)
-            got = self.poll(runner, app, done, settle)
-            if got is not None:
-                return got
-            self.debug_shot(f"miss-{slug(what)}-{attempt}")
-            self.save(f"atspi-miss-{slug(what)}-{attempt}.json", json.dumps(self.snapshot(runner, app), indent=1))
-        self.shot(f"fail-{slug(what)}", f"FAILURE: clicking never reached {what}")
-        raise Fail(f"clicking never reached {what}")
-
     def press(self, runner, app, name, done, what, timeout=120, role=None):
         """Press a button by its AT-SPI click action (pointer if it has none)."""
         act = ["act", app, name] if role is None else ["act", app, name, role]
@@ -748,90 +723,6 @@ class Harness:
                 return
         probe.with_suffix(".ppm").unlink(missing_ok=True)
         log("  GRUB menu not captured (timeout hidden)")
-
-    def installer(self):
-        if self.gnome_setup:
-            return self.gnome_setup_install()
-        log("=== Stage 2: OS-Installer GUI ===")
-        self.results.begin("install")
-        r, app = self.live_runner, INSTALLER_APP
-        nodes = self.wait_for(r, app, lambda n: has_text(n, "English"), "language page", 240)
-        self.save("atspi-language.json", json.dumps(nodes, indent=1))
-        # GNOME Shell opens the overview at login, above the autostarted window.
-        self.key("esc")
-        time.sleep(3)
-        self.maximize(r, app)
-        time.sleep(2)
-        self.shot("02-installer-language", "OS-Installer autostarted in the live session: language page")
-
-        nodes = self.click_until(r, app, lambda n: row_containing(n, "English (United States)"),
-                                 lambda n: has_text(n, "copying this live system"), "welcome page")
-        self.shot("03-installer-welcome", "Welcome page with the Utah logo and config text")
-        if not has_name(nodes, "Continue"):
-            raise Fail("the click picked another language than English (welcome page has no 'Continue')")
-
-        self.press(r, app, "Continue", lambda n: has_text(n, "Test the Keyboard Layout Here"), "keyboard page")
-        self.shot("04-installer-keyboard", "Keyboard layout page")
-
-        nodes = self.press(r, app, "Continue", lambda n: has_text(n, TARGET_DISK), "disk page")
-        self.save("atspi-disk.json", json.dumps(nodes, indent=1))
-        self.shot("05-installer-disk", f"Disk selection: the empty 48 GB target {TARGET_DISK} is offered; the 24 GB live medium is too small to pick")
-
-        nodes = self.click_until(r, app, lambda n: row_containing(n, TARGET_DISK),
-                                 lambda n: has_name(n, "Encrypt Files"), "encryption page")
-        self.save("atspi-encrypt.json", json.dumps(nodes, indent=1))
-        self.enable_encryption(r, app)
-        self.shot("06-installer-encryption", "Encryption enabled with a passphrase (LUKS2 via systemd-repart Encrypt=key-file)")
-
-        self.press(r, app, "Continue", lambda n: has_text(n, "This will delete all data on"), "confirmation page")
-        self.shot("07-installer-confirm", "Confirmation: the target disk will be erased")
-        nodes = self.press(r, app, "Confirm", lambda n: not has_text(n, "This will delete all data on"), "page after confirmation")
-        start = time.time()
-        if has_name(nodes, "Confirm") and not install_finished(nodes):
-            self.shot("08-installer-summary", "Summary page; the install script is already running in the background")
-            nodes = self.press(r, app, "Confirm", lambda n: has_name(n, "Confirm") is False or install_finished(n), "install page")
-        if not install_finished(nodes):
-            time.sleep(5)
-            self.shot("09-installer-progress", "Install running: block copy of the live medium onto the target")
-        nodes = self.wait_for(r, app, install_finished, "install result", 3600)
-        self.timings["gui-install-seconds-after-confirm"] = int(time.time() - start)
-        self.grab_install_log()
-        if has_text(nodes, "Error During Installation"):
-            self.shot("10-installer-failed", "FAILURE: OS-Installer reported an error")
-            self.atspi(r, "frame-action", app, "win.show-terminal")
-            time.sleep(3)
-            self.shot("11-installer-log", "Install script output at the failure")
-            raise Fail("installer failed")
-        log(f"  installer finished {self.timings['gui-install-seconds-after-confirm']}s after confirmation")
-        self.shot("10-installer-done", "Installation complete page")
-        res = self.atspi(r, "frame-action", app, "win.show-terminal")
-        if res and "error" not in res:
-            time.sleep(3)
-            self.shot("11-installer-log", "OS-Installer's terminal view: repart block copy into LUKS2, UUID regeneration, live entry removed, timings")
-        else:
-            log(f"  terminal view not opened: {res}")
-        self.after_install()
-
-    def enable_encryption(self, r, app):
-        res = self.atspi(r, "act", app, "Encrypt Files")
-        log(f"  Encrypt Files: {res}")
-        pin_ready = lambda n: has_name(n, "Encryption PIN", sensitive=True)  # noqa: E731
-        if not (res and res.get("how", "none") != "none" and self.poll(r, app, pin_ready, 10)):
-            self.click_until(r, app, lambda n: named(n, "Encrypt Files"), pin_ready, "encryption switch")
-        for label in ("Encryption PIN", "Confirm PIN"):
-            nodes = self.snapshot(r, app)
-            node = named(nodes, label, sensitive=True)
-            if node is None:
-                self.save("atspi-encrypt-missing.json", json.dumps(nodes, indent=1))
-                raise Fail(f"no sensitive {label!r} entry")
-            self.fill(r, app, node, PIN)
-        nodes = self.snapshot(r, app)
-        self.save("atspi-encrypt-filled.json", json.dumps(nodes, indent=1))
-        lengths = [len(n["text"]) for n in nodes if n["role"] in ("password text", "text", "entry") and n["text"]]
-        log(f"  entry text lengths after typing: {lengths}")
-        if lengths and lengths.count(len(PIN)) < 2:
-            self.debug_shot("encryption-typed")
-            raise Fail(f"passphrase entries hold {lengths}, expected two of length {len(PIN)}")
 
     # ---- gnome-setup ----------------------------------------------------------
     def gnome_setup_install(self):
@@ -1086,22 +977,6 @@ class Harness:
         self.check_slots()
         self.after_install()
 
-    def script_install(self):
-        """Run the same install.sh over SSH (no GUI), for --install script."""
-        if self.gnome_setup:
-            return self.gnome_setup_script_install()
-        log("=== Stage 2 (script): Utah install.sh over SSH ===")
-        self.results.begin("install")
-        start = time.time()
-        out = self.ssh("liveuser", f"sudo OSI_DEVICE_PATH={TARGET_DISK} OSI_DEVICE_IS_PARTITION=0 OSI_USE_ENCRYPTION=1 "
-                       f"OSI_ENCRYPTION_PIN={PIN} /usr/share/utah/os-installer/scripts/install.sh 2>&1",
-                       password="live", timeout=3600, check=False)
-        self.timings["script-install-seconds"] = int(time.time() - start)
-        self.save("utah-install.log", out)
-        if "Utah installed to" not in out:
-            raise Fail("install.sh failed (evidence/utah-install.log)")
-        self.after_install()
-
     def after_install(self):
         facts = self.ssh("liveuser", "sudo efibootmgr -v; lsblk -o NAME,SIZE,TYPE,FSTYPE,UUID,PARTLABEL", password="live", check=False)
         self.save("live-after-install.txt", facts)
@@ -1118,7 +993,7 @@ class Harness:
     def installed_boot(self, phase, unlock_label, unlock="pin"):
         """Boot (or reboot) the installed disk: unlock, graphical target.
 
-        unlock: "pin" types OS-Installer's passphrase and "recovery" gnome-setup's
+        unlock: "pin" types the passphrase of gnome-setup's disk passphrase page and "recovery" gnome-setup's
         recovery key at the branded Plymouth prompt; "tpm" expects no prompt at
         all (gnome-setup's TPM2 enrollment) and screenshots the first frame the
         unlocked system draws."""
@@ -1313,7 +1188,7 @@ class Harness:
         self.save(f"bootc-status-{slug(phase)}.json", status_json)
         digest_cmd = f"echo {PASSWORD} | sudo -S -p '' bootc status"
         self.terminal_shot(prefix, "bootc-status", "bootc status", digest_cmd, f"{phase}: terminal on the desktop running `bootc status`")
-        if self.gnome_setup and phase == "first boot":
+        if phase == "first boot":
             luks = (f"echo {PASSWORD} | sudo -S -p '' true; dev=$(lsblk -rnpo NAME,FSTYPE | awk '$2 == \"crypto_LUKS\" {{print $1}}'); "
                     "echo \"== keyslots of $dev\"; sudo systemd-cryptenroll \"$dev\"; echo '== /proc/cmdline'; "
                     "tr ' ' '\\n' </proc/cmdline | grep rd.luks; echo '== unlock'; "
@@ -1333,17 +1208,6 @@ class Harness:
         time.sleep(15)
         self.shot(f"{prefix}-{name}", proves, True)
         self.ssh("root", f"systemctl --machine={USER}@.host --user stop {unit}", check=False)
-
-    def reboot(self):
-        self.ssh("root", "systemctl reboot --no-block", check=False)
-        end = time.time() + 120
-        while time.time() < end:
-            try:
-                self.ssh("root", "true", timeout=10)
-                time.sleep(2)
-            except (Fail, subprocess.TimeoutExpired):
-                return
-        raise Fail("installed system did not go down for reboot")
 
     def check_flatpaks(self, phase, removed=None):
         """The baked Flatpaks are all there, except the one the user removed."""
@@ -1393,10 +1257,10 @@ class Harness:
              "device": "virtio-blk-pci,drive=target,bootindex=1"},
         ]
         self.start_vm("installed", self.installed_drives, self.vars_installed, self.args.ssh_port + 1, tpm=self.tpm)
-        if self.gnome_setup and self.tpm:
+        if self.tpm:
             self.installed_boot("first boot", "12-first-boot-tpm2-unlock", unlock="tpm")
         else:
-            # OS-Installer's passphrase, or the one gnome-setup's disk passphrase page set.
+            # The passphrase gnome-setup's disk passphrase page set.
             self.installed_boot("first boot", "12-first-boot-luks-prompt")
         self.results.begin("initial setup")
         self.initial_setup()
@@ -1417,13 +1281,9 @@ class Harness:
         log(f"  staged: {staged_digest}")
         if not staged_digest:
             raise Fail("bootc switch staged nothing (evidence/bootc-switch.log)")
-        if self.gnome_setup:
-            # Without the TPM, the recovery key gnome-setup showed (the second key when there is no TPM).
-            self.restart_installed("installed-switch", tpm=False)
-            self.installed_boot("after bootc switch", "20-switch-recovery-key-prompt", unlock="recovery")
-        else:
-            self.reboot()
-            self.installed_boot("after bootc switch", "20-switch-luks-prompt")
+        # Without the TPM, the recovery key gnome-setup showed (the second key when there is no TPM).
+        self.restart_installed("installed-switch", tpm=False)
+        self.installed_boot("after bootc switch", "20-switch-recovery-key-prompt", unlock="recovery")
         self.gdm_login("after bootc switch", "21-switch-gdm")
         digest = self.desktop_and_status("after bootc switch", "22-switch")
         self.check_flatpaks("after bootc switch", removed)
@@ -1433,14 +1293,10 @@ class Harness:
         log("=== Stage 5: bootc rollback ===")
         self.results.begin("bootc rollback")
         self.save("bootc-rollback.log", self.ssh("root", "bootc rollback 2>&1"))
-        if self.gnome_setup:
-            self.restart_installed("installed-rollback", tpm=self.tpm)
-            if self.tpm:
-                self.installed_boot("after bootc rollback", "30-rollback-tpm2-unlock", unlock="tpm")
-            else:
-                self.installed_boot("after bootc rollback", "30-rollback-luks-prompt")
+        self.restart_installed("installed-rollback", tpm=self.tpm)
+        if self.tpm:
+            self.installed_boot("after bootc rollback", "30-rollback-tpm2-unlock", unlock="tpm")
         else:
-            self.reboot()
             self.installed_boot("after bootc rollback", "30-rollback-luks-prompt")
         self.gdm_login("after bootc rollback", "31-rollback-gdm")
         digest = self.desktop_and_status("after bootc rollback", "32-rollback")
@@ -1526,10 +1382,6 @@ def top_frame(nodes):
     return max(frames, key=lambda n: n["ext"][2] * n["ext"][3]) if frames else None
 
 
-def install_finished(nodes):
-    return has_text(nodes, "Restart System") or has_text(nodes, "Error During Installation")
-
-
 def page_sig(nodes):
     """What identifies a page: its showing headings and labels."""
     return frozenset((n["role"], n["name"] or n["text"]) for n in nodes if n["role"] in ("heading", "label"))
@@ -1573,8 +1425,6 @@ def main():
     ap.add_argument("--cpus", type=int, default=4)
     ap.add_argument("--target-size", default="48G")
     ap.add_argument("--install", choices=("gui", "script"), default="gui")
-    ap.add_argument("--installer", choices=("gnome-setup", "os-installer"), default="gnome-setup",
-                    help="installer the medium's live session offers (build-raw-image.sh installer.txt)")
     ap.add_argument("--tpm", action="store_true",
                     help="give the VMs a software TPM 2.0 (swtpm) that persists across them "
                          "(gnome-setup: without it, the disk passphrase page is filled and used)")
@@ -1590,9 +1440,9 @@ def main():
     try:
         h.live()
         if args.install == "gui":
-            h.installer()
+            h.gnome_setup_install()
         else:
-            h.script_install()
+            h.gnome_setup_script_install()
         h.installed()
         h.results.finish()
         log("PASS: all stages")
@@ -1607,8 +1457,7 @@ def main():
                 pass
             if h.serial is not None and h.serial.name.startswith("live"):
                 h.grab_install_log()
-                if h.gnome_setup:
-                    h.grab_sysinstall_journal()
+                h.grab_sysinstall_journal()
             h.collect_journal("failure")
         return 1
     finally:

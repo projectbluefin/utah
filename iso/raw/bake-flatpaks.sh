@@ -10,7 +10,7 @@
 # state/deploy/<digest>/var links to), which `bootc install` has just created.
 # bootc never touches /var after the first deployment,
 # so a bootc update can neither re-add nor overwrite them, and an app the user
-# removes stays removed. OS-Installer's block copy carries that /var to the
+# removes stays removed. The installer's block copy carries that /var to the
 # installed disk, so first boot starts with them offline.
 #
 # The set is the one the ISO bakes (iso/live/src/install-flatpaks.sh): the
