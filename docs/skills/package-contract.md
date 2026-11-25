@@ -77,6 +77,9 @@ Kasumi is in the pinned factory, so `ibus-anthy` ships. The other two wait on
 packages no enabled repository carries, so they sit in `[unavailable]` with
 their tracking issue, where the gate watches them: when the factory publishes
 the missing package, the gate fails and the engine moves into `[parity]`.
+That tracking issue stays open while the engines are only recorded, not
+installed: an `[unavailable]` entry is a record of the gap, and closing the
+issue while the two engines are still missing hides the work that is left.
 
 ## Wi-Fi documentation currency
 
