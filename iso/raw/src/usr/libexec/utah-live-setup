@@ -40,22 +40,12 @@ with path.open("w") as f:
     config.write(f)
 PY
 
-# Which installer the session offers: utah.live.installer=gnome-setup on the
-# live entry (build-raw-image.sh, UTAH_RAW_INSTALLER), else OS-Installer.
-installer=os-installer
-grep -qw 'utah.live.installer=gnome-setup' /proc/cmdline && installer=gnome-setup
-if [[ "${installer}" == gnome-setup ]]; then
-    desktop=org.gnome.Setup.desktop
-else
-    desktop=com.github.p3732.os_installer.desktop
-fi
-
 # Keep the live session awake and skip the tour; pin the installer.
 install -d /etc/dconf/db/distro.d/locks
-cat >/etc/dconf/db/distro.d/50-utah-live <<EOF
+cat >/etc/dconf/db/distro.d/50-utah-live <<'EOF'
 [org/gnome/shell]
 welcome-dialog-last-shown-version='999'
-favorite-apps=['${desktop}', 'org.gnome.Nautilus.desktop']
+favorite-apps=['org.gnome.Setup.desktop', 'org.gnome.Nautilus.desktop']
 
 [org/gnome/desktop/screensaver]
 lock-enabled=false
@@ -79,34 +69,27 @@ install -d /etc/xdg/autostart /usr/local/share/applications
 # The app-grid/dock entry exists only in live sessions: the image keeps the
 # desktop files out of /usr/share/applications (installed systems must not
 # offer an installer), and /usr/local is writable here (overlay).
-if [[ "${installer}" == gnome-setup ]]; then
-    # gnome-setup's systemd-repart definitions (sources: this medium) and
-    # GNOME OS's live marker, which gnome-setup's polkit rule reads.
-    /usr/libexec/utah-live-definitions
-    install -d /run/gnomeos
-    touch /run/gnomeos/is-live
-    cat >/etc/xdg/autostart/utah-gnome-setup.desktop <<'EOF'
+# gnome-setup's systemd-repart definitions (sources: this medium) and
+# GNOME OS's live marker, which gnome-setup's polkit rule reads.
+/usr/libexec/utah-live-definitions
+install -d /run/gnomeos
+touch /run/gnomeos/is-live
+cat >/etc/xdg/autostart/utah-gnome-setup.desktop <<'EOF'
 [Desktop Entry]
 Type=Application
-Name=Install Utah
+Name=Install Bluefin
 Exec=gnome-setup
 Icon=org.gnome.Setup
 X-GNOME-Autostart-enabled=true
 EOF
-    cp /usr/share/utah/gnome-setup/org.gnome.Setup.desktop /usr/local/share/applications/
-else
-    cat >/etc/xdg/autostart/utah-os-installer.desktop <<'EOF'
-[Desktop Entry]
-Type=Application
-Name=Install Utah
-Exec=os-installer --config /usr/share/utah/os-installer/config.yaml
-Icon=com.github.p3732.os_installer
-X-GNOME-Autostart-enabled=true
-EOF
-    sed 's|^Exec=os-installer$|Exec=os-installer --config /usr/share/utah/os-installer/config.yaml|' \
-        /usr/share/utah/os-installer/com.github.p3732.os_installer.desktop \
-        >/usr/local/share/applications/com.github.p3732.os_installer.desktop
-fi
+# The dock and app grid name the product, as Dakota's live media do
+# ("Install Bluefin"), not the upstream "Setup". The translated names say
+# "Setup" too, so they go.
+sed -e '/^Name\[/d' -e 's/^Name=.*/Name=Install Bluefin/' \
+    -e '/^Comment/d' -e '/^Name=/a Comment=Install Bluefin on this computer' \
+    /usr/share/utah/gnome-setup/org.gnome.Setup.desktop \
+    >/usr/local/share/applications/org.gnome.Setup.desktop
+# end of desktop entry
 
 if grep -qw utah.live.debug /proc/cmdline; then
     echo "${user}:live" | chpasswd

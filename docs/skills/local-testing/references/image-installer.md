@@ -10,7 +10,7 @@ nothing. Tracking issue: #1403. History: spike #1399.
 
 | Piece | File |
 |---|---|
-| Live-capable layer on a published digest: OS-Installer from a pinned `hanthor/os-installer` commit (`OSI_REF`, fetched by commit and compared after checkout), `utah.live` units, initramfs with `systemd-volatile-root` and the live overlay ordered before both root setups (`ostree-prepare-root`, `bootc-root-setup`) | `iso/raw/Containerfile`, `iso/raw/src/` |
+| Live-capable layer on a published digest: gnome-setup and systemd-sysinstall from pinned `hanthor/gnome-setup` and `hanthor/systemd` commits (`GS_REF`, `SYSTEMD_REF`, fetched by commit and compared after checkout), `utah.live` units, initramfs with `systemd-volatile-root` and the live overlay ordered before both root setups (`ostree-prepare-root`, `bootc-root-setup`) | `iso/raw/Containerfile`, `iso/raw/src/` |
 | Raw medium: GPT BIOS-BOOT, 512 MiB ESP, 1 GiB ext4 `/boot`, btrfs root; one `bootc install to-filesystem --generic-image --karg rhgb --karg quiet`, with `--composefs-backend` when the image's kernel has the btrfs fs-verity fix (`UTAH_RAW_BACKEND=auto`, `scripts/kernel_verity.py`; ostree otherwise); "Utah Live" BLS entry as GRUB default; `EFI/BOOT` fallback | `iso/raw/build-raw-image.sh`, `iso/raw/medium.py`, `scripts/kernel_verity.py` |
 | Offline Flatpaks in the medium's stateful `/var` (`state/os/default/var` on composefs, the stateroot's `var` on ostree), never in an image: the set the ISO bakes (`system-flatpaks.Brewfile` apps via `scripts/verify-desktop-contract.py --flatpaks`, `--no-related`, listed runtimes pinned) plus `flatpak preinstall` of the image's `preinstall.d`, run in the image with that directory bind-mounted, then `setfiles` with the image's contexts | `iso/raw/bake-flatpaks.sh` |
 | Shrink to content: fstrim, btrfs balance + resize to minimum (+256 MiB, stepping up while btrfs refuses), fstrim again, cut the root partition and the file, rewrite the backup GPT; `size-breakdown.txt` shows what takes the space | `iso/raw/shrink-raw-image.sh`, `medium.py shrink-plan` |
@@ -18,16 +18,14 @@ nothing. Tracking issue: #1403. History: spike #1399.
 | Size per step (raw, allocated, zstd -3, zstd -19 --long, xz -9, pack/unpack time) | `iso/raw/measure_medium.py` |
 | Comparison with the Post-Testing E2E `luks` job for the same digest | `iso/raw/compare_paths.py` |
 
-The installer's own logic (`utah_config/scripts/install.sh`: mirror the
-medium's GPT with `CopyBlocks=`, LUKS2 via `Encrypt=key-file`, new filesystem
-UUIDs and their references, drop the live entry, `rd.luks.uuid` + crypttab,
-grow root; deployments under `ostree/deploy` or composefs's `state/deploy`)
-lives in the os-installer fork. Bump it by moving `OSI_REF` in
-`iso/raw/Containerfile` to a full commit of the fork's `utah` branch. Since
-`2006418` the same `install.sh` also installs Dakota media
-(`dakota_config/`: the live karg names the distribution, `root=LABEL=`,
-Type #1 entries on the ESP), and the disk page skips LVM2 when libudisks2
-lacks its types.
+The installer's post-copy fixups (new filesystem UUIDs and their references,
+drop the live entry, `rd.luks.uuid` + crypttab, grow root; deployments under
+`ostree/deploy` or composefs's `state/deploy`) are
+`iso/raw/src/usr/libexec/utah-sysinstall-post`; the partitions to copy are
+written at boot by `utah-live-definitions`. The live session's app is named
+"Install Bluefin", as on Dakota's live media; the logo and product name on the
+pages come from os-release (`LOGO`, `NAME`). OS-Installer, the first frontend,
+was removed once gnome-setup passed every stage nightly (ADR-0001 decision 4).
 
 ### gnome-setup (installer=gnome-setup, experimental)
 
@@ -193,8 +191,8 @@ testing build and Post-Testing E2E), on `workflow_dispatch`, and on pull
 requests that touch `iso/raw/**`, the workflow, or
 `tests/test_image_installer.py`. Dispatch inputs: `image_ref` (exact
 `ghcr.io/projectbluefin/<image>@sha256:...`), `all_flavors`, `install`
-(`gui` drives OS-Installer's window through a QEMU USB tablet at AT-SPI
-extents; `script` runs the same `install.sh` over SSH), `backend`
+(`gui` drives gnome-setup's window through a QEMU USB tablet at AT-SPI
+extents; `script` runs the same sysinstall call over SSH), `backend`
 (`auto`, the default and what scheduled and PR runs use; `composefs`, which
 fails on an unfixed kernel; or `ostree`),
 `btrfs_compress`
@@ -238,7 +236,7 @@ password and there is no sshd.
 ### Try it in a VM
 
 Boot the medium read-only next to a blank target disk of at least 48 GB
-(OS-Installer greys out smaller disks). This needs a graphical session for
+(the medium's partitions must fit). This needs a graphical session for
 `-display gtk`; use `-display vnc=:1` over SSH. The firmware paths are
 Homebrew's QEMU (`brew install qemu`, the usual one on Bluefin/Utah hosts);
 on Fedora use `/usr/share/edk2/ovmf/OVMF_CODE.fd` and `OVMF_VARS.fd`:
@@ -258,8 +256,8 @@ qemu-system-x86_64 -enable-kvm -machine q35 -cpu host -smp 4 -m 8192 \
 ```
 
 1. GRUB boots "Utah Live (try or install)" by default; the live session
-   autologs in and OS-Installer starts.
-2. Pick the 64 GB disk, turn encryption on, install. "Installation Complete"
+   autologs in and gnome-setup starts.
+2. Pick the 64 GB disk, install, back up the recovery key. "Installation Complete!"
    appears in about one to two minutes.
 3. Power off, then run the same command without the `medium.raw` line. The
    installed disk boots through the "Utah" firmware entry the installer

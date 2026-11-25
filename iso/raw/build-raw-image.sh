@@ -18,8 +18,8 @@
 #      unfixed kernel fails the build.
 #   2. Add a "Utah Live" BLS entry: the deployment's own entry with `ro
 #      utah.live` instead of `rw` (utah-live-root.service overlays the root),
-#      made the GRUB default through grubenv (medium.py). OS-Installer's Utah
-#      script removes both from the installed copy.
+#      made the GRUB default through grubenv (medium.py). utah-sysinstall-post
+#      removes both from the installed copy.
 #   3. Install the removable-media EFI fallback (shim as BOOTX64.EFI) so the
 #      medium boots on firmware with no NVRAM entry for it.
 #
@@ -31,9 +31,6 @@
 #                            deployment, so it survives `bootc switch`
 #   UTAH_RAW_EVIDENCE        directory for partition table, entries and sizes
 #   UTAH_RAW_BACKEND         auto (default), composefs or ostree
-#   UTAH_RAW_INSTALLER       installer the live session offers: gnome-setup
-#                            (default; utah.live.installer=gnome-setup on the
-#                            live entry, which utah-live-setup reads) or os-installer
 #
 # The root is written uncompressed: shrink-raw-image.sh compresses it after
 # the Flatpaks are baked (UTAH_RAW_BTRFS_COMPRESS), so they are covered too.
@@ -46,19 +43,14 @@ SIZE="${UTAH_RAW_SIZE:-24G}"
 LIVE_KARGS="${UTAH_RAW_LIVE_KARGS:-}"
 EVIDENCE="${UTAH_RAW_EVIDENCE:-$(dirname "${OUT}")/raw-evidence}"
 REQUESTED_BACKEND="${UTAH_RAW_BACKEND:-auto}"
-INSTALLER="${UTAH_RAW_INSTALLER:-gnome-setup}"
-case "${INSTALLER}" in
-    os-installer) ;;
-    gnome-setup) LIVE_KARGS="${LIVE_KARGS:+${LIVE_KARGS} }utah.live.installer=gnome-setup" ;;
-    *) echo "UTAH_RAW_INSTALLER must be os-installer or gnome-setup, not ${INSTALLER}" >&2; exit 1 ;;
-esac
+# Starts gnome-setup in the live session (utah-live-setup, the sysinstall units).
+LIVE_KARGS="${LIVE_KARGS:+${LIVE_KARGS} }utah.live.installer=gnome-setup"
 ESP_TYPE=c12a7328-f81f-11d2-ba4b-00a0c93ec93b
 LIVE_ENTRY=utah-live
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 [[ ${EUID} -eq 0 ]] || { echo "run as root (bootc install, loop devices)" >&2; exit 1; }
 mkdir -p "$(dirname "${OUT}")" "${EVIDENCE}"
-echo "${INSTALLER}" >"${EVIDENCE}/installer.txt"
 # Decided by the image's own kernel and rpm database, inside the image.
 decision="$(podman run --rm -i --entrypoint python3 "${IMAGE}" - select --backend "${REQUESTED_BACKEND}" \
     <"${HERE}/../../scripts/kernel_verity.py")" \

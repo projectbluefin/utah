@@ -120,8 +120,8 @@ In summary:
   hummingbird-community bootc image, not in `/hi`) and the `v4l2loopback`
   stage, which compiles against the base's kernel; `iso/raw/Containerfile`'s
   Fedora builder, because the Hummingbird repositories lack
-  `blueprint-compiler` and the GTK4/libadwaita/gnome-desktop4/libgweather4/vte
-  `-devel` packages OS-Installer builds against; `ghcr.io/qemus/qemu`,
+  the GTK4/libadwaita/gnome-desktop4 `-devel` packages gnome-setup builds
+  against; `ghcr.io/qemus/qemu`,
   `easy-novnc` and tacklebox (no RHHI equivalent); and every image that runs
   Utah itself (`check-repos`, `check-desktop-contract`, the ISO scripts).
 - The digest-pinned `packages` stage is the package factory's RPM repository,

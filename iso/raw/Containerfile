@@ -3,10 +3,8 @@
 #
 # The shipped bootc disk image is the live medium (booted with `ro utah.live`:
 # an initrd tmpfs overlay over the root), and installing is a block copy of
-# it, done by OS-Installer's Utah config (hanthor/os-installer, utah_config/)
-# or, with utah.live.installer=gnome-setup on the live entry, by gnome-setup
-# driving systemd-sysinstall (hanthor/gnome-setup, hanthor/systemd). Both are
-# built into the layer; the live entry picks one.
+# it, done by gnome-setup driving systemd-sysinstall (hanthor/gnome-setup,
+# hanthor/systemd). utah.live.installer=gnome-setup on the live entry starts it.
 # The layers sit on top of a published Utah digest; the published image and
 # the ISO/fisherman path are unchanged.
 ARG SOURCE_IMAGE=ghcr.io/projectbluefin/utah:testing@sha256:3bc5d1c9a941f4ef160e8f7c09f06add8df288948bdeb05644a11b1f6ed8fcc0
@@ -93,40 +91,12 @@ RUN dnf -y install --setopt=install_weak_deps=False \
     ln -s /run/utah-live/repart.d /out/usr/lib/gnome-setup/definitions && \
     echo "${GS_REF}" > /out/usr/share/utah/gnome-setup/SOURCE_REF
 
-# OS-Installer is Python + GTK4/libadwaita; every runtime library it loads is
-# already in Utah (gnome-desktop4, libgweather4, vte291-gtk4, udisks2, Atspi).
-# Only blueprint-compiler, needed to build its .ui files, is missing from the
-# Hummingbird repositories, so build it here and copy the result over.
-FROM ${BUILDER_IMAGE} AS os-installer
-ARG OSI_REPO=https://github.com/hanthor/os-installer.git
-# Full commit of hanthor/os-installer (branch utah). Fetched by commit and
-# compared after checkout, so the build never follows a moving branch.
-ARG OSI_REF=20064186ffba96f3ee73114f84feed9404f742ec
-RUN dnf -y install --setopt=install_weak_deps=False \
-        git meson ninja-build gettext blueprint-compiler glib2-devel \
-        gtk4-devel libadwaita-devel gnome-desktop4-devel libgweather4-devel \
-        vte291-gtk4-devel python3-pyyaml desktop-file-utils && \
-    [[ "${OSI_REF}" =~ ^[0-9a-f]{40}$ ]] && \
-    git init -q /src && \
-    git -C /src fetch -q --depth 1 "${OSI_REPO}" "${OSI_REF}" && \
-    git -C /src checkout -q FETCH_HEAD && \
-    test "$(git -C /src rev-parse HEAD)" = "${OSI_REF}" && \
-    meson setup /src/build /src --prefix=/usr && \
-    meson install -C /src/build --destdir /out && \
-    install -d /out/usr/share/utah && \
-    cp -a /src/utah_config /out/usr/share/utah/os-installer && \
-    mv /out/usr/share/applications/com.github.p3732.os_installer.desktop \
-       /out/usr/share/utah/os-installer/ && \
-    echo "${OSI_REF}" > /out/usr/share/utah/os-installer/SOURCE_REF
-
 FROM ${SOURCE_IMAGE}
-COPY --from=os-installer /out/usr/ /usr/
 COPY --from=sysinstall /out/usr/ /usr/
 COPY --from=gnome-setup /out/usr/ /usr/
 COPY src/usr/ /usr/
 
-# python3-pyyaml is OS-Installer's only runtime dependency Utah lacks.
-# Then rebuild the initramfs with the utah.live root overlay unit and its
+# Rebuild the initramfs with the utah.live root overlay unit and its
 # ordering before the ostree and the composefs (bootc-root-setup) root setup
 # (dracut.conf.d/60-utah-live.conf), using the same dracut invocation as
 # scripts/regenerate-initramfs.sh. /boot ends up empty: bootc's composefs
@@ -140,11 +110,8 @@ COPY src/usr/ /usr/
 # enrolled with TPM2 unlocks without a prompt.
 RUN set -euxo pipefail; \
     find /boot -mindepth 1 -delete; \
-    dnf5 install -y --setopt=install_weak_deps=False python3-pyyaml; \
-    dnf5 clean all; rm -rf /var/cache/dnf /var/cache/libdnf5 /var/log/dnf5.log*; \
     glib-compile-schemas /usr/share/glib-2.0/schemas; \
-    chmod 0755 /usr/libexec/utah-live-setup /usr/share/utah/os-installer/scripts/install.sh \
-        /usr/libexec/utah-live-definitions /usr/libexec/utah-sysinstall-post; \
+    chmod 0755 /usr/libexec/utah-live-setup /usr/libexec/utah-live-definitions /usr/libexec/utah-sysinstall-post; \
     install -m 0644 /usr/share/utah/gnome-setup/pages.conf /usr/lib/gnome-setup/pages.conf; \
     systemctl enable utah-live-setup.service utah-live-ready.service utah-sysinstall.socket utah-cryptenroll.socket; \
     if [[ -d /usr/lib/dracut/modules.d/91tpm2-tss ]]; then \
@@ -166,7 +133,6 @@ RUN set -euxo pipefail; \
         grep -q " ${f}\$" <<<"${listing}"; \
     done; \
     grep -E 'tpm2|cryptsetup' <<<"${listing}" || true; \
-    python3 -c 'import yaml, gi; gi.require_version("Vte", "3.91"); gi.require_version("GnomeDesktop", "4.0"); gi.require_version("GWeather", "4.0"); gi.require_version("UDisks", "2.0"); from gi.repository import Vte, GnomeDesktop, GWeather, UDisks'; \
     if ldd /usr/bin/gnome-setup /usr/libexec/utah-sysinstall/systemd-* | grep 'not found'; then exit 1; fi; \
     /usr/libexec/utah-sysinstall/systemd-sysinstall --version; \
     test -L /usr/lib/gnome-setup/definitions

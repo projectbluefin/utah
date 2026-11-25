@@ -9,15 +9,13 @@ name: Image-based installer (experimental)
 # Per flavor:
 #   1. build a live-capable layer on the exact :testing digest (iso/raw/Containerfile:
 #      gnome-setup and systemd-sysinstall from pinned hanthor/gnome-setup and
-#      hanthor/systemd commits, OS-Installer from a pinned hanthor/os-installer
-#      commit, utah.live units);
+#      hanthor/systemd commits, utah.live units);
 #   2. `bootc install to-filesystem` it once into a raw disk image
-#      (iso/raw/build-raw-image.sh; `installer` picks what its live session
-#      offers, gnome-setup by default), then shrink that medium to its content
+#      (iso/raw/build-raw-image.sh), then shrink that medium to its content
 #      (iso/raw/shrink-raw-image.sh);
 #   3. iso/raw/raw_e2e.py: live boot -> GUI install into LUKS2 (gnome-setup
 #      with a recovery key and a software TPM, or without a TPM a disk
-#      passphrase; or OS-Installer) -> unlock ->
+#      passphrase) -> unlock ->
 #      gnome-initial-setup -> desktop + bootc status ->
 #      bootc switch -> bootc rollback, with a screenshot of every stage;
 #   4. measure the medium (raw, allocated, compressed, time to pack/unpack;
@@ -42,13 +40,8 @@ on:
         type: choice
         options: [gui, script]
         default: gui
-      installer:
-        description: Installer the live medium offers (gnome-setup = systemd-sysinstall, recovery key, TPM2 via swtpm; os-installer = OS-Installer + install.sh)
-        type: choice
-        options: [gnome-setup, os-installer]
-        default: gnome-setup
       tpm:
-        description: gnome-setup only - give the VMs a software TPM 2.0 (off = no TPM; gnome-setup asks for a disk passphrase)
+        description: Give the VMs a software TPM 2.0 (off = no TPM; gnome-setup asks for a disk passphrase)
         type: boolean
         default: true
       backend:
@@ -149,7 +142,6 @@ jobs:
     env:
       WORK: /mnt/image-installer
       INSTALL: ${{ inputs.install || 'gui' }}
-      INSTALLER: ${{ inputs.installer || 'gnome-setup' }}
       # Scheduled and PR runs pick the backend from the image's kernel (auto:
       # composefs only with the btrfs fs-verity fix, scripts/kernel_verity.py),
       # compress the root and bake the Flatpaks; a dispatch can force a backend
@@ -224,7 +216,7 @@ jobs:
           # no Plymouth hiding it. SELinux stays enforcing: the raw image is labeled.
           sudo env UTAH_RAW_LIVE_KARGS="utah.live.debug systemd.journald.forward_to_console=1 plymouth.enable=0 rd.plymouth=0" \
             UTAH_RAW_SSH_PUBKEY="$WORK/id_ed25519.pub" UTAH_RAW_DEBUG_SSHD=1 UTAH_RAW_EVIDENCE="$WORK/raw-evidence" \
-            UTAH_RAW_BACKEND="$BACKEND" UTAH_RAW_INSTALLER="$INSTALLER" \
+            UTAH_RAW_BACKEND="$BACKEND" \
             bash iso/raw/build-raw-image.sh localhost/utah-raw:ci "$WORK/medium.raw" "${SOURCE_REF%@*}:testing"
           # The backend the build chose (backend.json), for the steps below.
           echo "MEDIUM_BACKEND=$(jq -r .backend "$WORK/raw-evidence/backend.json")" >> "$GITHUB_ENV"
@@ -263,9 +255,9 @@ jobs:
           # gnome-setup binds the root to a TPM2 when there is one: give the VMs swtpm
           # unless the dispatch turned it off (the no-TPM disk passphrase path).
           tpm=()
-          [[ "$INSTALLER" != gnome-setup || "$TPM" != true ]] || tpm=(--tpm)
+          [[ "$TPM" != true ]] || tpm=(--tpm)
           python3 iso/raw/raw_e2e.py --raw "$WORK/medium.raw" --work "$WORK/e2e" --install "$INSTALL" \
-            --installer "$INSTALLER" "${tpm[@]}" \
+            "${tpm[@]}" \
             --candidate "$CANDIDATE" --ssh-key "$WORK/id_ed25519" --backend "$MEDIUM_BACKEND" \
             --backend-decision "$WORK/raw-evidence/backend.json" "${baked[@]}" 2>&1 | tee "$WORK/e2e.log"
       - name: Measure the medium

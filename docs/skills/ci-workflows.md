@@ -160,7 +160,7 @@ post-build verification workflows, not the complete workflow inventory:
   pull requests touching `iso/raw/**`. The experimental image-based installer
   of ADR-0001 (`docs/adr/0001-image-based-installer.md`): builds a raw bootc
   medium on each flavor's current `:testing` digest (main only unless
-  `all_flavors`), shrinks it, drives OS-Installer through a LUKS2 install,
+  `all_flavors`), shrinks it, drives gnome-setup through a LUKS2 install,
   first boot, gnome-initial-setup, bootc switch and rollback with
   screenshots, and writes a comparison with the Post-Testing E2E `luks` job
   for the same digest to the job summary and `comparison.json`. It is

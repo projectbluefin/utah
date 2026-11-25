@@ -413,12 +413,11 @@ class NonBlockingTrackTests(unittest.TestCase):
         self.assertNotIn("Check all testing builds successful", name)
         self.assertNotEqual(name, "contract")
 
-    def test_os_installer_is_pinned_by_commit(self):
-        containerfile = (RAW / "Containerfile").read_text()
-        self.assertRegex(containerfile, r"(?m)^ARG OSI_REF=[0-9a-f]{40}$")
-        self.assertNotRegex(containerfile, r"\bgit\s+clone\b")
-        self.assertIn('test "$(git -C /src rev-parse HEAD)" = "${OSI_REF}"', containerfile)
-        self.assertRegex(containerfile, r"(?m)^ARG BUILDER_IMAGE=\S+@sha256:[0-9a-f]{64}$")
+    def test_os_installer_is_gone(self):
+        # ADR-0001 decision 4: the fallback until gnome-setup passed the E2E.
+        for path in [WORKFLOW, *RAW.rglob("*")]:
+            if path.is_file() and "__pycache__" not in path.parts:
+                self.assertNotRegex(path.read_text(), r"(?i)os[-_]installer|OSI_REF", path.name)
 
     def test_gnome_setup_and_systemd_are_pinned_by_commit(self):
         containerfile = (RAW / "Containerfile").read_text()
@@ -773,25 +772,13 @@ class KernelVeritySelectorTests(unittest.TestCase):
 
 
 class GnomeSetupTests(unittest.TestCase):
-    """installer=gnome-setup: gnome-setup drives systemd-sysinstall on the live medium."""
+    """gnome-setup drives systemd-sysinstall on the live medium."""
 
     workflow = yaml.safe_load(WORKFLOW.read_text())
 
-    def test_the_installer_is_a_dispatch_input_defaulting_to_gnome_setup(self):
-        inputs = self.workflow[True]["workflow_dispatch"]["inputs"]
-        self.assertEqual(inputs["installer"]["options"], ["gnome-setup", "os-installer"])
-        self.assertEqual(inputs["installer"]["default"], "gnome-setup")
-        self.assertIn("INSTALLER: ${{ inputs.installer || 'gnome-setup' }}", WORKFLOW.read_text())
-        self.assertIn('INSTALLER="${UTAH_RAW_INSTALLER:-gnome-setup}"', (RAW / "build-raw-image.sh").read_text())
-        text = WORKFLOW.read_text()
-        self.assertIn('UTAH_RAW_INSTALLER="$INSTALLER"', text)
-        self.assertIn('--installer "$INSTALLER"', text)
-
-    def test_the_live_karg_selects_the_installer(self):
+    def test_the_live_karg_starts_the_installer(self):
         build = (RAW / "build-raw-image.sh").read_text()
         self.assertIn("utah.live.installer=gnome-setup", build)
-        setup = (RAW / "src/usr/libexec/utah-live-setup").read_text()
-        self.assertIn("utah.live.installer=gnome-setup", setup)
         for unit in ("utah-sysinstall.socket", "utah-cryptenroll.socket"):
             text = (RAW / "src/usr/lib/systemd/system" / unit).read_text()
             self.assertIn("ConditionKernelCommandLine=utah.live.installer=gnome-setup", text)
@@ -820,7 +807,22 @@ class GnomeSetupTests(unittest.TestCase):
         inputs = self.workflow[True]["workflow_dispatch"]["inputs"]
         self.assertEqual(inputs["tpm"]["type"], "boolean")
         self.assertTrue(inputs["tpm"]["default"])
-        self.assertIn('[[ "$INSTALLER" != gnome-setup || "$TPM" != true ]] || tpm=(--tpm)', WORKFLOW.read_text())
+        self.assertIn('[[ "$TPM" != true ]] || tpm=(--tpm)', WORKFLOW.read_text())
+
+    def test_the_live_session_names_the_product_as_dakota_does(self):
+        setup = (RAW / "src/usr/libexec/utah-live-setup").read_text()
+        self.assertNotIn("Install Utah", setup)
+        self.assertIn("\nName=Install Bluefin\n", setup)
+        # The sed line itself, over a desktop file shaped like upstream's.
+        line = setup[setup.index("sed -e '/^Name"):setup.index("# end of desktop entry")]
+        with tempfile.TemporaryDirectory() as d:
+            src, dst = Path(d) / "src.desktop", Path(d) / "dst.desktop"
+            src.write_text("[Desktop Entry]\nName[de]=Einrichtung\nName=Setup\nExec=gnome-setup\n")
+            line = line.replace("/usr/share/utah/gnome-setup/org.gnome.Setup.desktop", str(src))
+            line = line.replace("/usr/local/share/applications/org.gnome.Setup.desktop", str(dst))
+            subprocess.run(["bash", "-euc", line], check=True)
+            self.assertEqual(dst.read_text(), "[Desktop Entry]\nName=Install Bluefin\n"
+                             "Comment=Install Bluefin on this computer\nExec=gnome-setup\n")
 
     def test_installed_systems_do_not_offer_gnome_setup(self):
         containerfile = (RAW / "Containerfile").read_text()
