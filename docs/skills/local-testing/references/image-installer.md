@@ -31,7 +31,7 @@ was removed once gnome-setup passed every stage nightly (ADR-0001 decision 4).
 
 The live layer also carries [gnome-setup](https://gitlab.gnome.org/Teams/STF/setup)
 (GNOME STF), built from the [hanthor/gnome-setup](https://github.com/hanthor/gnome-setup)
-mirror's `utah` branch (`GS_REF`), driving `systemd-sysinstall` and
+mirror's `bluefin` branch, shared with Dakota (`GS_REF`), driving `systemd-sysinstall` and
 `systemd-cryptenroll` over Varlink. Hummingbird's systemd 261 has neither
 Varlink API (v262+), and v262 cannot mount an encrypted root (systemd#44337),
 so `systemd-sysinstall`, `systemd-repart` and `systemd-cryptenroll` come from
