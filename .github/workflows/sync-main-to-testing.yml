@@ -19,7 +19,7 @@ on:
       - '!baselines/**'
       - '!tests/**'
       - '!iso/raw/**'
-      # the image-installer track's two workflows
+      # the raw-medium track's two workflows (iso/raw)
       - '!.github/workflows/*-installer.yml'
   schedule:
     - cron: "20 22 * * *"
