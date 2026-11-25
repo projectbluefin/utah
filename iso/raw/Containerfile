@@ -48,7 +48,7 @@ RUN dnf -y install --setopt=install_weak_deps=False \
     echo "${SYSTEMD_REF}" > /out/usr/libexec/utah-sysinstall/SOURCE_REF
 
 # gnome-setup (GNOME STF's installer; Rust, GTK 4, libadwaita, blueprint),
-# from a pinned commit of the hanthor/gnome-setup mirror's utah branch: the
+# from a pinned commit of the hanthor/gnome-setup mirror's bluefin branch: the
 # upstream main plus small fixes proposed upstream (no forced demo mode,
 # install errors shown, a distro post-install unit, the recovery key enrolled
 # on the installed disk, a disk passphrase page without a TPM). Built on
@@ -62,8 +62,8 @@ RUN dnf -y install --setopt=install_weak_deps=False \
 # utah-live-definitions writes at boot.
 FROM ${BUILDER_IMAGE} AS gnome-setup
 ARG GS_REPO=https://github.com/hanthor/gnome-setup.git
-# Full commit of hanthor/gnome-setup (branch utah).
-ARG GS_REF=64952cd0402eda6403035e93b71d38bf78752942
+# Full commit of hanthor/gnome-setup (branch bluefin, shared with Dakota).
+ARG GS_REF=0be3dbbaae78049d384d94ed6418a7dcddb3be70
 ARG BP_REPO=https://gitlab.gnome.org/GNOME/blueprint-compiler.git
 # blueprint-compiler v0.22.2.
 ARG BP_REF=ed35ac74de0c1bb1f5e852410b97edd1f08904c9
