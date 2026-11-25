@@ -211,8 +211,9 @@ packages = [
     # Input methods also shipped by Dakota (#1256). Keep the base manifest's
     # Mozc and Unikey engines: removing them would drop existing language support.
     # Anthy's dictionary tool (kasumi-unicode) is now in the pinned factory.
-    # Typing Booster waits on cldr-emoji-annotation (utah-packages#1294) and
-    # Rime on brise, which has no factory recipe yet (#1256).
+    # Typing Booster and Rime are the two Dakota engines the factory cannot
+    # install yet, so they are recorded as parity debt in [unavailable] until
+    # it publishes cldr-emoji-annotation and brise.
     "anthy-unicode",
     "ibus-anthy",
     "fcitx5-gtk",
@@ -882,8 +883,12 @@ packages = [
 # semantics, so bootc install fails without it (#1431, #1433).
 
 [unavailable]
-# Parity gaps none of Utah's enabled repositories provide.  Two kinds of gap
-# land here and both count as parity debt:
+# Parity gaps Utah cannot install from the repositories it enables.  A name
+# lands here when no enabled repository provides it, and also when the
+# factory publishes it but Utah cannot install it: the policy excludes
+# grub2*, and two input-method engines need packages nothing publishes.
+#
+# The gaps come in two kinds, and both count as parity debt:
 #
 #   contract gaps  names in packages/base.toml that neither utah-packages nor
 #                  Hummingbird's repository carries
@@ -920,12 +925,24 @@ packages = [
 #   it (it is Bluefin parity). Returns when utah-packages#238 publishes a grub2
 #   built with efi_vendor=fedora. Tracked by #253.
 #
+# ibus-typing-booster, ibus-rime
+#   Dakota's emoji-predicting engine and its Rime engine. The factory builds
+#   both, but neither can be installed from the enabled repositories:
+#   ibus-typing-booster requires cldr-emoji-annotation, whose recipe fails its
+#   self-test until utah-packages#1294 lands, and ibus-rime requires brise,
+#   which has no factory recipe at all. Recorded here as documented debt, so
+#   the gate below fires the moment the factory publishes the missing
+#   packages and a human can move them into [parity].
+#   Tracked by #1256.
+#
 # pipewire-libs-extra is supplied by the pinned September 10 factory candidate
 # and returns to the install contract (#35).
 packages = [
     "grub2-efi-x64-cdboot",
     "anaconda-live",
+    "ibus-typing-booster",
     "firefox",
+    "ibus-rime",
     "slitherer",
 ]
 
