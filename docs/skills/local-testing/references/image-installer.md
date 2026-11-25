@@ -38,14 +38,14 @@ so `systemd-sysinstall`, `systemd-repart` and `systemd-cryptenroll` come from
 a pinned [hanthor/systemd](https://github.com/hanthor/systemd) commit
 (`SYSTEMD_REF`: systemd main plus `--install-kernel=`/`--install-boot-loader=`),
 installed under `/usr/libexec/utah-sysinstall` next to the system's systemd.
-`UTAH_RAW_INSTALLER=gnome-setup` (workflow input `installer`) puts
-`utah.live.installer=gnome-setup` on the live entry, which starts:
+The live entry carries `utah.live.installer=gnome-setup` (set by
+`build-raw-image.sh`), which starts:
 
 | Piece | File |
 |---|---|
 | Varlink sockets on the standard paths, live + gnome-setup only; sysinstall with the kernel and boot loader steps off (the copied ESP carries shim and GRUB) | `src/usr/lib/systemd/system/utah-{sysinstall,cryptenroll}.socket`, `@.service` |
 | repart.d written at boot: every medium partition but BIOS boot by PARTUUID with `CopyBlocks=`, root into LUKS2 (`key-file+tpm2`, `TPM2PCRs=7` with a TPM 2.0, else `key-file`); gnome-setup's definitions dir links to it | `src/usr/libexec/utah-live-definitions` |
-| install.sh's post-copy fixups, started by gnome-setup after sysinstall (`[page:installer] post-install-unit=`) and before its recovery key page wipes the empty passphrase | `src/usr/libexec/utah-sysinstall-post`, `utah-sysinstall-post@.service` |
+| The post-copy fixups, started by gnome-setup after sysinstall (`[page:installer] post-install-unit=`) and before its recovery key page wipes the empty passphrase | `src/usr/libexec/utah-sysinstall-post`, `utah-sysinstall-post@.service` |
 | Pages (language, keyboard, try-or-install, disk, disk passphrase without a TPM, recovery key, done), live user's polkit grants | `src/usr/share/utah/gnome-setup/pages.conf`, `src/usr/share/polkit-1/rules.d/50-utah-live-gnome-setup.rules` |
 
 The recorded encryption policy and the limits of the merged CI evidence
@@ -60,7 +60,7 @@ recovery key. Without one, gnome-setup's disk passphrase page (shown only
 then) enrolls the passphrase the user picks, and the recovery key is a second
 slot; the recovery key is never the only boot key.
 
-The E2E (`--installer gnome-setup --tpm`, workflow input `tpm`, default on)
+The E2E (`--tpm`, workflow input `tpm`, default on)
 runs the VMs with swtpm: the first boot and the rollback boot must unlock
 through the TPM2 with no prompt, and the bootc switch boot runs without the
 TPM and is unlocked with the recovery key read from gnome-setup's recovery
@@ -275,7 +275,7 @@ Recreate `target.qcow2` (and copy a fresh `vars.fd`) to install again.
 |---|---|---|
 | Medium | raw and allocated bytes after bootc install and after shrinking; compressed bytes and pack/unpack time per format | `ISO ready` line; `production-iso-<image>` artifact bytes |
 | Build time | image layer + `bootc install` | "Compose disposable debug ISO" step |
-| Install time | `install.sh` total and block copy (`utah-install.log`), GUI confirm-to-done | `=== Phase 3/7` to `=== Phase 4/7` |
+| Install time | GUI confirm-to-done | `=== Phase 3/7` to `=== Phase 4/7` |
 | Stages | live boot, install, first boot unlock, initial setup, first boot desktop, bootc switch, bootc rollback | phases 1-7 (failed phase from the last marker) |
 | SELinux, failed units | `getenforce`, `systemctl --failed` on every boot | live permissive by construction (#22); not recorded |
 

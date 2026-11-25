@@ -349,19 +349,16 @@ class ComparisonTests(unittest.TestCase):
             results.boot("first boot", "Enforcing", ["x.service"])
             results.finish()
             (ev / "results.json").write_text(json.dumps(results.as_dict({"gui-install-seconds-after-confirm": 145})))
-            (ev / "utah-install.log").write_text("Block copy finished in 138s\nUtah installed to /dev/vdb in 144s\n")
             (rev / "medium.json").write_text('{"raw_apparent_bytes": 1, "raw_allocated_bytes": 1, "bootc_install_seconds": 147}')
             size = Path(tmp, "size.json")
             size.write_text(json.dumps({"label": "shrunk", "apparent_bytes": 8 * 2**30, "allocated_bytes": 7 * 2**30,
                                         "formats": {"zstd-3": {"bytes": 3 * 2**30, "compress_seconds": 60.0,
                                                                "decompress_seconds": 20.0}}}))
             img = compare.image_metrics(ev, rev, [size], 300)
-        self.assertEqual(img["install_seconds"], 144)
-        self.assertEqual(img["block_copy_seconds"], 138)
         self.assertEqual(img["bootc_install_seconds"], 147)
         md = compare.render({"image": "utah", "digest": "sha256:" + "a" * 64, "image_based": img,
                              "fisherman": None, "references": {"GNOME OS nightly": 3 * 2**30}})
-        self.assertIn("| Install time | 2 min 24 s install.sh", md)
+        self.assertIn("| Install time | GUI confirm-to-done 2 min 25 s", md)
         self.assertIn("first boot: x.service", md)
         self.assertIn("| shrunk | 8.00 GiB | 7.00 GiB | 3.00 GiB", md)
         self.assertIn("no Post-Testing E2E `luks` job found", md)
