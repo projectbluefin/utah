@@ -1,1 +1,1 @@
-ghcr.io/projectbluefin/utah:testing@sha256:0578bcb6eda501c5d53c3a7ad907139c302c2c9dc62f73b42e8840748292eaab
+ghcr.io/projectbluefin/utah:testing@sha256:66457ed6808b6909d56bc3530ebcbf374c059a013dc4a8ff56c9c5f6dcf86b7c
