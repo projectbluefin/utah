@@ -117,8 +117,19 @@ The E2E requirement is enforced against the promoted digests in
 
 Source pushes to `main` and the nightly schedule call
 `reusable-sync-branches.yml@v1`, then explicitly dispatch `build.yml` on
-`testing` with `actions: write`. README/verification-only pushes are excluded
-to avoid evidence-update build loops. Nightly runs still sync those changes.
+`testing` with `actions: write`. A push rebuilds only when it touches
+something that can change the image: the `push` filter excludes `README.md`,
+`docs/` (except `docs/agent/`, which ships in the image), `site/`,
+`baselines/`, `tests/` and the image-installer track (`iso/raw/`,
+`image-installer.yml`, `publish-installer.yml`). Without it the pipeline fed
+itself: a build promotes `:testing`, Renovate repins that digest in
+`iso/raw/Containerfile` and the E2E refreshes the README link, each push
+rebuilt the image, and Post-Testing E2E (one concurrency group, one pending
+run) replaced its queued run until `:testing` stopped moving (2026-11-25). A
+path that feeds the image (`Containerfile`, `packages/`, `system_files/`,
+`scripts/`, `config/`, `contracts/`, `.gitmodules`, `docs/agent/`, the
+`source_date_epoch` list in the Justfile) must never be excluded;
+`tests/test_sync_trigger.py` holds this. Nightly runs still sync everything.
 
 The sync workflow passes the current full `testing` SHA. Before checkout, the
 contract job rejects any non-empty `sha` input that differs from the run's
