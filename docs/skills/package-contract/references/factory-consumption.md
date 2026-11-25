@@ -113,3 +113,12 @@ subpackage. Also waive tools Utah installs under another path. Look those
 up in the Utah image (`rpm -ql`), not the gap report. `triage.toml`'s
 header names these waiver reasons. A gap an open PR closes points at
 that PR's issue as `planned`.
+
+Once the refresh shows a `planned` install landed, list what the item
+still lacks: Dakota paths owned by it in `baselines/dakota/surface.tsv`
+that are absent from `baselines/utah/surface.tsv`. Installing a split
+package rarely covers a whole GNOME OS element; the remainder is usually
+a `-devel-tools` or server subpackage, or a command Fedora does not
+package. Probe each path with the repoquery above and turn the entry into
+a `waived` one naming those leftovers, so the issue that planned the
+install can close (#1359).

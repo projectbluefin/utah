@@ -81,12 +81,8 @@ trace-cmd = { status = "planned", area = "cli-tools", issue = "#1359", reason = 
 numactl = { status = "planned", area = "cli-tools", issue = "#1359", reason = "Installed in [parity]" }
 bpftop = { status = "planned", area = "cli-tools", issue = "#1359", reason = "Installed in [parity]" }
 "/usr/bin/alsaucm" = { status = "planned", area = "media", issue = "#1359", reason = "alsa-ucm-utils, installed in [parity]" }
-v4l-utils = { status = "planned", area = "media", issue = "#1359", reason = "v4l-utils, rc-tools and dvb-tools installed in [parity]; v4l-utils-devel-tools (driver debugging) stays out" }
 "/usr/bin/edid-decode" = { status = "planned", area = "graphics", issue = "#1359", reason = "Ships in v4l-utils, installed in [parity]" }
-gstreamer = { status = "planned", area = "media", issue = "#1359", reason = "gst-play, gst-discoverer and gst-device-monitor from gstreamer1-plugins-base-tools, installed in [parity]" }
 libcamera = { status = "planned", area = "media", issue = "#1359", reason = "libcamerify from libcamera-v4l2, installed in [parity]" }
-iproute2 = { status = "planned", area = "networking", issue = "#1359", reason = "tc and routel from iproute-tc, installed in [parity]" }
-util-linux = { status = "planned", area = "cli-tools", issue = "#1359", reason = "script, scriptlive and scriptreplay from util-linux-script, installed in [parity]; uuidd and mkfs.bfs stay out" }
 xz = { status = "planned", area = "cli-tools", issue = "#1359", reason = "lzma and its aliases from xz-lzma-compat, installed in [parity]" }
 lz4 = { status = "planned", area = "cli-tools", issue = "#1359", reason = "Installed in [parity]" }
 sqlite = { status = "planned", area = "cli-tools", issue = "#1359", reason = "sqlite3, installed in [parity]" }
@@ -95,13 +91,22 @@ xxhash = { status = "planned", area = "cli-tools", issue = "#1359", reason = "In
 libfido2 = { status = "planned", area = "auth-security", issue = "#1359", reason = "fido2-tools, installed in [parity]" }
 "/usr/bin/pamu2fcfg" = { status = "planned", area = "auth-security", issue = "#1359", reason = "pam-u2f and pamu2fcfg installed in [parity]; PAM is left unconfigured" }
 gnutls = { status = "planned", area = "auth-security", issue = "#1359", reason = "gnutls-utils, installed in [parity]" }
-gnupg = { status = "planned", area = "auth-security", issue = "#1359", reason = "gpgsm and the GnuPG utilities (gnupg2-smime, gnupg2-utils) installed in [parity]; the gpg-wks server and gpgme-tool stay out" }
 openldap = { status = "planned", area = "auth-security", issue = "#1359", reason = "openldap-clients, installed in [parity]" }
 cryptsetup = { status = "planned", area = "files-devices", issue = "#1359", reason = "integritysetup and veritysetup, installed in [parity]" }
 bindfs = { status = "planned", area = "files-devices", issue = "#1359", reason = "Installed in [parity]" }
 malcontent = { status = "planned", area = "desktop-apps", issue = "#1359", reason = "malcontent-client from malcontent-tools, installed in [parity]" }
 nfs-utils = { status = "planned", area = "network-fs", issue = "#1359", reason = "nfsiostat, mountstats and rpcctl from nfs-python-utils, installed in [parity]" }
 pam-pkcs11 = { status = "planned", area = "auth-security", issue = "#1359", reason = "Smart-card login; resolves, but its PAM wiring is decided with opensc (#1257) first" }
+
+# What the #1359 installs leave behind: the 2026-11-25 Utah snapshot
+# (sha256:66457ed6) carries every [parity] tool above, and these commands are
+# what Dakota's element still ships beyond them. Each was probed against the
+# pinned factory and Hummingbird with `dnf repoquery --whatprovides`.
+v4l-utils = { status = "waived", area = "media", reason = "Developer toolchain (#1263): cec-compliance, v4l2-compliance and v4l2-dbg are driver test tools in v4l-utils-devel-tools; decode_tm6000 is not packaged. v4l-utils, rc-tools and dvb-tools are installed in [parity]" }
+gstreamer = { status = "waived", area = "media", reason = "Developer toolchain (#1263): gst-tester-1.0 runs GStreamer's test suites and is not packaged. gstreamer1-plugins-base-tools is installed in [parity]" }
+iproute2 = { status = "waived", area = "networking", reason = "routel is not packaged; `ip route` covers it. tc from iproute-tc is installed in [parity]" }
+util-linux = { status = "waived", area = "cli-tools", reason = "uuidd is a UUID-cache daemon nothing on the desktop needs, and mkfs.bfs (SCO bfs) is not packaged. script, scriptlive and scriptreplay from util-linux-script are installed in [parity]" }
+gnupg = { status = "waived", area = "auth-security", reason = "gpg-wks-client and gpg-wks-server come together in gnupg2-wks, the Web Key Service publishing tools; gpg itself already fetches keys by WKD. gpgme-tool is in gpgme-devel (developer toolchain, #1263) and gpgscm (the test-suite interpreter) is not packaged. gpgsm and the GnuPG utilities are installed in [parity]" }
 
 # Published since factory pin c288398 (#1347); tracked on #1360.
 NetworkManager = { status = "planned", area = "networking", issue = "#1360", reason = "nmtui from NetworkManager-tui, installed in [parity]; the initrd and nm-cloud-setup units stay out" }
