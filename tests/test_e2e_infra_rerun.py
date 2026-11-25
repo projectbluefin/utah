@@ -39,6 +39,11 @@ class ClassifyTests(unittest.TestCase):
         self.assertEqual(name, "registry-5xx")
         self.assertIn("fetching blob: received unexpected HTTP status: 500", evidence)
 
+    def test_the_gnome_gitlab_503s_that_cost_run_45673646964_are_infra(self):
+        name, evidence = rerun.classify(fixture("gnome-gitlab-503.log"))
+        self.assertEqual(name, "gnome-gitlab-5xx")
+        self.assertIn("gnome-ponytail-daemon.git", evidence)
+
     def test_product_failures_are_not_infra(self):
         # Real failing steps from E2E runs 44351106183 (testsuite SELinux
         # denial) and 44467894369 (lifecycle EFI mount check).
@@ -62,6 +67,8 @@ class ClassifyTests(unittest.TestCase):
             "codeberg-dns": "fatal: unable to access 'https://codeberg.org/mkhl/"
                             "gnome-shell-extension-fuzzy-application-search.git/': "
                             "Could not resolve host: codeberg.org",
+            "gnome-gitlab-5xx": "fatal: unable to access 'https://gitlab.gnome.org/ofourdan/"
+                                "gnome-ponytail-daemon.git/': The requested URL returned error: 503",
             "libpod-lock": "Error: failed to open 2048 locks in /libpod_lock: file exists",
         }
         self.assertEqual(set(samples), {s.name for s in rerun.SIGNATURES})
@@ -71,6 +78,9 @@ class ClassifyTests(unittest.TestCase):
 
     def test_near_misses_stay_unexplained(self):
         for line in (
+            # a missing GNOME GitLab repository is not an outage
+            "fatal: unable to access 'https://gitlab.gnome.org/GNOME/gone.git/': "
+            "The requested URL returned error: 404",
             "Could not resolve host: github.com",                 # not the codeberg fault
             "Librepo error: Status code: 404 for repomd.xml",     # a missing repo, not a mirror outage
             "ghcr.io/projectbluefin/utah@sha256:5003abc pulled",  # digits in a digest

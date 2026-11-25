@@ -829,11 +829,20 @@ scp_live liveuser@127.0.0.1:/tmp/utah-plymouth-watermark.png "${PLYMOUTH_WATERMA
 echo "Running the installer from the ISO's embedded payload store..."
 # The guest's clock, so the holder report's journal window starts here.
 install_since="$(ssh_live 'date +@%s' 2>/dev/null || true)"
-ssh_live 'sudo /usr/local/bin/fisherman /tmp/luks-recipe.json' || {
-    install_status=$?
+install_status=0
+ssh_live 'sudo /usr/local/bin/fisherman /tmp/luks-recipe.json' 2>&1 \
+    | tee "${WORK}/installer.log" || install_status=$?
+if (( install_status )); then
     keep_target_holders "${install_since}"
     fail "the installer exited ${install_status}"
-}
+fi
+# fisherman reports a lost Flatpak copy as a warning and exits 0. Without this
+# it only shows four phases later as a terminal that never opened, reported as
+# "fastfetch output was not visible" (11 of 18 red luks jobs sampled from
+# 2026-11-24 to 2026-11-25, e.g. run 45557299285).
+if grep -q 'Warning: could not copy flatpaks' "${WORK}/installer.log"; then
+    fail "the installer lost the Flatpaks: $(grep -o 'could not copy flatpaks: [^"]*' "${WORK}/installer.log" | head -1)"
+fi
 
 # The installed system already boots with console=ttyS0, but also with
 # "quiet", which suppresses the systemd messages phase 6 and the failure
