@@ -96,7 +96,10 @@ COPY --from=sysinstall /out/usr/ /usr/
 COPY --from=gnome-setup /out/usr/ /usr/
 COPY src/usr/ /usr/
 
-# Rebuild the initramfs with the utah.live root overlay unit and its
+# Rebuild the initramfs of the kernel bootc boots (the one tree with a
+# vmlinuz; gaming images carry a second module tree that sorts higher, so
+# picking the last directory left the OGC kernel's initrd without the live
+# overlay and the live root read-only) with the utah.live root overlay unit and its
 # ordering before the ostree and the composefs (bootc-root-setup) root setup
 # (dracut.conf.d/60-utah-live.conf), using the same dracut invocation as
 # scripts/regenerate-initramfs.sh. /boot ends up empty: bootc's composefs
@@ -117,7 +120,11 @@ RUN set -euxo pipefail; \
     if [[ -d /usr/lib/dracut/modules.d/91tpm2-tss ]]; then \
         echo 'add_dracutmodules+=" tpm2-tss "' > /usr/lib/dracut/dracut.conf.d/61-utah-live-tpm2.conf; \
     fi; \
-    kver="$(ls /usr/lib/modules | sort -V | tail -1)"; \
+    kernel_dirs="$(find /usr/lib/modules -mindepth 2 -maxdepth 2 -name vmlinuz -printf '%h\n')"; \
+    if [ -z "$kernel_dirs" ] || [ "$(printf '%s\n' "$kernel_dirs" | wc -l)" -ne 1 ]; then \
+        echo "Expected one bootc kernel for the live initramfs: $kernel_dirs" >&2; exit 1; \
+    fi; \
+    kver="${kernel_dirs##*/}"; \
     mkdir -p /var/roothome; \
     dracut --no-hostonly --reproducible --zstd --tmpdir /tmp --kver "${kver}" --force \
         "/usr/lib/modules/${kver}/initramfs.img" 2>&1 | tee /tmp/dracut.log; \
