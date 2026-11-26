@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Service-state checks shared by luks-e2e.sh and lifecycle-e2e.sh. Sourced,
-# never run.
+# Service-state checks shared by luks-e2e.sh, lifecycle-e2e.sh and
+# iso/raw/raw_e2e.py. Sourced, never run.
 #
 # The caller provides ssh_target and scp_target (the installed system, as
 # TEST_USER), fail (report and exit), ROOT, TEST_USER and TEST_PASSWORD.
+# raw_e2e.py sources it inside the guest, as TEST_USER, with ssh_target and
+# scp_target running locally (setup_state_script).
 #
 # verify_setup_state is a content gate: it holds the booted image to the
 # [services] lists of its contract, a check added after earlier :testing

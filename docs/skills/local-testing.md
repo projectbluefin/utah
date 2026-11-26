@@ -410,6 +410,8 @@ disk, and rechecks services, Flathub, and the default Flatpaks. This is the
 repeat-boot idempotence gate. It never runs on the lifecycle baseline; plain
 `just luks-test` remains a single boot unless `UTAH_E2E_REPEAT_BOOT=1` is
 exported.
+`iso/raw/raw_e2e.py` reuses this check and the other installed-system ones
+([image-installer.md](local-testing/references/image-installer.md#installed-system-checks-ported-from-the-fisherman-harness)).
 Read the recipe and script prerequisites before running it: it creates test
 accounts and requires local QEMU/KVM access, not a production installation.
 

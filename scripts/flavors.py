@@ -17,6 +17,7 @@ next to the list rather than in a commit message.
     flavors.py list-main      ["main"]            main, submitted as its own build matrix
     flavors.py list-kernel    ["nvidia", ...]     the OGC/NVIDIA flavors, the other matrix
     flavors.py image FLAVOR   utah / utah-nvidia  published image name for flavor
+    flavors.py flavor IMAGE   main / nvidia       the configured flavor that publishes IMAGE
     flavors.py suites     [{"image": "utah", "suites": "smoke,common"}, ...]  matrix
 """
 import json
@@ -73,5 +74,14 @@ elif what == "image":
     if flavor not in IMAGE:
         raise SystemExit(f"unknown flavor: {flavor}")
     print(IMAGE[flavor])
+elif what == "flavor":
+    # The reverse of `image`, for a harness that holds an image reference and
+    # needs the flavor the installed system must report (iso/raw/raw_e2e.py).
+    if len(sys.argv) < 3:
+        raise SystemExit("usage: flavors.py flavor IMAGE")
+    matches = [f for f in flavors if IMAGE[f] == sys.argv[2]]
+    if not matches:
+        raise SystemExit(f"no configured flavor publishes image: {sys.argv[2]}")
+    print(matches[0])
 else:
     raise SystemExit(f"unknown query: {what}")
