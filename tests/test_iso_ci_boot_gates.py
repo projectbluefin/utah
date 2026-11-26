@@ -241,6 +241,16 @@ class OgcKernelConfigGateTests(unittest.TestCase):
         self.assertRegex(
             self.SCRIPT.read_text(), r"--module INPUT_UINPUT(?:\s|$)")
 
+    def test_the_tpm_drivers_are_required_and_built_in(self):
+        # Without them the gaming kernel sees no TPM 2.0: gnome-setup asks for
+        # a passphrase and TPM2 unlock cannot work (hanthor/utah run
+        # 45742479307). Built in, so the initrd needs no module for it.
+        symbols = self.required_symbols()
+        for symbol in ("TCG_TPM", "TCG_TIS", "TCG_CRB"):
+            with self.subTest(symbol=symbol):
+                self.assertIn(symbol, symbols)
+                self.assertRegex(self.SCRIPT.read_text(), rf"--enable {symbol}(?:\s|$)")
+
     def test_zswap_and_zstd_are_required_for_the_zswap_kargs(self):
         # kargs.d/20-zswap.toml ships on every image (#1224); without these the
         # gaming kernel ignores zswap.* and the swapfile runs uncompressed.
