@@ -3,8 +3,12 @@
 
 Utah's terminal (Ghostty) is a Flatpak that the raw image does not carry
 offline, while VTE for GTK 4 is in the image. This opens one terminal window
-running COMMAND in bash and keeps the shell open afterwards, so a screendump
-shows the command's real output in a real terminal.
+running COMMAND in bash and keeps a shell open afterwards, so a screendump
+shows the command's real output in a real terminal. That shell skips the
+rc files: Bluefin's /etc/profile.d/uwelcome.sh banner, which /etc/bashrc
+prints in every interactive shell, otherwise scrolls the top of COMMAND's
+output out of the window (fastfetch's kernel, desktop and shell lines, the
+ones fastfetch-ocr-match.sh reads; Post-Testing E2E run 45858480299).
 
   vte_term.py TITLE COMMAND
 """
@@ -26,7 +30,7 @@ term.set_scrollback_lines(2000)
 window.set_child(term)
 window.connect("close-request", lambda *_: (loop.quit(), False)[1])
 term.spawn_async(Vte.PtyFlags.DEFAULT, GLib.get_home_dir(),
-                 ["/bin/bash", "-c", f"{command}; echo; echo UTAH-E2E-TERMINAL-DONE; exec bash"],
+                 ["/bin/bash", "-c", f"{command}; echo; echo UTAH-E2E-TERMINAL-DONE; exec bash --norc"],
                  None, GLib.SpawnFlags.DEFAULT, None, None, -1, None, None)
 window.present()
 loop.run()

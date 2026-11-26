@@ -215,7 +215,7 @@ removing the ISO path must keep them (`tests/test_image_installer.py`
 | Unprivileged user namespaces (Flatpak sandboxes), `gnome-rounded-blur` installed and `-devel` absent | `unshare` as the user; `rounded_blur_problems` | yes | |
 | CountMe: timer enabled and active, a mocked report names `utah/<flavor>:`, the opt-out marker stops the service | `iso/scripts/verify-countme-runtime.sh` in the guest | yes | |
 | GNOME extensions (`EXTENSIONS`, gsconnect) reach ACTIVE within two minutes | `iso/scripts/extension-state.sh` | yes | |
-| fastfetch in a terminal, read back by tesseract, and that frame differs from the clean desktop's | `vte_term.py` + `iso/scripts/fastfetch-ocr-match.sh` | yes | |
+| fastfetch in a terminal, read back by tesseract, and that frame differs from the clean desktop's. The shell left open afterwards is `bash --norc`: Bluefin's uwelcome banner otherwise scrolls fastfetch's kernel/desktop/shell lines out of the window and the OCR gate fails on a correct desktop (run 45858480299) | `vte_term.py` + `iso/scripts/fastfetch-ocr-match.sh` | yes | |
 | System Flathub remote configured | `flathub_configured` | yes | yes |
 | Setup units ran, every `[services]` unit of the installed contract still enabled and not failed | `iso/scripts/e2e-services.sh` `verify_setup_state` + `scripts/verify-desktop-contract.py`, in the guest as the user | yes | yes |
 
