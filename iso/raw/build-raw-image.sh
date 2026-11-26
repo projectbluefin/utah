@@ -221,7 +221,7 @@ umount "${mnt}/root"
     echo "apparent: $(du -h --apparent-size "${OUT}" | cut -f1)"
     echo "allocated: $(du -h "${OUT}" | cut -f1)"
 } | tee "${EVIDENCE}/size.txt"
-# Read by image-installer.yml's comparison (iso/raw/compare_paths.py).
+# Machine-readable size and install time, kept with the run's evidence.
 printf '{"raw_apparent_bytes": %s, "raw_allocated_bytes": %s, "bootc_install_seconds": %s}\n' \
     "$(du -b --apparent-size "${OUT}" | cut -f1)" "$(( $(du -k "${OUT}" | cut -f1) * 1024 ))" \
     "${install_seconds}" | tee "${EVIDENCE}/medium.json"

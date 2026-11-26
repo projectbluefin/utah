@@ -136,9 +136,9 @@ post-build verification workflows, not the complete workflow inventory:
   the proposed head. The measurement step keeps the read-only job token.
 - `.github/workflows/post-testing-e2e.yml` -- successful non-PR testing builds
   explicitly dispatch this, or manually supply a successful testing build run ID.
-  Its `promote-to-testing` job needs the LUKS jobs (which test and retain the
-  production ISO) and the testsuite. Only when all pass does it record
-  per-digest evidence and move
+  Its `promote-to-testing` job needs the `gnome-setup` install (every
+  flavor) and testsuite jobs; fisherman's `luks`, `lifecycle` and
+  `production-iso` jobs left the pipeline (#1569). Only when all pass does it record per-digest evidence and move
   `:testing` through a monotonic ratchet; a red testsuite leg blocks
   promotion, with no override (#1329). The promotion to `main` sets
   `run_e2e: false`; the release gate requires that evidence for the exact
@@ -160,16 +160,13 @@ post-build verification workflows, not the complete workflow inventory:
   [startup failures](ci-workflows/references/iso-e2e.md#startup-failures).
 - `.github/workflows/image-installer.yml` -- nightly, manual dispatch,
   pull requests touching `iso/raw/**`, and called by Post-Testing E2E
-  (`gnome-setup` job) on every tested digest, beside `luks` and not gating
-  yet: the path to replacing fisherman in the gate (#1569). The experimental image-based installer
+  (`gnome-setup` job) on every tested digest; that job is the install gate
+  for `:testing` (#1569). The experimental image-based installer
   of ADR-0001 (`docs/adr/0001-image-based-installer.md`): builds a raw bootc
   medium on each flavor's current `:testing` digest (main only unless
   `all_flavors`), shrinks it, drives gnome-setup through a LUKS2 install,
   first boot, gnome-initial-setup, bootc switch and rollback with
-  screenshots, and writes a comparison with the Post-Testing E2E `luks` job
-  for the same digest to the job summary and `comparison.json`. It is
-  deliberately non-blocking: not a required check, not in
-  `promote-to-testing`'s needs, read-only permissions, no tag moves;
+  screenshots. Read-only permissions and no tag moves of its own;
   `tests/test_image_installer.py` holds that. Details:
   [image-installer](local-testing/references/image-installer.md).
 - `.github/workflows/publish-installer.yml` -- weekly Monday 09:41 UTC and

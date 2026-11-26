@@ -16,7 +16,6 @@ nothing. Tracking issue: #1403. History: spike #1399.
 | Shrink to content: fstrim, btrfs balance + resize to minimum (+256 MiB, stepping up while btrfs refuses), fstrim again, cut the root partition and the file, rewrite the backup GPT; `size-breakdown.txt` shows what takes the space | `iso/raw/shrink-raw-image.sh`, `medium.py shrink-plan` |
 | End to end with screenshots and `evidence/results.json`; on composefs, fs-verity checks on every installed boot; the fisherman harness's installed-system checks ([below](#installed-system-checks-ported-from-the-fisherman-harness)) | `iso/raw/raw_e2e.py`, `composefs_check.py`, `atspi_drive.py`, `vte_term.py` |
 | Size per step (raw, allocated, zstd -3, zstd -19 --long, xz -9, pack/unpack time) | `iso/raw/measure_medium.py` |
-| Comparison with the Post-Testing E2E `luks` job for the same digest | `iso/raw/compare_paths.py` |
 
 The installer's post-copy fixups (new filesystem UUIDs and their references,
 drop the live entry, `rd.luks.uuid` + crypttab, grow root; deployments under
@@ -259,9 +258,9 @@ flatpak fallocate their objects), `flatpaks` (default on: bake
 the set above into the medium's `/var`; off leaves the image's `preinstall.d`
 to the online first-boot flatpak-preinstall.service), `formats`.
 
-The job summary holds the comparison table; the
-`image-installer-<image>` artifact holds screenshots, `contact-sheet.png`,
-evidence, raw-evidence and `comparison.json`. The medium and the disks are
+The `image-installer-<image>` artifact holds screenshots,
+`contact-sheet.png`, evidence and raw-evidence. The comparison with the
+fisherman `luks` job (`compare_paths.py`) left with that job (#1569). The medium and the disks are
 never uploaded: CI media carry a root SSH key, `utah.live.debug` (live user
 password `live`, sshd) and the test passphrase.
 

@@ -40,8 +40,7 @@ Stages (every screenshot is listed in DIR/screenshots/manifest.json):
      and gets none of them: an older image cannot meet this checkout's rules.
 
 DIR/evidence/results.json records each stage (STAGES) as pass, fail or not
-run with its duration, plus SELinux mode and failed units for every boot;
-compare_paths.py turns it into the comparison with the ISO/fisherman path.
+run with its duration, plus SELinux mode and failed units for every boot.
 
 Input is what a user at the machine would give: a QEMU USB tablet clicks at a
 widget's on-screen position and QEMU `sendkey` types. AT-SPI (atspi_drive.py,
@@ -126,8 +125,7 @@ BOOTC_PROBE_DIAG = (
     "-p ExecMainStartTimestampMonotonic '*' | awk -F= '/^Id=/{id=$2} /^ExecMainPID=/{pid=$2} "
     "/^ExecMainStartTimestampMonotonic=/{if (pid > 0) print pid, $2, id}' | sort -n")
 
-# The stages results.json reports, in order. compare_paths.py lines them up
-# against the ISO/fisherman luks job's phases.
+# The stages results.json reports, in order.
 STAGES = ("live boot", "install", "first boot unlock", "initial setup",
           "first boot desktop", "bootc switch", "bootc rollback")
 

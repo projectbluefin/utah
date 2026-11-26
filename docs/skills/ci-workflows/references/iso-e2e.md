@@ -1,5 +1,16 @@
 # ISO end-to-end verification
 
+> **Since #1569 the install gate is the gnome-setup medium, not fisherman.**
+> Post-Testing E2E's `gnome-setup` job calls `image-installer.yml` for each
+> flavor's tested digest (live boot, GUI install into LUKS2, first boot,
+> gnome-initial-setup, bootc switch and rollback), and `promote-to-testing`
+> and `documentation` need it. The `luks`, `lifecycle` and `production-iso`
+> jobs are gone from that workflow; the record on the `verification` branch is
+> the main flavor's gnome-setup screenshots plus `provenance.json`, and the
+> README shows `14-first-boot-desktop.png`. The fisherman sections below
+> describe `iso/scripts/luks-e2e.sh`, which `candidate-common.yml` and
+> `build.yml`'s review VM still use until the fisherman path is removed.
+
 `post-testing-e2e.yml` downloads the originating build's digest artifacts.
 The final `dispatch-iso` build job invokes it with `workflow_dispatch`, not
 `workflow_run`: the latter did not fire after our GITHUB_TOKEN-dispatched
@@ -42,16 +53,6 @@ kept as `installed-luks-prompt.png` and published with the other evidence.
 The harness therefore keeps `rhgb` on the installed entry and drops only
 `quiet`; Plymouth then holds the console until GDM starts, so the graphical
 target is read over SSH as well as from serial.
-
-The `luks` job keeps the ISO it tested: once its leg passes, it uploads those
-same bytes and their SHA-256 checksum as the `production-iso-<image>` 3-day
-Actions artifact, so the retained media is exactly what booted live, installed
-offline and reached a desktop, not a later rebuild. A leg that fails uploads
-no ISO. Artifacts are per leg, so a passing flavor keeps its ISO even when
-another flavor fails; promotion still needs every leg. It is deliberately an
-artifact, not a release: destination, flavor policy, naming, signing, and
-Secure Boot are product decisions tracked by #186. Guest disks are never
-uploaded because they contain test credentials.
 
 **"Production" names the `DEBUG=0` build, not shippable media.** `DEBUG=0`
 does exclude the test credentials and sshd path (`iso/live/src/configure-live.sh`),

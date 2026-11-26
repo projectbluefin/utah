@@ -25,7 +25,7 @@ been re-pushed by a same-day rebuild; the dated tag is checked as corroboration.
 Subcommands (each writes `key=value` lines to $GITHUB_OUTPUT when it is set):
 
     decide        may the tested digests become :testing?   action=promote|noop|refuse
-    record        publish per-digest E2E success (LUKS, production ISO and
+    record        publish per-digest E2E success (gnome-setup install and
                   testsuite) as commit statuses
     release-gate  require that evidence for what :testing points at; emit the
                   `variants` JSON that retags the commit-addressed tags to :stable
@@ -361,7 +361,7 @@ def record(
                 continue
             github.post_status(tested_sha, context, entry["digest"], run_url)
             lines.append(f"{image}: recorded {context} success for {entry['digest']} on {tested_sha[:7]}")
-    aggregate = f"LUKS + production ISO + testsuite passed for {len(entries)} digest(s)"
+    aggregate = f"gnome-setup install + testsuite passed for {len(entries)} digest(s)"
     if not _has_evidence(existing, EVIDENCE_CONTEXT, aggregate):
         github.post_status(tested_sha, EVIDENCE_CONTEXT, aggregate, run_url)
     return lines
