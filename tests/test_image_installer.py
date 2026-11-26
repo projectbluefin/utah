@@ -666,6 +666,15 @@ class ComposefsTests(unittest.TestCase):
             (Path(d) / "backend.json").write_text(json.dumps(decision))
             self.assertEqual(compare.image_metrics(d, d, [], 0)["backend"], decision)
 
+    def test_the_live_initramfs_is_the_booted_kernels(self):
+        # Gaming images carry a second module tree that sorts above the OGC
+        # kernel's; rebuilding that one left the booted initrd without the
+        # live overlay (run 45729186820: "serial never showed UTAH_LIVE_READY").
+        containerfile = (RAW / "Containerfile").read_text()
+        self.assertNotIn("ls /usr/lib/modules | sort -V | tail -1", containerfile)
+        self.assertIn("-name vmlinuz", containerfile)
+        self.assertIn('kver="${kernel_dirs##*/}"', containerfile)
+
     def test_the_live_overlay_sits_under_both_root_setups(self):
         units = RAW / "src/usr/lib/systemd/system"
         live_root = (units / "utah-live-root.service").read_text()
