@@ -14,7 +14,7 @@ nothing. Tracking issue: #1403. History: spike #1399.
 | Raw medium: GPT BIOS-BOOT, 512 MiB ESP, 1 GiB ext4 `/boot`, btrfs root; one `bootc install to-filesystem --generic-image --karg rhgb --karg quiet`, with `--composefs-backend` when the image's kernel has the btrfs fs-verity fix (`UTAH_RAW_BACKEND=auto`, `scripts/kernel_verity.py`; ostree otherwise); "Utah Live" BLS entry as GRUB default; `EFI/BOOT` fallback | `iso/raw/build-raw-image.sh`, `iso/raw/medium.py`, `scripts/kernel_verity.py` |
 | Offline Flatpaks in the medium's stateful `/var` (`state/os/default/var` on composefs, the stateroot's `var` on ostree), never in an image: the set the ISO bakes (`system-flatpaks.Brewfile` apps via `scripts/verify-desktop-contract.py --flatpaks`, `--no-related`, listed runtimes pinned) plus `flatpak preinstall` of the image's `preinstall.d`, run in the image with that directory bind-mounted, then `setfiles` with the image's contexts | `iso/raw/bake-flatpaks.sh` |
 | Shrink to content: fstrim, btrfs balance + resize to minimum (+256 MiB, stepping up while btrfs refuses), fstrim again, cut the root partition and the file, rewrite the backup GPT; `size-breakdown.txt` shows what takes the space | `iso/raw/shrink-raw-image.sh`, `medium.py shrink-plan` |
-| End to end with screenshots and `evidence/results.json`; on composefs, fs-verity checks on every installed boot | `iso/raw/raw_e2e.py`, `composefs_check.py`, `atspi_drive.py`, `vte_term.py` |
+| End to end with screenshots and `evidence/results.json`; on composefs, fs-verity checks on every installed boot; the fisherman harness's installed-system checks ([below](#installed-system-checks-ported-from-the-fisherman-harness)) | `iso/raw/raw_e2e.py`, `composefs_check.py`, `atspi_drive.py`, `vte_term.py` |
 | Size per step (raw, allocated, zstd -3, zstd -19 --long, xz -9, pack/unpack time) | `iso/raw/measure_medium.py` |
 | Comparison with the Post-Testing E2E `luks` job for the same digest | `iso/raw/compare_paths.py` |
 
@@ -184,6 +184,50 @@ flatpak-preinstall.service has run with the network up.
 Each run also measures the same medium without Flatpaks (`size-2-no-flatpaks.json`)
 so the comparison shows what the offline set costs in download size.
 
+### Installed-system checks (ported from the fisherman harness)
+
+Everything `iso/scripts/luks-e2e.sh` asserted on the system it installed is
+asserted by `raw_e2e.py` too, with the same pass/fail, so the gnome-setup
+track can replace it without losing coverage. `Harness.check_installed` runs
+every check, records each one's problems under `installed_checks` in
+`results.json` and fails the boot with all of them together. It reuses the
+fisherman harness's own scripts from their current paths rather than copies;
+removing the ISO path must keep them (`tests/test_image_installer.py`
+`InstalledSystemCheckTests` fails otherwise):
+
+| Check | How | First boot | Rollback boot |
+|---|---|---|---|
+| No emergency mode (root is locked, so the boot carries on to `graphical.target`) | `emergency.target`/`emergency.service` started this boot (`emergency_entered`) | yes | |
+| `/efi` exists, `efi.automount`/`efi.mount` not failed (#1330) | `EFI_CHECK` | yes | |
+| No denied bootc SELinux probe (`comm="chcon"`/`"bootc"`, #1198) | `bootc_probe_denials`; caller diagnostics in `bootc-probe-diag-*.log` | yes | |
+| logrotate's `/var/lib` state and service | `LOGROTATE_CHECK` | yes | |
+| Flavor: image-info `image-flavor`, OGC kernel booted on gaming (and not elsewhere), `tun` on gaming, NVIDIA module `vermagic` = booted kernel, module file and `nvidia-smi` on nvidia | `iso/scripts/verify-installed-flavor.py` in the guest | yes | |
+| Unprivileged user namespaces (Flatpak sandboxes), `gnome-rounded-blur` installed and `-devel` absent | `unshare` as the user; `rounded_blur_problems` | yes | |
+| CountMe: timer enabled and active, a mocked report names `utah/<flavor>:`, the opt-out marker stops the service | `iso/scripts/verify-countme-runtime.sh` in the guest | yes | |
+| GNOME extensions (`EXTENSIONS`, gsconnect) reach ACTIVE within two minutes | `iso/scripts/extension-state.sh` | yes | |
+| fastfetch in a terminal, read back by tesseract, and that frame differs from the clean desktop's | `vte_term.py` + `iso/scripts/fastfetch-ocr-match.sh` | yes | |
+| System Flathub remote configured | `flathub_configured` | yes | yes |
+| Setup units ran, every `[services]` unit of the installed contract still enabled and not failed | `iso/scripts/e2e-services.sh` `verify_setup_state` + `scripts/verify-desktop-contract.py`, in the guest as the user | yes | yes |
+
+The flavor is `--flavor`, or the configured flavor that publishes
+`--candidate`'s repository (`scripts/flavors.py flavor IMAGE`): the switch
+target is always the same repository as the image under test. The rollback
+boot is the fisherman harness's repeat boot (#19). The bootc switch boot runs
+another image and gets none of these checks: an older `:testing` cannot meet
+rules this checkout added later (#1343). The live session, desktop and
+greeter screenshots must draw (retaken for a minute, then the run fails), the
+live one below the top bar too, as `UTAH_E2E_REQUIRE_SCREENSHOTS` required.
+The harness needs `tesseract` on the host.
+
+Not ported, because they test fisherman's path rather than the installed
+system: the ISO's `media-input.json` receipt and the booted manifest/config
+tie to it (the medium is a derived live layer installed by block copy, so its
+digest is not the published one; `bootc switch` and `bootc rollback` check
+digests instead), fisherman's lost-Flatpak warning, the boot-entry `rhgb`
+patch, the live `btrfs` modprobe, and the `docs/verification` record.
+Unlike the fisherman VM, these VMs have network: the CountMe check still
+stubs curl, but the shipped timer can reach the real endpoint at boot.
+
 ## Running it
 
 `.github/workflows/image-installer.yml` runs nightly (07:41 UTC, after the
@@ -211,7 +255,8 @@ evidence, raw-evidence and `comparison.json`. The medium and the disks are
 never uploaded: CI media carry a root SSH key, `utah.live.debug` (live user
 password `live`, sshd) and the test passphrase.
 
-Locally, with a published digest and root (KVM, podman, qemu, OVMF, zstd, xz).
+Locally, with a published digest and root (KVM, podman, qemu, OVMF, zstd, xz;
+the E2E also needs tesseract and ffmpeg).
 The build takes about 10-15 minutes; `bake-flatpaks.sh` is optional (about
 5 GB more raw, needs Flathub; without it the installed system preinstalls
 them online on first boot):

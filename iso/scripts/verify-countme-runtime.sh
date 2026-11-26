@@ -8,7 +8,8 @@
 # countme.projectbluefin.io. It cannot get there: luks-e2e.sh boots the
 # installed disk on a QEMU user netdev with restrict=on, which gives the guest
 # no outbound route. That isolation, not this stub, keeps the review VM's boot
-# from being counted.
+# from being counted. iso/raw/raw_e2e.py runs this script too, and its VMs
+# have network: there the boot's own run can reach the endpoint.
 set -euo pipefail
 
 expected_flavor="${1:?expected flavor required}"

@@ -96,6 +96,22 @@ class QueryTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("unknown flavor: unknown-flavor", result.stderr)
 
+    def test_flavor_is_the_reverse_of_image_for_configured_flavors(self):
+        cli = build_tree({"flavors": ALL_FLAVORS, "retired": {}})
+        for flavor in ALL_FLAVORS:
+            image = run(cli, "image", flavor).stdout.strip()
+            result = run(cli, "flavor", image)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.strip(), flavor)
+
+    def test_flavor_fails_for_an_image_no_configured_flavor_publishes(self):
+        cli = build_tree({"flavors": ["main"], "retired": {"nvidia": "off"}})
+        for image in ("utah-nvidia", "dakota"):
+            result = run(cli, "flavor", image)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(f"no configured flavor publishes image: {image}", result.stderr)
+        self.assertIn("usage: flavors.py flavor IMAGE", run(cli, "flavor").stderr)
+
     def test_releases_promotes_testing_to_stable_for_every_flavor(self):
         cli = build_tree({"flavors": ["main", "gaming"], "retired": {}})
         result = run(cli, "releases")

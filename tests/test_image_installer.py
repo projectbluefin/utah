@@ -737,6 +737,137 @@ class ComposefsTests(unittest.TestCase):
         self.assertIn('path=\\"/boot[/\\"]', harness)
 
 
+class InstalledSystemCheckTests(unittest.TestCase):
+    """The installed-system checks raw_e2e.py took over from the fisherman harness (luks-e2e.sh)."""
+
+    def test_image_name_is_the_repository_without_registry_tag_or_digest(self):
+        for ref in ("ghcr.io/projectbluefin/utah@sha256:" + "a" * 64, "ghcr.io/projectbluefin/utah:testing",
+                    "localhost:5000/utah:testing", "utah"):
+            with self.subTest(ref=ref):
+                self.assertEqual(raw_e2e.image_name(ref), "utah")
+
+    def test_every_configured_flavor_is_found_from_its_image(self):
+        flavors = json.loads((ROOT / "config/flavors.json").read_text())["flavors"]
+        for flavor in flavors:
+            image = subprocess.run([sys.executable, str(ROOT / "scripts/flavors.py"), "image", flavor],
+                                   capture_output=True, text=True, check=True).stdout.strip()
+            with self.subTest(flavor=flavor):
+                self.assertEqual(raw_e2e.flavor_of(f"ghcr.io/projectbluefin/{image}@sha256:{'0' * 64}"), flavor)
+        with self.assertRaises(SystemExit):
+            raw_e2e.flavor_of("ghcr.io/projectbluefin/dakota:testing")
+
+    def test_an_emergency_this_boot_is_seen_although_the_boot_carried_on(self):
+        never = "InactiveExitTimestampMonotonic=0\nExecMainStartTimestamp=\n"
+        self.assertFalse(raw_e2e.emergency_entered(never))
+        self.assertFalse(raw_e2e.emergency_entered("InactiveExitTimestampMonotonic=0\nExecMainStartTimestamp=n/a\n"))
+        self.assertTrue(raw_e2e.emergency_entered("InactiveExitTimestampMonotonic=8123456\nExecMainStartTimestamp=\n"))
+        self.assertTrue(raw_e2e.emergency_entered(
+            "InactiveExitTimestampMonotonic=0\nExecMainStartTimestamp=Thu 2026-11-26 10:00:01 UTC\n"))
+
+    def test_only_a_denied_bootc_or_chcon_probe_fails_the_boot(self):
+        denial = ('type=AVC msg=audit(1795247042.592:77): avc:  denied  { mac_admin } for  pid=2690 '
+                  'comm="chcon" capability=33  scontext=system_u:system_r:initrc_t:s0 tclass=capability2 permissive=0')
+        other = denial.replace('comm="chcon"', 'comm="logind"')
+        self.assertEqual(raw_e2e.bootc_probe_denials(f"{other}\n{denial}\n"), [denial])
+        self.assertEqual(raw_e2e.bootc_probe_denials(denial.replace("chcon", "bootc")), [denial.replace("chcon", "bootc")])
+        self.assertEqual(raw_e2e.bootc_probe_denials(other), [])
+
+    def test_the_flathub_remote_must_be_listed(self):
+        self.assertTrue(raw_e2e.flathub_configured("fedora\nflathub\n"))
+        self.assertFalse(raw_e2e.flathub_configured("flathub-beta\nfedora\n"))
+        self.assertFalse(raw_e2e.flathub_configured(""))
+
+    def test_rounded_blur_runtime_present_and_devel_absent(self):
+        self.assertEqual(raw_e2e.rounded_blur_problems(0, 1), [])
+        self.assertEqual(raw_e2e.rounded_blur_problems(1, 1),
+                         ["installed image lacks the gnome-rounded-blur runtime package"])
+        self.assertEqual(raw_e2e.rounded_blur_problems(0, 0),
+                         ["build-only gnome-rounded-blur-devel leaked into the installed image"])
+        self.assertEqual(raw_e2e.rounded_blur_problems(0, 2), ["could not verify gnome-rounded-blur-devel is absent"])
+
+    def test_extension_state_is_decided_by_extension_state_sh(self):
+        for info, expected in (("Name: GSConnect\n  State: ACTIVE\n", ("ACTIVE", True)),
+                               ("State: ENABLED\n", ("ENABLED", True)),
+                               ("State: ACTIVE\nState: ERROR\n", ("ERROR", False)),
+                               ("State: OUT_OF_DATE\n", ("OUT_OF_DATE", False)),
+                               ("ssh root: failed (1)\n", ("", False))):
+            with self.subTest(info=info):
+                self.assertEqual(raw_e2e.extension_state(info), expected)
+
+    def test_fastfetch_is_read_back_by_fastfetch_ocr_match_sh(self):
+        with tempfile.TemporaryDirectory() as d:
+            transcript = Path(d) / "ocr.txt"
+            transcript.write_text("root@utah:~# fastfetch && echo UTAH-E2E-FASTFETCH\n"
+                                  "Utah (Version: testing-20261126)\nLinux 7.3.5-200.1.utah1.fc44.x86_64\n"
+                                  "GNOME 51.1\nUTAH-E2E-FASTFETCH\n")
+            self.assertTrue(raw_e2e.fastfetch_seen(transcript))
+            # The sentinel in scrollback alone is not fastfetch on screen.
+            transcript.write_text("UTAH-E2E-FASTFETCH\n[tester@utah ~]$\n")
+            self.assertFalse(raw_e2e.fastfetch_seen(transcript))
+            transcript.write_text("")
+            self.assertFalse(raw_e2e.fastfetch_seen(transcript))
+        self.assertTrue(raw_e2e.welcome_dialog_showing("Welcome to Bluefin\nSkip  Take Tour\n"))
+        self.assertFalse(raw_e2e.welcome_dialog_showing("Linux 7.3"))
+
+    def test_a_frame_with_only_the_top_bar_drawn_is_not_drawn_below_it(self):
+        w, h = 200, 100
+        top = bytes(b for i in range(w * (h // 10)) for b in (i % 251, (i * 7) % 253, (i * 13) % 255))
+        frame = b"P6\n%d %d\n255\n" % (w, h) + top + bytes(3 * w * (h - h // 10))
+        with tempfile.TemporaryDirectory() as d:
+            ppm = Path(d) / "f.ppm"
+            ppm.write_bytes(frame)
+            self.assertTrue(raw_e2e.drawn(ppm))
+            self.assertFalse(raw_e2e.drawn(ppm, below_top_bar=True))
+            ppm.write_bytes(b"P6\n%d %d\n255\n" % (w, h) + top * 10)
+            self.assertTrue(raw_e2e.drawn(ppm, below_top_bar=True))
+
+    def run_setup_state(self, failed_unit):
+        """setup_state_script against e2e-services.sh, with systemctl, sudo and the contract parser stubbed."""
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            (d / "scripts").mkdir()
+            (d / "bin").mkdir()
+            shutil.copy(ROOT / "iso/scripts/e2e-services.sh", d / "e2e-services.sh")
+            (d / "scripts/verify-desktop-contract.py").write_text(
+                'import sys\nprint({"enabled": "gdm.service", "user_enabled": "pipewire.socket"}[sys.argv[2]])\n')
+            (d / "bin/sudo").write_text('#!/bin/bash\nwhile [[ $1 == -* ]]; do [[ $1 == -p ]] && shift; shift; done\n'
+                                        'cat >/dev/null\nexec "$@"\n')
+            (d / "bin/systemctl").write_text(
+                '#!/bin/bash\ncase "$*" in\n  *is-enabled*) echo enabled ;;\n  *list-units*) ;;\n'
+                '  *"$FAILED_UNIT"*) printf "LoadState=loaded\\nActiveState=failed\\nResult=exit-code\\n'
+                'ExecMainStartTimestamp=n/a\\n" ;;\n'
+                '  *) printf "LoadState=loaded\\nActiveState=active\\nResult=success\\n'
+                'ExecMainStartTimestamp=Thu 2026-11-26 10:00:00 UTC\\n" ;;\nesac\n')
+            for stub in ("sudo", "systemctl"):
+                (d / "bin" / stub).chmod(0o755)
+            self.addCleanup(Path("/tmp/utah-e2e-verify-desktop-contract.py").unlink, missing_ok=True)
+            original = raw_e2e.GUEST_SCRIPTS
+            raw_e2e.GUEST_SCRIPTS = str(d)
+            try:
+                script = raw_e2e.setup_state_script("repeat")
+            finally:
+                raw_e2e.GUEST_SCRIPTS = original
+            return subprocess.run(["bash", "-c", script], capture_output=True, text=True, stdin=subprocess.DEVNULL,
+                                  env={"PATH": f"{d / 'bin'}:/usr/bin:/bin", "FAILED_UNIT": failed_unit})
+
+    def test_the_contract_units_are_checked_by_e2e_services_sh_in_the_guest(self):
+        ok = self.run_setup_state("none")
+        self.assertEqual(ok.returncode, 0, ok.stderr)
+        for unit in ("flatpak-preinstall.service", "ublue-system-setup.service", "ublue-user-setup.service",
+                     "gdm.service", "pipewire.socket", "kanata.service"):
+            self.assertIn(unit, ok.stdout)
+        failed = self.run_setup_state("gdm.service")
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertIn("FAIL: system unit gdm.service failed during repeat boot", failed.stderr)
+
+    def test_the_reused_fisherman_checks_exist_where_the_harness_reads_them(self):
+        # raw_e2e.py runs these from iso/scripts/: removing the ISO path must keep them.
+        for script in ("e2e-services.sh", "verify-installed-flavor.py", "verify-countme-runtime.sh",
+                       "extension-state.sh", "fastfetch-ocr-match.sh"):
+            self.assertTrue((raw_e2e.SCRIPTS / script).is_file(), script)
+        self.assertTrue((raw_e2e.REPO / "scripts/verify-desktop-contract.py").is_file())
+
+
 class KernelVeritySelectorTests(unittest.TestCase):
     """scripts/kernel_verity.py: composefs only on a kernel with the btrfs fs-verity fix."""
 

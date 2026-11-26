@@ -28,6 +28,16 @@ Stages (every screenshot is listed in DIR/screenshots/manifest.json):
      With --backend composefs, every installed boot must run the composefs
      image with fs-verity enforced and every object must carry verity; the
      first boot also reads every object (composefs_check.py --read).
+  5. The installed-system checks the ISO/fisherman harness (luks-e2e.sh) made,
+     on the first boot: no emergency mode, the /efi mountpoint, no bootc
+     SELinux probe denial, logrotate's state, the flavor (image-info, OGC
+     kernel, tun, NVIDIA module built for the booted kernel), unprivileged
+     user namespaces, the rounded-blur runtime/devel split, CountMe, GNOME
+     extension states, fastfetch read back by OCR from a terminal screenshot,
+     the Flathub remote and every [services] unit of the installed contract.
+     The rollback boot repeats the Flathub remote and the services, like the
+     fisherman harness's repeat boot. The bootc switch boot runs another image
+     and gets none of them: an older image cannot meet this checkout's rules.
 
 DIR/evidence/results.json records each stage (STAGES) as pass, fail or not
 run with its duration, plus SELinux mode and failed units for every boot;
@@ -42,7 +52,10 @@ harness maximizes it first: a maximized window spans the screen width and starts
 right under the top bar (the dock reserves the bottom of the work area, run
 44863382769), which turns window coordinates into screen coordinates.
 
-Reuses iso/scripts/qemu_monitor.py, plymouth-prompt.py and luks-unlock.py.
+Reuses iso/scripts/qemu_monitor.py, plymouth-prompt.py and luks-unlock.py on
+the host, extension-state.sh and fastfetch-ocr-match.sh for the decisions,
+and runs e2e-services.sh, verify-installed-flavor.py, verify-countme-runtime.sh
+and scripts/verify-desktop-contract.py in the guest (copied to GUEST_SCRIPTS).
 """
 
 import argparse
@@ -88,6 +101,31 @@ RESOLV_FACTS = ("echo '== /etc/resolv.conf'; ls -laZ /etc/resolv.conf; readlink 
                 "journalctl -b --no-pager -o cat _TRANSPORT=audit | grep -o 'avc: *denied.*' "
                 "| sed -E 's/ (pid|ino)=[0-9]+//g' | sort | uniq -c | sort -rn | head -20")
 
+REPO = HERE.parent.parent
+# Where the checks the guest runs are copied to, readable by the test user.
+GUEST_SCRIPTS = "/var/tmp/utah-e2e"
+# luks-e2e.sh's default UTAH_E2E_EXTENSIONS: these must reach ACTIVE.
+EXTENSIONS = ("gsconnect@andyholmes.github.io",)
+# fastfetch-ocr-match.sh needs fastfetch's body and this sentinel.
+FASTFETCH_CMD = "fastfetch && echo UTAH-E2E-FASTFETCH"
+# luks-e2e.sh's EFI gate (#1330): /efi exists and neither EFI mount unit failed.
+EFI_CHECK = ('test -d /efi && for unit in efi.automount efi.mount; do '
+             'load=$(systemctl show "$unit" -p LoadState --value) && '
+             'state=$(systemctl show "$unit" -p ActiveState --value) && '
+             'echo "$unit: load=$load active=$state" && test "$state" != failed || exit 1; done')
+# clean-stage removes /var/lib from the image: tmpfiles must recreate logrotate's.
+LOGROTATE_CHECK = ("sh -eu -c 'test -d /var/lib/logrotate; systemctl start logrotate.service; "
+                   "test -s /var/lib/logrotate/logrotate.status'")
+# What identifies the caller of a denied bootc mac_admin probe (luks-e2e.sh, #1198).
+BOOTC_PROBE_DIAG = (
+    "echo '## SYSCALL records of chcon/bootc'; grep -E 'type=SYSCALL.*comm=\"(chcon|bootc)\"' /var/log/audit/audit.log; "
+    "echo '## labels'; ls -Z /usr/bin/bootc /usr/bin/chcon /usr/bin/bash /usr/bin/unshare "
+    "/usr/bin/ublue-booted-image-sync /usr/libexec/projectbluefin-countme 2>&1; "
+    "echo '## mounts'; findmnt -o TARGET,SOURCE,FSTYPE,OPTIONS / /usr /etc /var /sysroot 2>&1; "
+    "echo '## services by main PID'; systemctl show --type=service --all -p Id -p ExecMainPID "
+    "-p ExecMainStartTimestampMonotonic '*' | awk -F= '/^Id=/{id=$2} /^ExecMainPID=/{pid=$2} "
+    "/^ExecMainStartTimestampMonotonic=/{if (pid > 0) print pid, $2, id}' | sort -n")
+
 # The stages results.json reports, in order. compare_paths.py lines them up
 # against the ISO/fisherman luks job's phases.
 STAGES = ("live boot", "install", "first boot unlock", "initial setup",
@@ -120,6 +158,7 @@ class Results:
         self.current = None
         self.started = None
         self.error = None
+        self.checks = {}
 
     def begin(self, stage):
         if stage not in STAGES:
@@ -148,13 +187,16 @@ class Results:
     def composefs_boot(self, phase, facts, problems):
         self.composefs[phase] = {**{k: v for k, v in facts.items() if k != "cmdline"}, "problems": problems}
 
+    def check(self, phase, name, problems):
+        self.checks.setdefault(phase, {})[name] = problems
+
     def as_dict(self, timings=None):
         stages = [{"stage": s, **self.stages.get(s, {"status": "not run", "seconds": None})} for s in STAGES]
         passed = self.error is None and all(s["status"] == "pass" for s in stages)
         return {"result": "pass" if passed else "fail", "error": self.error, "install": self.install,
                 "installer": self.installer, "backend": self.backend, "encryption": self.encryption,
                 "stages": stages, "boots": self.boots, "flatpaks": self.flatpaks,
-                "composefs": self.composefs, "timings": dict(timings or {})}
+                "composefs": self.composefs, "installed_checks": self.checks, "timings": dict(timings or {})}
 
 
 def flatpak_problems(baked, installed, removed=None):
@@ -207,6 +249,79 @@ def composefs_problems(facts):
     if facts.get("corrupted_reports"):
         problems.append(f"{facts['corrupted_reports']} fs-verity FILE CORRUPTED reports this boot")
     return problems
+
+
+def image_name(ref):
+    """The repository name of an image reference: ghcr.io/projectbluefin/utah-nvidia@sha256:... -> utah-nvidia."""
+    return ref.split("@", 1)[0].rsplit("/", 1)[-1].split(":", 1)[0]
+
+
+def emergency_entered(show):
+    """Whether `systemctl show` of emergency.target/emergency.service says either started this boot.
+
+    The image locks root, so sulogin exits at once and the boot carries on to
+    the graphical target: reaching it does not prove there was no emergency."""
+    for line in show.splitlines():
+        key, eq, value = line.partition("=")
+        if eq and key in ("InactiveExitTimestampMonotonic", "ExecMainStartTimestamp") \
+                and value.strip() not in ("", "0", "n/a"):
+            return True
+    return False
+
+
+BOOTC_PROBE_DENIAL = re.compile(r'denied .*comm="(chcon|bootc)"')
+
+
+def bootc_probe_denials(avc):
+    """AVC lines that deny bootc's mac_admin probe: utah_bootc_probe is not in effect (#1198)."""
+    return [line for line in avc.splitlines() if BOOTC_PROBE_DENIAL.search(line)]
+
+
+def flathub_configured(remotes):
+    """`flatpak remotes --system --columns=name` lists flathub."""
+    return "flathub" in (line.strip() for line in remotes.splitlines())
+
+
+def rounded_blur_problems(runtime_rc, devel_rc):
+    """rpm -q exit codes: the runtime must be installed and the build-only -devel absent (rc 1)."""
+    problems = []
+    if runtime_rc != 0:
+        problems.append("installed image lacks the gnome-rounded-blur runtime package")
+    if devel_rc == 0:
+        problems.append("build-only gnome-rounded-blur-devel leaked into the installed image")
+    elif devel_rc != 1:
+        problems.append("could not verify gnome-rounded-blur-devel is absent")
+    return problems
+
+
+def extension_state(info):
+    """(state, active) from `gnome-extensions info` output, as iso/scripts/extension-state.sh decides it."""
+    r = subprocess.run(["bash", "-c", 'source "$1"; state=$(extension_state_from_info); printf "%s\\n" "$state"; '
+                        'extension_state_is_active "$state"', "extension-state", str(SCRIPTS / "extension-state.sh")],
+                       input=info, capture_output=True, text=True)
+    return r.stdout.strip(), r.returncode == 0
+
+
+def fastfetch_seen(transcript):
+    """Whether a tesseract transcript file proves fastfetch ran (iso/scripts/fastfetch-ocr-match.sh)."""
+    return subprocess.run(["bash", str(SCRIPTS / "fastfetch-ocr-match.sh"), str(transcript)],
+                          capture_output=True).returncode == 0
+
+
+def welcome_dialog_showing(ocr):
+    """GNOME Shell's first-login "Welcome ... Skip / Take Tour" dialog is over the screenshot."""
+    return "take tour" in ocr.lower()
+
+
+def setup_state_script(boot_pass):
+    """e2e-services.sh's verify_setup_state, run in the guest as the test user.
+
+    Its ssh_target/scp_target reach the installed system from the host; here
+    they run locally. TEST_PASSWORD feeds its `sudo -S`."""
+    return (f"ROOT={GUEST_SCRIPTS} TEST_USER={USER} TEST_PASSWORD={PASSWORD}; "
+            'ssh_target() { bash -c "$1"; }; scp_target() { cp "$1" "${2#*:}"; }; '
+            'fail() { echo "FAIL: $*" >&2; exit 1; }; '
+            f"source {GUEST_SCRIPTS}/e2e-services.sh; verify_setup_state {shlex.quote(boot_pass)}")
 
 
 class Fail(Exception):
@@ -300,6 +415,10 @@ class Harness:
         self.swtpm = None
         self.recovery_key = None
         self.results.encryption = {"tpm2": self.tpm, "unlocks": {}}
+        if not shutil.which("tesseract"):
+            raise SystemExit("needs tesseract: the fastfetch screenshot is read back by OCR")
+        self.flavor = args.flavor or flavor_of(args.candidate)
+        log(f"flavor under test: {self.flavor}")
 
     # ---- QEMU ---------------------------------------------------------------
     def start_vm(self, name, drives, vars_file, ssh_port, tpm=False):
@@ -456,11 +575,16 @@ class Harness:
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(ppm), str(png)], check=True)
         ppm.unlink(missing_ok=True)
 
-    def shot(self, label, proves, retake_until_drawn=False):
+    def shot(self, label, proves, retake_until_drawn=False, required=False, below_top_bar=False):
+        """A screenshot into the manifest. retake_until_drawn retakes a flat frame
+        (below_top_bar: one flat below the top bar) for a minute; required then
+        fails the run on a frame that never drew, as the fisherman harness's
+        UTAH_E2E_REQUIRE_SCREENSHOTS gate did."""
         png = self.shots / f"{label}.png"
         for attempt in range(12 if retake_until_drawn else 1):
             ppm = self.screendump(png)
-            if not retake_until_drawn or drawn(ppm):
+            ok = drawn(ppm, below_top_bar=below_top_bar)
+            if not retake_until_drawn or ok:
                 break
             log(f"  {label}: frame not drawn yet ({attempt + 1}/12)")
             self.key("shift")
@@ -469,6 +593,8 @@ class Harness:
         self.manifest.append({"file": png.name, "stage": label, "proves": proves})
         self.write_manifest()
         log(f"  screenshot {png.name}: {proves}")
+        if required and not ok:
+            raise Fail(f"screenshot {png.name} shows a blank or flat-colour frame rather than: {proves}")
         return png
 
     def debug_shot(self, label):
@@ -707,7 +833,8 @@ class Harness:
         while time.time() < end and "gnome-shell" not in self.ssh("liveuser", "pgrep -a -u liveuser gnome-shell || true", password=live_pw):
             time.sleep(5)
         time.sleep(10)
-        self.shot("01-live-session", "Raw disk image booted as live media (utah.live, tmpfs overlay): GNOME session for the live user", True)
+        self.shot("01-live-session", "Raw disk image booted as live media (utah.live, tmpfs overlay): GNOME session for the live user",
+                  True, required=True, below_top_bar=True)
 
     def shot_when_grub(self):
         # GRUB shows its menu briefly; catch it to show the live entry is the default.
@@ -1074,6 +1201,172 @@ class Harness:
             return self.ssh("root", f"runuser -u {user} -- env {env} sh -c {shlex.quote(command)}")
         return run
 
+    def copy_guest_scripts(self):
+        """The fisherman harness's guest-side checks, from their current paths, readable by the test user."""
+        self.ssh("root", f"mkdir -p {GUEST_SCRIPTS}/scripts")
+        for src, dst in ((SCRIPTS / "e2e-services.sh", "e2e-services.sh"),
+                         (SCRIPTS / "verify-installed-flavor.py", "verify-installed-flavor.py"),
+                         (SCRIPTS / "verify-countme-runtime.sh", "verify-countme-runtime.sh"),
+                         (REPO / "scripts/verify-desktop-contract.py", "scripts/verify-desktop-contract.py")):
+            self.scp_to("root", src, f"{GUEST_SCRIPTS}/{dst}")
+        self.ssh("root", f"chmod -R a+rX {GUEST_SCRIPTS}")
+
+    def check_installed(self, phase, prefix, repeat=False):
+        """What luks-e2e.sh checked on the installed system, with its pass/fail.
+
+        Every check runs and the boot fails with all their problems together;
+        repeat is the fisherman harness's repeat boot: the Flathub remote and
+        the contract's units again."""
+        self.copy_guest_scripts()
+        boot_pass = "repeat" if repeat else "first"
+        checks = [("flathub remote", self.check_flathub),
+                  ("setup units", lambda: self.check_setup_state(phase, boot_pass))]
+        if not repeat:
+            checks = [("boot state", lambda: self.check_boot_state(phase)),
+                      ("flavor", lambda: self.check_flavor(phase)),
+                      ("countme", lambda: self.check_countme(phase)),
+                      ("extensions", lambda: self.check_extensions(phase)),
+                      ("fastfetch", lambda: self.check_fastfetch(phase, prefix))] + checks
+        problems = []
+        for name, check in checks:
+            try:
+                found = check()
+            except (Fail, subprocess.TimeoutExpired) as e:
+                found = [str(e)]
+            self.results.check(phase, name, found)
+            log(f"  {phase}: {name}: {'; '.join(found) or 'ok'}")
+            problems += [f"{name}: {p}" for p in found]
+        if problems:
+            raise Fail(f"{phase}: {'; '.join(problems)}")
+
+    def check_boot_state(self, phase):
+        """No emergency mode, /efi, no denied bootc SELinux probe, logrotate's boot-created state."""
+        problems = []
+        show = self.ssh("root", "systemctl show -p InactiveExitTimestampMonotonic emergency.target; "
+                        "systemctl show -p ExecMainStartTimestamp emergency.service", check=False)
+        if emergency_entered(show):
+            problems.append("the installed system entered emergency mode during boot (evidence/journal)")
+            self.save(f"emergency-{slug(phase)}.txt", show + self.ssh(
+                "root", "journalctl -b --no-pager -o short-monotonic -p err", check=False))
+        efi = self.ssh("root", EFI_CHECK + " && echo EFI-OK", check=False)
+        if "EFI-OK" not in efi:
+            problems.append(f"EFI mountpoint is missing or an EFI mount unit failed: {efi.strip()}")
+        avc = self.ssh("root", "grep -hF avc: /var/log/audit/audit.log 2>/dev/null; "
+                       "journalctl -b --no-pager -o cat 2>/dev/null | grep -F avc:; true", check=False)
+        self.save(f"avc-{slug(phase)}.log", avc)
+        if bootc_probe_denials(avc):
+            self.save(f"bootc-probe-diag-{slug(phase)}.log", self.ssh("root", BOOTC_PROBE_DIAG, check=False))
+            problems.append("chcon was denied mac_admin during boot (#1198): utah_bootc_probe is not in effect "
+                            f"(evidence/avc-{slug(phase)}.log, bootc-probe-diag-{slug(phase)}.log)")
+        if "LOGROTATE-OK" not in self.ssh("root", LOGROTATE_CHECK + " && echo LOGROTATE-OK", check=False):
+            problems.append("logrotate state directory or service failed on the installed system")
+        return problems
+
+    def check_flavor(self, phase):
+        """verify-installed-flavor.py (flavor, OGC kernel, tun, NVIDIA module for the booted
+        kernel), unprivileged user namespaces, the rounded-blur runtime/devel split."""
+        problems = []
+        try:
+            out = self.ssh("root", f"python3 {GUEST_SCRIPTS}/verify-installed-flavor.py --flavor {shlex.quote(self.flavor)}")
+            self.save(f"flavor-checks-{slug(phase)}.json", out)
+        except Fail as e:
+            problems.append(f"installed flavor probe failed: {e}")
+        try:
+            self.user_runner(USER)("unshare --user --map-root-user true")
+        except Fail:
+            problems.append("unprivileged user namespaces unavailable for Flatpaks")
+        rcs = self.ssh("root", "rpm -q gnome-rounded-blur >/dev/null; echo $?; "
+                       "rpm -q --quiet gnome-rounded-blur-devel; echo $?", check=False).split()
+        if len(rcs) != 2:
+            return problems + [f"could not query the rounded-blur packages: {rcs}"]
+        return problems + rounded_blur_problems(int(rcs[0]), int(rcs[1]))
+
+    def check_countme(self, phase):
+        """verify-countme-runtime.sh: timer, a mocked report naming the flavor, the opt-out."""
+        # stderr carries the reason; self.ssh puts it in the Fail.
+        out = self.ssh("root", f"bash {GUEST_SCRIPTS}/verify-countme-runtime.sh {shlex.quote(self.flavor)}")
+        self.save(f"countme-{slug(phase)}.log", out)
+        return []
+
+    def check_extensions(self, phase):
+        """Every EXTENSIONS uuid reaches ACTIVE within two minutes; never re-enabled here."""
+        run = self.user_runner(USER)
+        problems = []
+        for uuid in EXTENSIONS:
+            info, state, active = "", "", False
+            for _ in range(24):
+                try:
+                    info = run(f"gnome-extensions info {shlex.quote(uuid)}")
+                except Fail as e:
+                    info = str(e)
+                state, active = extension_state(info)
+                if active:
+                    break
+                time.sleep(5)
+            if active:
+                log(f"  extension {uuid}: {state}")
+                continue
+            try:
+                errors = run("gdbus call --session --dest org.gnome.Shell.Extensions --object-path /org/gnome/Shell/Extensions "
+                             f"--method org.gnome.Shell.Extensions.GetExtensionErrors {shlex.quote(uuid)}")
+            except Fail as e:
+                errors = str(e)
+            self.save(f"extension-{uuid.split('@')[0]}-{slug(phase)}.txt", f"{info}\n== shell-reported errors\n{errors}\n")
+            self.debug_shot(f"extension-{uuid.split('@')[0]}-{slug(phase)}")
+            problems.append(f"extension {uuid}: " + (f"state={state}" if state else "state could not be read"))
+        return problems
+
+    def check_fastfetch(self, phase, prefix):
+        """A terminal on the desktop running fastfetch, read back by tesseract
+        (fastfetch-ocr-match.sh), and a frame that differs from the clean desktop's."""
+        label = f"{prefix}-fastfetch"
+        unit = f"utah-e2e-term-{label}"
+        png = self.shots / f"{label}.png"
+        transcript = self.evidence / f"fastfetch-ocr-{slug(phase)}.txt"
+        self.ssh("root", f"systemd-run --machine={USER}@.host --user --collect --unit={unit} "
+                         f"python3 /var/tmp/vte_term.py fastfetch {shlex.quote(FASTFETCH_CMD)}", check=False)
+        seen = False
+        try:
+            time.sleep(15)
+            for _ in range(24):
+                self.to_png(self.screendump(png), png)
+                # tesseract reads identical pixels differently between runs (#375): re-read before a new shot.
+                for _ in range(3):
+                    ocr = subprocess.run(["tesseract", str(png), "stdout"], capture_output=True, text=True).stdout
+                    transcript.write_text(ocr)
+                    seen = fastfetch_seen(transcript)
+                    if seen:
+                        break
+                if seen:
+                    break
+                if welcome_dialog_showing(ocr):
+                    log("  GNOME Shell welcome dialog is showing; pressing Skip")
+                    self.key("ret")
+                    time.sleep(3)
+                time.sleep(5)
+        finally:
+            if png.exists():
+                self.manifest.append({"file": png.name, "stage": label,
+                                      "proves": f"{phase}: fastfetch in a terminal on the desktop, read back by OCR"})
+                self.write_manifest()
+            self.ssh("root", f"systemctl --machine={USER}@.host --user stop {unit}", check=False)
+        problems = [] if seen else [f"fastfetch output was not visible in {png.name} (evidence/{transcript.name})"]
+        desktop = self.shots / f"{prefix}-desktop.png"
+        if desktop.exists() and png.exists() and desktop.read_bytes() == png.read_bytes():
+            problems.append(f"{desktop.name} and {png.name} are byte-identical; they must capture distinct states")
+        return problems
+
+    def check_flathub(self):
+        remotes = self.ssh("root", "flatpak remotes --system --columns=name", check=False)
+        return [] if flathub_configured(remotes) else ["system Flathub remote is not configured"]
+
+    def check_setup_state(self, phase, boot_pass):
+        """e2e-services.sh's verify_setup_state as the test user: the setup units ran, every
+        [services] unit of the installed contract is still enabled and has not failed."""
+        out = self.user_runner(USER)(f"bash -c {shlex.quote(setup_state_script(boot_pass))}")
+        self.save(f"setup-units-{slug(phase)}.txt", out)
+        return []
+
     def initial_setup(self):
         log("=== Stage 3: gnome-initial-setup creates the user ===")
         # ps truncates long user names and comm is cut at 15 characters: match the
@@ -1143,7 +1436,7 @@ class Harness:
     def gdm_login(self, phase, label):
         self.key("shift")
         time.sleep(3)
-        self.shot(label, f"{phase}: GDM greeter offers the account created by gnome-initial-setup", True)
+        self.shot(label, f"{phase}: GDM greeter offers the account created by gnome-initial-setup", True, required=True)
         self.key("ret")
         time.sleep(3)
         self.type(PASSWORD, enter=True)
@@ -1181,7 +1474,7 @@ class Harness:
     def desktop_and_status(self, phase, prefix):
         # Close the overview (and Shell's first-login welcome dialog) over the desktop.
         self.close_overview()
-        self.shot(f"{prefix}-desktop", f"{phase}: GNOME desktop for {USER}", True)
+        self.shot(f"{prefix}-desktop", f"{phase}: GNOME desktop for {USER}", True, required=True)
         status = self.ssh("root", "bootc status", check=False)
         status_json = self.ssh("root", "bootc status --json", check=False)
         self.save(f"bootc-status-{slug(phase)}.txt", status)
@@ -1267,6 +1560,7 @@ class Harness:
         self.results.begin("first boot desktop")
         self.baseline_digest = self.desktop_and_status("first boot", "14-first-boot")
         self.check_flatpaks("first boot")
+        self.check_installed("first boot", "14-first-boot")
         removed = self.remove_flatpak()
         log(f"  baseline digest {self.baseline_digest}")
 
@@ -1303,6 +1597,7 @@ class Harness:
         self.check_flatpaks("after bootc rollback", removed)
         if digest != self.baseline_digest:
             raise Fail(f"after rollback booted {digest}, expected baseline {self.baseline_digest}")
+        self.check_installed("after bootc rollback", "32-rollback", repeat=True)
         self.stop_vm(lambda: self.ssh("root", "systemctl poweroff --no-block", check=False))
 
 
@@ -1395,8 +1690,11 @@ def page_title(nodes):
     return labels[0] if labels else "page"
 
 
-def drawn(ppm, min_colors=8):
-    """True when a PPM screendump is more than a flat or near-flat frame."""
+def drawn(ppm, min_colors=8, below_top_bar=False):
+    """True when a PPM screendump is more than a flat or near-flat frame.
+
+    below_top_bar: judge only what is below the top tenth, so a frame holding
+    nothing but GNOME's top bar is not drawn either."""
     try:
         data = ppm.read_bytes()
     except OSError:
@@ -1409,9 +1707,20 @@ def drawn(ppm, min_colors=8):
         body = parts[3]
     except (ValueError, IndexError):
         return False
+    if below_top_bar:
+        body = body[(h // 10) * w * 3:]
     step = max(1, (w * h) // 20000) * 3
     colors = {body[i:i + 3] for i in range(0, len(body) - 3, step)}
     return len(colors) >= min_colors
+
+
+def flavor_of(ref):
+    """The configured flavor that publishes ref's image (config/flavors.json, scripts/flavors.py flavor)."""
+    r = subprocess.run([sys.executable, str(REPO / "scripts/flavors.py"), "flavor", image_name(ref)],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        raise SystemExit(f"cannot tell the flavor of {ref} ({r.stderr.strip()}); pass --flavor")
+    return r.stdout.strip()
 
 
 def main():
@@ -1435,6 +1744,9 @@ def main():
     ap.add_argument("--flatpaks", help="apps baked into the medium (bake-flatpaks.sh flatpak-apps.txt)")
     ap.add_argument("--remove-flatpak", default="org.gnome.Calculator",
                     help="baked app to remove after first boot (default: first baked app if absent)")
+    ap.add_argument("--flavor",
+                    help="flavor the installed system must be (config/flavors.json); default: the flavor "
+                         "that publishes --candidate's image, which is the image under test's repository")
     args = ap.parse_args()
     h = Harness(args)
     try:
