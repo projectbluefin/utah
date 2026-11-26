@@ -1,9 +1,9 @@
 # Utahraptor
 
 <!-- BEGIN E2E VERIFICATION -->
-[![Verified ISO desktop](https://github.com/projectbluefin/utah/raw/73ee6a42faa36643f567a8b93e2ebdbbc69621f4/screenshots/installed-fastfetch.png)](https://github.com/projectbluefin/utah/blob/73ee6a42faa36643f567a8b93e2ebdbbc69621f4/README.md)
+[![Verified ISO desktop](https://github.com/projectbluefin/utah/raw/870241c90912917231772ffd49115a538caac069/screenshots/installed-fastfetch.png)](https://github.com/projectbluefin/utah/blob/870241c90912917231772ffd49115a538caac069/README.md)
 
-*LUKS ISO test passed for commit `00eed97d0fd2`. [CI run](https://github.com/projectbluefin/utah/actions/runs/45739755811) also runs independent desktop tests that do not gate this record; the LUKS and production ISO jobs passed; [screenshots and provenance](https://github.com/projectbluefin/utah/tree/73ee6a42faa36643f567a8b93e2ebdbbc69621f4).*
+*LUKS ISO test passed for commit `c883a0c140ee`. [CI run](https://github.com/projectbluefin/utah/actions/runs/45779161959) also runs independent desktop tests that do not gate this record; the LUKS and production ISO jobs passed; [screenshots and provenance](https://github.com/projectbluefin/utah/tree/870241c90912917231772ffd49115a538caac069).*
 <!-- END E2E VERIFICATION -->
 
 †Utahraptor ostrommaysi
