@@ -63,7 +63,8 @@ required_config=(SCHED_CLASS_EXT NTSYNC ANDROID_BINDERFS
                  CRYPTO_XTS FUSE_FS FS_VERITY
                  SYSFB_SIMPLEFB DRM_SIMPLEDRM VIDEO_DEV USER_NS TUN
                  INPUT_UINPUT ZSWAP CRYPTO_ZSTD CGROUP_BPF
-                 DRM_AMDGPU DRM_XE TCG_TPM TCG_TIS TCG_CRB)
+                 DRM_AMDGPU DRM_XE TCG_TPM TCG_TIS TCG_CRB
+                 VSOCKETS VIRTIO_VSOCKETS)
 verify_config() {
   local config="$1" symbol
   for symbol in "${required_config[@]}"; do
@@ -192,6 +193,13 @@ scripts/config --module INPUT_UINPUT
 # discrete and firmware TPMs (and QEMU's tpm-tis), CRB for Intel PTT and
 # AMD fTPM.
 scripts/config --enable TCG_TPM --enable TCG_TIS --enable TCG_CRB --enable HW_RANDOM_TPM
+# AF_VSOCK over virtio, the guest side of QEMU's vhost-vsock-pci: the E2E
+# harnesses log in to the live session over vsock with a per-run key (#1508),
+# and systemd's ssh generator only listens there when the kernel has it.
+# x86_64_defconfig has neither, so both gaming legs of Post-Testing E2E failed
+# "no SSH from the live ISO" (run 45858480299) while main and nvidia, on the
+# Fedora kernel, passed. Built in, as Fedora ships them.
+scripts/config --enable VSOCKETS --enable VIRTIO_VSOCKETS
 # Swap is a /var/swap/swapfile fronted by zswap, as on Dakota (#1224):
 # kargs.d/20-zswap.toml sets zswap.enabled=1 zswap.compressor=zstd on every
 # image, and x86_64_defconfig has neither, so the kargs would be ignored and
