@@ -27,7 +27,7 @@ class NetworkStepTimeoutTests(unittest.TestCase):
     def test_every_network_step_has_its_own_timeout(self):
         steps = [(name, step) for name, job in JOBS.items() for step in job.get("steps", [])
                  if is_network_step(step)]
-        self.assertGreaterEqual(len(steps), 15)
+        self.assertGreaterEqual(len(steps), 8)
         for name, step in steps:
             with self.subTest(job=name, step=step.get("name") or step.get("uses")):
                 minutes = step.get("timeout-minutes")
@@ -41,12 +41,6 @@ class NetworkStepTimeoutTests(unittest.TestCase):
                 if "apt-get install -y podman" in step.get("run", ""):
                     with self.subTest(job=name):
                         self.assertGreaterEqual(step["timeout-minutes"], 35)
-
-
-class RetentionTests(unittest.TestCase):
-    def test_production_isos_are_kept_for_days_not_a_month(self):
-        upload = next(s for s in JOBS["luks"]["steps"] if s.get("name") == "Retain the tested production ISO")
-        self.assertLessEqual(upload["with"]["retention-days"], 3)
 
 
 if __name__ == "__main__":

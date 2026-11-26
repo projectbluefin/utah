@@ -391,7 +391,7 @@ echo $! > "$pidfile"
         # tacklebox-iso lacked the grant and its boot ran under TCG.
         import yaml
         jobs = yaml.safe_load((ROOT / ".github/workflows/post-testing-e2e.yml").read_text())["jobs"]
-        for name in ("luks", "lifecycle", "tacklebox-iso"):
+        for name in ("tacklebox-iso",):
             prepare = next(s for s in jobs[name]["steps"] if s.get("name") == "Prepare ISO and QEMU host")
             self.assertIn("sudo chmod a+rw /dev/kvm", prepare["run"], name)
             self.assertIn("test -r /dev/kvm && test -w /dev/kvm", prepare["run"], name)

@@ -1,13 +1,12 @@
 name: Image-based installer (experimental)
 
-# The experimental install path of docs/adr/0001-image-based-installer.md,
-# run in parallel with the live ISO + bootc-installer/fisherman path so the two
-# can be compared on the same :testing digest. It is NOT a gate: nothing here
-# is a required check or in post-testing-e2e.yml's promote-to-testing needs,
-# it publishes nothing and moves no tag.
+# Utah's install path (docs/adr/0001-image-based-installer.md, #1569): the
+# gnome-setup medium. Post-Testing E2E calls it for each flavor's tested digest
+# and gates :testing on it; it also runs nightly, on dispatch and on pull
+# requests that touch it. It publishes nothing and moves no tag itself.
 #
 # Per flavor:
-#   1. build a live-capable layer on the exact :testing digest (iso/raw/Containerfile:
+#   1. build a live-capable layer on the exact digest (iso/raw/Containerfile:
 #      gnome-setup and systemd-sysinstall from pinned hanthor/gnome-setup and
 #      hanthor/systemd commits, utah.live units);
 #   2. `bootc install to-filesystem` it once into a raw disk image
@@ -15,15 +14,12 @@ name: Image-based installer (experimental)
 #      (iso/raw/shrink-raw-image.sh);
 #   3. iso/raw/raw_e2e.py: live boot -> GUI install into LUKS2 (gnome-setup
 #      with a recovery key and a software TPM, or without a TPM a disk
-#      passphrase) -> unlock ->
-#      gnome-initial-setup -> desktop + bootc status ->
-#      bootc switch -> bootc rollback, with a screenshot of every stage;
+#      passphrase) -> unlock -> gnome-initial-setup -> desktop + bootc status
+#      -> bootc switch -> bootc rollback, with a screenshot of every stage;
 #   4. measure the medium (raw, allocated, compressed, time to pack/unpack;
-#      iso/raw/measure_medium.py) and compare with the latest Post-Testing E2E
-#      luks job for the same digest (iso/raw/compare_paths.py): job summary
-#      and comparison.json.
-# Screenshots, logs and the comparison are uploaded; the medium and disks are
-# never uploaded (CI media carry test credentials).
+#      iso/raw/measure_medium.py).
+# Screenshots and logs are uploaded; the medium and disks are never uploaded
+# (CI media carry test credentials).
 on:
   workflow_dispatch:
     inputs:
@@ -61,8 +57,7 @@ on:
         description: Download formats to measure (iso/raw/measure_medium.py; xz-9 adds ~20 min)
         type: string
         default: zstd-3,zstd-19-long
-  # Post-Testing E2E runs the track on each flavor's exact tested digest,
-  # beside the fisherman luks job (#1569). It does not gate :testing yet.
+  # Post-Testing E2E runs it on each flavor's tested digest: the install gate (#1569).
   workflow_call:
     inputs:
       image_ref:
@@ -97,10 +92,6 @@ on:
         description: Download formats to measure (iso/raw/measure_medium.py; xz-9 adds ~20 min)
         type: string
         default: zstd-3,zstd-19-long
-      e2e_run:
-        description: Post-Testing E2E run id (the caller's github.run_id); its luks job is the comparison side
-        type: string
-        default: ''
   schedule:
     # Nightly, after the 04:00-06:00 UTC testing build and Post-Testing E2E.
     - cron: '41 7 * * *'
@@ -174,8 +165,6 @@ jobs:
     timeout-minutes: 330
     permissions:
       contents: read
-      # compare_paths.py reads the Post-Testing E2E luks job's log and artifacts.
-      actions: read
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
@@ -310,24 +299,6 @@ jobs:
           else out=size-3-no-flatpaks.json label="$medium: shrunk, no Flatpaks (tested medium)"; fi
           python3 iso/raw/measure_medium.py "$WORK/medium.raw" "$WORK/raw-evidence/$out" \
             --label "$label" --formats "$FORMATS"
-      - name: Compare with the ISO/fisherman path
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-          IMAGE: ${{ matrix.image }}
-          DIGEST: ${{ matrix.digest }}
-          E2E_RUN: ${{ inputs.e2e_run }}
-        run: |
-          set -euo pipefail
-          mkdir -p "$WORK/e2e/evidence" "$WORK/raw-evidence"
-          shopt -s nullglob
-          sizes=("$WORK"/raw-evidence/size-*.json)
-          python3 iso/raw/compare_paths.py --repo "$GITHUB_REPOSITORY" --image "$IMAGE" --digest "$DIGEST" \
-            ${E2E_RUN:+--e2e-run "$E2E_RUN"} \
-            --evidence "$WORK/e2e/evidence" --raw-evidence "$WORK/raw-evidence" \
-            --sizes "${sizes[@]}" \
-            --image-build-seconds "${IMAGE_BUILD_SECONDS:-0}" \
-            --out "$WORK/comparison.json" --summary "$GITHUB_STEP_SUMMARY"
       - name: Contact sheet
         if: always()
         run: |
@@ -338,7 +309,7 @@ jobs:
           (( ${#shots[@]} )) || exit 0
           montage -font DejaVu-Sans -pointsize 14 -label '%t' "${shots[@]}" \
             -tile 4x -geometry 480x270+8+8 -background '#202020' -fill white contact-sheet.png
-      - name: Upload screenshots, logs and the comparison
+      - name: Upload screenshots and logs
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
@@ -352,4 +323,3 @@ jobs:
             ${{ env.WORK }}/e2e/*.log
             ${{ env.WORK }}/e2e.log
             ${{ env.WORK }}/raw-evidence/
-            ${{ env.WORK }}/comparison.json

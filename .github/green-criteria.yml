@@ -58,26 +58,26 @@ criteria:
     freshness_sla_days: 2
     gates:
       - workflow: .github/workflows/post-testing-e2e.yml
-        job: lifecycle
-        script: iso/scripts/lifecycle-e2e.sh
+        job: gnome-setup
+        script: iso/raw/raw_e2e.py
     notes: >
-      The lifecycle job tests the ostree upgrade and the rebase/rollback paths
-      on installed media. It runs from post-testing-e2e.yml, which the merge
-      queue and trusted dispatch feed into promote-to-testing.
+      The gnome-setup job installs every flavor's tested digest with
+      gnome-setup, then moves the installed disk to another image and rolls
+      it back (#1569). It replaced the fisherman lifecycle job.
 
   - id: image_installer_gnome_setup
-    name: The experimental image-based installer writes a working desktop
+    name: The gnome-setup installer writes a working desktop
     proves: >
-      The image-based installer writes a bootable system and GNOME initial
-      setup completes on it.
-    enforcement: advisory
-    freshness_sla_days: 8
+      The gnome-setup installer writes a bootable system and GNOME initial
+      setup completes on it, for every flavor.
+    enforcement: blocking
+    freshness_sla_days: 2
     gates:
-      - workflow: .github/workflows/image-installer.yml
-        job: e2e
+      - workflow: .github/workflows/post-testing-e2e.yml
+        job: gnome-setup
     notes: >
-      Advisory by intent: the installer is experimental and its runs are not
-      yet required to stop a release.
+      The install gate since #1569: Utah installs with upstream gnome-setup,
+      not fisherman.
 
   - id: composefs_lifecycle
     name: A composefs system can update and roll back

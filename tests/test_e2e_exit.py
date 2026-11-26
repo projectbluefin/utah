@@ -127,17 +127,5 @@ class HarnessWiringTests(unittest.TestCase):
         self.assertIn('|| e2e_exit "$?" "the install harness (luks-e2e.sh) failed', text)
 
 
-class WorkflowDeadlineTests(unittest.TestCase):
-    def test_harness_jobs_set_the_deadline_from_their_own_timeout(self):
-        jobs = yaml.safe_load((ROOT / ".github/workflows/post-testing-e2e.yml").read_text())["jobs"]
-        for name in ("luks", "lifecycle"):
-            with self.subTest(name):
-                step = jobs[name]["steps"][0]
-                self.assertEqual(step["name"], "Set the job deadline")
-                self.assertEqual(int(step["env"]["TIMEOUT_MINUTES"]), jobs[name]["timeout-minutes"])
-                self.assertIn("(TIMEOUT_MINUTES - 10) * 60", step["run"])
-                self.assertIn("E2E_WALL_CLOCK_DEADLINE=", step["run"])
-
-
 if __name__ == "__main__":
     unittest.main()

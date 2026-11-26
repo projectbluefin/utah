@@ -284,40 +284,14 @@ class EvidenceTests(unittest.TestCase):
         self.assertNotIn("docs/verification/", result)
         self.assertIn("independent desktop tests that do not gate this record", result)
         self.assertNotIn("failure", result)
-        self.assertIn("the LUKS test passed on the production ISO it retains", result)
-
-    def test_the_retained_production_iso_is_the_media_luks_tested(self):
-        # #1448: the luks job boots the DEBUG=0 ISO itself, reaching its live
-        # session over vsock, and keeps those bytes -- not a later rebuild.
-        import yaml
-        jobs = yaml.safe_load((ROOT / ".github/workflows/post-testing-e2e.yml").read_text())["jobs"]
-        self.assertNotIn("production-iso", jobs)
-        steps = jobs["luks"]["steps"]
-        names = [step.get("name") for step in steps]
-        compose = steps[names.index("Compose production ISO")]
-        self.assertIn('"$PWD/output/utah-live.iso"', compose["run"])
-        self.assertIn('"Utah Live" 0 "$IMAGE_REF"', compose["run"])
-        test = steps[names.index("Run existing LUKS install and desktop test")]
-        self.assertIn('luks-e2e.sh "$PWD/output/utah-live.iso"', test["run"])
-        self.assertEqual(test["env"]["UTAH_E2E_LIVE_SSH"], "vsock")
-        record = steps[names.index("Record exact test provenance")]
-        self.assertIn("cd output && sha256sum utah-live.iso > utah-live.iso.sha256", record["run"])
-        artifact = steps[names.index("Retain the tested production ISO")]
-        self.assertGreater(names.index("Retain the tested production ISO"), names.index("Run existing LUKS install and desktop test"))
-        self.assertNotIn("if", artifact)
-        self.assertEqual(artifact["with"]["name"], "production-iso-${{ matrix.image }}")
-        self.assertIn("output/utah-live.iso", artifact["with"]["path"])
-        self.assertIn("output/utah-live.iso.sha256", artifact["with"]["path"])
-        for name in ["promote-to-testing", "documentation"]:
-            self.assertIn("luks", jobs[name]["needs"])
-            self.assertIn("needs.luks.result == 'success'", jobs[name]["if"])
+        self.assertIn("every flavor installed, booted, switched and rolled back", result)
+        self.assertIn("screenshots/14-first-boot-desktop.png", result)
 
     def test_e2e_live_isos_are_production_builds_reached_over_vsock(self):
         import yaml
         workflows = {name: yaml.safe_load((ROOT / f".github/workflows/{name}.yml").read_text())["jobs"]
-                     for name in ["post-testing-e2e", "candidate-common", "build"]}
-        harness_jobs = [(workflows["post-testing-e2e"], "luks"), (workflows["post-testing-e2e"], "lifecycle"),
-                        (workflows["candidate-common"], "candidate"), (workflows["build"], "review_vm")]
+                     for name in ["candidate-common", "build"]}
+        harness_jobs = [(workflows["candidate-common"], "candidate"), (workflows["build"], "review_vm")]
         for jobs, name in harness_jobs:
             with self.subTest(job=name):
                 steps = jobs[name]["steps"]
@@ -349,23 +323,6 @@ class EvidenceTests(unittest.TestCase):
         guard = "github.repository_owner == 'projectbluefin' && github.ref == 'refs/heads/main'"
         for name in ["Get repository-scoped mergeraptor token", "Propose updated verification link"]:
             self.assertEqual(steps[name].get("if"), guard, name)
-
-    def test_test_disks_are_not_uploaded(self):
-        import yaml
-        jobs = yaml.safe_load((ROOT / ".github/workflows/post-testing-e2e.yml").read_text())["jobs"]
-        steps = jobs["luks"]["steps"]
-        self.assertFalse(jobs["luks"]["strategy"]["fail-fast"])
-        test = next(step for step in steps if "Run existing LUKS" in step.get("name", ""))
-        self.assertEqual(test["env"]["UTAH_E2E_REQUIRE_FASTFETCH"], "1")
-        uploads = [s for s in steps if "upload-artifact@" in s.get("uses", "")]
-        for step in uploads:
-            self.assertNotIn("qcow2", step["with"]["path"])
-            self.assertNotIn("vsock-key", step["with"]["path"])
-            # Only the production ISO leaves output/, and only from a passing leg.
-            if "output/" in step["with"]["path"]:
-                self.assertEqual(step["name"], "Retain the tested production ISO")
-                self.assertNotIn("if", step)
-        self.assertTrue(any(s.get("if") == "always()" for s in uploads))
 
     def test_harness_restricts_both_guests_and_requires_real_screenshots(self):
         script = (ROOT / "iso/scripts/luks-e2e.sh").read_text()

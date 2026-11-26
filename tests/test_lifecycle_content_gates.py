@@ -137,12 +137,6 @@ class LifecycleContentGateTests(unittest.TestCase):
                                     UTAH_E2E_EXPECT_FLAVOR="utah")
         self.assertEqual(out, "")
 
-    def test_post_testing_luks_job_requests_the_repeat_boot(self):
-        import yaml
-        workflow = yaml.safe_load((ROOT / ".github/workflows/post-testing-e2e.yml").read_text())
-        step = next(s for s in workflow["jobs"]["luks"]["steps"] if "luks-e2e.sh" in s.get("run", ""))
-        self.assertEqual(step["env"]["UTAH_E2E_REPEAT_BOOT"], "1")
-
     def test_luks_e2e_runs_the_service_check_only_behind_the_switch(self):
         # The repeat boot is never the lifecycle's baseline; any other
         # first-boot call must be gated.

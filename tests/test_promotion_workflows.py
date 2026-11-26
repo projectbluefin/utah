@@ -71,15 +71,12 @@ class PromoteToTestingTests(unittest.TestCase):
 
     def test_the_job_can_write_statuses_and_stays_behind_the_full_matrix(self):
         self.assertEqual(self.job["permissions"]["statuses"], "write")
-        self.assertEqual(set(self.job["needs"]), {"resolve", "luks", "lifecycle", "testsuite"})
-        # The only job condition is the lifecycle gate: every other need must
-        # succeed, and lifecycle may be absent only when resolve skipped it.
+        self.assertEqual(set(self.job["needs"]), {"resolve", "gnome-setup", "testsuite"})
+        # Every need must succeed: the gnome-setup install of every flavor
+        # (#1569) and the whole testsuite matrix (#1329).
         condition = self.job["if"]
-        for need in ["resolve", "luks", "testsuite"]:
+        for need in ["resolve", "gnome-setup", "testsuite"]:
             self.assertIn(f"needs.{need}.result == 'success'", condition)
-        self.assertIn("needs.lifecycle.result == 'success'", condition)
-        self.assertIn("needs.lifecycle.result == 'skipped' && needs.resolve.outputs.lifecycle == 'skip'",
-                      condition)
         self.assertIn("!cancelled()", condition)
         self.assertNotIn("always()", condition)
         self.assertNotIn("failure", condition)
@@ -103,50 +100,26 @@ class PromoteToTestingTests(unittest.TestCase):
         self.assertEqual(writers, ["post-testing-e2e.yml"])
 
 
-class LifecycleGateTests(unittest.TestCase):
-    """The upgrade/rollback harness runs on the promoted digest and gates it."""
+class GnomeSetupGateTests(unittest.TestCase):
+    """#1569: the gnome-setup install of every flavor gates :testing."""
 
-    job = E2E["jobs"]["lifecycle"]
-    resolve = E2E["jobs"]["resolve"]
+    job = E2E["jobs"]["gnome-setup"]
 
-    def test_it_runs_after_provenance_and_only_when_there_is_an_upgrade(self):
+    def test_it_installs_each_flavors_tested_digest_after_provenance(self):
         self.assertEqual(set(self.job["needs"]), {"resolve", "verify-provenance"})
-        self.assertEqual(self.job["if"], "needs.resolve.outputs.lifecycle == 'run'")
-        self.assertEqual(self.job["strategy"]["matrix"]["include"],
-                         [{"image": "utah", "backend": "ostree"}])
-        self.assertIn("${{ matrix.image }}", self.job["name"])
+        self.assertEqual(self.job["uses"], "./.github/workflows/image-installer.yml")
+        self.assertEqual(self.job["with"]["image_ref"], "${{ matrix.ref }}")
+        self.assertFalse(self.job["strategy"]["fail-fast"])
 
-    def test_baseline_is_testing_before_this_run_and_a_noop_is_skipped(self):
-        step = next(s for s in self.resolve["steps"] if s.get("id") == "baseline")
-        self.assertIn('docker://$repo:testing', step["run"])
-        self.assertIn('[ "$baseline" = "$candidate" ]', step["run"])
-        self.assertIn("manifest unknown|name unknown", step["run"])
-        self.assertEqual(self.resolve["outputs"]["lifecycle"], "${{ steps.baseline.outputs.lifecycle }}")
+    def test_fisherman_left_the_pipeline(self):
+        for name in ("luks", "lifecycle", "production-iso"):
+            self.assertNotIn(name, E2E["jobs"])
 
-    def test_the_iso_installs_the_baseline_and_the_harness_stages_the_candidate(self):
-        compose = step_named(self.job, "Compose production ISO of the baseline")
-        self.assertIn('"Utah CI Live" 0 "$BASELINE_REF"', compose["run"])
-        self.assertEqual(compose["env"]["BASELINE_REF"], "${{ needs.resolve.outputs.lifecycle_baseline }}")
-        run = step_named(self.job, "Run the upgrade and rollback lifecycle")
-        self.assertIn('lifecycle-e2e.sh "$PWD/output/utah-live.iso"', run["run"])
-        self.assertIn('"$BASELINE_REF" "$CANDIDATE_REF"', run["run"])
-        self.assertEqual(run["env"]["CANDIDATE_REF"],
-                         "${{ fromJSON(needs.resolve.outputs.digests)[matrix.image] }}")
-        self.assertNotIn("UTAH_E2E_COMPOSEFS_BACKEND", run["env"])
-
-    def test_evidence_is_kept_on_failure_but_debug_media_never_is(self):
-        upload = step_named(self.job, "Preserve lifecycle evidence even on failure")
-        self.assertEqual(upload["if"], "always()")
-        self.assertIn("utah-lifecycle-e2e/evidence/", upload["with"]["path"])
-        self.assertIn("utah-lifecycle-e2e/screenshots/", upload["with"]["path"])
-        self.assertNotIn("output/", upload["with"]["path"])
-        self.assertNotIn(".qcow2", upload["with"]["path"])
-
-    def test_promotion_and_documentation_wait_for_it(self):
-        for name in ["promote-to-testing", "documentation"]:
-            job = E2E["jobs"][name]
-            self.assertIn("lifecycle", job["needs"])
-            self.assertIn("needs.lifecycle.result == 'success'", job["if"])
+    def test_the_record_is_the_main_flavors_install(self):
+        job = E2E["jobs"]["documentation"]
+        self.assertEqual(set(job["needs"]), {"resolve", "gnome-setup"})
+        download = step_named(job, "Download the passing main-flavor install record")
+        self.assertEqual(download["with"]["name"], "image-installer-utah")
 
 
 class ReleaseGateWiringTests(unittest.TestCase):
