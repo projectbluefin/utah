@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-25",
+  "generated_at": "2026-11-26",
   "generator": "scripts/generate-site-data.py",
   "groups": [
     {
@@ -248,6 +248,7 @@
         "ibus-gtk4",
         "ibus-hangul",
         "ibus-libpinyin",
+        "ibus-typing-booster",
         "ifuse",
         "integritysetup",
         "intel-gmmlib",
@@ -486,8 +487,8 @@
     }
   ],
   "totals": {
-    "installed": 429,
-    "unavailable": 6
+    "installed": 430,
+    "unavailable": 5
   },
   "unavailable": [
     {
@@ -513,12 +514,6 @@
         1256
       ],
       "name": "ibus-rime"
-    },
-    {
-      "issues": [
-        1256
-      ],
-      "name": "ibus-typing-booster"
     },
     {
       "issues": [

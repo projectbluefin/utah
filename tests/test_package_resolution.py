@@ -486,12 +486,11 @@ class ParityContractTests(unittest.TestCase):
 
     def test_input_methods_remain_in_the_install_contract(self):
         contract = set(installer.contract(self.MANIFEST, self.OVERLAY, "44"))
-        # Every input method Utah installs for Dakota parity (#1256). The
-        # Japanese engine joined the list with #1539; without it here, dropping
-        # ibus-anthy from the manifest would still pass this test.
+        # Dakota parity must not replace the existing Mozc and Unikey engines.
         expected = {
             "anthy-unicode", "fcitx5-gtk",
             "ibus-anthy", "ibus-hangul", "ibus-libpinyin",
+            "ibus-typing-booster",
             "libhangul", "libpinyin", "m17n-db", "m17n-lib",
             "ibus-mozc", "ibus-unikey",
         }
