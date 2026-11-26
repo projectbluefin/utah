@@ -121,9 +121,9 @@ In summary:
   stage, which compiles against the base's kernel; `iso/raw/Containerfile`'s
   Fedora builder, because the Hummingbird repositories lack
   the GTK4/libadwaita/gnome-desktop4 `-devel` packages gnome-setup builds
-  against; `ghcr.io/qemus/qemu`,
-  `easy-novnc` and tacklebox (no RHHI equivalent); and every image that runs
-  Utah itself (`check-repos`, `check-desktop-contract`, the ISO scripts).
+  against; `ghcr.io/qemus/qemu` (no RHHI equivalent); and every image that
+  runs Utah itself (`check-repos`, `check-desktop-contract`, the install
+  medium).
 - The digest-pinned `packages` stage is the package factory's RPM repository,
   and it is **bind mounted, never copied**: `RUN --mount=type=bind,
   from=packages,source=/repository,target=/etc/utah-packages,ro` feeds it to the
@@ -262,7 +262,7 @@ reasons: that script is in the kernel cache tag, and the cache tarball still
 has to carry the tree for the NVIDIA and v4l2loopback compiles; and it lands
 in the same RUN layer that unpacked the tree, where a deletion actually
 shrinks the layer. A later layer's whiteout only helps after chunkah
-rechunks, and a local `just iso` embeds the un-rechunked layers as they are.
+rechunks, and a local `just medium` installs the un-rechunked layers as they are.
 
 After the final NVIDIA, OGC, and v4l2loopback package steps, the flavor layer
 runs `utah-regenerate-initramfs`. The helper selects the exact bootc kernel,
@@ -302,9 +302,8 @@ find /boot` must print only `/boot`.
 The one deliberate exception is `/var/home`, created after clean-stage but
 before lint in that same RUN. useradd ships `HOME=/home` (#576) and
 `home.mount` binds `/var/home` over `/home` (Dakota's bind mount, #1234), so
-the homes live in `/var/home`: the installer pre-creates it in the
-stateroot, and the tacklebox customize container and live ISO build create
-liveuser's home there (#602). clean-stage strips all of `/var` except cache,
+the homes live in `/var/home`, where the live medium's
+`utah-live-setup` creates liveuser's home (#602). clean-stage strips all of `/var` except cache,
 so the mkdir cannot go earlier; placing it before lint keeps lint proving
 the directory is covered by the `utah-home.conf` tmpfiles entry.
 

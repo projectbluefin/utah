@@ -2,8 +2,9 @@
 # Decide whether a tesseract transcript of the final desktop screenshot proves
 # that fastfetch ran inside the installed session.
 #
-# Kept separate from luks-e2e.sh so the decision can be exercised against real
-# transcripts (tests/test_iso_ci_boot_gates.py) without booting a VM.
+# Kept separate from the E2E harness (iso/raw/raw_e2e.py) so the decision can be
+# exercised against real transcripts (tests/test_iso_ci_boot_gates.py) without
+# booting a VM.
 #
 # Two independent tokens must be present, because either alone lies:
 #

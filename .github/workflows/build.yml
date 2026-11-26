@@ -17,28 +17,21 @@ on:
       # A maintainer can dispatch this on an unreviewed branch. A dispatch is
       # not a pull_request event, so the reusable build would push and sign
       # testing images from content nobody has reviewed yet. contract_only
-      # skips publication; review_vm can still build a local image and offline
-      # ISO for a disposable VM test.
+      # skips publication; review_vm can still build a local image and
+      # install-test it with the gnome-setup medium in a disposable VM.
       review_vm:
-        description: Build and VM-test a disposable local review image (requires contract_only)
+        description: Build a disposable local review image and install-test it with gnome-setup (requires contract_only)
         type: boolean
         default: false
-      review_iso_all_flavors:
-        description: Test an offline ISO for every configured flavor (requires review_vm and contract_only)
+      review_all_flavors:
+        description: Install-test every configured flavor (requires review_vm and contract_only)
         type: boolean
         default: false
-      # The review matrix normally uses test-only zstd 15 to fit all flavors.
-      # Allow an explicit production level to measure the budget (#684).
-      review_iso_compression_level:
-        description: zstd level for the review ISO (15 = test-only; 3 = production budget)
-        type: string
-        default: '15'
-      # The ISO installs with the ostree backend until composefs installs pass
-      # for every flavor (#1129). This runs the review install on composefs.
-      review_composefs_backend:
-        description: Install the review ISO with the composefs backend instead of ostree (requires review_vm and contract_only)
-        type: boolean
-        default: false
+      review_backend:
+        description: bootc backend of the review medium (auto = composefs on a kernel with the btrfs fs-verity fix, else ostree)
+        type: choice
+        options: [auto, composefs, ostree]
+        default: auto
       contract_only:
         description: Run contract checks and skip image publication
         type: boolean
@@ -407,14 +400,16 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.review_vm && inputs.contract_only
     needs: contract
     runs-on: ubuntu-26.04
-    timeout-minutes: 180
+    timeout-minutes: 330
     strategy:
       fail-fast: false
       matrix:
-        flavor: ${{ fromJSON(inputs.review_iso_all_flavors && needs.contract.outputs.all_flavors || needs.contract.outputs.main_flavors) }}
+        flavor: ${{ fromJSON(inputs.review_all_flavors && needs.contract.outputs.all_flavors || needs.contract.outputs.main_flavors) }}
     env:
       REVIEW_FLAVOR: ${{ matrix.flavor }}
       REVIEW_SHA: ${{ inputs.sha || github.sha }}
+      REVIEW_BACKEND: ${{ inputs.review_backend || 'auto' }}
+      WORK: /mnt/review-vm
     permissions:
       contents: read
       packages: read
@@ -431,15 +426,12 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
           sudo apt-get update
           sudo apt-get install -y podman skopeo uidmap slirp4netns fuse-overlayfs \
-            squashfs-tools xorriso dosfstools mtools qemu-system-x86 qemu-utils \
-            ovmf sshpass socat ffmpeg tesseract-ocr
+            qemu-system-x86 qemu-utils ovmf sshpass ffmpeg imagemagick zstd \
+            tesseract-ocr swtpm swtpm-tools jq
+          # Ubuntu's AppArmor profile keeps swtpm out of $WORK (raw_e2e.py --tpm).
+          if [[ -f /etc/apparmor.d/usr.bin.swtpm ]]; then sudo apparmor_parser -R /etc/apparmor.d/usr.bin.swtpm || true; fi
           test -c /dev/kvm
           sudo chmod a+rw /dev/kvm
-          # The LUKS harness logs in to the DEBUG=0 live session over AF_VSOCK
-          # with a per-run key (its LIVE_SSH setting).
-          sudo modprobe vhost_vsock
-          sudo chmod a+rw /dev/vhost-vsock
-          test -w /dev/vhost-vsock
           mkdir -p evidence output
           df -h .
       - name: Build candidate locally and record immutable bytes
@@ -461,53 +453,52 @@ jobs:
             --arg manifest "$(cut -d ' ' -f1 evidence/payload-manifest.sha256)" \
             '{source_sha:$sha,flavor:$flavor,vm_run:$run,image_ref:$ref,manifest_sha256:$manifest,publication:false}' \
             > evidence/provenance.json
-      - name: Compose offline production ISO from the local candidate
-        env:
-          UTAH_ISO_WORKDIR: ${{ runner.temp }}
-          # Test-only compression keeps every flavor under the ISO ceiling so
-          # this opt-in matrix can reach the install/boot checks. Production
-          # callers retain the builder's default compression level; dispatch
-          # with review_iso_compression_level=3 to measure against it.
-          UTAH_ISO_COMPRESSION_LEVEL: ${{ inputs.review_iso_compression_level || '15' }}
+      # The local candidate goes to root's storage on /mnt, where the medium is
+      # built: iso/raw needs root (bootc install, loop devices) and the space.
+      - name: Move the candidate to root's storage on /mnt
         run: |
           set -euo pipefail
-          image_ref=$(cat evidence/image-ref.txt)
           image_name=$(python3 scripts/flavors.py image "$REVIEW_FLAVOR")
-          rc=0
-          bash iso/scripts/build-iso.sh "localhost/${image_name}:testing" "$PWD/output/utah-review.iso" \
-            "Utah Review $REVIEW_FLAVOR" 0 "$image_ref" 2>&1 | tee evidence/iso-build.log || rc=$?
-          # Record the size before honoring the budget guard so diagnostics
-          # still answer how far above/below budget the image landed.
-          if [ -f output/utah-review.iso ]; then
-            jq -n --arg flavor "$REVIEW_FLAVOR" --arg level "$UTAH_ISO_COMPRESSION_LEVEL" \
-              --argjson bytes "$(du -b output/utah-review.iso | cut -f1)" \
-              '{flavor:$flavor,compression_level:($level|tonumber),iso_bytes:$bytes,iso_mib:($bytes/1048576|floor)}' \
-              > evidence/iso-size.json
-            cat evidence/iso-size.json
-          fi
-          [ "$rc" -eq 0 ] || exit "$rc"
-          sha256sum output/utah-review.iso > evidence/iso.sha256
-      - name: Boot live desktop, install LUKS, log in and test review fixes
-        env:
-          UTAH_E2E_WORK: ${{ runner.temp }}/utah-review-vm
-          UTAH_E2E_REQUIRE_SCREENSHOTS: "1"
-          UTAH_E2E_REQUIRE_FASTFETCH: "1"
-          UTAH_E2E_RAM: "6144"
-          UTAH_E2E_CPUS: "2"
-          UTAH_E2E_EXPECT_FLAVOR: ${{ matrix.flavor }}
-          UTAH_E2E_README: none
-          UTAH_E2E_COMPOSEFS_BACKEND: ${{ inputs.review_composefs_backend && '1' || '0' }}
-          UTAH_E2E_LIVE_SSH: vsock
+          sudo mkdir -p /mnt/containers /var/lib/containers "$WORK"
+          sudo mount --bind /mnt/containers /var/lib/containers
+          sudo chown "$USER" "$WORK"
+          podman save --format oci-archive -o "$WORK/candidate.tar" "localhost/${image_name}:testing"
+          sudo podman load -q -i "$WORK/candidate.tar"
+          rm -f "$WORK/candidate.tar"
+          podman rmi -af >/dev/null || true
+          df -h / /mnt
+      # The same gnome-setup medium (iso/raw) Post-Testing E2E gates :testing
+      # on (#1569), built from the local candidate instead of a published digest.
+      - name: Build the gnome-setup medium from the local candidate
         run: |
           set -euo pipefail
-          image_ref=$(cat evidence/image-ref.txt)
-          bash iso/scripts/luks-e2e.sh "$PWD/output/utah-review.iso" "$image_ref" \
-            2>&1 | tee evidence/vm-test.log
-          # Both backends boot fisherman's re-serialized copy of the payload;
-          # luks-e2e.sh ties the booted manifest to the payload's config.
-          booted_config=$(cat "$UTAH_E2E_WORK/booted-config-digest")
-          test "$booted_config" = "$(jq -r .config.digest evidence/payload-manifest.json)"
-          cp "$UTAH_E2E_WORK/bootc-status.json" "$UTAH_E2E_WORK/flavor-checks.json" evidence/
+          image_name=$(python3 scripts/flavors.py image "$REVIEW_FLAVOR")
+          sudo podman build --layers=false -t localhost/utah-raw:review \
+            --build-arg SOURCE_IMAGE="localhost/${image_name}:testing" -f iso/raw/Containerfile iso/raw 2>&1 | tail -150
+          ssh-keygen -q -t ed25519 -N '' -f "$WORK/id_ed25519"
+          sudo env UTAH_RAW_LIVE_KARGS="utah.live.debug systemd.journald.forward_to_console=1 plymouth.enable=0 rd.plymouth=0" \
+            UTAH_RAW_SSH_PUBKEY="$WORK/id_ed25519.pub" UTAH_RAW_DEBUG_SSHD=1 UTAH_RAW_EVIDENCE="$WORK/raw-evidence" \
+            UTAH_RAW_BACKEND="$REVIEW_BACKEND" \
+            bash iso/raw/build-raw-image.sh localhost/utah-raw:review "$WORK/medium.raw" "ghcr.io/projectbluefin/${image_name}:testing"
+          echo "MEDIUM_BACKEND=$(jq -r .backend "$WORK/raw-evidence/backend.json")" >> "$GITHUB_ENV"
+          sudo env UTAH_RAW_EVIDENCE="$WORK/raw-evidence" bash iso/raw/bake-flatpaks.sh localhost/utah-raw:review "$WORK/medium.raw"
+          sudo env UTAH_RAW_EVIDENCE="$WORK/raw-evidence" UTAH_RAW_BTRFS_COMPRESS="zstd:3" \
+            bash iso/raw/shrink-raw-image.sh localhost/utah-raw:review "$WORK/medium.raw"
+          sudo chown "$USER" "$WORK/medium.raw"
+          sudo chown -R "$USER" "$WORK/raw-evidence"
+          sudo podman rmi -af >/dev/null || true
+      # Install with gnome-setup, first boot, gnome-initial-setup, desktop, then
+      # bootc switch to the published :testing digest and roll back.
+      - name: Install with gnome-setup, boot, switch and roll back
+        run: |
+          set -euo pipefail
+          image_name=$(python3 scripts/flavors.py image "$REVIEW_FLAVOR")
+          repo="ghcr.io/projectbluefin/${image_name}"
+          candidate="$repo@$(skopeo inspect --format '{{.Digest}}' "docker://$repo:testing")"
+          python3 iso/raw/raw_e2e.py --raw "$WORK/medium.raw" --work "$WORK/e2e" --install gui --tpm \
+            --candidate "$candidate" --ssh-key "$WORK/id_ed25519" --backend "$MEDIUM_BACKEND" \
+            --backend-decision "$WORK/raw-evidence/backend.json" \
+            --flatpaks "$WORK/raw-evidence/flatpak-apps.txt" 2>&1 | tee evidence/vm-test.log
       - name: Preserve VM evidence on success or failure
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -517,7 +508,7 @@ jobs:
           if-no-files-found: warn
           path: |
             evidence/
-            ${{ runner.temp }}/utah-review-vm/*.log
-            ${{ runner.temp }}/utah-review-vm/*.json
-            ${{ runner.temp }}/utah-review-vm/fastfetch-ocr.txt
-            ${{ runner.temp }}/utah-review-vm/screenshots/
+            ${{ env.WORK }}/e2e/screenshots/
+            ${{ env.WORK }}/e2e/evidence/
+            ${{ env.WORK }}/e2e/*.log
+            ${{ env.WORK }}/raw-evidence/

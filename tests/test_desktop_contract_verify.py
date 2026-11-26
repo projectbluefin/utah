@@ -724,10 +724,10 @@ class FailClosedTests(VerifyModeTests):
 class FlatpaksModeTests(unittest.TestCase):
     """`--flatpaks BREWFILE` prints refs to stdout, one per line.
 
-    Containerfile (iso/live/Containerfile, Containerfile.tacklebox) and
-    luks-e2e.sh consume this to share the parser with the build-time
-    contract check instead of carrying their own awk; without a contract
-    in hand the mode is parser-only and exits 0.
+    The install medium's Flatpak bake (iso/raw/bake-flatpaks.sh) consumes this
+    to share the parser with the build-time contract check instead of
+    carrying its own awk; without a contract in hand the mode is parser-only
+    and exits 0.
     """
 
     def setUp(self):

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify that an installed ISO booted the requested flavor and kernel."""
+"""Verify that an installed system booted the requested flavor and kernel."""
 import argparse
 import json
 from pathlib import Path

@@ -84,8 +84,8 @@ class GhosttyHookContractTests(unittest.TestCase):
         )
 
     def test_seeded_config_hint_names_a_command_that_exists(self):
-        """Ghostty ships only as the flatpak (iso/live/src/install-flatpaks.sh);
-        there is no `ghostty` binary on the host to run."""
+        """Ghostty ships only as the flatpak (iso/raw/bake-flatpaks.sh bakes it
+        into the install medium); there is no `ghostty` binary on the host to run."""
         self.assertIn(
             "flatpak run com.mitchellh.ghostty +show-config --default --docs",
             self.body,

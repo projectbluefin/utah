@@ -28,16 +28,16 @@ Stages (every screenshot is listed in DIR/screenshots/manifest.json):
      With --backend composefs, every installed boot must run the composefs
      image with fs-verity enforced and every object must carry verity; the
      first boot also reads every object (composefs_check.py --read).
-  5. The installed-system checks the ISO/fisherman harness (luks-e2e.sh) made,
-     on the first boot: no emergency mode, the /efi mountpoint, no bootc
-     SELinux probe denial, logrotate's state, the flavor (image-info, OGC
-     kernel, tun, NVIDIA module built for the booted kernel), unprivileged
-     user namespaces, the rounded-blur runtime/devel split, CountMe, GNOME
-     extension states, fastfetch read back by OCR from a terminal screenshot,
-     the Flathub remote and every [services] unit of the installed contract.
-     The rollback boot repeats the Flathub remote and the services, like the
-     fisherman harness's repeat boot. The bootc switch boot runs another image
-     and gets none of them: an older image cannot meet this checkout's rules.
+  5. The installed-system checks, on the first boot: no emergency mode, the
+     /efi mountpoint, no bootc SELinux probe denial, logrotate's state, the
+     flavor (image-info, OGC kernel, tun, NVIDIA module built for the booted
+     kernel), unprivileged user namespaces, the rounded-blur runtime/devel
+     split, CountMe, GNOME extension states, fastfetch read back by OCR from a
+     terminal screenshot, the Flathub remote and every [services] unit of the
+     installed contract.
+     The rollback boot repeats the Flathub remote and the services as a repeat
+     boot (#19). The bootc switch boot runs another image and gets none of
+     them: an older image cannot meet this checkout's rules.
 
 DIR/evidence/results.json records each stage (STAGES) as pass, fail or not
 run with its duration, plus SELinux mode and failed units for every boot.
@@ -103,11 +103,11 @@ RESOLV_FACTS = ("echo '== /etc/resolv.conf'; ls -laZ /etc/resolv.conf; readlink 
 REPO = HERE.parent.parent
 # Where the checks the guest runs are copied to, readable by the test user.
 GUEST_SCRIPTS = "/var/tmp/utah-e2e"
-# luks-e2e.sh's default UTAH_E2E_EXTENSIONS: these must reach ACTIVE.
+# GNOME extensions that must reach ACTIVE at first login (#969).
 EXTENSIONS = ("gsconnect@andyholmes.github.io",)
 # fastfetch-ocr-match.sh needs fastfetch's body and this sentinel.
 FASTFETCH_CMD = "fastfetch && echo UTAH-E2E-FASTFETCH"
-# luks-e2e.sh's EFI gate (#1330): /efi exists and neither EFI mount unit failed.
+# /efi exists and neither EFI mount unit failed (#1330).
 EFI_CHECK = ('test -d /efi && for unit in efi.automount efi.mount; do '
              'load=$(systemctl show "$unit" -p LoadState --value) && '
              'state=$(systemctl show "$unit" -p ActiveState --value) && '
@@ -115,7 +115,7 @@ EFI_CHECK = ('test -d /efi && for unit in efi.automount efi.mount; do '
 # clean-stage removes /var/lib from the image: tmpfiles must recreate logrotate's.
 LOGROTATE_CHECK = ("sh -eu -c 'test -d /var/lib/logrotate; systemctl start logrotate.service; "
                    "test -s /var/lib/logrotate/logrotate.status'")
-# What identifies the caller of a denied bootc mac_admin probe (luks-e2e.sh, #1198).
+# What identifies the caller of a denied bootc mac_admin probe (#1198).
 BOOTC_PROBE_DIAG = (
     "echo '## SYSCALL records of chcon/bootc'; grep -E 'type=SYSCALL.*comm=\"(chcon|bootc)\"' /var/log/audit/audit.log; "
     "echo '## labels'; ls -Z /usr/bin/bootc /usr/bin/chcon /usr/bin/bash /usr/bin/unshare "
@@ -576,8 +576,8 @@ class Harness:
     def shot(self, label, proves, retake_until_drawn=False, required=False, below_top_bar=False):
         """A screenshot into the manifest. retake_until_drawn retakes a flat frame
         (below_top_bar: one flat below the top bar) for a minute; required then
-        fails the run on a frame that never drew, as the fisherman harness's
-        UTAH_E2E_REQUIRE_SCREENSHOTS gate did."""
+        fails the run on a frame that never drew (a flat or frozen screen is
+        no proof a session started, #786)."""
         png = self.shots / f"{label}.png"
         for attempt in range(12 if retake_until_drawn else 1):
             ppm = self.screendump(png)
@@ -1200,7 +1200,7 @@ class Harness:
         return run
 
     def copy_guest_scripts(self):
-        """The fisherman harness's guest-side checks, from their current paths, readable by the test user."""
+        """The guest-side checks, from their iso/scripts/ paths, readable by the test user."""
         self.ssh("root", f"mkdir -p {GUEST_SCRIPTS}/scripts")
         for src, dst in ((SCRIPTS / "e2e-services.sh", "e2e-services.sh"),
                          (SCRIPTS / "verify-installed-flavor.py", "verify-installed-flavor.py"),
@@ -1210,11 +1210,11 @@ class Harness:
         self.ssh("root", f"chmod -R a+rX {GUEST_SCRIPTS}")
 
     def check_installed(self, phase, prefix, repeat=False):
-        """What luks-e2e.sh checked on the installed system, with its pass/fail.
+        """The checks on the installed system, with their pass/fail.
 
         Every check runs and the boot fails with all their problems together;
-        repeat is the fisherman harness's repeat boot: the Flathub remote and
-        the contract's units again."""
+        repeat is the repeat boot (#19): the Flathub remote and the contract's
+        units again."""
         self.copy_guest_scripts()
         boot_pass = "repeat" if repeat else "first"
         checks = [("flathub remote", self.check_flathub),

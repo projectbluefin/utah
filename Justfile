@@ -81,7 +81,6 @@ check:
     test -f scripts/podman-epoch-args.sh
     test -f scripts/check-reproducible-build.sh
     test -f packages/RPM-GPG-KEY-fedora-44-primary
-    test -f scripts/bootc_lifecycle.py
     test -f contracts/bluefin-desktop.toml
     # The reusable image workflow checks out this repository without
     # submodules. Populate them here before validating the source contract;
@@ -95,31 +94,10 @@ check:
     grep -q '/system_files/bluefin' Containerfile
     grep -q '"flatpak-preinstall.service"' contracts/bluefin-desktop.toml
     grep -q 'flathub.flatpakrepo' scripts/configure-services.sh
-    test -f iso/live/Containerfile
-    test -f iso/live/src/configure-live.sh
-    test -f iso/live/src/install-flatpaks.sh
-    test -f iso/live/src/etc/bootc-installer/images.json
-    test -f iso/live/src/etc/bootc-installer/recipe.json
-    test -f iso/scripts/build-iso.sh
-    test -f iso/scripts/measure-iso-store.sh
-    bash -n iso/scripts/measure-iso-store.sh
-    python3 -m json.tool evidence/iso-size.json >/dev/null
-    test -f iso/scripts/build-iso-tacklebox.sh
-    test -f iso/scripts/tacklebox-boot-gate.sh
-    test -f iso/live/Containerfile.tacklebox
-    grep -q 'live_customize' iso/scripts/build-iso-tacklebox.sh
-    grep -q 'offline_payloads' iso/scripts/build-iso-tacklebox.sh
-    grep -q 'Secure Boot DISABLED' iso/scripts/build-iso-tacklebox.sh
-    test -f iso/scripts/lifecycle-e2e.sh
-    python3 -m json.tool iso/live/src/etc/bootc-installer/images.json >/dev/null
-    python3 -m json.tool iso/live/src/etc/bootc-installer/recipe.json >/dev/null
-    grep -q 'org.bootcinstaller.Installer' iso/live/src/install-flatpaks.sh
-    grep -q 'iso/scripts/embed-store-payload.sh' iso/scripts/build-iso.sh
-    bash -n iso/scripts/embed-store-payload.sh
-    grep -q 'UTAH_LIVE' iso/scripts/build-iso.sh
-    grep -q 'Documented exception (Issue #22)' iso/scripts/build-iso.sh
-    if grep -q 'rd.utah.isofile' iso/scripts/build-iso.sh; then echo "rd.utah.isofile found in build-iso.sh" >&2; exit 1; fi
-    if grep -q 'loopback.cfg' iso/scripts/build-iso.sh; then echo "loopback.cfg found in build-iso.sh" >&2; exit 1; fi
+    # The install path is the gnome-setup medium (iso/raw, #1569).
+    test -f iso/raw/Containerfile
+    test -f iso/raw/build-raw-image.sh
+    test -f iso/raw/raw_e2e.py
     grep -q 'ENABLE_SSHD' Containerfile
     grep -q 'ENABLE_SSHD="${ENABLE_SSHD:-0}"' Justfile
     grep -q 'ARG PACKAGE_IMAGE_SHA=' Containerfile
@@ -522,32 +500,6 @@ build-local stream="testing" package_image="localhost/utah-packages:local-merged
       --tag "localhost/{{ image }}:{{ stream }}" \
       --file Containerfile .
 
-# Install Utah from its live ISO onto an encrypted disk in QEMU, boot the
-# result, answer Plymouth's passphrase prompt, and confirm it comes up. The
-# install phase drives the live session over SSH: with a writable
-# /dev/vhost-vsock any ISO works, `just iso testing` included, through a
-# per-run key over AF_VSOCK; without it, only a debug ISO (`just iso testing 1`).
-luks-test iso_path="output/utah-live.iso" image="ghcr.io/projectbluefin/utah:testing":
-    bash iso/scripts/luks-e2e.sh "{{ iso_path }}" "{{ image }}"
-
-# Boot the disk luks-test installed, with VNC and a browser console, so the
-# verified result can be driven by hand instead of only asserted about.
-try-installed:
-    bash iso/scripts/boot-installed.sh
-
-# Validate bootc upgrade and rollback lifecycle between two immutable digests in QEMU.
-# Boots a known Utah deployment, stages/upgrades to candidate digest via bootc/uupd,
-# verifies graphical desktop, rolls back, and verifies the previous deployment.
-# Defaults to the live ISO (see luks-test for which ISO the host can drive),
-# because the harness logs in over SSH as the `utahtest` account the installer
-# provisions. The disk from `just generate-bootable-image` has no such account
-# and cannot be used.
-# The ISO installs its payload as baseline_image, then the harness stages
-# candidate_image; the candidate has no default because staging the baseline
-# ref again is a no-op and would never exercise an upgrade.
-lifecycle-test candidate_image disk_or_iso="output/utah-live.iso" baseline_image="ghcr.io/projectbluefin/utah:testing":
-    bash iso/scripts/lifecycle-e2e.sh "{{ disk_or_iso }}" "{{ baseline_image }}" "{{ candidate_image }}"
-
 generate-build-tags base_name stream flavor kernel_pin build_number version event_name event_number:
     @echo "{{ stream }} {{ version }}"
 
@@ -652,67 +604,24 @@ generate-bootable-image stream="testing":
     sync
     echo "Bootable disk ready: $disk"
 
-# Build a single-architecture UEFI live ISO. `just luks-test` drives the
-# bootc-installer payload this produces through an offline, LUKS2-encrypted
-# install (see docs/verification); this recipe only builds the media.
-iso stream="testing" debug="0":
+# Build the gnome-setup install medium (iso/raw, docs/adr/0001) from a local
+# image: a raw disk that boots live (utah.live) and installs by block copy.
+# Needs root (bootc install, loop devices). Write it to a USB stick with dd, or
+# boot it in a VM next to a blank target disk (docs/skills/local-testing/
+# references/image-installer.md).
+medium stream="testing":
     #!/usr/bin/env bash
     set -euo pipefail
     ref="localhost/{{ image }}:{{ stream }}"
-    podman image exists "$ref" || { echo "Image $ref not found; run just build-ghcr {{ image }} {{ stream }} main" >&2; exit 1; }
+    sudo podman image exists "$ref" || { echo "Image $ref not found in root's storage; build it with sudo just build-ghcr {{ image }} {{ stream }} main" >&2; exit 1; }
     mkdir -p "{{ base_dir }}"
-    bash iso/scripts/build-iso.sh "$ref" "$(realpath "{{ base_dir }}")/utah-live.iso" "Utah Live" "{{ debug }}" "ghcr.io/{{ repo_organization }}/{{ image }}:{{ stream }}"
-
-# #875 ISO size experiments: measure the live-rootfs squashfs under each
-# embedded-store / compression strategy for one or more flavors, and write the
-# table to evidence/iso-size.json. It mirrors build-iso.sh's assembly but does
-# NOT assemble the ISO or boot it. Pass NAME=IMAGE pairs; defaults to the two
-# largest flavors:
-#   just measure-iso main=ghcr.io/projectbluefin/utah:testing
-measure-iso *flavors:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    flavors=({{ flavors }})
-    if [[ ${#flavors[@]} -eq 0 ]]; then
-      for f in main nvidia-gaming; do
-        flavors+=("$f=ghcr.io/{{ repo_organization }}/$(python3 scripts/flavors.py image "$f"):testing")
-      done
-    fi
-    bash iso/scripts/measure-iso-store.sh "${flavors[@]}"
-
-# Fast live ISO via tacklebox for any flavors.json flavor, including variants
-# this project publishes no ISO for. Two stages: a rootless Flatpak bake
-# (bwrap needs the userns tacklebox's rootful customize containers lack),
-# then root assembly. Unsigned systemd-boot chain: boots with Secure Boot
-# DISABLED only. For the Secure Boot ISO use `just iso`.
-#   just iso-tacklebox main              # from localhost/utah:testing
-#   just iso-tacklebox main testing ghcr testing-20260922-256d837
-iso-tacklebox flavor="main" stream="testing" repo="local" tag="" debug="0":
-    #!/usr/bin/env bash
-    set -euo pipefail
-    tag="{{ tag }}"
-    if [[ -z "$tag" ]]; then tag="{{ stream }}"; fi
-    sudo bash iso/scripts/build-iso-tacklebox.sh "{{ flavor }}" "{{ stream }}" "{{ repo }}" "$tag" "{{ debug }}"
-
-# Boot the live ISO with QEMU-for-Docker and expose its noVNC console.
-boot-iso:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    iso="$(realpath "{{ base_dir }}/utah-live.iso")"
-    test -f "$iso" || { echo "Missing $iso; run just iso" >&2; exit 1; }
-    port=8006
-    while ss -H -tln "sport = :$port" 2>/dev/null | grep -q .; do port=$((port + 1)); done
-    echo "Utah live ISO console: http://127.0.0.1:$port"
-    podman run --rm --privileged --device /dev/kvm --pull=always \
-      --publish "127.0.0.1:${port}:8006" \
-      --env NETWORK=user \
-      --env CPU_CORES="{{ vm_cpus }}" \
-      --env RAM_SIZE="{{ vm_ram }}" \
-      --env TPM=y \
-      --env BOOT_MODE=uefi \
-      --env ARGUMENTS=-snapshot \
-      --volume "$iso:/boot.iso:ro" \
-      ghcr.io/qemus/qemu:latest
+    sudo podman build --layers=false -t localhost/utah-raw:local \
+      --build-arg SOURCE_IMAGE="$ref" -f iso/raw/Containerfile iso/raw
+    sudo bash iso/raw/build-raw-image.sh localhost/utah-raw:local "$(realpath "{{ base_dir }}")/medium.raw" \
+      "ghcr.io/{{ repo_organization }}/{{ image }}:{{ stream }}"
+    sudo bash iso/raw/bake-flatpaks.sh localhost/utah-raw:local "$(realpath "{{ base_dir }}")/medium.raw"
+    sudo bash iso/raw/shrink-raw-image.sh localhost/utah-raw:local "$(realpath "{{ base_dir }}")/medium.raw"
+    echo "Medium ready: {{ base_dir }}/medium.raw"
 
 # Boot the installed Utah disk through QEMU-for-Docker. Open the printed URL
 # and confirm GDM appears and the GNOME Shell desktop renders. The disk is

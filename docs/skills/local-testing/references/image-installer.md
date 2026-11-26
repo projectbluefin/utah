@@ -1,10 +1,11 @@
 # Image-based installer track (experimental)
 
 The GNOME OS-style install path of
-[ADR-0001](../../../adr/0001-image-based-installer.md), run in parallel with
-the live ISO + bootc-installer/fisherman path. Nothing gates on it: it is not
-a required check, not in `promote-to-testing`'s needs, and it publishes
-nothing. Tracking issue: #1403. History: spike #1399.
+[ADR-0001](../../../adr/0001-image-based-installer.md), Utah's only install
+path since the fisherman live ISO was removed (#1569). Post-Testing E2E's
+`gnome-setup` job runs this workflow on every tested digest and
+`promote-to-testing` needs it; `publish-installer.yml` publishes the medium
+without the CI debug kargs. Tracking issue: #1403. History: spike #1399.
 
 ## What it builds
 
@@ -169,9 +170,7 @@ uses large data folios under that option). A fixed kernel gets composefs, any
 other kernel ostree; `composefs` forced on an unfixed kernel fails the build.
 The decision is in `raw-evidence/backend.json`, `results.json` (`backend`)
 and the job summary. This keeps composefs safe when Utah moves to Fedora's
-signed kernel (#1379), which lacks the fix today. The ISO path's composefs
-opt-in (`UTAH_E2E_COMPOSEFS_BACKEND=1`, `luks-e2e.sh`) runs the same check on
-the live root and fails on an unfixed kernel. Dispatch with `backend=ostree`
+signed kernel (#1379), which lacks the fix today. Dispatch with `backend=ostree`
 for the ostree medium on any kernel.
 
 ### Offline Flatpaks
@@ -181,7 +180,7 @@ fails if either has content in `/var/lib/flatpak`. bootc copies an image's
 `/var` only at the first deployment and never touches it again, so Flatpaks
 in the medium's stateroot `/var` reach the installed disk through the block
 copy and can never be re-added or overwritten by an update. The set is the
-ISO's (`iso/live/src/install-flatpaks.sh`) plus the image's `preinstall.d`,
+image's `system-flatpaks.Brewfile` apps plus its `preinstall.d`,
 which `flatpak preinstall` records as preinstalled, so
 flatpak-preinstall.service has nothing to fetch on first boot and a removed
 app stays removed. The E2E proves
@@ -195,14 +194,14 @@ so the comparison shows what the offline set costs in download size.
 
 ### Installed-system checks (ported from the fisherman harness)
 
-Everything `iso/scripts/luks-e2e.sh` asserted on the system it installed is
-asserted by `raw_e2e.py` too, with the same pass/fail, so the gnome-setup
-track can replace it without losing coverage. `Harness.check_installed` runs
-every check, records each one's problems under `installed_checks` in
-`results.json` and fails the boot with all of them together. It reuses the
-fisherman harness's own scripts from their current paths rather than copies;
-removing the ISO path must keep them (`tests/test_image_installer.py`
-`InstalledSystemCheckTests` fails otherwise):
+Everything the removed fisherman harness (`luks-e2e.sh`) asserted on the
+system it installed is asserted by `raw_e2e.py` too, with the same
+pass/fail. `Harness.check_installed` runs every check, records each one's
+problems under `installed_checks` in `results.json` and fails the boot with
+all of them together. The guest-side checks are scripts in `iso/scripts/`
+that the fisherman harness also used, run from there rather than copied
+(`tests/test_image_installer.py` `InstalledSystemCheckTests` fails if one
+goes):
 
 | Check | How | First boot | Rollback boot |
 |---|---|---|---|
@@ -221,11 +220,11 @@ removing the ISO path must keep them (`tests/test_image_installer.py`
 The flavor is `--flavor`, or the configured flavor that publishes
 `--candidate`'s repository (`scripts/flavors.py flavor IMAGE`): the switch
 target is always the same repository as the image under test. The rollback
-boot is the fisherman harness's repeat boot (#19). The bootc switch boot runs
-another image and gets none of these checks: an older `:testing` cannot meet
-rules this checkout added later (#1343). The live session, desktop and
-greeter screenshots must draw (retaken for a minute, then the run fails), the
-live one below the top bar too, as `UTAH_E2E_REQUIRE_SCREENSHOTS` required.
+boot is the repeat boot (#19). The bootc switch boot runs another image and
+gets none of these checks: an older `:testing` cannot meet rules this
+checkout added later (#1343). The live session, desktop and greeter
+screenshots must draw (retaken for a minute, then the run fails), the live
+one below the top bar too (#786).
 The harness needs `tesseract` on the host.
 
 Not ported, because they test fisherman's path rather than the installed
@@ -323,19 +322,6 @@ qemu-system-x86_64 -enable-kvm -machine q35 -cpu host -smp 4 -m 8192 \
 Keep `vars.fd` between boots: the installer's firmware entry lives there.
 Recreate `target.qcow2` (and copy a fresh `vars.fd`) to install again.
 
-## What the comparison measures
-
-| Metric | Image-based | ISO/fisherman (`luks` job, same digest) |
-|---|---|---|
-| Medium | raw and allocated bytes after bootc install and after shrinking; compressed bytes and pack/unpack time per format | `ISO ready` line; `production-iso-<image>` artifact bytes |
-| Build time | image layer + `bootc install` | "Compose production ISO" step |
-| Install time | GUI confirm-to-done | `=== Phase 3/7` to `=== Phase 4/7` |
-| Stages | live boot, install, first boot unlock, initial setup, first boot desktop, bootc switch, bootc rollback | phases 1-7 (failed phase from the last marker) |
-| SELinux, failed units | `getenforce`, `systemctl --failed` on every boot | live permissive by construction (#22); not recorded |
-
-GNOME OS's published ISOs (nightly, stable) are read with HEAD requests as a
-size reference.
-
 ## Gotchas found on the way
 
 - `systemd.volatile=overlay` disables ostree's generated `var.mount`
@@ -348,8 +334,9 @@ size reference.
   GRUB cannot unlock repart's LUKS2 (argon2id), so the medium is partitioned
   by hand with a separate ext4 `/boot`.
 - Without `rhgb quiet` on the deployment the installed disk asks for the
-  passphrase in Plymouth's text mode; `bootc install` and `kargs.d` set
-  neither, fisherman adds them (`desktop-contract/references/boot-splash.md`).
+  passphrase in Plymouth's text mode; `kargs.d` sets neither, so
+  `build-raw-image.sh` passes them to `bootc install`
+  (`desktop-contract/references/boot-splash.md`).
 - GNOME Shell does not focus a window that maps under the login overview,
   and GTK 4 has no AT-SPI `GrabFocus` or actions on list rows: the harness
   clicks with a USB tablet at AT-SPI extents. GTK 4 reports extents relative

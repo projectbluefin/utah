@@ -27,7 +27,7 @@ class NetworkStepTimeoutTests(unittest.TestCase):
     def test_every_network_step_has_its_own_timeout(self):
         steps = [(name, step) for name, job in JOBS.items() for step in job.get("steps", [])
                  if is_network_step(step)]
-        self.assertGreaterEqual(len(steps), 8)
+        self.assertGreaterEqual(len(steps), 5)
         for name, step in steps:
             with self.subTest(job=name, step=step.get("name") or step.get("uses")):
                 minutes = step.get("timeout-minutes")

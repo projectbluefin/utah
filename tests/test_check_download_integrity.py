@@ -27,8 +27,8 @@ INSPECTED_FILES = [
     "scripts/install-ogc-kernel.sh",
     "scripts/install-v4l2loopback.sh",
     "scripts/configure-services.sh",
-    "iso/live/src/install-flatpaks.sh",
-    "iso/scripts/build-iso.sh",
+    "iso/raw/Containerfile",
+    "iso/raw/bake-flatpaks.sh",
 ]
 
 GUARDED_EXTENSIONS = [
@@ -183,7 +183,7 @@ class DownloadIntegrityTests(unittest.TestCase):
 
     def test_flathub_allowlist_is_exempt(self):
         self.write_file(
-            "iso/live/src/install-flatpaks.sh",
+            "iso/raw/Containerfile",
             "curl -LO https://dl.flathub.org/repo/flathub.flatpakrepo\n"
             "wget https://dl.flathub.org/repo/appstream\n",
         )

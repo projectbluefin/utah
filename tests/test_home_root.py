@@ -3,8 +3,7 @@
 Since /etc/default/useradd ships HOME=/home (#576) and home.mount binds
 /var/home over /home (#1234, Dakota's files/bindmounts/home.mount), the homes
 live in /var/home, which must exist wherever homes are created: the
-installer's stateroot, the tacklebox customize container, and the live ISO
-build (#602).
+installer's stateroot and the install medium's live session (#602).
 
 The contract has three parts that must not drift apart:
 
@@ -32,7 +31,6 @@ SHARED = ROOT / "system_files/shared"
 TMPFILES = SHARED / "usr/lib/tmpfiles.d/utah-home.conf"
 UNITS = SHARED / "usr/lib/systemd/system"
 CONTAINERFILE = ROOT / "Containerfile"
-CONFIGURE_LIVE = ROOT / "iso/live/src/configure-live.sh"
 
 
 class HomeRootTests(unittest.TestCase):
@@ -139,16 +137,6 @@ class HomeRootTests(unittest.TestCase):
         result, calls = self.run_migration("bob:x:1001:1001::/home/bob:/bin/bash\n")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(calls, [])
-
-    def test_live_user_home_lives_in_var_home(self):
-        """A build has no bind mount: anything written to /home is hidden at boot."""
-        text = CONFIGURE_LIVE.read_text()
-        self.assertIn("--home-dir /var/home/liveuser", text)
-        self.assertIn("usermod --home /home/liveuser liveuser", text)
-        self.assertIn(": >/var/home/liveuser/.config/gnome-initial-setup-done", text)
-        self.assertNotIn("mkdir -p /home/", text)
-        self.assertNotIn(">/home/", text)
-
 
 if __name__ == "__main__":
     unittest.main()

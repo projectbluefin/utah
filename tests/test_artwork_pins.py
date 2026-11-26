@@ -29,8 +29,6 @@ FETCH = ROOT / "scripts/fetch-artwork.sh"
 # Every caller of the fetch script: path in the artwork repository.
 CALLERS = [
     ROOT / "Containerfile",
-    ROOT / "iso/scripts/build-iso.sh",
-    ROOT / "iso/scripts/build-iso-tacklebox.sh",
 ]
 
 
@@ -113,16 +111,6 @@ class ArtworkLockTests(unittest.TestCase):
             "system_files/shared/usr/share/pixmaps/bluefin-gdm-logo.png",
         ):
             self.assertFalse((ROOT / blob).exists(), f"{blob} must come from artwork")
-
-    def test_installer_art_is_the_utah_mascot(self):
-        _, sums = lock_entries()
-        self.assertIn(
-            "assets/raster/dinos/jacob-schnurr/utah/utah-look/black-outline/utah-look-black-outline.png",
-            sums,
-        )
-        live = (ROOT / "iso/live/src/configure-live.sh").read_text()
-        self.assertNotIn("bluefin-look", live)
-
 
 class FetchScriptTests(unittest.TestCase):
     PATH = "assets/thing.svg"

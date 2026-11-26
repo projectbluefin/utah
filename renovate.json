@@ -21,17 +21,6 @@
     {
       "customType": "regex",
       "managerFilePatterns": [
-        "/^config/tacklebox-image$/"
-      ],
-      "matchStrings": [
-        "(?<depName>ghcr\\.io/tuna-os/tacklebox):(?<currentValue>latest)@(?<currentDigest>sha256:[a-f0-9]{64})"
-      ],
-      "datasourceTemplate": "docker",
-      "versioningTemplate": "docker"
-    },
-    {
-      "customType": "regex",
-      "managerFilePatterns": [
         "/^\\.github/workflows/(post-testing-e2e|execute-release|candidate-common)\\.yml$/"
       ],
       "matchStrings": [
