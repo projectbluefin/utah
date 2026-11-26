@@ -263,6 +263,15 @@ kernel ignores them, and `/var/swap/swapfile` runs as plain uncompressed swap.
 `ZSWAP` and `CRYPTO_ZSTD` are built in with `ZSMALLOC`, gated. zram is not
 built: Utah dropped zram-generator for Dakota's zswap swapfile.
 
+Two more gaps showed up only under the E2E harnesses, both built in and gated.
+With no TPM driver (`TCG_TPM`, `TCG_TIS`, `TCG_CRB`) the gaming kernel sees
+no TPM 2.0, so gnome-setup asks for a passphrase and TPM2 unlock cannot work
+(#1579). Without guest vsock (`VSOCKETS`, `VIRTIO_VSOCKETS`) the harnesses,
+which reach the live session over AF_VSOCK since #1508, get no SSH, and the
+gaming `luks` legs fail `no SSH from the live ISO` while `main` and `nvidia`,
+on the Fedora kernel, pass. When only the gaming legs fail an E2E step,
+check the OGC config against `x86_64_defconfig` first.
+
 The contract also covers the display. `x86_64_defconfig` enables DRM and the
 Intel i915 driver and nothing else, so on any other GPU, QEMU's included, the
 OGC kernel registered no DRM device: GDM started, mutter had no KMS device to

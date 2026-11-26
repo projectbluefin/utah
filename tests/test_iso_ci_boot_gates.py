@@ -251,6 +251,15 @@ class OgcKernelConfigGateTests(unittest.TestCase):
                 self.assertIn(symbol, symbols)
                 self.assertRegex(self.SCRIPT.read_text(), rf"--enable {symbol}(?:\s|$)")
 
+    def test_guest_vsock_is_required_and_built_in(self):
+        # The E2E harnesses reach the live session over AF_VSOCK (#1508); on a
+        # kernel without it the gaming legs never get SSH (run 45858480299).
+        symbols = self.required_symbols()
+        for symbol in ("VSOCKETS", "VIRTIO_VSOCKETS"):
+            with self.subTest(symbol=symbol):
+                self.assertIn(symbol, symbols)
+                self.assertRegex(self.SCRIPT.read_text(), rf"--enable {symbol}(?:\s|$)")
+
     def test_zswap_and_zstd_are_required_for_the_zswap_kargs(self):
         # kargs.d/20-zswap.toml ships on every image (#1224); without these the
         # gaming kernel ignores zswap.* and the swapfile runs uncompressed.
