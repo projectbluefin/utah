@@ -437,7 +437,13 @@ class NonBlockingTrackTests(unittest.TestCase):
         self.assertEqual(lane["uses"], "./.github/workflows/image-installer.yml")
         self.assertEqual(lane["with"], {"image_ref": "${{ matrix.ref }}", "e2e_run": "${{ github.run_id }}"})
         # It waits for the luks job it compares with, and runs even if luks is red.
-        self.assertLessEqual({"luks", "production-iso"}, set(lane["needs"]))
+        # Every need must be a real job: a dangling one makes GitHub reject the
+        # whole workflow file and no Post-Testing E2E run starts at all.
+        self.assertIn("luks", lane["needs"])
+        for job_name, job in e2e["jobs"].items():
+            needs = job.get("needs") or []
+            needs = [needs] if isinstance(needs, str) else needs
+            self.assertLessEqual(set(needs), set(e2e["jobs"]), job_name)
         self.assertIn("!cancelled()", lane["if"])
         self.assertEqual(lane["strategy"]["matrix"], "${{ fromJSON(needs.resolve.outputs.matrix) }}")
         self.assertEqual(set(lane["permissions"].values()), {"read"})

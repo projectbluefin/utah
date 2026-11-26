@@ -284,18 +284,18 @@ jobs:
   # flavor's luks job installs with fisherman: live boot, GUI install into
   # LUKS2, first boot, gnome-initial-setup, bootc switch and rollback. It runs
   # beside luks and gates nothing yet; once it is reliably green it replaces
-  # luks, lifecycle and production-iso in promote-to-testing's needs, and
-  # fisherman leaves the pipeline (#1569).
+  # luks and lifecycle in promote-to-testing's needs, and fisherman leaves the
+  # pipeline (#1569).
   #
   # It only runs once verify-provenance has passed: the installer is privileged
   # and must never run an image whose provenance failed verification.
   #
-  # It waits for luks and production-iso (whatever their result) so its
-  # comparison step can read that job's finished log and ISO artifact. A red
+  # It waits for luks (whatever its result) so its comparison step can read
+  # that job's finished log and its production-iso-<image> artifact. A red
   # gnome-setup leg is advisory: rerun-e2e-infra-failures.yml ignores it.
   gnome-setup:
     name: gnome-setup (${{ matrix.image }})
-    needs: [resolve, verify-provenance, luks, production-iso]
+    needs: [resolve, verify-provenance, luks]
     if: ${{ !cancelled() && needs.resolve.result == 'success' && needs.verify-provenance.result == 'success' }}
     strategy:
       fail-fast: false
