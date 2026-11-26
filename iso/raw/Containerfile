@@ -8,7 +8,7 @@
 # The layers sit on top of a published Utah digest; the published image and
 # the ISO/fisherman path are unchanged.
 ARG SOURCE_IMAGE=ghcr.io/projectbluefin/utah:testing@sha256:43b1448e236e7b71a8c0bd1e99c28bce3b732714d03afe4a94bcff9d8e8235dd
-ARG BUILDER_IMAGE=registry.fedoraproject.org/fedora:43@sha256:59be9ed15831f74e408c5f3d59fc77fc8371f4642de2673c16c37e880b4dd937
+ARG BUILDER_IMAGE=registry.fedoraproject.org/fedora:43@sha256:94622fc51eb4f9d5245d802b5cfe0324425fe40531ce28f520f0c06ead472d82
 
 # systemd-sysinstall's Varlink API (io.systemd.SysInstall, which gnome-setup
 # drives) and systemd-cryptenroll's (io.systemd.CryptEnroll, its recovery key
