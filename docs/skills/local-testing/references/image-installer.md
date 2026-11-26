@@ -144,6 +144,16 @@ labels in `boot-labels.txt` and fails unless the root is `boot_t`. The
 install block-copies `/boot`, so the labels carry over, and the E2E fails a
 boot with any SELinux denial on a `/boot` path.
 
+The same trap sits under `/var`. `bake-flatpaks.sh` creates
+`var/lib/flatpak` from the host, and on a fresh stateroot that `install -d`
+creates `var/lib` too, with no label. On first boot systemd (`init_t`) was
+then denied `add_name` in the `unlabeled_t` `/var/lib`, and
+`systemd-timesyncd` failed its `StateDirectory` until `start-limit-hit`
+(Post-Testing E2E run 45858480299, every flavor). The bake runs `setfiles`
+over all of `var/lib`, records `/var`, `/var/lib` and `/var/lib/flatpak` in
+`var-labels.txt`, and fails unless `/var/lib` is `var_lib_t`. Anything the
+medium build writes from the host needs the same treatment.
+
 ### Backend selection
 
 Since 7.2, btrfs reads data through large folios, and without mainline
