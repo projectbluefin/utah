@@ -248,6 +248,17 @@ for `/test`, `/retest` and `/ok-to-test`. The org's mergeraptor installation
 grants all five (`statuses:write` accepted 2026-11-14,
 projectbluefin/.project#36); chairlift and common run the same caller.
 
+### A run that "likely failed because of a workflow file issue"
+
+A run with no jobs and that banner means GitHub rejected the workflow file
+itself, so nothing in it ran. The usual cause here is a `needs:` entry naming a
+job that does not exist (2026-11-26: `gnome-setup` still needed
+`production-iso`, an artifact name, after #1508 dropped that job; every
+Post-Testing E2E run on `main` failed instantly and `:testing` stopped moving).
+`tests/test_image_installer.py` now asserts every `needs` in
+`post-testing-e2e.yml` names a real job, and `actionlint` reports `job-needs`
+for it.
+
 ## Unattended landing with strict freshness
 
 Arm GitHub's **native auto-merge** on a PR to land it unattended: Hive, a
