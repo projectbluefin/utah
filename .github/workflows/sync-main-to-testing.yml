@@ -1,11 +1,26 @@
 name: Sync main to testing
 
 on:
+  # Only a push that can change the image rebuilds it. Each testing build
+  # promotes a new :testing digest, Renovate then repins that digest in
+  # iso/raw/Containerfile (#1547, #1553, #1556), and the E2E refreshes the
+  # README's verified-ISO link (#1555, #1558): when those pushes rebuilt the
+  # image, every build queued the next one, and Post-Testing E2E replaced its
+  # pending run so often that :testing stopped moving (2026-11-25). The
+  # nightly schedule below still syncs everything. Later patterns win.
   push:
     branches: [main]
-    paths-ignore:
-      - README.md
-      - docs/verification/**
+    paths:
+      - '**'
+      - '!README.md'
+      - '!docs/**'
+      - 'docs/agent/**'
+      - '!site/**'
+      - '!baselines/**'
+      - '!tests/**'
+      - '!iso/raw/**'
+      # the raw-medium track's two workflows (iso/raw)
+      - '!.github/workflows/*-installer.yml'
   schedule:
     - cron: "20 22 * * *"
   workflow_dispatch:
