@@ -396,8 +396,9 @@ chmod u-s /usr/bin/su-rs
 # Dakota's swapfile (/var/swap/swapfile, created at boot by
 # bluefin-swapfile-init) needs the swapfile_t label under Utah's SELinux
 # policy, which has no rule for that path (#1224). Install the one-line module
-# into the policy store, which Hummingbird keeps under /usr/lib/selinux, so it
-# ships in the image and survives ostree's per-deployment policy rebuild.
+# into the policy store, which utah-relocate-selinux-store moved to
+# /etc/selinux (#551), so it ships in the image and survives ostree's
+# per-deployment policy rebuild.
 # -n: no reload; an image build has no selinuxfs to load it into.
 semodule -n -i /usr/share/selinux/packages/utah-swapfile.cil
 if ! matchpathcon /var/swap/swapfile | grep -q ':swapfile_t:'; then

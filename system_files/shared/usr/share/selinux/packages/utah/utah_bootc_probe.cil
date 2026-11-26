@@ -17,8 +17,8 @@
 ; would let every such service write labels the policy does not know, and
 ; would change what bootc's probe decides. A capability check has no target
 ; but the process itself, so a domain plus one permission is the narrowest
-; rule the policy language can express. Installed at build time (the store
-; is on read-only /usr once booted, #551); the desktop contract's [selinux]
+; rule the policy language can express. Installed at build time (into the
+; /etc/selinux store since #551); the desktop contract's [selinux]
 ; modules list asserts it is loaded.
 (dontaudit unconfined_service_t self (capability2 (mac_admin)))
 (dontaudit initrc_t self (capability2 (mac_admin)))
