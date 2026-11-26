@@ -63,7 +63,7 @@ required_config=(SCHED_CLASS_EXT NTSYNC ANDROID_BINDERFS
                  CRYPTO_XTS FUSE_FS FS_VERITY
                  SYSFB_SIMPLEFB DRM_SIMPLEDRM VIDEO_DEV USER_NS TUN
                  INPUT_UINPUT ZSWAP CRYPTO_ZSTD CGROUP_BPF
-                 DRM_AMDGPU DRM_XE)
+                 DRM_AMDGPU DRM_XE TCG_TPM TCG_TIS TCG_CRB)
 verify_config() {
   local config="$1" symbol
   for symbol in "${required_config[@]}"; do
@@ -183,6 +183,15 @@ scripts/config --enable NAMESPACES --enable USER_NS --module TUN
 # closes cleanly via Ctrl+Q" on the gaming flavors). Module, as Fedora ships
 # it (CONFIG_INPUT_UINPUT=m); the harness modprobes it before use.
 scripts/config --module INPUT_UINPUT
+# The TPM: x86_64_defconfig has no TPM driver, so on the OGC kernel a machine's
+# TPM 2.0 was invisible. gnome-setup then saw no TPM and asked for a disk
+# passphrase instead of binding the root to it, and an install made on another
+# kernel could not unlock with TPM2 (hanthor/utah run 45742479307, both
+# gaming flavors). Built in, as Fedora ships them, so the initrd's
+# systemd-cryptsetup finds /dev/tpmrm0 without loading a module: TIS for
+# discrete and firmware TPMs (and QEMU's tpm-tis), CRB for Intel PTT and
+# AMD fTPM.
+scripts/config --enable TCG_TPM --enable TCG_TIS --enable TCG_CRB --enable HW_RANDOM_TPM
 # Swap is a /var/swap/swapfile fronted by zswap, as on Dakota (#1224):
 # kargs.d/20-zswap.toml sets zswap.enabled=1 zswap.compressor=zstd on every
 # image, and x86_64_defconfig has neither, so the kargs would be ignored and
