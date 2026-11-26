@@ -258,13 +258,16 @@ jobs:
   # luks, lifecycle and production-iso in promote-to-testing's needs, and
   # fisherman leaves the pipeline (#1569).
   #
+  # It only runs once verify-provenance has passed: the installer is privileged
+  # and must never run an image whose provenance failed verification.
+  #
   # It waits for luks and production-iso (whatever their result) so its
   # comparison step can read that job's finished log and ISO artifact. A red
   # gnome-setup leg is advisory: rerun-e2e-infra-failures.yml ignores it.
   gnome-setup:
     name: gnome-setup (${{ matrix.image }})
     needs: [resolve, verify-provenance, luks, production-iso]
-    if: ${{ !cancelled() && needs.resolve.result == 'success' }}
+    if: ${{ !cancelled() && needs.resolve.result == 'success' && needs.verify-provenance.result == 'success' }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}

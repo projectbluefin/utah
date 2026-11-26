@@ -127,16 +127,6 @@ class DecideTests(unittest.TestCase):
         self.assertIsNone(verdicts[1].signature)
         self.assertIn("unexplained", rerun.summary("u", go, verdicts))
 
-    def test_a_red_advisory_gnome_setup_leg_does_not_veto_the_re_run(self):
-        jobs = [{"id": 1, "name": "smoke-a", "conclusion": "failure"},
-                {"id": 2, "name": "gnome-setup (utah) / e2e (utah)", "conclusion": "failure"},
-                {"id": 3, "name": "gnome-setup (utah) / resolve", "conclusion": "failure"}]
-        failed = [j for j in jobs if j["conclusion"] in rerun.FAILED
-                  and not j["name"].startswith(rerun.ADVISORY_PREFIXES)]
-        self.assertEqual([j["id"] for j in failed], [1])
-        go, _ = rerun.decide(failed, self.logs({1: fixture("ghcr-blob-500.log")}))
-        self.assertTrue(go)
-
     def test_no_failed_jobs_means_no_re_run(self):
         self.assertEqual(rerun.decide([], self.logs({})), (False, []))
 
@@ -164,7 +154,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(b'{"jobs": [{"id": 1, "name": "a", "conclusion": "failure"},'
                              b' {"id": 2, "name": "b", "conclusion": "success"},'
                              b' {"id": 3, "name": "c", "conclusion": "skipped"},'
-                             b' {"id": 4, "name": "d", "conclusion": "cancelled"}]}')
+                             b' {"id": 4, "name": "d", "conclusion": "cancelled"},'
+                             b' {"id": 5, "name": "gnome-setup (utah) / e2e (utah)", "conclusion": "failure"},'
+                             b' {"id": 6, "name": "gnome-setup (utah) / resolve", "conclusion": "cancelled"}]}')
 
     def log_message(self, *args):
         pass
@@ -193,6 +185,10 @@ class ApiTests(unittest.TestCase):
 
     def test_only_failed_and_cancelled_jobs_are_classified(self):
         self.assertEqual([j["id"] for j in rerun.failed_jobs("o/r", "7", "t")], [1, 4])
+
+    def test_red_advisory_gnome_setup_jobs_are_not_returned_by_failed_jobs(self):
+        names = [j["name"] for j in rerun.failed_jobs("o/r", "7", "t")]
+        self.assertFalse([n for n in names if n.startswith("gnome-setup (")])
 
 
 class WorkflowTests(unittest.TestCase):
