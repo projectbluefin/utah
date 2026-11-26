@@ -61,6 +61,46 @@ on:
         description: Download formats to measure (iso/raw/measure_medium.py; xz-9 adds ~20 min)
         type: string
         default: zstd-3,zstd-19-long
+  # Post-Testing E2E runs the track on each flavor's exact tested digest,
+  # beside the fisherman luks job (#1569). It does not gate :testing yet.
+  workflow_call:
+    inputs:
+      image_ref:
+        description: Exact image to install (repo@sha256:...), the digest Post-Testing E2E tests
+        type: string
+        default: ''
+      all_flavors:
+        description: Every flavor in config/flavors.json (default main only)
+        type: boolean
+        default: false
+      install:
+        description: gui drives the installer's window; script runs the same install over SSH
+        type: string
+        default: gui
+      tpm:
+        description: Give the VMs a software TPM 2.0 (off = no TPM; gnome-setup asks for a disk passphrase)
+        type: boolean
+        default: true
+      backend:
+        description: bootc backend of the medium (auto = composefs if the image's kernel has the btrfs fs-verity fix, else ostree; composefs fails on an unfixed kernel)
+        type: string
+        default: auto
+      btrfs_compress:
+        description: Compress the medium's btrfs root after the Flatpak bake (defragment -c<algorithm>, default level); off = uncompressed (empty = the default)
+        type: string
+        default: 'zstd:3'
+      flatpaks:
+        description: Bake the image's preinstall Flatpaks into the medium's /var (off = online first-boot preinstall)
+        type: boolean
+        default: true
+      formats:
+        description: Download formats to measure (iso/raw/measure_medium.py; xz-9 adds ~20 min)
+        type: string
+        default: zstd-3,zstd-19-long
+      e2e_run:
+        description: Post-Testing E2E run id (the caller's github.run_id); its luks job is the comparison side
+        type: string
+        default: ''
   schedule:
     # Nightly, after the 04:00-06:00 UTC testing build and Post-Testing E2E.
     - cron: '41 7 * * *'
@@ -74,7 +114,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: image-installer-${{ github.ref }}
+  group: image-installer-${{ github.ref }}-${{ inputs.image_ref || 'testing' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -276,12 +316,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           IMAGE: ${{ matrix.image }}
           DIGEST: ${{ matrix.digest }}
+          E2E_RUN: ${{ inputs.e2e_run }}
         run: |
           set -euo pipefail
           mkdir -p "$WORK/e2e/evidence" "$WORK/raw-evidence"
           shopt -s nullglob
           sizes=("$WORK"/raw-evidence/size-*.json)
           python3 iso/raw/compare_paths.py --repo "$GITHUB_REPOSITORY" --image "$IMAGE" --digest "$DIGEST" \
+            ${E2E_RUN:+--e2e-run "$E2E_RUN"} \
             --evidence "$WORK/e2e/evidence" --raw-evidence "$WORK/raw-evidence" \
             --sizes "${sizes[@]}" \
             --image-build-seconds "${IMAGE_BUILD_SECONDS:-0}" \

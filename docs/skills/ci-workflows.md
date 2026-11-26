@@ -156,8 +156,10 @@ post-build verification workflows, not the complete workflow inventory:
   testing build and Post-Testing E2E when GitHub never started their newest
   run, which sends no `workflow_run` event for the re-run above to see. See
   [startup failures](ci-workflows/references/iso-e2e.md#startup-failures).
-- `.github/workflows/image-installer.yml` -- nightly, manual dispatch, and
-  pull requests touching `iso/raw/**`. The experimental image-based installer
+- `.github/workflows/image-installer.yml` -- nightly, manual dispatch,
+  pull requests touching `iso/raw/**`, and called by Post-Testing E2E
+  (`gnome-setup` job) on every tested digest, beside `luks` and not gating
+  yet: the path to replacing fisherman in the gate (#1569). The experimental image-based installer
   of ADR-0001 (`docs/adr/0001-image-based-installer.md`): builds a raw bootc
   medium on each flavor's current `:testing` digest (main only unless
   `all_flavors`), shrinks it, drives gnome-setup through a LUKS2 install,

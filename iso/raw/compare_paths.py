@@ -141,7 +141,21 @@ def gh_api(path, raw=False):
     return out if raw else json.loads(out)
 
 
-def fetch_fisherman(repo, image, digest, max_runs=60, api=gh_api):
+def fetch_fisherman(repo, image, digest, max_runs=60, api=gh_api, run_id=None):
+    """The luks job for digest: the caller's own run first when run_id is given.
+
+    Called from Post-Testing E2E, the luks job is in the run that is still in
+    progress, which the completed-runs scan below would skip; the caller waits
+    for luks, so its job is finished and its log readable.
+    """
+    if run_id:
+        run = api(f"repos/{repo}/actions/runs/{run_id}")
+        jobs = api(f"repos/{repo}/actions/runs/{run_id}/jobs?per_page=100")["jobs"]
+        job = match_luks_job(jobs, image, digest)
+        if job is not None and job.get("conclusion"):
+            log_text = api(f"repos/{repo}/actions/jobs/{job['id']}/logs", raw=True)
+            artifacts = api(f"repos/{repo}/actions/runs/{run_id}/artifacts?per_page=100")["artifacts"]
+            return fisherman_metrics(run, job, log_text, artifacts, image)
     runs = api(f"repos/{repo}/actions/workflows/{E2E_WORKFLOW}/runs?per_page={max_runs}")["workflow_runs"]
     for run in runs:
         if run.get("status") != "completed":
@@ -300,9 +314,10 @@ def main():
     ap.add_argument("--image-build-seconds", type=int)
     ap.add_argument("--out", required=True)
     ap.add_argument("--summary")
+    ap.add_argument("--e2e-run", help="Post-Testing E2E run that called this workflow; its luks job is read first")
     args = ap.parse_args()
     try:
-        fisherman = fetch_fisherman(args.repo, args.image, args.digest)
+        fisherman = fetch_fisherman(args.repo, args.image, args.digest, run_id=args.e2e_run)
     except (subprocess.CalledProcessError, KeyError, ValueError) as e:
         print(f"could not read the fisherman side: {e}")
         fisherman = None

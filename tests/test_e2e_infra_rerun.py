@@ -154,7 +154,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(b'{"jobs": [{"id": 1, "name": "a", "conclusion": "failure"},'
                              b' {"id": 2, "name": "b", "conclusion": "success"},'
                              b' {"id": 3, "name": "c", "conclusion": "skipped"},'
-                             b' {"id": 4, "name": "d", "conclusion": "cancelled"}]}')
+                             b' {"id": 4, "name": "d", "conclusion": "cancelled"},'
+                             b' {"id": 5, "name": "gnome-setup (utah) / e2e (utah)", "conclusion": "failure"},'
+                             b' {"id": 6, "name": "gnome-setup (utah) / resolve", "conclusion": "cancelled"}]}')
 
     def log_message(self, *args):
         pass
@@ -183,6 +185,10 @@ class ApiTests(unittest.TestCase):
 
     def test_only_failed_and_cancelled_jobs_are_classified(self):
         self.assertEqual([j["id"] for j in rerun.failed_jobs("o/r", "7", "t")], [1, 4])
+
+    def test_red_advisory_gnome_setup_jobs_are_not_returned_by_failed_jobs(self):
+        names = [j["name"] for j in rerun.failed_jobs("o/r", "7", "t")]
+        self.assertFalse([n for n in names if n.startswith("gnome-setup (")])
 
 
 class WorkflowTests(unittest.TestCase):
