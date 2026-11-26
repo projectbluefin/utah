@@ -8,7 +8,7 @@ GHCR ("fetching blob: received unexpected HTTP status: 500"), so the whole
 run was wasted. `rerun-e2e-infra-failures.yml` calls this on every failed
 first attempt and re-runs the failed jobs once, after a delay, only when
 every failed job is explained by a signature below. One unexplained failure
-leaves the run red: a re-run must never paper over a product defect.
+of a gating job leaves the run red: a re-run must never paper over a product defect.
 
 Each failed job is judged on its first failing step only -- the step that
 printed the first `##[error]` line -- so a transient error an earlier step
@@ -39,6 +39,11 @@ API = "https://api.github.com"
 # any other failure: none of them is excused without a matching signature.
 FAILED = {"failure", "timed_out", "cancelled"}
 NO_LOGS = "no-logs"
+# Jobs that gate nothing (post-testing-e2e.yml's `gnome-setup` lane calls the
+# experimental image-installer.yml, #1569). A red one must not veto the re-run
+# of the jobs that do gate promotion, so it is never classified. The called
+# workflow's jobs are named "gnome-setup (utah) / e2e (utah)".
+ADVISORY_PREFIXES = ("gnome-setup (",)
 
 
 @dataclass(frozen=True)
@@ -162,7 +167,8 @@ def failed_jobs(repo: str, run_id: str, token: str) -> list[dict]:
         if len(batch) < 100:
             break
         page += 1
-    return [job for job in jobs if job.get("conclusion") in FAILED]
+    return [job for job in jobs if job.get("conclusion") in FAILED
+            and not job.get("name", "").startswith(ADVISORY_PREFIXES)]
 
 
 def job_log(repo: str, job_id: int, token: str) -> str | None:

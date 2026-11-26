@@ -336,6 +336,25 @@ class FishermanSideTests(unittest.TestCase):
         self.assertFalse(any("/runs/3/" in c for c in calls))
 
 
+    def test_fetch_reads_the_callers_own_in_progress_run_first(self):
+        digest = "sha256:" + "ab" * 32
+        job = {"id": 9, "name": f"luks (utah, {digest}, r)", "conclusion": "failure", "html_url": "j", "steps": []}
+
+        def api(path, raw=False):
+            if path.endswith("/runs/42"):
+                return {"id": 42, "status": "in_progress", "html_url": "r42"}
+            if "/runs/42/jobs" in path:
+                return {"jobs": [job]}
+            if path.endswith("/jobs/9/logs"):
+                return LUKS_LOG
+            if "/runs/42/artifacts" in path:
+                return {"artifacts": []}
+            raise AssertionError(path)
+
+        got = compare.fetch_fisherman("o/r", "utah", digest, api=api, run_id="42")
+        self.assertEqual((got["run"], got["conclusion"]), (42, "failure"))
+
+
 class ComparisonTests(unittest.TestCase):
     def test_image_side_and_markdown(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -394,8 +413,9 @@ class NonBlockingTrackTests(unittest.TestCase):
         # Called inputs carry the dispatch defaults, so a call runs the same
         # medium (TPM, Flatpaks, compression) as the nightly run.
         call, dispatch = on["workflow_call"]["inputs"], on["workflow_dispatch"]["inputs"]
-        self.assertEqual(set(call), set(dispatch))
-        for name in call:
+        # e2e_run is the one call-only input: the caller's run id.
+        self.assertEqual(set(call) - {"e2e_run"}, set(dispatch))
+        for name in dispatch:
             self.assertEqual(call[name].get("default"), dispatch[name].get("default"), name)
         self.assertNotIn("merge_group", on)
 
@@ -415,7 +435,10 @@ class NonBlockingTrackTests(unittest.TestCase):
         # Post-Testing E2E runs it on every tested digest, beside luks (#1569).
         lane = e2e["jobs"]["gnome-setup"]
         self.assertEqual(lane["uses"], "./.github/workflows/image-installer.yml")
-        self.assertEqual(lane["with"], {"image_ref": "${{ matrix.ref }}"})
+        self.assertEqual(lane["with"], {"image_ref": "${{ matrix.ref }}", "e2e_run": "${{ github.run_id }}"})
+        # It waits for the luks job it compares with, and runs even if luks is red.
+        self.assertLessEqual({"luks", "production-iso"}, set(lane["needs"]))
+        self.assertIn("!cancelled()", lane["if"])
         self.assertEqual(lane["strategy"]["matrix"], "${{ fromJSON(needs.resolve.outputs.matrix) }}")
         self.assertEqual(set(lane["permissions"].values()), {"read"})
         name = self.workflow["jobs"]["e2e"]["name"]

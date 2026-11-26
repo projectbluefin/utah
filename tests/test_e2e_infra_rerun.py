@@ -127,6 +127,16 @@ class DecideTests(unittest.TestCase):
         self.assertIsNone(verdicts[1].signature)
         self.assertIn("unexplained", rerun.summary("u", go, verdicts))
 
+    def test_a_red_advisory_gnome_setup_leg_does_not_veto_the_re_run(self):
+        jobs = [{"id": 1, "name": "smoke-a", "conclusion": "failure"},
+                {"id": 2, "name": "gnome-setup (utah) / e2e (utah)", "conclusion": "failure"},
+                {"id": 3, "name": "gnome-setup (utah) / resolve", "conclusion": "failure"}]
+        failed = [j for j in jobs if j["conclusion"] in rerun.FAILED
+                  and not j["name"].startswith(rerun.ADVISORY_PREFIXES)]
+        self.assertEqual([j["id"] for j in failed], [1])
+        go, _ = rerun.decide(failed, self.logs({1: fixture("ghcr-blob-500.log")}))
+        self.assertTrue(go)
+
     def test_no_failed_jobs_means_no_re_run(self):
         self.assertEqual(rerun.decide([], self.logs({})), (False, []))
 

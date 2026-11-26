@@ -257,9 +257,14 @@ jobs:
   # beside luks and gates nothing yet; once it is reliably green it replaces
   # luks, lifecycle and production-iso in promote-to-testing's needs, and
   # fisherman leaves the pipeline (#1569).
+  #
+  # It waits for luks and production-iso (whatever their result) so its
+  # comparison step can read that job's finished log and ISO artifact. A red
+  # gnome-setup leg is advisory: rerun-e2e-infra-failures.yml ignores it.
   gnome-setup:
     name: gnome-setup (${{ matrix.image }})
-    needs: [resolve, verify-provenance]
+    needs: [resolve, verify-provenance, luks, production-iso]
+    if: ${{ !cancelled() && needs.resolve.result == 'success' }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
@@ -269,6 +274,7 @@ jobs:
     uses: ./.github/workflows/image-installer.yml
     with:
       image_ref: ${{ matrix.ref }}
+      e2e_run: ${{ github.run_id }}
 
   # Prove a booted machine can move from the last promoted build to this one
   # and back again: install the baseline (:testing before this run) from a

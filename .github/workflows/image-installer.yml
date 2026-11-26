@@ -97,6 +97,10 @@ on:
         description: Download formats to measure (iso/raw/measure_medium.py; xz-9 adds ~20 min)
         type: string
         default: zstd-3,zstd-19-long
+      e2e_run:
+        description: Post-Testing E2E run id (the caller's github.run_id); its luks job is the comparison side
+        type: string
+        default: ''
   schedule:
     # Nightly, after the 04:00-06:00 UTC testing build and Post-Testing E2E.
     - cron: '41 7 * * *'
@@ -312,12 +316,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           IMAGE: ${{ matrix.image }}
           DIGEST: ${{ matrix.digest }}
+          E2E_RUN: ${{ inputs.e2e_run }}
         run: |
           set -euo pipefail
           mkdir -p "$WORK/e2e/evidence" "$WORK/raw-evidence"
           shopt -s nullglob
           sizes=("$WORK"/raw-evidence/size-*.json)
           python3 iso/raw/compare_paths.py --repo "$GITHUB_REPOSITORY" --image "$IMAGE" --digest "$DIGEST" \
+            ${E2E_RUN:+--e2e-run "$E2E_RUN"} \
             --evidence "$WORK/e2e/evidence" --raw-evidence "$WORK/raw-evidence" \
             --sizes "${sizes[@]}" \
             --image-build-seconds "${IMAGE_BUILD_SECONDS:-0}" \
