@@ -251,6 +251,25 @@ jobs:
           path: docs/verification/
       # Never upload debug ISOs or test disks: they contain test passwords.
 
+  # The gnome-setup install (iso/raw, ADR-0001) on the exact digest each
+  # flavor's luks job installs with fisherman: live boot, GUI install into
+  # LUKS2, first boot, gnome-initial-setup, bootc switch and rollback. It runs
+  # beside luks and gates nothing yet; once it is reliably green it replaces
+  # luks, lifecycle and production-iso in promote-to-testing's needs, and
+  # fisherman leaves the pipeline (#1569).
+  gnome-setup:
+    name: gnome-setup (${{ matrix.image }})
+    needs: [resolve, verify-provenance]
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/image-installer.yml
+    with:
+      image_ref: ${{ matrix.ref }}
+
   # Prove a booted machine can move from the last promoted build to this one
   # and back again: install the baseline (:testing before this run) from a
   # debug live ISO, stage the candidate with bootc, reboot into it, roll back,

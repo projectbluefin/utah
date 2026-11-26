@@ -391,6 +391,12 @@ class NonBlockingTrackTests(unittest.TestCase):
         self.assertTrue(on["schedule"])
         self.assertIn("iso/raw/**", on["pull_request"]["paths"])
         self.assertNotIn("push", on)
+        # Called inputs carry the dispatch defaults, so a call runs the same
+        # medium (TPM, Flatpaks, compression) as the nightly run.
+        call, dispatch = on["workflow_call"]["inputs"], on["workflow_dispatch"]["inputs"]
+        self.assertEqual(set(call), set(dispatch))
+        for name in call:
+            self.assertEqual(call[name].get("default"), dispatch[name].get("default"), name)
         self.assertNotIn("merge_group", on)
 
     def test_the_track_has_no_write_permission(self):
@@ -404,8 +410,14 @@ class NonBlockingTrackTests(unittest.TestCase):
         needs = e2e["jobs"]["promote-to-testing"]["needs"]
         self.assertFalse([n for n in needs if "image" in n or "raw" in n])
         for other in (ROOT / ".github/workflows").glob("*.yml"):
-            if other != WORKFLOW:
+            if other not in (WORKFLOW, ROOT / ".github/workflows/post-testing-e2e.yml"):
                 self.assertNotIn("image-installer", other.read_text(), other.name)
+        # Post-Testing E2E runs it on every tested digest, beside luks (#1569).
+        lane = e2e["jobs"]["gnome-setup"]
+        self.assertEqual(lane["uses"], "./.github/workflows/image-installer.yml")
+        self.assertEqual(lane["with"], {"image_ref": "${{ matrix.ref }}"})
+        self.assertEqual(lane["strategy"]["matrix"], "${{ fromJSON(needs.resolve.outputs.matrix) }}")
+        self.assertEqual(set(lane["permissions"].values()), {"read"})
         name = self.workflow["jobs"]["e2e"]["name"]
         self.assertNotIn("Check all testing builds successful", name)
         self.assertNotEqual(name, "contract")
