@@ -35,14 +35,22 @@ therefore skip the kernel cache and reusable image publishers. A same-repo
 pull request may still publish a kernel-cache image under its `pull/N/merge`
 identity (#316).
 
-The consumer (`build-ghcr`) also fails closed: CI downloads cosign v2.6.1
-with the platform SHA-256 pinned by `sigstore/cosign-installer@7e8b541e…`,
+The consumer (`build-ghcr`) also fails closed: CI downloads cosign v3.1.4
+with its platform SHA-256 pinned (the release's `cosign_checksums.txt`),
 outside the context under `${RUNNER_TEMP}/utah-tools`, and invokes its absolute
 path because the reusable builder uses `sudo` with `secure_path`. Local kernel
 builds require cosign on PATH. The tag is resolved once through `skopeo`, the
 same issuer/ref regexp verifies the resulting immutable digest, and only that
 digest reaches `BASE_IMAGE`. Registry credentials use a private temporary
 Docker keychain outside the checkout and are removed at recipe exit.
+
+The verifier's cosign major version must match the signer's. Since #1540,
+`sigstore/cosign-installer` v4 gives `kernel_cache` cosign 3, which stores
+the signature as a bundle in an OCI referrer, with no `sha256-<digest>.sig`
+tag. cosign 2 cannot see it and fails with `no signatures found`. cosign 3
+still verifies the older `.sig` signatures, so the bump is safe for caches
+signed before #1540 (checked 2026-11-26 on both generations). Every
+kernel-cache rebuild after #1540 failed this way until the pin moved (#1574).
 
 ## The build matrix calls reusable-build.yml twice
 
