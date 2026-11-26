@@ -73,35 +73,13 @@ ifuse = { status = "planned", area = "files-devices", issue = "#1261", reason = 
 
 # Installed in packages/utah.toml [parity] (#1359); each closes on the next
 # Utah snapshot.
-tealdeer = { status = "planned", area = "cli-tools", issue = "#1359", reason = "Installed in [parity]" }
-nethogs = { status = "planned", area = "cli-tools", issue = "#1359", reason = "Installed in [parity]" }
-tiptop = { status = "planned", area = "cli-tools", issue = "#1359", reason = "Installed in [parity]" }
-"/usr/bin/ptiptop" = { status = "planned", area = "cli-tools", issue = "#1359", reason = "Ships in tiptop, installed in [parity]" }
-trace-cmd = { status = "planned", area = "cli-tools", issue = "#1359", reason = "Installed in [parity]" }
-numactl = { status = "planned", area = "cli-tools", issue = "#1359", reason = "Installed in [parity]" }
-bpftop = { status = "planned", area = "cli-tools", issue = "#1359", reason = "Installed in [parity]" }
-"/usr/bin/alsaucm" = { status = "planned", area = "media", issue = "#1359", reason = "alsa-ucm-utils, installed in [parity]" }
-"/usr/bin/edid-decode" = { status = "planned", area = "graphics", issue = "#1359", reason = "Ships in v4l-utils, installed in [parity]" }
-libcamera = { status = "planned", area = "media", issue = "#1359", reason = "libcamerify from libcamera-v4l2, installed in [parity]" }
-xz = { status = "planned", area = "cli-tools", issue = "#1359", reason = "lzma and its aliases from xz-lzma-compat, installed in [parity]" }
-lz4 = { status = "planned", area = "cli-tools", issue = "#1359", reason = "Installed in [parity]" }
-sqlite = { status = "planned", area = "cli-tools", issue = "#1359", reason = "sqlite3, installed in [parity]" }
-libarchive = { status = "planned", area = "cli-tools", issue = "#1359", reason = "bsdtar, bsdcpio, bsdcat and bsdunzip, installed in [parity]" }
-xxhash = { status = "planned", area = "cli-tools", issue = "#1359", reason = "Installed in [parity]" }
-libfido2 = { status = "planned", area = "auth-security", issue = "#1359", reason = "fido2-tools, installed in [parity]" }
-"/usr/bin/pamu2fcfg" = { status = "planned", area = "auth-security", issue = "#1359", reason = "pam-u2f and pamu2fcfg installed in [parity]; PAM is left unconfigured" }
-gnutls = { status = "planned", area = "auth-security", issue = "#1359", reason = "gnutls-utils, installed in [parity]" }
-openldap = { status = "planned", area = "auth-security", issue = "#1359", reason = "openldap-clients, installed in [parity]" }
-cryptsetup = { status = "planned", area = "files-devices", issue = "#1359", reason = "integritysetup and veritysetup, installed in [parity]" }
-bindfs = { status = "planned", area = "files-devices", issue = "#1359", reason = "Installed in [parity]" }
-malcontent = { status = "planned", area = "desktop-apps", issue = "#1359", reason = "malcontent-client from malcontent-tools, installed in [parity]" }
-nfs-utils = { status = "planned", area = "network-fs", issue = "#1359", reason = "nfsiostat, mountstats and rpcctl from nfs-python-utils, installed in [parity]" }
-pam-pkcs11 = { status = "planned", area = "auth-security", issue = "#1359", reason = "Smart-card login; resolves, but its PAM wiring is decided with opensc (#1257) first" }
+pam-pkcs11 = { status = "planned", area = "auth-security", issue = "#1359", reason = "pam_pkcs11 installed in [parity] with its PAM module left unconfigured, as on Dakota and GNOME OS; pkcs11-eventmgr.service stays off by the 80-pam-pkcs11 preset; closes on the next Utah snapshot" }
 
 # What the #1359 installs leave behind: the 2026-11-25 Utah snapshot
-# (sha256:66457ed6) carries every [parity] tool above, and these commands are
-# what Dakota's element still ships beyond them. Each was probed against the
-# pinned factory and Hummingbird with `dnf repoquery --whatprovides`.
+# (sha256:66457ed6) carries every [parity] tool of that batch, and these
+# commands are what Dakota's element still ships beyond them. Each was probed
+# against the pinned factory and Hummingbird with `dnf repoquery
+# --whatprovides`.
 v4l-utils = { status = "waived", area = "media", reason = "Developer toolchain (#1263): cec-compliance, v4l2-compliance and v4l2-dbg are driver test tools in v4l-utils-devel-tools; decode_tm6000 is not packaged. v4l-utils, rc-tools and dvb-tools are installed in [parity]" }
 gstreamer = { status = "waived", area = "media", reason = "Developer toolchain (#1263): gst-tester-1.0 runs GStreamer's test suites and is not packaged. gstreamer1-plugins-base-tools is installed in [parity]" }
 iproute2 = { status = "waived", area = "networking", reason = "routel is not packaged; `ip route` covers it. tc from iproute-tc is installed in [parity]" }

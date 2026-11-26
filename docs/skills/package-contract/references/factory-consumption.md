@@ -9,6 +9,12 @@ still fail on a `Requires` that neither the factory nor Hummingbird carries.
    the same files. List the RPMs in the pinned package image
    (`repository/result/*.rpm` in its payload layer) and in Hummingbird's x86_64
    primary metadata. A name in the factory is only a preflight.
+   The factory publishes its repodata as the pinned image's first layer, so a
+   name can be confirmed without podman: fetch the image manifest from ghcr.io,
+   take `layers[0]`, and read `repodata/primary.xml.gz` (name, release,
+   requires) and `repodata/filelists.xml.gz` (the files it ships) out of it.
+   `scripts/check-repo-availability.py` reads the same layer before it resolves
+   the transaction, so a name it confirms is one the image build will resolve.
 2. **Resolve the real transaction.**
    `python3 scripts/check-repo-availability.py packages/base.toml packages/utah.toml`
    (about 20 seconds: it reads the pinned repodata layer, no RPM download).
@@ -56,6 +62,14 @@ Rules applied while choosing names:
   called `bootc loader-entries` on every profile switch and hung on the
   ostree sysroot lock, which needed a post-loaded profile workaround; PPD has
   no bootloader plugin, so that workaround is gone.
+- A PAM module package that ships no `/etc/pam.d` file needs no authselect
+  wiring: it installs the module and nothing configures it, so it stays inert
+  until an administrator does. `pam_pkcs11` is the case in point — the factory
+  builds it to GNOME OS's 0.6.14, which installs neither a PAM stack entry nor
+  an `/etc/pam_pkcs11` configuration. Utah installs it in `[parity]`, leaves
+  PAM alone, and keeps its `pkcs11-eventmgr.service` off with the
+  `80-pam-pkcs11.preset` line in `98-utah-enable-default.preset`, exactly as
+  on Dakota (#1359).
 - A `planned` triage entry for an item Utah now ships closes when
   `just baselines` refreshes the Utah snapshot; do not hand-edit the generated
   snapshot.
@@ -73,6 +87,11 @@ from `baselines/triage.toml`. Those notices are advisory, so a passing
 check does not mean the triage cleanup is complete. If the refresh is
 still in an open PR, validate the cleanup with its snapshots and land
 the refresh first; the old snapshots still require those triage entries.
+
+One refresh closes the entries of many issues at once, and each entry
+belongs to the issue that planned it. A cleanup for one issue drops that
+issue's entries and leaves the rest: the other issues close their own
+when their work lands.
 
 A waiver can also be recorded *before* the refresh that exposes the gap
 lands, and then `check` on `main` reports it under "no longer gaps"

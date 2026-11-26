@@ -332,6 +332,7 @@
         "orca",
         "pam-u2f",
         "pam_oo7",
+        "pam_pkcs11",
         "pamu2fcfg",
         "papers-libs",
         "papers-nautilus",
@@ -486,7 +487,7 @@
     }
   ],
   "totals": {
-    "installed": 429,
+    "installed": 430,
     "unavailable": 6
   },
   "unavailable": [

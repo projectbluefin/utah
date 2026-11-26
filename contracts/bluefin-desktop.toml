@@ -859,4 +859,9 @@ disabled = [
   "mdcheck_start.timer",
   "mdcheck_continue.timer",
   "mdmonitor-oneshot.timer",
+  # pam_pkcs11's card-event manager stays off, as on Dakota: its own
+  # 80-pam-pkcs11.preset disables it and 98-utah-enable-default.preset carries
+  # that line. The module is installed but PAM is left unconfigured, so the
+  # daemon has nothing to do (#1359).
+  "pkcs11-eventmgr.service",
 ]

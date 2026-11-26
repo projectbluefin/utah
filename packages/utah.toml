@@ -646,13 +646,17 @@ packages = [
     "gst-thumbnailers",
     # Command-line, device and security tools Dakota ships (#1359), measured
     # by `just baselines` on 2026-11-20 (baselines/GAP.md). The monitoring
-    # tools are the user-facing CLIs #1263 adopted. pam-u2f installs the
-    # module only; PAM is left unconfigured. pam_pkcs11 waits for the
-    # smart-card PAM decision (#1257). bpftool, newt (whiptail, and the
-    # libnewt NetworkManager-tui needs), lzip and the Dell smbios-utils
-    # arrived with factory pin c288398 (#1360). The iSCSI initiator and iSNS
-    # tools ship as on Dakota, every unit off (85-utah-desktop.preset carries
-    # Dakota's 50-iscsi.preset); umotd is waived for uwelcome.
+    # tools are the user-facing CLIs #1263 adopted. pam-u2f and pam_pkcs11
+    # install the module only; PAM is left unconfigured, as on Dakota and
+    # GNOME OS. pam_pkcs11 ships no /etc/pam.d file and no /etc/pam_pkcs11
+    # configuration, so its module stays inert until an administrator
+    # configures it, and its pkcs11-eventmgr.service stays off through
+    # Dakota's 80-pam-pkcs11.preset line in 98-utah-enable-default.preset.
+    # bpftool, newt (whiptail, and the libnewt NetworkManager-tui needs),
+    # lzip and the Dell smbios-utils arrived with factory pin c288398
+    # (#1360). The iSCSI initiator and iSNS tools ship as on Dakota, every
+    # unit off (85-utah-desktop.preset carries Dakota's 50-iscsi.preset);
+    # umotd is waived for uwelcome.
     "tealdeer",
     "nethogs",
     "tiptop",
@@ -678,6 +682,7 @@ packages = [
     "fido2-tools",
     "pam-u2f",
     "pamu2fcfg",
+    "pam_pkcs11",
     "gnutls-utils",
     "gnupg2-smime",
     "gnupg2-utils",
@@ -1255,6 +1260,7 @@ parity = [
     "libcamera-v4l2",
     "pam-u2f",
     "pamu2fcfg",
+    "pam_pkcs11",
     "bindfs",
     "malcontent-tools",
     "nfs-python-utils",
