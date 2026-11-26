@@ -22,8 +22,13 @@
 # flatpak-preinstall.service has nothing left to fetch on the installed
 # system's first boot. It runs in IMAGE with the stateroot's var/lib/flatpak
 # bind-mounted at /var/lib/flatpak, so the image's remotes.d descriptors and
-# flatpak version apply. setfiles then labels the new tree with the image's
-# file contexts: the installed system runs SELinux enforcing.
+# flatpak version apply. setfiles then labels var/lib with the image's file
+# contexts: the installed system runs SELinux enforcing. All of var/lib, not
+# only var/lib/flatpak: on a fresh stateroot the `install -d` below creates
+# var/lib too, from the host, with no label at all, and on first boot
+# systemd (init_t) is denied add_name in the unlabeled_t /var/lib, so
+# systemd-timesyncd's StateDirectory fails until start-limit-hit (Post-Testing
+# E2E run 45858480299). The build fails if /var/lib is not var_lib_t.
 #
 # Environment: UTAH_RAW_EVIDENCE (default: raw-evidence beside RAW).
 set -euo pipefail
@@ -105,11 +110,18 @@ podman run --rm --privileged --network host --security-opt label=type:unconfined
         flatpak uninstall --system --noninteractive --unused
         flatpak list --system --app --columns=application | sort >/stateroot/.utah-flatpaks-apps
         flatpak list --system --runtime --columns=ref | sort >/stateroot/.utah-flatpaks-runtimes
-        setfiles -F -r /stateroot /etc/selinux/targeted/contexts/files/file_contexts /stateroot/var/lib/flatpak
+        setfiles -F -r /stateroot /etc/selinux/targeted/contexts/files/file_contexts /stateroot/var/lib
+        for d in /stateroot/var /stateroot/var/lib /stateroot/var/lib/flatpak; do
+            echo "${d#/stateroot}: $(getfattr --absolute-names --only-values -n security.selinux "$d" | tr -d "\0")"
+        done >/stateroot/.utah-var-labels
     '
 seconds=$(( $(date +%s) - start ))
 mv "${stateroot}/.utah-flatpaks-apps" "${EVIDENCE}/flatpak-apps.txt"
 mv "${stateroot}/.utah-flatpaks-runtimes" "${EVIDENCE}/flatpak-runtimes.txt"
+mv "${stateroot}/.utah-var-labels" "${EVIDENCE}/var-labels.txt"
+cat "${EVIDENCE}/var-labels.txt"
+grep -q '^/var/lib: .*:var_lib_t:' "${EVIDENCE}/var-labels.txt" \
+    || { echo "/var/lib is not labeled var_lib_t (var-labels.txt above)" >&2; exit 1; }
 bytes=$(du -sxb "${stateroot}/var/lib/flatpak" | cut -f1)
 apps=$(wc -l <"${EVIDENCE}/flatpak-apps.txt")
 [[ ${apps} -gt 0 ]] || { echo "the bake installed no apps" >&2; exit 1; }
