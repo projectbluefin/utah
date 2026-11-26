@@ -71,11 +71,11 @@ class PromoteToTestingTests(unittest.TestCase):
 
     def test_the_job_can_write_statuses_and_stays_behind_the_full_matrix(self):
         self.assertEqual(self.job["permissions"]["statuses"], "write")
-        self.assertEqual(set(self.job["needs"]), {"resolve", "luks", "production-iso", "lifecycle", "testsuite"})
+        self.assertEqual(set(self.job["needs"]), {"resolve", "luks", "lifecycle", "testsuite"})
         # The only job condition is the lifecycle gate: every other need must
         # succeed, and lifecycle may be absent only when resolve skipped it.
         condition = self.job["if"]
-        for need in ["resolve", "luks", "production-iso", "testsuite"]:
+        for need in ["resolve", "luks", "testsuite"]:
             self.assertIn(f"needs.{need}.result == 'success'", condition)
         self.assertIn("needs.lifecycle.result == 'success'", condition)
         self.assertIn("needs.lifecycle.result == 'skipped' && needs.resolve.outputs.lifecycle == 'skip'",
@@ -124,8 +124,8 @@ class LifecycleGateTests(unittest.TestCase):
         self.assertEqual(self.resolve["outputs"]["lifecycle"], "${{ steps.baseline.outputs.lifecycle }}")
 
     def test_the_iso_installs_the_baseline_and_the_harness_stages_the_candidate(self):
-        compose = step_named(self.job, "Compose disposable debug ISO of the baseline")
-        self.assertIn('"Utah CI Live" 1 "$BASELINE_REF"', compose["run"])
+        compose = step_named(self.job, "Compose production ISO of the baseline")
+        self.assertIn('"Utah CI Live" 0 "$BASELINE_REF"', compose["run"])
         self.assertEqual(compose["env"]["BASELINE_REF"], "${{ needs.resolve.outputs.lifecycle_baseline }}")
         run = step_named(self.job, "Run the upgrade and rollback lifecycle")
         self.assertIn('lifecycle-e2e.sh "$PWD/output/utah-live.iso"', run["run"])

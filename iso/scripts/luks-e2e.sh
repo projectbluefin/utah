@@ -33,8 +33,11 @@
 # Every phase writes a PNG screenshot under the work directory, so a failure
 # can be looked at rather than guessed at.
 #
-# The live ISO must be a debug build (`just iso testing 1`): phases 2 and 3
-# drive the live environment over SSH, which only a debug ISO enables.
+# Phases 1-3 drive the live environment over SSH. On a host with vhost-vsock
+# that works on the production ISO as shipped: a per-run key reaches the
+# guest as a systemd credential and sshd answers on AF_VSOCK (see LIVE_SSH
+# below). Without host vsock support only a debug ISO (`just iso testing 1`)
+# can be reached, through its test password.
 set -euo pipefail
 
 ISO="${1:?live ISO path is required}"
@@ -98,6 +101,32 @@ SSH_PORT_INSTALLED=$((SSH_PORT + 1))
 # turns "it hung somewhere in phase 5" into something you can just look at.
 VNC_LIVE="${UTAH_E2E_VNC_LIVE:-2}"
 VNC_INSTALLED="${UTAH_E2E_VNC_INSTALLED:-3}"
+# How phases 1-3 reach the live session (#1448). One of:
+#
+#   vsock     A fresh ed25519 key, made for this run only, is handed to the
+#             guest as the systemd credential ssh.ephemeral-authorized_keys-all
+#             in an SMBIOS type 11 string, and a vhost-vsock-pci device gives
+#             the guest an AF_VSOCK address. systemd-ssh-generator (systemd
+#             >= 256) binds sshd to that address in any VM and authorizes the
+#             credential's key, so the ISO needs no password, no enabled sshd
+#             and no change at all: this is how the production (DEBUG=0) ISO
+#             is tested. The harness logs in as root, the one account sshd
+#             can read the credential's key for on every systemd version.
+#   password  The debug ISO's liveuser/live login over the forwarded TCP port.
+#   auto      Offer the guest both when the host can do vsock, and keep
+#             whichever logs in first; without host vsock support only the
+#             password route is left, which needs a debug ISO. The default.
+#
+# The route depends on the live boot entry being permissive (enforcing=0,
+# iso/scripts/build-iso.sh): on an enforcing Utah system sshd is denied the
+# credential's key (#1448). That is also why the installed disk keeps the TCP
+# login below; its account and password come from this run's installer
+# recipe, not from the image. CI pins vsock, so a runner that loses vsock
+# support fails as a missing dependency instead of quietly needing a debug ISO.
+LIVE_SSH="${UTAH_E2E_LIVE_SSH:-auto}"
+# Guest CIDs are host-wide, like ports: two VMs cannot share one.
+VSOCK_CID="${UTAH_E2E_VSOCK_CID:-$((SSH_PORT + 1000))}"
+VSOCK_KEY="${WORK}/live-vsock-key"
 # UTAH_E2E_BASELINE=1: the installed image is the lifecycle's baseline, the
 # previous :testing, which lifecycle-e2e.sh installs before upgrading it.
 # Content gates -- checks that hold the image to a rule from this checkout,
@@ -139,12 +168,83 @@ done
 ACCEL="-accel kvm"
 test -r /dev/kvm || { echo "No /dev/kvm; falling back to TCG (much slower)"; ACCEL="-accel tcg,thread=multi"; }
 
+# ssh options that reach VSOCK_CID, or VSOCK_UNSUPPORTED says why the host
+# cannot. systemd >= 256 ships a proxy that hands ssh the connected socket;
+# socat is the fallback where systemd is older.
+VSOCK_PROXY=()
+VSOCK_UNSUPPORTED=""
+if [[ ! -w /dev/vhost-vsock ]]; then
+    VSOCK_UNSUPPORTED="/dev/vhost-vsock is missing or not writable (sudo modprobe vhost_vsock, then grant this user read-write on it)"
+elif [[ -x /usr/lib/systemd/systemd-ssh-proxy ]]; then
+    VSOCK_PROXY=(-o "ProxyCommand=/usr/lib/systemd/systemd-ssh-proxy vsock/${VSOCK_CID} 22"
+                 -o ProxyUseFdpass=yes)
+elif socat -V 2>/dev/null | grep -q 'WITH_VSOCK 1'; then
+    VSOCK_PROXY=(-o "ProxyCommand=socat - VSOCK-CONNECT:${VSOCK_CID}:22")
+else
+    VSOCK_UNSUPPORTED="there is no vsock ssh proxy: install systemd >= 256 (/usr/lib/systemd/systemd-ssh-proxy) or socat built with vsock support"
+fi
+LIVE_VSOCK=0
+LIVE_PASSWORD=0
+case "${LIVE_SSH}" in
+    vsock)
+        [[ -z "${VSOCK_UNSUPPORTED}" ]] \
+            || e2e_exit "${E2E_EXIT_DEPENDENCY}" "UTAH_E2E_LIVE_SSH=vsock, but ${VSOCK_UNSUPPORTED}"
+        LIVE_VSOCK=1
+        ;;
+    password)
+        LIVE_PASSWORD=1
+        ;;
+    auto)
+        LIVE_PASSWORD=1
+        if [[ -z "${VSOCK_UNSUPPORTED}" ]]; then
+            LIVE_VSOCK=1
+        else
+            echo "No vsock route to the live guest: ${VSOCK_UNSUPPORTED}."
+            echo "Only a debug ISO's password login can reach it."
+        fi
+        ;;
+    *)
+        e2e_exit 1 "UTAH_E2E_LIVE_SSH must be auto, vsock or password, got '${LIVE_SSH}'"
+        ;;
+esac
+
 SSH_OPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
           -o LogLevel=ERROR -o ConnectTimeout=5
           -o PreferredAuthentications=password
           -o ServerAliveInterval=30 -o ServerAliveCountMax=20)
-ssh_live() { sshpass -p live ssh "${SSH_OPTS[@]}" -p "${SSH_PORT}" liveuser@127.0.0.1 "$@"; }
-scp_live() { sshpass -p live scp "${SSH_OPTS[@]}" -P "${SSH_PORT}" "$@"; }
+VSOCK_SSH_OPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+                -o LogLevel=ERROR -o BatchMode=yes -o IdentitiesOnly=yes
+                -o PreferredAuthentications=publickey -i "${VSOCK_KEY}"
+                -o ServerAliveInterval=30 -o ServerAliveCountMax=20
+                "${VSOCK_PROXY[@]}")
+# The live login the wait loop in phase 1 settled on; see use_live_route.
+LIVE_SSH_CMD=()
+LIVE_SCP_CMD=()
+LIVE_LOGIN=""
+use_live_route() {
+    case "$1" in
+        vsock)
+            LIVE_SSH_CMD=(ssh "${VSOCK_SSH_OPTS[@]}")
+            LIVE_SCP_CMD=(scp "${VSOCK_SSH_OPTS[@]}")
+            # Any name: the proxy, not DNS, decides where it connects.
+            LIVE_LOGIN="root@utah-live"
+            ;;
+        password)
+            LIVE_SSH_CMD=(sshpass -p live ssh "${SSH_OPTS[@]}" -p "${SSH_PORT}")
+            LIVE_SCP_CMD=(sshpass -p live scp "${SSH_OPTS[@]}" -P "${SSH_PORT}")
+            LIVE_LOGIN="liveuser@127.0.0.1"
+            ;;
+    esac
+}
+# One login attempt over a route. timeout bounds a proxy whose connect hangs,
+# which ConnectTimeout does not cover.
+live_route_answers() {
+    use_live_route "$1"
+    timeout 30 "${LIVE_SSH_CMD[@]}" "${LIVE_LOGIN}" true 2>/dev/null
+}
+ssh_live() { "${LIVE_SSH_CMD[@]}" "${LIVE_LOGIN}" "$@"; }
+# Remote paths are "${LIVE_LOGIN}:/path".
+scp_live() { "${LIVE_SCP_CMD[@]}" "$@"; }
 ssh_target() {
     sshpass -p "${TEST_PASSWORD}" ssh "${SSH_OPTS[@]}" \
         -p "${SSH_PORT_INSTALLED}" "${TEST_USER}@127.0.0.1" "$@"
@@ -386,11 +486,14 @@ preserve_failed_disk_diagnostics() {
 # the mapping open, so whatever held it is still in the guest now and gone
 # once QEMU is killed. iso/scripts/target-holders.sh reads metadata only.
 # Written under WORK, which CI already uploads as "*.log"; the report's
-# sections up to the journal also go to the job log. `timeout` because a
-# guest stuck in filesystem I/O must not hang the harness past its deadline.
+# sections up to the journal also go to the job log. It logs in over the
+# route phase 1 settled on (use_live_route), so the vsock route that tests
+# the production ISO gets the report too. `timeout` because a guest stuck in
+# filesystem I/O must not hang the harness past its deadline; it wraps the
+# route's command itself because timeout cannot run the ssh_live function.
 keep_target_holders() {
     local since="$1" out="${WORK}/install-target-holders-$(date +%Y%m%d-%H%M%S).log"
-    timeout 300 sshpass -p live ssh "${SSH_OPTS[@]}" -p "${SSH_PORT}" liveuser@127.0.0.1 \
+    timeout 300 "${LIVE_SSH_CMD[@]}" "${LIVE_LOGIN}" \
         "sudo bash -s -- '${since}' btrfs" < "${ROOT}/iso/scripts/target-holders.sh" > "${out}" 2>&1 || true
     sed '/^=== systemd unit activity/,$d' "${out}" >&2
     echo "  installer target holders kept (metadata only): ${out}" >&2
@@ -615,6 +718,20 @@ rm -f "${INSTALL_DISK}" "${MONITOR_LIVE}" "${MONITOR_INSTALLED}" \
 qemu-img create -f qcow2 "${INSTALL_DISK}" 64G >/dev/null
 cp -f "${OVMF_VARS_SRC}" "${VARS}"
 
+# The vsock route's key is made fresh for every run and never leaves WORK and
+# this guest's firmware tables. SMBIOS type 11 strings are how a VM receives
+# systemd credentials; restrict=on below stays, since vsock needs no network.
+LIVE_VSOCK_ARGS=()
+if (( LIVE_VSOCK )); then
+    rm -f "${VSOCK_KEY}" "${VSOCK_KEY}.pub"
+    ssh-keygen -q -t ed25519 -N "" -C "utah-e2e-live-$$" -f "${VSOCK_KEY}"
+    LIVE_VSOCK_ARGS=(
+        -device "vhost-vsock-pci,guest-cid=${VSOCK_CID}"
+        -smbios "type=11,value=io.systemd.credential.binary:ssh.ephemeral-authorized_keys-all=$(base64 -w0 <"${VSOCK_KEY}.pub")"
+    )
+    echo "  live login: per-run key over AF_VSOCK, guest CID ${VSOCK_CID}"
+fi
+
 "${QEMU}" \
     -machine q35 -cpu host -m "${VM_RAM}" -smp "${VM_CPUS}" ${ACCEL} \
     "${VGA_ARGS[@]}" \
@@ -630,29 +747,42 @@ cp -f "${OVMF_VARS_SRC}" "${VARS}"
     -monitor "unix:${MONITOR_LIVE},server,nowait" \
     -serial "file:${SERIAL_LIVE}" \
     -vnc "127.0.0.1:${VNC_LIVE}" \
+    "${LIVE_VSOCK_ARGS[@]}" \
     -daemonize -pidfile "${WORK}/live.pid"
 qemu_pids+=("$(cat "${WORK}/live.pid")")
 echo "  watch the live VM: vnc://127.0.0.1:$((5900 + VNC_LIVE))"
 
 echo "Waiting for the live environment to accept SSH..."
-for i in $(seq 1 90); do
-    if ssh_live true 2>/dev/null; then echo "Live environment is up."; break; fi
-    if [[ "$i" -eq 90 ]]; then
-        tail -40 "${SERIAL_LIVE}" >&2 || true
-        # Much the commonest cause, and it looks nothing like itself: a
-        # non-debug ISO boots perfectly and even starts sshd, but the
-        # liveuser password, PasswordAuthentication and root login are all
-        # gated behind DEBUG=1 in configure-live.sh, so every login is
-        # refused and the symptom is silence.
-        if grep -qa "Reached target.*Graphical" "${SERIAL_LIVE}" 2>/dev/null; then
-            echo "The live system reached its graphical target, so it booted fine" >&2
-            echo "and this is a login failure. Was the ISO built with debug on?" >&2
-            echo "  just iso testing 1     (plain 'just iso testing' has no ssh login)" >&2
-        fi
-        fail "no SSH from the live ISO after 7m30s"
-    fi
+LIVE_ROUTE=""
+live_wait_start=${SECONDS}
+while (( SECONDS - live_wait_start < 450 )); do
+    if (( LIVE_VSOCK )) && live_route_answers vsock; then LIVE_ROUTE=vsock; break; fi
+    if (( LIVE_PASSWORD )) && live_route_answers password; then LIVE_ROUTE=password; break; fi
     sleep 5
 done
+if [[ -z "${LIVE_ROUTE}" ]]; then
+    tail -40 "${SERIAL_LIVE}" >&2 || true
+    # Boot and login fail very differently, and the second looks nothing like
+    # itself: the guest is fine and every login is quietly refused.
+    if grep -qa "Reached target.*Graphical" "${SERIAL_LIVE}" 2>/dev/null; then
+        echo "The live system reached its graphical target, so it booted fine" >&2
+        echo "and this is a login failure." >&2
+        if (( LIVE_VSOCK )); then
+            # The vsock login needs systemd-ssh-generator's sshd-vsock.socket,
+            # the credential, and a permissive live boot (see LIVE_SSH above).
+            echo "  vsock: check the guest for sshd-vsock.socket and the" >&2
+            echo "  ssh.ephemeral-authorized_keys-all credential (systemd-creds --system list)." >&2
+        else
+            # The liveuser password, PasswordAuthentication and root login
+            # are gated behind DEBUG=1 in configure-live.sh.
+            echo "  This host has no vsock route, so only a debug ISO answers:" >&2
+            echo "  just iso testing 1     (or give this host vhost-vsock; see LIVE_SSH)" >&2
+        fi
+    fi
+    fail "no SSH from the live ISO after 7m30s"
+fi
+use_live_route "${LIVE_ROUTE}"
+echo "Live environment is up (${LIVE_ROUTE} login as ${LIVE_LOGIN%@*})."
 
 E2E_PHASE_EXIT=12
 echo "=== Phase 2/7: prove the live session reached a desktop ==="
@@ -792,7 +922,7 @@ cat > "${WORK}/recipe.json" <<EOF
   }
 }
 EOF
-scp_live "${WORK}/recipe.json" liveuser@127.0.0.1:/tmp/luks-recipe.json
+scp_live "${WORK}/recipe.json" "${LIVE_LOGIN}:/tmp/luks-recipe.json"
 
 # btrfs must be loadable in the live kernel before the installer formats the
 # root on it. The OGC kernel the gaming flavors ship is a source build whose
@@ -823,8 +953,8 @@ ssh_live 'theme=$(plymouth-set-default-theme) &&
     cp "$dir/watermark.png" /tmp/utah-plymouth-watermark.png &&
     echo "  default theme: $theme; watermark: $dir/watermark.png"' \
     || fail "the payload's default Plymouth theme has no watermark.png: the boot splash is unbranded"
-scp_live liveuser@127.0.0.1:/tmp/utah-plymouth-theme "${PLYMOUTH_THEME_FILE}"
-scp_live liveuser@127.0.0.1:/tmp/utah-plymouth-watermark.png "${PLYMOUTH_WATERMARK}"
+scp_live "${LIVE_LOGIN}:/tmp/utah-plymouth-theme" "${PLYMOUTH_THEME_FILE}"
+scp_live "${LIVE_LOGIN}:/tmp/utah-plymouth-watermark.png" "${PLYMOUTH_WATERMARK}"
 
 echo "Running the installer from the ISO's embedded payload store..."
 # The guest's clock, so the holder report's journal window starts here.

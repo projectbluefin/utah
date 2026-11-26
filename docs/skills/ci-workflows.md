@@ -36,9 +36,10 @@ post-build verification workflows, not the complete workflow inventory:
   (`just build-ghcr` refuses an override without them); ordinary builds
   retain the existing pin. Each job uses
   the verified kernel cache, canonicalizes gzip layer bytes before booting its
-  real local candidate through the unchanged offline LUKS/desktop harness,
-  and compares its installed manifest with that exact local manifest
-  and builds DEBUG=0 media. Main also runs the existing tacklebox builder
+  real local candidate's DEBUG=0 ISO through the unchanged offline
+  LUKS/desktop harness (live session over vsock), compares its installed
+  manifest with that exact local manifest, and retains that tested ISO.
+  Main also runs the existing tacklebox builder
   attestation, size and live-boot gates on local bytes. Publication follows
   these gates and rejects digest changes or existing candidate tags. The
   `candidate-manifest/candidate-manifest.json` artifact binds source commits,
@@ -135,8 +136,9 @@ post-build verification workflows, not the complete workflow inventory:
   the proposed head. The measurement step keeps the read-only job token.
 - `.github/workflows/post-testing-e2e.yml` -- successful non-PR testing builds
   explicitly dispatch this, or manually supply a successful testing build run ID.
-  Its `promote-to-testing` job needs the LUKS, production ISO and testsuite
-  jobs. Only when all pass does it record per-digest evidence and move
+  Its `promote-to-testing` job needs the LUKS jobs (which test and retain the
+  production ISO) and the testsuite. Only when all pass does it record
+  per-digest evidence and move
   `:testing` through a monotonic ratchet; a red testsuite leg blocks
   promotion, with no override (#1329). The promotion to `main` sets
   `run_e2e: false`; the release gate requires that evidence for the exact

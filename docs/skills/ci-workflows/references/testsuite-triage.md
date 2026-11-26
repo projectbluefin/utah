@@ -7,7 +7,7 @@ not harness bugs. Triage in this order; each step names where its evidence
 lives.
 
 The testsuite matrix gates promotion (#1329): `promote-to-testing` needs
-`resolve`, `luks`, `production-iso`, `lifecycle` and `testsuite`, so one red
+`resolve`, `luks`, `lifecycle` and `testsuite`, so one red
 leg leaves `:testing` where it is and records no E2E evidence for the run's
 digests. `:stable` only releases digests that carry that evidence. There is
 no override: fix the image, or fix or scope the scenario upstream.

@@ -123,10 +123,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y podman skopeo uidmap slirp4netns fuse-overlayfs acl \
             squashfs-tools xorriso dosfstools mtools qemu-system-x86 qemu-utils \
-            ovmf sshpass ffmpeg tesseract-ocr
+            ovmf sshpass socat ffmpeg tesseract-ocr
           test -c /dev/kvm
           sudo setfacl -m "u:$(id -u):rw" /dev/kvm
           test -r /dev/kvm && test -w /dev/kvm
+          # The LUKS harness logs in to the production ISO's live session over
+          # AF_VSOCK with a per-run key (its LIVE_SSH setting).
+          sudo modprobe vhost_vsock
+          sudo setfacl -m "u:$(id -u):rw" /dev/vhost-vsock
+          test -w /dev/vhost-vsock
           mkdir -p output evidence
           podman load --input "$RUNNER_TEMP/common.oci.tar"
       - name: Run native source and package contracts
@@ -179,13 +184,14 @@ jobs:
           rm -rf "$canonical"
           sha256sum evidence/payload-manifest.json > evidence/payload-manifest.sha256
           just check-desktop-contract "$local_ref"
-      - name: Compose local offline debug ISO
+      # DEBUG=0: the media retained below is these tested bytes, not a rebuild.
+      - name: Compose local production ISO
         env:
           UTAH_ISO_WORKDIR: ${{ runner.temp }}
         run: |
           set -euo pipefail
           ref=$(cat evidence/local-ref.txt)
-          bash iso/scripts/build-iso.sh "$ref" "$PWD/output/utah-live.iso" "Utah Candidate Live" 1 "$ref" 2>&1 | tee evidence/iso-build.log
+          bash iso/scripts/build-iso.sh "$ref" "$PWD/output/utah-live.iso" "Utah Candidate Live" 0 "$ref" 2>&1 | tee evidence/iso-build.log
       - name: Verify LUKS offline install and graphical desktop against local bytes
         env:
           UTAH_E2E_WORK: ${{ runner.temp }}/utah-luks-e2e
@@ -195,19 +201,12 @@ jobs:
           UTAH_E2E_CPUS: "2"
           UTAH_E2E_EXPECT_FLAVOR: ${{ matrix.flavor }}
           UTAH_E2E_README: none
+          UTAH_E2E_LIVE_SSH: vsock
         run: |
           set -euo pipefail
           bash iso/scripts/luks-e2e.sh "$PWD/output/utah-live.iso" "$(cat evidence/local-ref.txt)" 2>&1 | tee evidence/luks-test.log
           test "$(jq -r .status.booted.image.imageDigest "$UTAH_E2E_WORK/bootc-status.json")" = "sha256:$(cut -d ' ' -f1 evidence/payload-manifest.sha256)"
           cp "$UTAH_E2E_WORK/bootc-status.json" evidence/
-          rm output/utah-live.iso
-      - name: Compose production ISO from the same local candidate
-        env:
-          UTAH_ISO_WORKDIR: ${{ runner.temp }}
-        run: |
-          set -euo pipefail
-          ref=$(cat evidence/local-ref.txt)
-          bash iso/scripts/build-iso.sh "$ref" "$PWD/output/utah-live.iso" "Utah Candidate Live" 0 "$ref" 2>&1 | tee evidence/production-iso.log
           (cd output && sha256sum utah-live.iso > utah-live.iso.sha256)
       - name: Verify main local tacklebox ISO and live boot
         if: matrix.flavor == 'main'
@@ -258,7 +257,7 @@ jobs:
           name: candidate-image-${{ matrix.flavor }}
           path: evidence/candidate-image.json
           if-no-files-found: error
-      - name: Retain diagnostics without debug media or test disks
+      - name: Retain diagnostics without test disks
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:

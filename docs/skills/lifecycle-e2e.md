@@ -132,7 +132,10 @@ booted deployment and fails closed rather than falling back to `bootc switch`.
 Passing a live ISO instead of an installed disk runs the LUKS install harness
 first; `UTAH_E2E_WORK` overrides where that install phase writes its disk.
 The harness drives the guest over SSH as the `utahtest` password account the
-installer provisions, so it defaults to the debug ISO (`just iso testing 1`).
+installer provisions, so it defaults to the live ISO. The install phase reaches
+a production ISO (`just iso testing`) over vsock when the host has a writable
+`/dev/vhost-vsock`, and otherwise needs the debug ISO (`just iso testing 1`);
+see [local-testing](local-testing.md#encrypted-install-and-screenshot-harness).
 The disk from `just generate-bootable-image` has no such account and cannot be
 used directly. An installed disk may be passed instead when it carries that
 account; its image format is detected before the overlay is created, so raw
@@ -165,7 +168,7 @@ just lifecycle-test ghcr.io/projectbluefin/utah@sha256:<candidate-digest>
 
 CI runs this harness on every testing build: the `lifecycle` job in
 `post-testing-e2e.yml` installs the digest `:testing` served before the run
-from a debug ISO and stages the run's `utah` digest, and `promote-to-testing`
+from a production ISO and stages the run's `utah` digest, and `promote-to-testing`
 needs it, so a failed lifecycle blocks promotion. It is skipped, never passed,
 when `:testing` already serves the candidate. Evidence lands in the
 `lifecycle-<image>-<backend>` run artifact. See

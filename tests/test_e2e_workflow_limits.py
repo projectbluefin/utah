@@ -45,7 +45,7 @@ class NetworkStepTimeoutTests(unittest.TestCase):
 
 class RetentionTests(unittest.TestCase):
     def test_production_isos_are_kept_for_days_not_a_month(self):
-        upload = next(s for s in JOBS["production-iso"]["steps"] if s.get("name") == "Retain production ISO")
+        upload = next(s for s in JOBS["luks"]["steps"] if s.get("name") == "Retain the tested production ISO")
         self.assertLessEqual(upload["with"]["retention-days"], 3)
 
 

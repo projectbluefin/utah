@@ -54,7 +54,7 @@ Once `boot-vm` confirms the desktop boots, the rest of the adopted gates run
 locally too:
 
 ```bash
-just iso testing 1              # build a debug live ISO (needed for luks-test)
+just iso testing                # build the live ISO (luks-test needs `just iso testing 1` without /dev/vhost-vsock)
 just boot-iso                   # boot the live session and confirm the installer is there
 just luks-test                  # install to an encrypted disk over SSH, boot it, log in
 just try-installed              # re-boot the disk luks-test installed, with a browser console
