@@ -338,16 +338,19 @@ build-ghcr base_name stream flavor kernel_pin="":
       # The reusable builder runs this via sudo, whose secure_path drops tools
       # installed through GITHUB_PATH. Bootstrap a checksummed binary outside
       # the context in CI and invoke it by absolute path; local builds require it.
+      # Keep this the version sigstore/cosign-installer gives kernel_cache:
+      # cosign 3 signs in the bundle format stored as an OCI referrer, which
+      # cosign 2 cannot see ("no signatures found").
       cosign_bin="$(command -v cosign || true)"
       if [ "${GITHUB_ACTIONS:-false}" = true ]; then
         case "$(uname -m)" in
-          x86_64) cosign_arch=amd64; cosign_sha=064954c5d8c7e3b28188eee5b1727b31c411550bc5fefd41aa672d3c761d103a ;;
-          aarch64) cosign_arch=arm64; cosign_sha=56a16480bdd56ec789abaa65924402f6b92c0041f06885995853c05567b76f34 ;;
+          x86_64) cosign_arch=amd64; cosign_sha=424e2c97d0b45fd7a6b608a87f090f35633f4c23ece5f092d48bba11aaf4bbfa ;;
+          aarch64) cosign_arch=arm64; cosign_sha=ade83b7aac62e131cacfe96d958948b2150cc9efec46a570a2649b8e27dedad2 ;;
           *) echo "Unsupported cosign architecture" >&2; exit 1 ;;
         esac
         cosign_bin="${RUNNER_TEMP:?}/utah-tools/cosign"
         mkdir -p "${cosign_bin%/*}"
-        curl -fsSL "https://github.com/sigstore/cosign/releases/download/v2.6.1/cosign-linux-${cosign_arch}" -o "$cosign_bin"
+        curl -fsSL "https://github.com/sigstore/cosign/releases/download/v3.1.4/cosign-linux-${cosign_arch}" -o "$cosign_bin"
         echo "${cosign_sha}  ${cosign_bin}" | sha256sum --check --strict
         chmod 0755 "$cosign_bin"
       fi
