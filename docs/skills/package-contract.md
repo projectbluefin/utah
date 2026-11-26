@@ -73,13 +73,11 @@ installing the Fcitx daemon. Keep the base manifest's Mozc and Unikey.
 Do not treat a published engine RPM as installable on its own: `ibus-anthy`
 needs Kasumi, `ibus-typing-booster` needs `cldr-emoji-annotation`, and
 `ibus-rime` needs `brise` and the OpenCC library through `librime`.
-Kasumi is in the pinned factory, so `ibus-anthy` ships. The other two wait on
-packages no enabled repository carries, so they sit in `[unavailable]` with
-their tracking issue, where the gate watches them: when the factory publishes
-the missing package, the gate fails and the engine moves into `[parity]`.
-That tracking issue stays open while the engines are only recorded, not
-installed: an `[unavailable]` entry is a record of the gap, and closing the
-issue while the two engines are still missing hides the work that is left.
+The pinned factory provides both Kasumi and `cldr-emoji-annotation`, so Anthy
+and Typing Booster are in the install contract. Rime remains in `[unavailable]`:
+the published engine requires `brise`, which no enabled repository provides.
+Keep #1256 open until the Rime transaction resolves and the engine moves into
+`[parity]`.
 
 ## Wi-Fi documentation currency
 
@@ -97,8 +95,7 @@ hardware establishes that its radio works.
 enables". That covers a name no enabled repository carries, and a name the
 factory publishes but Utah cannot install, because the repository policy
 excludes it (`grub2-efi-x64-cdboot`) or because a package it requires is
-published nowhere (`ibus-typing-booster` needs `cldr-emoji-annotation`,
-`ibus-rime` needs `brise`).
+published nowhere (`ibus-rime` needs `brise`).
 It covers both kinds of parity gap: names in `base.toml`, and names a measured
 image ships outside that manifest (Dakota's gaps are triaged in
 `baselines/triage.toml`; `nss-mdns` came from the retired Bluefin image
@@ -403,8 +400,8 @@ describe the same image as its `surface.tsv`; after a refresh,
 [remove resolved triage entries](package-contract/references/factory-consumption.md#closing-baseline-gaps).
 
 Current counts, per the README "Parity with Dakota" section: 57 base manifest
-packages installed, 372 Utah additions (GNOME 51, base-image parity, device
-firmware, desktop services), 6 genuinely unavailable. After changing a manifest,
+packages installed, 373 Utah additions (GNOME 51, base-image parity, device
+firmware, desktop services), 5 genuinely unavailable. After changing a manifest,
 run `python3 scripts/generate-site-data.py`, then
 `python3 scripts/check-doc-counts.py --write` to refresh both documents.
 `just check` validates the inventory and both sets of counts.

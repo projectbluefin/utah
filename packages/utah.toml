@@ -210,15 +210,15 @@ packages = [
     "langpacks-fonts-en",
     # Input methods also shipped by Dakota (#1256). Keep the base manifest's
     # Mozc and Unikey engines: removing them would drop existing language support.
-    # Anthy's dictionary tool (kasumi-unicode) is now in the pinned factory.
-    # Typing Booster and Rime are the two Dakota engines the factory cannot
-    # install yet, so they are recorded as parity debt in [unavailable] until
-    # it publishes cldr-emoji-annotation and brise.
+    # The pinned factory supplies Anthy's dictionary tool (kasumi-unicode)
+    # and Typing Booster's emoji data (cldr-emoji-annotation).
+    # Rime still needs brise; see [unavailable].
     "anthy-unicode",
     "ibus-anthy",
     "fcitx5-gtk",
     "ibus-hangul",
     "ibus-libpinyin",
+    "ibus-typing-booster",
     "libhangul",
     "libpinyin",
     "m17n-db",
@@ -925,14 +925,10 @@ packages = [
 #   it (it is Bluefin parity). Returns when utah-packages#238 publishes a grub2
 #   built with efi_vendor=fedora. Tracked by #253.
 #
-# ibus-typing-booster, ibus-rime
-#   Dakota's emoji-predicting engine and its Rime engine. The factory builds
-#   both, but neither can be installed from the enabled repositories:
-#   ibus-typing-booster requires cldr-emoji-annotation, whose recipe fails its
-#   self-test until utah-packages#1294 lands, and ibus-rime requires brise,
-#   which has no factory recipe at all. Recorded here as documented debt, so
-#   the gate below fires the moment the factory publishes the missing
-#   packages and a human can move them into [parity].
+# ibus-rime
+#   The factory builds Dakota's Rime engine, but it requires brise, which
+#   neither enabled repository provides. Move it into [parity] once the
+#   pinned repositories can resolve it.
 #   Tracked by #1256.
 #
 # pipewire-libs-extra is supplied by the pinned September 10 factory candidate
@@ -940,7 +936,6 @@ packages = [
 packages = [
     "grub2-efi-x64-cdboot",
     "anaconda-live",
-    "ibus-typing-booster",
     "firefox",
     "ibus-rime",
     "slitherer",
@@ -1103,6 +1098,7 @@ parity = [
     "totem-pl-parser",
     "gstreamer1-plugin-openh264",
     "openh264",
+    "ibus-typing-booster",
     # Bluefin tools consumed from the pinned factory (#263, #388, #392).
     "power-profiles-daemon",
     "thermald",
