@@ -144,7 +144,22 @@ NetworkManager wrote its own file into the 0700 one, and resolved logged
 "Failed to open /etc/resolv.conf: Permission denied" on every live and
 installed boot (run 44923414875). `build-raw-image.sh` removes them when
 empty, and the E2E fails a boot that logs it. The live session also skips
-`flatpak-preinstall.service`: it would download into the RAM overlay.
+`flatpak-preinstall.service`: it would download into the RAM overlay. It
+skips `ublue-booted-image.service` too: the live medium is not a bootc host,
+`bootc status` (root included) remounts `/sysroot` read-write first, and the
+live root's read-only overlay refuses that ("overlay: No changes allowed in
+reconfigure"), so the unit failed every live boot (run 45918946265). Its
+`/run/ublue-os/booted-image` is optional: fastfetch falls back to
+`image-info.json`.
+
+The live user's installer grants come from
+`50-utah-live-gnome-setup.rules`, by user name. gnome-setup's own
+`20-gnome-setup.rules` would grant them when polkitd's
+`cat /run/gnomeos/is-live` succeeds, but polkitd's cat runs as
+`policykit_t`, which SELinux denies reading a `var_run_t` file: the marker
+granted nothing and logged an AVC denial per authorization check (run
+45918946265), so `utah-live-setup` does not create it. Without it the cat
+fails with ENOENT and no denial, as on installed systems.
 
 bootc labels the `/boot` filesystem root only on its ostree path, and
 nothing labels the `/boot/efi` mountpoint or the live entry the build writes

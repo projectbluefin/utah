@@ -69,11 +69,9 @@ install -d /etc/xdg/autostart /usr/local/share/applications
 # The app-grid/dock entry exists only in live sessions: the image keeps the
 # desktop files out of /usr/share/applications (installed systems must not
 # offer an installer), and /usr/local is writable here (overlay).
-# gnome-setup's systemd-repart definitions (sources: this medium) and
-# GNOME OS's live marker, which gnome-setup's polkit rule reads.
+# gnome-setup's systemd-repart definitions (sources: this medium). No GNOME
+# OS live marker (/run/gnomeos/is-live): see 50-utah-live-gnome-setup.rules.
 /usr/libexec/utah-live-definitions
-install -d /run/gnomeos
-touch /run/gnomeos/is-live
 cat >/etc/xdg/autostart/utah-gnome-setup.desktop <<'EOF'
 [Desktop Entry]
 Type=Application
