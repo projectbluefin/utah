@@ -78,7 +78,7 @@ the base image's kernel (Koji's copy signed with the Fedora 44 key, also
 checked against a recorded SHA-256) with `packages/kernel-patches/*.patch`
 concatenated into the spec's `linux-kernel-test.patch` hook. Base variant only:
 no debug kernels, debuginfo, UKI, tools or headers. The release gains
-`.1.utah1` (`7.3.4-200.1.utah1.fc44`), which sorts above Fedora's build and
+`.1.utah1` (`7.3.5-200.1.utah1.fc44`), which sorts above Fedora's build and
 below any later one.
 
 Koji deletes the signed copy once a newer kernel supersedes it (7.3.3's was

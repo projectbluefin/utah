@@ -22,7 +22,7 @@ re-check.
 | --- | --- | --- | --- |
 | `shimx64.efi` (`shim-x64` 16.1-7, Fedora) | all, installed | Microsoft UEFI CA 2011 | OK |
 | `grubx64.efi` (`grub2-efi-x64` 2.12-66.fc44, Fedora) | all, installed | Fedora Secure Boot CA 20250530 | OK |
-| Kernel `7.3.4-200.1.utah1.fc44` (inventoried as 7.3.3, same rebuild path; Fedora SRPM rebuilt with the btrfs fix, `scripts/install-fedora-kernel.sh`) | all | pesign's **Red Hat Test Certificate** | **refused by shim** |
+| Kernel `7.3.5-200.1.utah1.fc44` (inventoried as 7.3.3, same rebuild path; Fedora SRPM rebuilt with the btrfs fix, `scripts/install-fedora-kernel.sh`) | all | pesign's **Red Hat Test Certificate** | **refused by shim** |
 | In-tree modules of that kernel | all | the rebuild's own per-build key | follow the kernel |
 | OGC kernel `7.1.8-ogc1` (`scripts/install-ogc-kernel.sh`) | gaming, nvidia-gaming | none; `CONFIG_MODULE_SIG` unset | **refused by shim** |
 | NVIDIA open `nvidia*.ko` 595.99.02 (`scripts/install-nvidia.sh`) | nvidia, nvidia-gaming | none | **refused by lockdown** |
