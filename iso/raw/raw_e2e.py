@@ -149,6 +149,10 @@ OVERVIEW_DIAG = (
     "/usr/share/gnome-shell/extensions/dash-to-dock@micxgx.gmail.com/docking.js 2>&1; "
     "echo '== session journal'; journalctl --user -b --no-pager -o short-monotonic 2>&1 "
     "| grep -iE 'gnome-shell|extension|dock|overview' | head -300; true")
+# patches/dash-to-dock's module flag: an image without it predates the
+# startup-overview fix, so check_no_startup_overview records but does not enforce.
+DOCK_JS = "/usr/share/gnome-shell/extensions/dash-to-dock@micxgx.gmail.com/docking.js"
+DOCK_PATCH_MARKER = "startupOverviewHandled"
 # GNOME Shell's overview state on the session bus; format with ("Get", "") or
 # ("Set", " '<false>'").
 OVERVIEW_ACTIVE = ("gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell "
@@ -2042,8 +2046,9 @@ class Harness:
                 if seen:
                     break
                 if welcome_dialog_showing(ocr):
-                    log("  GNOME Shell welcome dialog is showing; pressing Skip")
-                    self.key("ret")
+                    # Escape is the dialog's Skip key; Return (Take Tour) left it up in run 46065121091.
+                    log("  GNOME Shell welcome dialog is showing; pressing Escape (Skip)")
+                    self.key("esc")
                     time.sleep(3)
                 time.sleep(5)
         finally:
@@ -2176,12 +2181,16 @@ class Harness:
         self.wait_user_shell()
 
     def check_no_startup_overview(self, phase, runner):
-        """Record whether GNOME starts on the desktop or in the Activities overview.
+        """GNOME starts on the desktop, not in the Activities overview (common's
+        disable-overview-on-startup plus patches/dash-to-dock). The dock may close the
+        overview a few seconds in, so poll for 20 s.
 
-        Recorded, not enforced: with patches/dash-to-dock in :testing (4e9f57eb) the live
-        session still started in the overview (run 46064303673), so failing here only
-        blocked every installer run. It fails again once a fix is proven on a booted
-        image. The dock may close the overview a few seconds in, so poll for 20 s."""
+        Enforced only on an image that carries the patch: a pull request builds its medium
+        from the :testing digest pinned in iso/raw/Containerfile, which can predate it
+        (overview-live.txt in run 46071542116: patch 0, overview up). On the patched
+        candidate (4e9f57eb, Post-Testing run 46065121091) every live and first-boot
+        login started on the desktop."""
+        patched = DOCK_PATCH_MARKER in runner(f"grep -o {DOCK_PATCH_MARKER} {DOCK_JS} || true")
         end = time.time() + 20
         while True:
             try:
@@ -2193,13 +2202,15 @@ class Harness:
             time.sleep(2)
         problems = [] if active is False else [
             "the session started in the Activities overview" if active is True else f"OverviewActive {active}"]
-        self.results.check(phase, "startup overview", problems)
+        self.results.check(phase, "startup overview", problems if patched else [])
         log(f"  {phase}: startup overview: {'; '.join(problems) or 'ok'}"
-            + (" (recorded, not enforced)" if problems else ""))
+            + ("" if patched or not problems else " (image predates patches/dash-to-dock; not enforced)"))
         if problems:
             # Why the dock did not keep it closed: the key, the extension's state, the
             # patch in the image, and the session's journal (extension enable order).
             self.save(f"overview-{slug(phase)}.txt", runner(OVERVIEW_DIAG))
+            if patched:
+                raise Fail(f"{phase}: {problems[0]} although the image carries patches/dash-to-dock")
 
     def close_overview(self):
         """Leave the overview GNOME Shell opens at login, checked through its D-Bus property.
@@ -2231,7 +2242,11 @@ class Harness:
 
     def desktop_and_status(self, phase, prefix):
         self.check_no_startup_overview(phase, self.user_runner(USER))
-        # Close Shell's first-login welcome dialog (and any overview) over the desktop.
+        # Shell's first-login welcome dialog opens at startup-complete over the desktop.
+        # Escape is its Skip key; before the overview stayed closed, close_overview's
+        # Escape dismissed it by accident, and fastfetch then ran under it (run 46065121091).
+        self.key("esc")
+        time.sleep(3)
         self.close_overview()
         self.shot(f"{prefix}-desktop", f"{phase}: GNOME desktop for {USER}", True, required=True)
         status = self.ssh("root", "bootc status", check=False)

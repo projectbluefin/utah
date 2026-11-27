@@ -71,13 +71,23 @@ file is in projectbluefin/dakota `patches/dash-to-dock/`. The build applies it
 with `git apply` before `make`, so a submodule bump it no longer fits fails the
 build; `test_dash_to_dock_patches_apply_to_the_pinned_submodule` catches that
 first. The image-installer E2E reads `OverviewActive` at the live login and at
-each installed login (`check_no_startup_overview`, 20 s) and records it.
+each installed login (`check_no_startup_overview`, 20 s). It fails only on an
+image whose `docking.js` carries the patch (`startupOverviewHandled`) and
+otherwise records the result, saving `evidence/overview-<phase>.txt` (the key,
+`gnome-extensions info`, the patch count, the session journal) whenever the
+overview is up.
 
-**Not fixed yet.** With the patch in `:testing` (`4e9f57eb`) the live session
-still started in the overview (run 46064303673): in its journal GNOME Shell
-started at 18.2 s, extensions were enabled at about 28-29 s, and the overview
-was still up at about 37 s. The check is recorded, not enforced, until a fix is
-proven on a booted image; enforcing it blocked every installer run.
+Evidence: on the patched candidate `4e9f57eb` (Post-Testing run 46065121091)
+every live and first-boot login started on the desktop. A pull request builds
+its medium from the `:testing` digest pinned in `iso/raw/Containerfile`, which
+can predate the patch: run 46071542116's `overview-live.txt` shows the key
+`true`, dash-to-dock `ACTIVE`, patch count `0`, and the overview up. (Run
+46064303673 was read as "the patch does not work" for the same reason.)
+
+With the overview closed, Shell's first-login welcome dialog ("Take Tour") is
+no longer dismissed by the Escape meant for the overview, and it covered the
+fastfetch terminal (run 46065121091). The harness presses Escape (its Skip key)
+once at every desktop login.
 
 ## Checking an image or a machine
 
