@@ -248,6 +248,19 @@ class WorkflowTests(unittest.TestCase):
     def test_deployment_is_not_cancelled_mid_upload(self):
         self.assertIn("cancel-in-progress: false", self.workflow)
 
+    def test_deployment_retries_without_reuploading(self):
+        # deploy-pages can miss an artifact finalized moments earlier
+        # (actions/deploy-pages#451). Only the deploy may repeat: a second
+        # upload makes every later lookup fail on two artifacts.
+        self.assertEqual(self.workflow.count("actions/upload-pages-artifact@"), 1)
+        self.assertGreater(self.workflow.count("actions/deploy-pages@"), 1)
+        last = self.workflow.rsplit("actions/deploy-pages@", 1)[1]
+        self.assertNotIn("continue-on-error", last)
+        url = re.search(r"url: (\$\{\{.*\}\})", self.workflow).group(1)
+        for step in re.findall(r"- id: (deploy\w*)", self.workflow):
+            with self.subTest(step=step):
+                self.assertIn(f"steps.{step}.outputs.page_url", url)
+
 
 class ScriptBehaviourTests(unittest.TestCase):
     """Execute the page's own functions instead of reading them.
