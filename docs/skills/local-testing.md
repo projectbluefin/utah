@@ -1,7 +1,7 @@
 ---
 name: local-testing
 version: "1.0"
-last_updated: "2026-11-26"
+last_updated: "2026-11-27"
 id: local-testing
 one_line_purpose: Build, install, and boot Utah locally in a VM or with the gnome-setup install medium.
 entry_point: docs/skills/local-testing.md
@@ -144,7 +144,13 @@ sudo just medium testing                 # -> output/medium.raw
 ```
 
 Boot `output/medium.raw` read-only next to a blank target disk of at least 48
-GB, or write it to a USB stick. Build, VM steps, the CI harness
+GB, or write it to a USB stick: `sudo dd if=output/medium.raw of=/dev/sdX
+bs=4M status=progress conv=fsync`, or GNOME Disks' "Restore Disk Image". The
+published `utah-installer-latest.raw.xz` (README) goes onto a stick the same
+way: Fedora Media Writer ("Select .iso file", then the `.raw.xz`; it
+decompresses xz itself), GNOME Disks, Impression, or
+`xz -dc utah-installer-latest.raw.xz | sudo dd of=/dev/sdX bs=4M status=progress conv=fsync`.
+Ventoy and legacy BIOS are unsupported. Build, VM steps, the CI harness
 (`iso/raw/raw_e2e.py`: live boot, GUI install, TPM2 and recovery-key unlock,
 gnome-initial-setup, `bootc switch` and `rollback`), its installed-system
 checks (`iso/scripts/e2e-services.sh` and the others it runs in the guest:
