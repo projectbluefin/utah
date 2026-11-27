@@ -36,6 +36,39 @@ failed units and denials fail a boot. The medium and disks carry test
 credentials and are never uploaded. Details:
 [image-installer](../../local-testing/references/image-installer.md).
 
+### A live session that cannot draw the installer
+
+Stage 2 waits for gnome-setup's first page through AT-SPI. Sometimes the live
+session never gets that far, and the harness used to say only "no buttons,
+check boxes or labels" and "first setup page never appeared in setup" (run
+45927940366, attempt 1, 2026-11-27: the same digest passed its attempt 2, and
+the mirror in `projectbluefin/dakota-iso` run 46036916466 failed the same
+way).
+
+What the guest's journal shows there: the session drew its desktop
+(`01-live-session.png`), then gnome-shell stopped logging about a second after
+it registered the display with GDM, the accessibility registry declared it
+unresponsive and disabled it (`Disabling unresponsive app with pid 2233`),
+and the session's two desktop portal units, started at the same moment, were
+killed with "start operation timed out". gnome-setup, autostarted into the
+session a moment earlier, blocked on its first portal call ("Cannot get portal
+org.freedesktop.host.portal.Registry version: Timeout was reached") and never
+opened a window, so the accessibility bus listed no application at all. The
+portal is the victim, not the cause: the shell stopped first. Why the shell
+stopped is not in the journal, which is why the coredumps matter.
+
+The harness now says so instead of guessing. While it waits for the first
+page it asks the guest whether the session's portal units failed; a portal
+that failed is given `PORTAL_GRACE` seconds to come back (the installer can
+open its window without a portal) and the stage then fails with the reason
+rather than running out its whole 300 s budget. Every stage-2 failure also
+writes `evidence/live-session-failure.txt`: the session's portal and
+accessibility units with their results and journal, the shell's and the
+installer's process state (including the shell's kernel stack), the system's
+coredumps (`coredumpctl list`, `coredumpctl info` for gnome-shell and
+gnome-setup), and the applications the accessibility bus lists. The whole
+boot's journal is still saved as `journal-failure.txt`.
+
 `promote-to-testing` needs `gnome-setup` and `testsuite` for every flavor
 (#1329, #1569): a red or skipped leg skips it, so nothing is recorded and no
 tag moves. Then it runs the ratchet described next. The job switches to an

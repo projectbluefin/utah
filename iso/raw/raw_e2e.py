@@ -66,6 +66,14 @@ Reuses iso/scripts/qemu_monitor.py, plymouth-prompt.py and luks-unlock.py on
 the host, extension-state.sh and fastfetch-ocr-match.sh for the decisions,
 and runs e2e-services.sh, verify-installed-flavor.py, verify-countme-runtime.sh
 and scripts/verify-desktop-contract.py in the guest (copied to GUEST_SCRIPTS).
+
+A stage that fails collects the evidence for it. The installer stage also
+writes the live session's desktop state (evidence/live-session-failure.txt):
+the session's portal and accessibility units with their results and journal,
+the shell's and the installer's process state, the system's coredumps and the
+applications the accessibility bus lists. A session whose desktop portal
+failed cannot show the installer at all, and the stage says so instead of
+waiting out its whole budget.
 """
 
 import argparse
@@ -192,6 +200,28 @@ ISO_BOOT_FACTS = (
 )
 
 
+# The live session's desktop stack. gnome-setup asks the session's desktop
+# portal for its version before it opens a window, so a session whose portal
+# never starts cannot show the installer at all: in run 45927940366 (attempt
+# 1) both portal units failed with "start operation timed out" and the
+# installer's window never appeared.
+SESSION_PORTAL_UNITS = ("xdg-desktop-portal.service", "xdg-desktop-portal-gnome.service")
+SESSION_UNITS = ("xdg-desktop-portal.service", "xdg-desktop-portal-gnome.service",
+                  "xdg-desktop-portal-gtk.service", "xdg-permission-store.service",
+                  "at-spi2-registryd.service", "gnome-shell.service", "gnome-shell-x11.service")
+# The live session's user manager. `systemctl --user` needs the session bus
+# and the runtime directory; without XDG_RUNTIME_DIR it answers "Failed to
+# connect to bus" and the report comes back empty, which reads as no failure.
+SESSION_ENV = ("export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus "
+               "XDG_RUNTIME_DIR=/run/user/$(id -u)")
+# systemctl's Result values that mean the unit did not come up.
+FAILED_UNIT_RESULTS = ("timeout", "exit-code", "failure", "signal", "core-dump", "watchdog")
+# How often the stage-2 wait asks the guest whether the session can still
+# draw the installer, and how long a failed portal is given to come back.
+SESSION_CHECK_EVERY = 15
+PORTAL_GRACE = 90
+
+
 def parse_failed_units(text):
     """Unit names from `systemctl --failed --no-legend --plain` output."""
     units = []
@@ -200,6 +230,72 @@ def parse_failed_units(text):
         if words and "." in words[0]:
             units.append(words[0])
     return units
+
+
+def failed_session_units(report):
+    """The units a `systemctl show` report marks as failed.
+
+    The report is one block per unit: an `Id=` line and the properties that
+    follow it. A unit that is still activating carries no Result yet.
+    """
+    blocks, block = [], None
+    for line in (report or "").splitlines():
+        key, _, value = line.partition("=")
+        if key == "Id":
+            block = {"Id": value.strip()}
+            blocks.append(block)
+        elif block is not None and key in ("ActiveState", "SubState", "Result"):
+            block[key] = value.strip()
+    return [b["Id"] for b in blocks
+            if b.get("ActiveState") == "failed" or b.get("Result") in FAILED_UNIT_RESULTS]
+
+
+def portal_state_command():
+    """The guest command that reports the session portal's unit results.
+
+    It carries the live session's environment with it: `systemctl --user`
+    needs the session bus and the runtime directory, or it answers "Failed to
+    connect to bus" and the report comes back empty, which reads as no
+    failure at all.
+    """
+    units = " ".join(shlex.quote(unit) for unit in SESSION_PORTAL_UNITS)
+    return (f"{SESSION_ENV}; systemctl --user show {units} "
+            "-p Id -p ActiveState -p SubState -p Result 2>&1 || true")
+
+
+def session_state_command():
+    """The guest command that prints the live session's desktop state.
+
+    Every part is best effort: a missing unit, an unreadable /proc file or a
+    coredumpctl without a dump must not stop the report, so each block ends
+    with `|| true`. The live session's environment comes with it, so
+    `systemctl --user` and `journalctl --user` reach the session's manager.
+    """
+    units = " ".join(shlex.quote(unit) for unit in SESSION_UNITS)
+    return SESSION_ENV + "; " + "; ".join((
+        "echo '== session units'",
+        f"systemctl --user list-units --all --no-pager --plain {units} 2>&1 || true",
+        "echo '== unit results'",
+        f"systemctl --user show {units} -p Id -p ActiveState -p SubState -p Result 2>&1 || true",
+        "echo '== unit journal'",
+        "journalctl --user -b --no-pager -o short-monotonic -u 'xdg-desktop-portal*' "
+        "-u 'at-spi2-registryd.service' -u 'gnome-shell*' 2>&1 | tail -n 200 || true",
+        "echo '== processes'",
+        "ps -o pid,ppid,stat,wchan:24,etime,cmd -C gnome-shell -C gnome-setup 2>&1 || true",
+        "echo '== shell state'",
+        "for p in $(pgrep -x gnome-shell); do echo \"-- gnome-shell $p\"; "
+        "grep -E '^(State|Threads)' /proc/$p/status 2>&1 || true; "
+        "echo \"wchan: $(cat /proc/$p/wchan 2>/dev/null)\"; "
+        "sudo cat /proc/$p/stack 2>&1 || true; done",
+        "echo '== installer state'",
+        "for p in $(pgrep -x gnome-setup); do echo \"-- gnome-setup $p\"; "
+        "grep -E '^(State|Threads)' /proc/$p/status 2>&1 || true; "
+        "echo \"wchan: $(cat /proc/$p/wchan 2>/dev/null)\"; done",
+        "echo '== coredumps'",
+        "coredumpctl list --no-pager 2>&1 | tail -n 20 || true",
+        "coredumpctl info --no-pager gnome-shell 2>&1 | tail -n 80 || true",
+        "coredumpctl info --no-pager gnome-setup 2>&1 | tail -n 80 || true",
+    ))
 
 
 class Results:
@@ -630,6 +726,7 @@ class Harness:
         self.tpm_state = self.work / "swtpm-state"
         self.swtpm = None
         self.recovery_key = None
+        self.portal_failed_at = None
         self.results.encryption = {"tpm2": self.tpm, "unlocks": {}}
         self.target_disk = target_disk(args.iso)
         self.results.medium = ({"medium": "raw"} if args.iso is None
@@ -900,6 +997,66 @@ class Harness:
             return []
         return nodes if isinstance(nodes, list) else []
 
+    def atspi_apps(self, runner, app=GS_APP):
+        """The applications the AT-SPI desktop lists.
+
+        atspi_drive.py answers with {"error": ..., "apps": [...]} when nothing
+        matches the app name. An empty list is what tells a session whose
+        accessibility bus is dead from a window that has not appeared yet: in
+        run 45927940366 (attempt 1) the desktop listed no application at all.
+        """
+        try:
+            payload = self.atspi(runner, "snapshot", app)
+        except (Fail, subprocess.TimeoutExpired):
+            return []
+        if isinstance(payload, dict):
+            return [str(name) for name in (payload.get("apps") or [])]
+        return []
+
+    def live_session_diagnose(self, runner, label):
+        """Best effort: the live session's desktop state, into the evidence.
+
+        The session's portal and accessibility units with their journal, the
+        shell's and the installer's process state, the system's coredumps and
+        the applications the accessibility bus lists: what a wedged live
+        session looks like (run 45927940366, attempt 1).
+        """
+        state = self.ssh("liveuser", session_state_command(), password="live", check=False)
+        apps = self.atspi_apps(runner)
+        self.save(f"live-session-{label}.txt",
+                  state + "\n== atspi applications\n" + ("\n".join(apps) or "(none)") + "\n")
+
+    def live_session_stall(self):
+        """Why the live session cannot draw the installer's window, or None.
+
+        gnome-setup asks the session's desktop portal for its version before
+        it opens its window and blocks there while the portal never starts:
+        in run 45927940366 (attempt 1) both portal units failed with "start
+        operation timed out" and the installer's window never appeared. The
+        session cannot recover from that, so the stage fails with the reason
+        instead of running out its whole budget. A portal that failed only
+        moments ago is given PORTAL_GRACE seconds to come back first: the
+        installer can open its window without a portal.
+        """
+        try:
+            report = self.ssh("liveuser", portal_state_command(), password="live", check=False)
+        except (Fail, subprocess.TimeoutExpired, OSError):
+            return None
+        failed = failed_session_units(report)
+        if not failed:
+            self.portal_failed_at = None
+            return None
+        now = time.monotonic()
+        if self.portal_failed_at is None:
+            self.portal_failed_at = now
+            return None
+        if now - self.portal_failed_at < PORTAL_GRACE:
+            return None
+        return ("the live session's desktop portal failed to start ("
+                + ", ".join(failed)
+                + "); gnome-setup waits for the portal before it opens its window, so the "
+                  "installer cannot appear (evidence/live-session-failure.txt)")
+
     def poll(self, runner, app, predicate, timeout):
         end = time.time() + timeout
         while True:
@@ -910,16 +1067,39 @@ class Harness:
                 return None
             time.sleep(2)
 
-    def wait_for(self, runner, app, predicate, what, timeout=300):
-        nodes = self.poll(runner, app, predicate, timeout)
-        if nodes is not None:
-            return nodes
+    def wait_for(self, runner, app, predicate, what, timeout=300, stall=None):
+        """Wait for the app's tree to satisfy predicate.
+
+        stall is asked every SESSION_CHECK_EVERY seconds for a reason the
+        guest cannot recover from (a wedged live session): it returns a
+        message, and the wait ends with it instead of running out the budget.
+        """
+        end = time.time() + timeout
+        asked = 0.0
+        while True:
+            nodes = self.snapshot(runner, app)
+            if nodes and predicate(nodes):
+                return nodes
+            now = time.time()
+            if stall is not None and now - asked >= SESSION_CHECK_EVERY:
+                asked = now
+                message = stall()
+                if message:
+                    self.record_wait_failure(what, nodes)
+                    raise Fail(message)
+            if now >= end:
+                break
+            time.sleep(2)
         nodes = self.snapshot(runner, app)
+        self.record_wait_failure(what, nodes)
+        raise Fail(f"{what} never appeared in {app}")
+
+    def record_wait_failure(self, what, nodes):
+        """The AT-SPI tree, its summary and a screenshot of a failed wait."""
         self.save(f"atspi-timeout-{slug(what)}.json", json.dumps(nodes, indent=1))
         for line in summarize_nodes(nodes):
             log(f"  atspi [{slug(what)}]: {line}")
         self.shot(f"fail-{slug(what)}", f"FAILURE: {what} never appeared")
-        raise Fail(f"{what} never appeared in {app}")
 
     def to_screen(self, nodes, node):
         frame = top_frame(nodes)
@@ -1199,7 +1379,7 @@ class Harness:
         r, app = self.live_runner, GS_APP
         try:
             self.wait_for(r, app, lambda nodes: classify_setup_page(nodes) is not Page.UNKNOWN,
-                          "first setup page", 300)
+                          "first setup page", 300, stall=self.live_session_stall)
             self.key("esc")
             time.sleep(3)
             self.maximize(r, app)
@@ -1217,6 +1397,7 @@ class Harness:
         for collect in (
             lambda: self.setup_dump(runner, label),
             lambda: self.shot(f"fail-setup-{label}", "FAILURE: current installer page"),
+            lambda: self.live_session_diagnose(runner, label),
             self.grab_install_log,
             self.grab_sysinstall_journal,
         ):
