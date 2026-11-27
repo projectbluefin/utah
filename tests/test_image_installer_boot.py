@@ -11,6 +11,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import yaml
 
@@ -109,6 +110,16 @@ class GrubMenuTests(unittest.TestCase):
                     "[  OK  ] Started utah-live-root.service - Utah live root overlay.\n"):
             with self.subTest(ocr=ocr):
                 self.assertEqual(raw_e2e.boot_frame(ocr), "other")
+
+    def test_without_kvm_ci_fails_and_a_local_run_falls_back_to_tcg(self):
+        # A vanished KVM grant made the candidate's installed VM run under TCG and
+        # time out into emergency mode (run 45950837602); CI must say so up front.
+        self.assertEqual(raw_e2e.accel_args(True, ci=True), ["-accel", "kvm", "-cpu", "host"])
+        with self.assertRaisesRegex(raw_e2e.Fail, "/dev/kvm is not writable"):
+            raw_e2e.accel_args(False, ci=True)
+        with mock.patch.object(raw_e2e, "log") as log:
+            self.assertEqual(raw_e2e.accel_args(False, ci=False), ["-accel", "tcg"])
+        log.assert_called_once()
 
     def test_grub_live_text_is_the_live_entry_title(self):
         self.assertTrue(medium.LIVE_TITLE.lower().startswith(raw_e2e.GRUB_LIVE_TEXT))
