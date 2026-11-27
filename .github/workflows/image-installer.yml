@@ -99,7 +99,7 @@ on:
     paths:
       - iso/raw/**
       - .github/workflows/image-installer.yml
-      - tests/test_image_installer.py
+      - tests/test_image_installer*.py
       - scripts/kernel_verity.py
 
 permissions: {}

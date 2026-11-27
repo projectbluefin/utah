@@ -228,7 +228,7 @@ pass/fail. `Harness.check_installed` runs every check, records each one's
 problems under `installed_checks` in `results.json` and fails the boot with
 all of them together. The guest-side checks are scripts in `iso/scripts/`
 that the fisherman harness also used, run from there rather than copied
-(`tests/test_image_installer.py` `InstalledSystemCheckTests` fails if one
+(`tests/test_image_installer_verify.py` `InstalledSystemCheckTests` fails if one
 goes):
 
 | Check | How | First boot | Rollback boot |
@@ -273,7 +273,7 @@ stubs curl, but the shipped timer can reach the real endpoint at boot.
 `.github/workflows/image-installer.yml` runs nightly (07:41 UTC, after the
 testing build and Post-Testing E2E), on `workflow_dispatch`, and on pull
 requests that touch `iso/raw/**`, the workflow, or
-`tests/test_image_installer.py`. Dispatch inputs: `image_ref` (exact
+`tests/test_image_installer*.py`. Dispatch inputs: `image_ref` (exact
 `ghcr.io/projectbluefin/<image>@sha256:...`), `all_flavors`, `install`
 (`gui` drives gnome-setup's window through a QEMU USB tablet at AT-SPI
 extents; `script` runs the same sysinstall call over SSH), `backend`
