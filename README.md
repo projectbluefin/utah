@@ -62,6 +62,7 @@ Utah is built across two repositories:
   # Decompress straight onto the USB stick (replace /dev/sdX).
   xz -dc utah-installer-latest.raw.xz | sudo dd of=/dev/sdX bs=4M status=progress conv=fsync
   ```
+- **Same medium as an ISO (Secure Boot off):** [`utah-installer-latest.iso`](https://projectbluefin.dev/utah-installer-latest.iso) ([SHA-256 checksum](https://projectbluefin.dev/utah-installer-latest.iso-CHECKSUM), [checksum signature](https://projectbluefin.dev/utah-installer-latest.iso-CHECKSUM.sigstore.json)), published with the `.raw.xz` after its install test passes booted as a CD-ROM and as a USB disk. It is a hybrid ISO (El Torito, shim → systemd-boot; #1404) for tools and virtual machines that expect an ISO; write it to a USB stick as-is with Fedora Media Writer or `sudo dd if=utah-installer-latest.iso of=/dev/sdX bs=4M status=progress conv=fsync`. It is uncompressed and about 9.5 GB, so it does not fit on a DVD. Verify its checksum the same way as the `.raw.xz` (`cosign verify-blob` and `sha256sum -c` with `iso` in place of `raw.xz`).
 - **Testing-channel install medium:** [`ghcr.io/projectbluefin/utah-installer`](https://github.com/projectbluefin/utah/pkgs/container/utah-installer) (`testing` tag), the same medium built weekly and on demand from `:testing`, published as a zstd-compressed OCI artifact. The GUI writers above do not decode zstd, so write it from a terminal; `--long=31` is required because it was compressed with it:
 
   ```sh
