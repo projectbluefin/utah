@@ -1,7 +1,7 @@
 ---
 name: docs-parity
 version: "1.0"
-last_updated: "2026-10-15"
+last_updated: "2026-11-27"
 id: docs-parity
 one_line_purpose: Reconcile Utah's README with the docs.projectbluefin.io/utah page before deleting duplicate prose.
 entry_point: docs/skills/docs-parity.md
@@ -25,13 +25,13 @@ metadata:
 
 Utah's user-facing docs page at
 [`docs.projectbluefin.io/utah`](https://docs.projectbluefin.io/utah) is
-the **target state** for a shared build-time renderer in
+rendered at build time by
 [`projectbluefin/documentation`](https://github.com/projectbluefin/documentation)'s
-`scripts/fetch-readmes.mjs`. Today that renderer fetches only
-`projectbluefin/server`'s README; `docs/utah.mdx` is still hand-written
-prose. Once the Utah source is added there, `README.md` becomes the
-canonical source. Until then, edit the README **and** the docs wrapper in
-the same change, or the two will drift.
+`scripts/fetch-readmes.mjs`: it fetches `README.md` from `projectbluefin/utah`
+`main` (the `utah` entry of `src/components/image-identities.json`) into
+`src/content/utah-readme.md`, which `docs/utah.mdx` imports. `README.md` is
+the canonical source of the page's prose; the committed
+`src/content/utah-readme.md` is only a seed the build overwrites.
 
 This skill is the reconciliation contract: what the README owns, what the
 docs page owns, and how to land changes without either one of them drifting
@@ -44,7 +44,8 @@ Everything that is **true of the source repository right now**:
 - Identity, architecture, and the two-repository composition with
   `projectbluefin/utah-packages`.
 - The honest pre-alpha status, including which artifacts are published: the
-  live ISO (built monthly from `:stable` by `projectbluefin/dakota-iso`), the
+  gnome-setup install medium (built monthly from `:stable` by
+  `projectbluefin/dakota-iso`), the
   `:testing` consumer tag after `post-testing-e2e` validates a digest, and the
   rolling `:stable` tag that `execute-release.yml` releases behind the release
   gate, re-released by a daily check once it is over a week old (kept as the
@@ -56,10 +57,14 @@ Everything that is **true of the source repository right now**:
 - The "Parity with Dakota" section — Dakota as the parity target, the pointer
   to `baselines/GAP.md` and #1236, and the base-manifest count table.
 - Verification record and provenance links (CI runs, screenshots).
-- The "Download and image streams" section: the live ISO link and its
-  SHA-256 checksum link, the pointer to `docs.projectbluefin.io/utah` for live
-  versions and downloads (the catalog lives there, not in the README), the
-  canonical flavor set from `config/flavors.json`, and the stream table.
+- The "Download and image streams" section: the install medium link
+  (`utah-installer-latest.raw.xz`) with its SHA-256 checksum and signature
+  bundle links, how to write it (Fedora Media Writer first, GNOME Disks,
+  Impression, and the verify-and-`dd` commands), the testing-channel medium
+  on GHCR, the retired live ISO, the
+  pointer to `docs.projectbluefin.io/utah` for live versions and downloads
+  (the catalog lives there, not in the README), the canonical flavor set from
+  `config/flavors.json`, and the stream table.
 
 ## What the docs page owns
 
@@ -79,6 +84,13 @@ What the README **cannot** carry honestly:
   `main` (set by the docs wrapper, not the README).
 - Sidebar and routing metadata (`slug: /utah`, position under Images after
   `dakota`, `server`, `classic`).
+- The `## Downloads & Image Versions` cards (`<ProductDownloadsAndVersions
+  product="utah" />`). Their data comes from the documentation repository's
+  `scripts/fetch-image-releases.mjs`, which names the Utah download itself
+  (`utah-live-latest.iso` until the documentation repository follows the
+  move to `utah-installer-latest.raw.xz`); the component renders only
+  `.iso` downloads. A README download change does not move these cards:
+  change them in `projectbluefin/documentation` too.
 
 ## Reconciliation record
 
@@ -90,7 +102,7 @@ page as follows:
 | Identity | "Utah is Bluefin built on Fedora Hummingbird … Utah adds the desktop layer" | Same identity, plus the Fedora Hummingbird Magazine link | README "What it is" |
 | Two-repo composition | "Utah is composed across two coordinated repositories" with `projectbluefin/utah-packages` | Same two-repo table | README "What it is" |
 | Pre-alpha status | "Utah is an alpha build … its `:testing` container image is published on GHCR" | Testing container images and live ISOs are available for hardware testing; the `:testing` consumer tag is published on `ghcr.io/projectbluefin/utah:testing` once `post-testing-e2e` validates a digest; the rolling `:stable` tag is released behind the release gate, and re-released by a daily check once it is over a week old | README header + "Download and image streams" |
-| Download | `https://projectbluefin.dev/utah-live-latest.iso` | Same ISO URL plus its `-CHECKSUM` link; built monthly from `:stable` by `projectbluefin/dakota-iso`; and a pointer to the docs page for live versions and downloads | README "Download and image streams" |
+| Download | `https://projectbluefin.dev/utah-live-latest.iso` | Replaced by the gnome-setup medium `https://projectbluefin.dev/utah-installer-latest.raw.xz` (xz, so Fedora Media Writer, GNOME Disks and Impression write it directly) with its `-CHECKSUM` and `-CHECKSUM.sigstore.json` links, built monthly from `:stable` by `projectbluefin/dakota-iso` (`publish-utah-installer.yml`); the ISO is listed as retired (#1578); and a pointer to the docs page for live versions and downloads | README "Download and image streams" |
 | Image streams | `utah`, `utah-nvidia`, `utah-gaming`, `utah-nvidia-gaming` on stable/testing | Same set; canonical source is `config/flavors.json` | README "Download and image streams" |
 | Features / stack | Kernel options + OGC + Gaming mode; NVIDIA and Gaming flavors; GNOME 51 from source | Same explanations, with the precise kernel/NVIDIA/Secure Boot caveats | README "Known gaps" |
 | Current Versions | `<DriverVersionsCatalog streamId="utah-testing" />` (live, empty today) | Component kept; README does not duplicate it | docs page only |
@@ -108,8 +120,8 @@ this PR lands:
 - The hand-maintained GNOME-version statement. The `DriverVersionsCatalog`
   is the live source.
 - Any hand-written download URL in the wrapper. The README carries the
-  live ISO and checksum links; duplicating them in the wrapper invites
-  drift.
+  install medium, checksum and signature links; duplicating them in the
+  wrapper invites drift.
 
 ## Editing protocol
 
@@ -124,10 +136,10 @@ When changing the README in a way the docs page surfaces:
    renderer fetches `main`). PR title is a Conventional Commit (`docs:`,
    `fix:`, `feat:`); the merge rebuilds the docs site.
 4. After the merge, `docs.projectbluefin.io/utah` is updated by the
-   documentation repo's next `pages.yml` push (builds on push, not on a
-   schedule), which fetches the new README, resolves relative links, and
-   re-renders. No browser-side fetch; no silent stale fallback (the
-   renderer's contract — see `docs/skills/variant-docs-pages.md` in
+   documentation repo's next `pages.yml` run (on push and every 6 hours),
+   which fetches the new README, resolves relative links, and re-renders.
+   No browser-side fetch; no silent stale fallback (the renderer's
+   contract — see `docs/skills/variant-docs-pages.md` in
    `projectbluefin/documentation`).
 
 When adding or changing a live component on the docs page (a catalog, a

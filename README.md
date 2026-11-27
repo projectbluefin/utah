@@ -40,18 +40,36 @@ Utah is built across two repositories:
 
 ## Download and image streams
 
-- **Install medium (gnome-setup, Secure Boot off):** [`ghcr.io/projectbluefin/utah-installer`](https://github.com/projectbluefin/utah/pkgs/container/utah-installer) (`testing` tag), published weekly and on demand from `:testing` — a raw disk image that boots live and installs with GNOME STF's gnome-setup ([docs/adr/0001](https://github.com/projectbluefin/utah/blob/main/docs/adr/0001-image-based-installer.md)), baked Flatpaks included. A projectbluefin.dev download from `:stable` follows when [projectbluefin/dakota-iso#414](https://github.com/projectbluefin/dakota-iso/pull/414) publishes it.
+- **Install medium (gnome-setup, AMD / Intel, Secure Boot off):** [`utah-installer-latest.raw.xz`](https://projectbluefin.dev/utah-installer-latest.raw.xz) ([SHA-256 checksum](https://projectbluefin.dev/utah-installer-latest.raw.xz-CHECKSUM), [checksum signature](https://projectbluefin.dev/utah-installer-latest.raw.xz-CHECKSUM.sigstore.json)), built monthly from `:stable` by projectbluefin/dakota-iso and published only after its GUI install test passes on that digest — an xz-compressed raw disk image that boots live and installs with GNOME STF's gnome-setup ([docs/adr/0001](https://github.com/projectbluefin/utah/blob/main/docs/adr/0001-image-based-installer.md)), baked Flatpaks included.
+
+  Write it to a USB stick (everything on the stick is erased) with
+  [Fedora Media Writer](https://flathub.org/apps/org.fedoraproject.MediaWriter):
+  choose "Select .iso file" and pick the `.raw.xz`; it decompresses the xz
+  itself. GNOME Disks ("Restore Disk Image") and
+  [Impression](https://flathub.org/apps/io.gitlab.adhami3310.Impression) take
+  the `.raw.xz` too. To verify the download and write it from a terminal:
 
   ```sh
-  # Fetch the OCI artifact, verify its checksum, decompress, then flash it.
+  # Download the medium, its checksum and the checksum's keyless signature.
+  base=https://projectbluefin.dev/utah-installer-latest.raw.xz
+  curl -L -O "$base" -O "$base-CHECKSUM" -O "$base-CHECKSUM.sigstore.json"
+  # The checksum was signed by dakota-iso's publish workflow on main.
+  cosign verify-blob utah-installer-latest.raw.xz-CHECKSUM \
+    --bundle utah-installer-latest.raw.xz-CHECKSUM.sigstore.json \
+    --certificate-identity https://github.com/projectbluefin/dakota-iso/.github/workflows/publish-utah-installer.yml@refs/heads/main \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com
+  sha256sum -c utah-installer-latest.raw.xz-CHECKSUM
+  # Decompress straight onto the USB stick (replace /dev/sdX).
+  xz -dc utah-installer-latest.raw.xz | sudo dd of=/dev/sdX bs=4M status=progress conv=fsync
+  ```
+- **Testing-channel install medium:** [`ghcr.io/projectbluefin/utah-installer`](https://github.com/projectbluefin/utah/pkgs/container/utah-installer) (`testing` tag), the same medium built weekly and on demand from `:testing`, published as a zstd-compressed OCI artifact. The GUI writers above do not decode zstd, so write it from a terminal; `--long=31` is required because it was compressed with it:
+
+  ```sh
   oras pull ghcr.io/projectbluefin/utah-installer:testing
   sha256sum -c medium.zst.sha256
-  zstd -d --long=31 medium.zst -o utah-installer.raw
-  sudo dd if=utah-installer.raw of=/dev/sdX bs=4M status=progress conv=fsync
+  zstd -dc --long=31 medium.zst | sudo dd of=/dev/sdX bs=4M status=progress conv=fsync
   ```
-
-  `--long=31` is required to decompress, because the medium was compressed with it.
-- **Older live ISO (fisherman installer, retiring):** [`utah-live-latest.iso`](https://projectbluefin.dev/utah-live-latest.iso) ([SHA-256 checksum](https://projectbluefin.dev/utah-live-latest.iso-CHECKSUM)), last built from `:stable` by projectbluefin/dakota-iso; Utah no longer tests this installer (#1569)
+- **Retired live ISO:** `utah-live-latest.iso` (fisherman installer) is retired: Utah removed fisherman in #1578 (#1569), so the ISO is no longer tested and dakota-iso no longer rebuilds it on schedule. Use the install medium above.
 - **Live versions & downloads:** [docs.projectbluefin.io/utah](https://docs.projectbluefin.io/utah)
 
 Downloads on projectbluefin.dev are built by
@@ -89,7 +107,7 @@ Bluefin's `base.toml` and is now edited by hand as Dakota parity work lands.
 
 Why this is still pre-alpha:
 
-- **Disable Secure Boot.** No flavor boots with Secure Boot on yet. Every flavor runs Fedora's kernel rebuilt with a btrfs fs-verity fix, and that rebuild is not Fedora-signed. The gaming flavors' OGC kernel, the NVIDIA module, `v4l2loopback` and the live ISO's `systemd-boot-unsigned` are unsigned too. Utah will not sign them with its own key or ask you to enroll a MOK. Signing comes from upstream instead: the kernel fix going into Fedora's signed kernel, and signed systemd-boot and kernel modules through Hummingbird (#1225, #1379, #1380, #1381). Boot via UEFI with Secure Boot off, and flash the ISO directly with Fedora Media Writer or `dd` (Ventoy and legacy BIOS are unsupported). The live session runs SELinux permissive; installed systems run Enforcing.
+- **Disable Secure Boot.** No flavor boots with Secure Boot on yet. Every flavor runs Fedora's kernel rebuilt with a btrfs fs-verity fix, and that rebuild is not Fedora-signed. The gaming flavors' OGC kernel, the NVIDIA module and `v4l2loopback` are unsigned too. Utah will not sign them with its own key or ask you to enroll a MOK. Signing comes from upstream instead: the kernel fix going into Fedora's signed kernel, and signed systemd-boot and kernel modules through Hummingbird (#1225, #1379, #1380, #1381). Boot via UEFI with Secure Boot off, and write the install medium straight to the USB stick with Fedora Media Writer, GNOME Disks, Impression or `dd` (Ventoy and legacy BIOS are unsupported). The live session runs SELinux permissive; installed systems run Enforcing.
 - **Switching from another `bootc` image.** Ostree's 3-way `/etc` merge can carry over `bootc-fetch-apply-updates.timer` from another image. Utah masks `bootc-fetch-apply-updates` so background updates go through `uupd` instead of silently undoing a `bootc rollback`. After switching, check `systemctl is-enabled bootc-fetch-apply-updates.timer`.
 - **Bootloader updates.** Systems on `systemd-boot` update their EFI partition via `bootctl` (`systemd-boot-update.service`), so `bootupctl status` intentionally shows no components. Check `bootctl status` instead.
 - **Hardware, codecs, and drivers need real-world testing.** Intel/Linux Wi-Fi firmware and Intel media drivers are included, and the OGC kernel (`sched_ext`, `binderfs`) and open NVIDIA module compile, but hardware video decoding, Wi-Fi, and gaming flavors still need testing on physical machines (#383).
