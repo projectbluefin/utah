@@ -157,6 +157,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                              b' {"id": 4, "name": "d", "conclusion": "cancelled"},'
                              b' {"id": 5, "name": "gnome-setup (utah) / e2e (utah)", "conclusion": "failure"},'
                              b' {"id": 6, "name": "gnome-setup (utah) / resolve", "conclusion": "cancelled"}]}')
+        elif "/actions/runs/8/jobs" in self.path:
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b'{"jobs": ['
+                             b' {"id": 5, "name": "gnome-setup (utah) / e2e (utah)", "conclusion": "failure"}]}')
 
     def log_message(self, *args):
         pass
@@ -183,12 +188,22 @@ class ApiTests(unittest.TestCase):
         with self.assertRaises(Exception):
             rerun.job_log("o/r", 3, "t")
 
-    def test_only_failed_and_cancelled_jobs_are_classified(self):
-        self.assertEqual([j["id"] for j in rerun.failed_jobs("o/r", "7", "t")], [1, 4])
+    def test_only_unsuccessful_jobs_are_classified(self):
+        self.assertEqual([j["id"] for j in rerun.failed_jobs("o/r", "7", "t")], [1, 4, 5, 6])
 
-    def test_red_advisory_gnome_setup_jobs_are_not_returned_by_failed_jobs(self):
-        names = [j["name"] for j in rerun.failed_jobs("o/r", "7", "t")]
-        self.assertFalse([n for n in names if n.startswith("gnome-setup (")])
+    def test_a_gnome_setup_infra_failure_alone_allows_a_re_run(self):
+        jobs = rerun.failed_jobs("o/r", "8", "t")
+        go, verdicts = rerun.decide(jobs, {5: fixture("ghcr-blob-500.log")}.__getitem__)
+        self.assertTrue(go)
+        self.assertEqual([(v.job_id, v.signature) for v in verdicts], [(5, "registry-5xx")])
+
+    def test_a_gnome_setup_product_failure_vetoes_otherwise_infra_re_run(self):
+        jobs = rerun.failed_jobs("o/r", "7", "t")
+        logs = {1: fixture("ghcr-blob-500.log"), 4: None, 5: fixture("lifecycle-efi.log"), 6: None}
+        go, verdicts = rerun.decide(jobs, logs.__getitem__)
+        self.assertFalse(go)
+        self.assertEqual([v.job_id for v in verdicts if v.signature is None], [5])
+        self.assertEqual(verdicts[0].signature, "registry-5xx")
 
 
 class WorkflowTests(unittest.TestCase):
