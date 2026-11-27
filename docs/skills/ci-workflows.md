@@ -30,7 +30,9 @@ post-build verification workflows, not the complete workflow inventory:
   unreviewed Common code never reaches a job holding `packages: write`.
   Common is built once
   from its actual source in an isolated runner-temp checkout without inherited
-  credentials or environment. Native flavors consume its local layer through
+  credentials or environment (`env -i`, so no user D-Bus session: that
+  `podman build` names `--cgroup-manager=cgroupfs`, or crun asks the system
+  bus for systemd cgroups and every `RUN` fails). Native flavors consume its local layer through
   `COMMON_IMAGE_REF`, with `COMMON_IMAGE`/`COMMON_IMAGE_SHA` naming that
   layer's digest so `provenance.json` records the candidate, not the pin
   (`just build-ghcr` refuses an override without them); ordinary builds
