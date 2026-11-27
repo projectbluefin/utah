@@ -153,6 +153,8 @@ class EvidenceTests(unittest.TestCase):
         # `verification` branch, so a frozen block stays self-consistent.
         self.assertIn(f"raw/{record_commit}/screenshots", result)
         self.assertIn(f"tree/{record_commit}", result)
+        # The record commit has no README.md, so the screenshot must not link to a blob path (404, #1637).
+        self.assertNotIn(f"blob/{record_commit}/README.md", result)
         # The record now lives on the `verification` branch, so the block must
         # not embed any local docs/verification/ path.
         self.assertNotIn("docs/verification/", result)

@@ -18,7 +18,7 @@ def update(text, provenance, record_commit="verification"):
     # resolve to the record, so read its identity from that record instead.
     block = (f"{begin}\n"
              f"[![Verified install desktop](https://github.com/projectbluefin/utah/raw/{record_commit}/screenshots/14-first-boot-desktop.png)]"
-             f"(https://github.com/projectbluefin/utah/blob/{record_commit}/README.md)\n\n"
+             f"(https://github.com/projectbluefin/utah/tree/{record_commit})\n\n"
              f"*gnome-setup install test passed for commit `{sha[:12]}`. "
              f"[CI run](https://github.com/projectbluefin/utah/actions/runs/{run}) "
              "also runs independent desktop tests that do not gate this record; "
