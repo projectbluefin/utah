@@ -35,6 +35,7 @@ JUSTFILE = ROOT / "Justfile"
 RECIPE = "check-repos"
 
 STUB_PYTHON3 = """#!/usr/bin/env bash
+if [ "$1" = "scripts/check-retag-names.py" ]; then exit 0; fi
 printf '%s\\n' "$*" >> "$CALLS"
 attempt=$(wc -l < "$CALLS")
 code=$(sed -n "${attempt}p" "$CODES")
