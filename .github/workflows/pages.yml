@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-26.04
     environment:
       name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+      url: ${{ steps.deploy.outputs.page_url || steps.deploy_retry_1.outputs.page_url || steps.deploy_retry_2.outputs.page_url || steps.deploy_retry_3.outputs.page_url }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -48,5 +48,34 @@ jobs:
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: site
+
+      # deploy-pages looks the artifact up by name once, through the artifact
+      # service, and that listing can lag the upload by seconds to a minute:
+      # "Found 0 artifact(s)" right after "successfully finalized"
+      # (actions/deploy-pages#451). Retry the deploy, never the upload: a
+      # second upload in the run makes the lookup fail with two artifacts,
+      # which is also why re-running the job cannot recover. Drop the retries
+      # once actions/deploy-pages#455 ships in a release.
       - id: deploy
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+        continue-on-error: true
+      - name: Wait for the artifact listing
+        if: steps.deploy.outcome == 'failure'
+        run: sleep 5
+      - id: deploy_retry_1
+        if: steps.deploy.outcome == 'failure'
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+        continue-on-error: true
+      - name: Wait for the artifact listing
+        if: steps.deploy_retry_1.outcome == 'failure'
+        run: sleep 20
+      - id: deploy_retry_2
+        if: steps.deploy_retry_1.outcome == 'failure'
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+        continue-on-error: true
+      - name: Wait for the artifact listing
+        if: steps.deploy_retry_2.outcome == 'failure'
+        run: sleep 60
+      - id: deploy_retry_3
+        if: steps.deploy_retry_2.outcome == 'failure'
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

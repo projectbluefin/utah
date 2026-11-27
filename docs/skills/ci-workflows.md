@@ -1,7 +1,7 @@
 ---
 name: ci-workflows
-version: "1.4"
-last_updated: "2026-11-22"
+version: "1.5"
+last_updated: "2026-11-27"
 id: ci-workflows
 one_line_purpose: Navigate Utah's build, promote, and sync workflow topology.
 entry_point: docs/skills/ci-workflows.md
@@ -203,6 +203,18 @@ post-build verification workflows, not the complete workflow inventory:
   The four-hour backstop trades scheduled runner use for up to four hours of
   reconciliation delay plus GitHub scheduling delays, not immediate CI-green
   handling. Existing review, check, and queue protections are unchanged.
+- `.github/workflows/pages.yml` -- pushes to `main` touching `site/`, the
+  two manifests or `scripts/generate-site-data.py`, and manual dispatch,
+  publish the status page to GitHub Pages in one job: check the committed
+  package data, run `tests.test_site`, upload `site/` once, deploy. Right
+  after the upload, `actions/deploy-pages` can list no artifact (`Found 0
+  artifact(s)` then `No artifacts named "github-pages"`; actions/deploy-pages#451,
+  runs #83–#86 in November 2026), so the deploy step is retried after 5, 20
+  and 60 s. Never retry the upload and never re-run the failed job: a second
+  `github-pages` artifact in the run fails every later lookup with `Multiple
+  artifacts`. Re-dispatch the workflow instead. `tests/test_site.py` holds
+  the single upload and the retries; drop them once actions/deploy-pages#455
+  is released.
 
 CI delegates builds, vulnerability reporting, keyless signatures, provenance,
 and caching to `projectbluefin/actions@v1` (originated as a `docs/building.md`
