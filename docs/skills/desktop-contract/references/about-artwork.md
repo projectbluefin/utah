@@ -24,8 +24,7 @@ Wallpapers: `/usr/share/backgrounds/bluefin/*` and
 `/usr/share/gnome-background-properties/*.xml` come from the pinned
 `bluefin-wallpapers-gnome` image, overlaid after Common's copy (see the
 Containerfile skill). `01-bluefin.xml` and `06-bluefin.xml` are contract files.
-The mascot the live installer shows is the Utah black-outline art, staged into
-`iso/live/src/images/utahraptor.png` by the ISO builders. The os-release `LOGO`
+gnome-setup, the installer, shows the os-release `LOGO`. The os-release `LOGO`
 is `img-logo-icon`, as on Dakota: artwork's `bluefin-logo-light.svg` installed
 as `/usr/share/pixmaps/img-logo-icon.svg` and `img-logo-icon-text.svg`, and
 `bluefin-logo-dark.svg` as the two `-dark` names, all from the

@@ -54,23 +54,18 @@ Once `boot-vm` confirms the desktop boots, the rest of the adopted gates run
 locally too:
 
 ```bash
-just iso testing                # build the live ISO (luks-test needs `just iso testing 1` without /dev/vhost-vsock)
-just boot-iso                   # boot the live session and confirm the installer is there
-just luks-test                  # install to an encrypted disk over SSH, boot it, log in
-just try-installed              # re-boot the disk luks-test installed, with a browser console
+sudo just medium testing        # gnome-setup install medium from localhost/utah:testing
 just check-desktop-contract     # branding, services, and Flatpak policy against a built image
 just check-repos                # every contract package resolves in the enabled repositories
 ```
 
-`just luks-test` drives `iso/scripts/luks-e2e.sh`: it installs from the ISO's
-embedded container store with no network, unlocks the LUKS2 volume at the
-Plymouth prompt, confirms the disk boots on its own, and overwrites
-the local `docs/verification/README.md` and its screenshots
-with the fresh passing record — that file documents exactly what a run
-proved and when. Local runs do not update the separate
-[published CI record](https://github.com/projectbluefin/utah/tree/verification). See
-[`skills/local-testing.md`](skills/local-testing.md) for the encrypted and
-plain offline install paths and the `bootc rollback` / `uupd` update policy.
+`just medium` builds the raw medium Post-Testing E2E gates `:testing` on
+(`iso/raw/`, #1569): it boots live and installs with GNOME STF's gnome-setup
+by block copy into LUKS2. Boot it in a VM next to a blank target disk, or
+write it to a USB stick; the steps, and the CI end-to-end harness
+(`iso/raw/raw_e2e.py`), are in
+[image-installer](skills/local-testing/references/image-installer.md). For a
+candidate in CI, dispatch `build.yml` with `contract_only` and `review_vm`.
 
 ## Deep documentation
 

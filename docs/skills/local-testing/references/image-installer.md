@@ -1,10 +1,11 @@
 # Image-based installer track (experimental)
 
 The GNOME OS-style install path of
-[ADR-0001](../../../adr/0001-image-based-installer.md), run in parallel with
-the live ISO + bootc-installer/fisherman path. Nothing gates on it: it is not
-a required check, not in `promote-to-testing`'s needs, and it publishes
-nothing. Tracking issue: #1403. History: spike #1399.
+[ADR-0001](../../../adr/0001-image-based-installer.md), Utah's only install
+path since the fisherman live ISO was removed (#1569). Post-Testing E2E's
+`gnome-setup` job runs this workflow on every tested digest and
+`promote-to-testing` needs it; `publish-installer.yml` publishes the medium
+without the CI debug kargs. Tracking issue: #1403. History: spike #1399.
 
 ## What it builds
 
@@ -16,7 +17,6 @@ nothing. Tracking issue: #1403. History: spike #1399.
 | Shrink to content: fstrim, btrfs balance + resize to minimum (+256 MiB, stepping up while btrfs refuses), fstrim again, cut the root partition and the file, rewrite the backup GPT; `size-breakdown.txt` shows what takes the space | `iso/raw/shrink-raw-image.sh`, `medium.py shrink-plan` |
 | End to end with screenshots and `evidence/results.json`; on composefs, fs-verity checks on every installed boot; the fisherman harness's installed-system checks ([below](#installed-system-checks-ported-from-the-fisherman-harness)) | `iso/raw/raw_e2e.py`, `composefs_check.py`, `atspi_drive.py`, `vte_term.py` |
 | Size per step (raw, allocated, zstd -3, zstd -19 --long, xz -9, pack/unpack time) | `iso/raw/measure_medium.py` |
-| Comparison with the Post-Testing E2E `luks` job for the same digest | `iso/raw/compare_paths.py` |
 
 The installer's post-copy fixups (new filesystem UUIDs and their references,
 drop the live entry, `rd.luks.uuid` + crypttab, grow root; deployments under
@@ -78,13 +78,26 @@ the installer window. Keep this startup budget separate from the page loop's
 shorter unknown-page timeout: an empty accessibility snapshot during slow
 application startup must not trigger clicks against fallback window offsets.
 
-`iso/raw/raw_e2e.py` classifies visible gnome-setup pages on each poll,
-accepting free-space and plain-confirmation routes. Destructive confirmation
-requires `/dev/vdb` exactly; free-space selection never falls back to erase.
+`iso/raw/raw_e2e.py` classifies visible gnome-setup pages on each poll. The
+target (`install.qcow2`, `/dev/vdb`) is created fresh and all-zero, so the one
+accepted route is the empty-disk one: the target's row (picked by its
+`51.5 GB` size) reads "This disk is fully empty" when AT-SPI exposes it, and
+selecting it opens the nondestructive "Begin Installation?" dialog, confirmed
+with "Install". That dialog names no disk, so the harness confirms it only
+after it selected the target row itself. "Existing Data Found", any "Erase and
+Install" confirmation (after "Use Entire Disk", or forced as "Insufficient
+Free Space" or "Disk is Full"), or a target row reading "This disk contains
+existing data" fails the run with "gnome-setup reported existing data on the
+blank target disk (empty-disk detection regressed)" before anything is
+pressed. Emptiness comes from the `partitionCount` systemd-sysinstall forwards on
+`ListCandidateDevices` (0 for a zeroed disk or an empty GPT; absent when
+libblkid finds a whole-disk signature); gnome-setup calls a fitting disk empty
+only when it is 0. Its old test, `currentSizeBytes == 0`, never held:
+systemd-repart reports the whole device there, so every disk read as data.
 Recovery keys come from the key-shaped label; the QR dialog takes precedence
 over its parent page. Each distinct page gets one screenshot in the manifest.
 Run `python3 -m unittest discover -s tests -p 'test_setup_pages.py'` for
-host-only route replays; these do not replace VM runs through both routes.
+host-only route replays; these do not replace a VM run.
 Unknown pages time out after 60 seconds, interactive pages after 120 seconds,
 and progress after an hour, within a 70-minute total budget. Missing controls
 save `atspi-gs-miss.json` and log button names and showing/sensitive states.
@@ -170,9 +183,7 @@ uses large data folios under that option). A fixed kernel gets composefs, any
 other kernel ostree; `composefs` forced on an unfixed kernel fails the build.
 The decision is in `raw-evidence/backend.json`, `results.json` (`backend`)
 and the job summary. This keeps composefs safe when Utah moves to Fedora's
-signed kernel (#1379), which lacks the fix today. The ISO path's composefs
-opt-in (`UTAH_E2E_COMPOSEFS_BACKEND=1`, `luks-e2e.sh`) runs the same check on
-the live root and fails on an unfixed kernel. Dispatch with `backend=ostree`
+signed kernel (#1379), which lacks the fix today. Dispatch with `backend=ostree`
 for the ostree medium on any kernel.
 
 ### Offline Flatpaks
@@ -182,7 +193,7 @@ fails if either has content in `/var/lib/flatpak`. bootc copies an image's
 `/var` only at the first deployment and never touches it again, so Flatpaks
 in the medium's stateroot `/var` reach the installed disk through the block
 copy and can never be re-added or overwritten by an update. The set is the
-ISO's (`iso/live/src/install-flatpaks.sh`) plus the image's `preinstall.d`,
+image's `system-flatpaks.Brewfile` apps plus its `preinstall.d`,
 which `flatpak preinstall` records as preinstalled, so
 flatpak-preinstall.service has nothing to fetch on first boot and a removed
 app stays removed. The E2E proves
@@ -196,14 +207,14 @@ so the comparison shows what the offline set costs in download size.
 
 ### Installed-system checks (ported from the fisherman harness)
 
-Everything `iso/scripts/luks-e2e.sh` asserted on the system it installed is
-asserted by `raw_e2e.py` too, with the same pass/fail, so the gnome-setup
-track can replace it without losing coverage. `Harness.check_installed` runs
-every check, records each one's problems under `installed_checks` in
-`results.json` and fails the boot with all of them together. It reuses the
-fisherman harness's own scripts from their current paths rather than copies;
-removing the ISO path must keep them (`tests/test_image_installer.py`
-`InstalledSystemCheckTests` fails otherwise):
+Everything the removed fisherman harness (`luks-e2e.sh`) asserted on the
+system it installed is asserted by `raw_e2e.py` too, with the same
+pass/fail. `Harness.check_installed` runs every check, records each one's
+problems under `installed_checks` in `results.json` and fails the boot with
+all of them together. The guest-side checks are scripts in `iso/scripts/`
+that the fisherman harness also used, run from there rather than copied
+(`tests/test_image_installer.py` `InstalledSystemCheckTests` fails if one
+goes):
 
 | Check | How | First boot | Rollback boot |
 |---|---|---|---|
@@ -222,11 +233,11 @@ removing the ISO path must keep them (`tests/test_image_installer.py`
 The flavor is `--flavor`, or the configured flavor that publishes
 `--candidate`'s repository (`scripts/flavors.py flavor IMAGE`): the switch
 target is always the same repository as the image under test. The rollback
-boot is the fisherman harness's repeat boot (#19). The bootc switch boot runs
-another image and gets none of these checks: an older `:testing` cannot meet
-rules this checkout added later (#1343). The live session, desktop and
-greeter screenshots must draw (retaken for a minute, then the run fails), the
-live one below the top bar too, as `UTAH_E2E_REQUIRE_SCREENSHOTS` required.
+boot is the repeat boot (#19). The bootc switch boot runs another image and
+gets none of these checks: an older `:testing` cannot meet rules this
+checkout added later (#1343). The live session, desktop and greeter
+screenshots must draw (retaken for a minute, then the run fails), the live
+one below the top bar too (#786).
 The harness needs `tesseract` on the host.
 
 Not ported, because they test fisherman's path rather than the installed
@@ -259,9 +270,9 @@ flatpak fallocate their objects), `flatpaks` (default on: bake
 the set above into the medium's `/var`; off leaves the image's `preinstall.d`
 to the online first-boot flatpak-preinstall.service), `formats`.
 
-The job summary holds the comparison table; the
-`image-installer-<image>` artifact holds screenshots, `contact-sheet.png`,
-evidence, raw-evidence and `comparison.json`. The medium and the disks are
+The `image-installer-<image>` artifact holds screenshots,
+`contact-sheet.png`, evidence and raw-evidence. The comparison with the
+fisherman `luks` job (`compare_paths.py`) left with that job (#1569). The medium and the disks are
 never uploaded: CI media carry a root SSH key, `utah.live.debug` (live user
 password `live`, sshd) and the test passphrase.
 
@@ -324,19 +335,6 @@ qemu-system-x86_64 -enable-kvm -machine q35 -cpu host -smp 4 -m 8192 \
 Keep `vars.fd` between boots: the installer's firmware entry lives there.
 Recreate `target.qcow2` (and copy a fresh `vars.fd`) to install again.
 
-## What the comparison measures
-
-| Metric | Image-based | ISO/fisherman (`luks` job, same digest) |
-|---|---|---|
-| Medium | raw and allocated bytes after bootc install and after shrinking; compressed bytes and pack/unpack time per format | `ISO ready` line; `production-iso-<image>` artifact bytes |
-| Build time | image layer + `bootc install` | "Compose production ISO" step |
-| Install time | GUI confirm-to-done | `=== Phase 3/7` to `=== Phase 4/7` |
-| Stages | live boot, install, first boot unlock, initial setup, first boot desktop, bootc switch, bootc rollback | phases 1-7 (failed phase from the last marker) |
-| SELinux, failed units | `getenforce`, `systemctl --failed` on every boot | live permissive by construction (#22); not recorded |
-
-GNOME OS's published ISOs (nightly, stable) are read with HEAD requests as a
-size reference.
-
 ## Gotchas found on the way
 
 - `systemd.volatile=overlay` disables ostree's generated `var.mount`
@@ -349,8 +347,9 @@ size reference.
   GRUB cannot unlock repart's LUKS2 (argon2id), so the medium is partitioned
   by hand with a separate ext4 `/boot`.
 - Without `rhgb quiet` on the deployment the installed disk asks for the
-  passphrase in Plymouth's text mode; `bootc install` and `kargs.d` set
-  neither, fisherman adds them (`desktop-contract/references/boot-splash.md`).
+  passphrase in Plymouth's text mode; `kargs.d` sets neither, so
+  `build-raw-image.sh` passes them to `bootc install`
+  (`desktop-contract/references/boot-splash.md`).
 - GNOME Shell does not focus a window that maps under the login overview,
   and GTK 4 has no AT-SPI `GrabFocus` or actions on list rows: the harness
   clicks with a USB tablet at AT-SPI extents. GTK 4 reports extents relative

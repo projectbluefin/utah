@@ -21,17 +21,6 @@
     {
       "customType": "regex",
       "managerFilePatterns": [
-        "/^config/tacklebox-image$/"
-      ],
-      "matchStrings": [
-        "(?<depName>ghcr\\.io/tuna-os/tacklebox):(?<currentValue>latest)@(?<currentDigest>sha256:[a-f0-9]{64})"
-      ],
-      "datasourceTemplate": "docker",
-      "versioningTemplate": "docker"
-    },
-    {
-      "customType": "regex",
-      "managerFilePatterns": [
         "/^\\.github/workflows/(post-testing-e2e|execute-release|candidate-common)\\.yml$/"
       ],
       "matchStrings": [
@@ -43,6 +32,19 @@
     }
   ],
   "packageRules": [
+    {
+      "description": "iso/raw's BUILDER_IMAGE compiles gnome-setup and systemd-sysinstall that then run on the Hummingbird image, so its glibc must not be newer than Hummingbird's. Fedora 46 linked GLIBC_2.45 and the medium failed (#1499: /usr/bin/gnome-setup: version 'GLIBC_2.45' not found). Stay on the proven Fedora 43 major; its digest updates still flow. Raise this only with an E2E pass on the new major.",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "registry.fedoraproject.org/fedora"
+      ],
+      "matchFileNames": [
+        "iso/raw/Containerfile"
+      ],
+      "allowedVersions": "<=43"
+    },
     {
       "matchManagers": [
         "custom.regex"

@@ -28,20 +28,19 @@ Stages (every screenshot is listed in DIR/screenshots/manifest.json):
      With --backend composefs, every installed boot must run the composefs
      image with fs-verity enforced and every object must carry verity; the
      first boot also reads every object (composefs_check.py --read).
-  5. The installed-system checks the ISO/fisherman harness (luks-e2e.sh) made,
-     on the first boot: no emergency mode, the /efi mountpoint, no bootc
-     SELinux probe denial, logrotate's state, the flavor (image-info, OGC
-     kernel, tun, NVIDIA module built for the booted kernel), unprivileged
-     user namespaces, the rounded-blur runtime/devel split, CountMe, GNOME
-     extension states, fastfetch read back by OCR from a terminal screenshot,
-     the Flathub remote and every [services] unit of the installed contract.
-     The rollback boot repeats the Flathub remote and the services, like the
-     fisherman harness's repeat boot. The bootc switch boot runs another image
-     and gets none of them: an older image cannot meet this checkout's rules.
+  5. The installed-system checks, on the first boot: no emergency mode, the
+     /efi mountpoint, no bootc SELinux probe denial, logrotate's state, the
+     flavor (image-info, OGC kernel, tun, NVIDIA module built for the booted
+     kernel), unprivileged user namespaces, the rounded-blur runtime/devel
+     split, CountMe, GNOME extension states, fastfetch read back by OCR from a
+     terminal screenshot, the Flathub remote and every [services] unit of the
+     installed contract.
+     The rollback boot repeats the Flathub remote and the services as a repeat
+     boot (#19). The bootc switch boot runs another image and gets none of
+     them: an older image cannot meet this checkout's rules.
 
 DIR/evidence/results.json records each stage (STAGES) as pass, fail or not
-run with its duration, plus SELinux mode and failed units for every boot;
-compare_paths.py turns it into the comparison with the ISO/fisherman path.
+run with its duration, plus SELinux mode and failed units for every boot.
 
 Input is what a user at the machine would give: a QEMU USB tablet clicks at a
 widget's on-screen position and QEMU `sendkey` types. AT-SPI (atspi_drive.py,
@@ -84,6 +83,11 @@ GS_APP = "setup"              # AT-SPI app name of gnome-setup (org.gnome.Setup)
 GIS_APP = "initial-setup"
 TARGET_DISK = "/dev/vdb"
 TARGET_SIZE_TEXT = "51.5 GB"  # glib's format_size of the 48 GiB target, as gnome-setup's disk row shows it
+# gnome-setup's disk row subtitles (src/models/disk/disk.rs, display_desc).
+DISK_EMPTY_TEXT = "This disk is fully empty"
+DISK_DATA_TEXT = "This disk contains existing data"
+BLANK_TARGET_DATA = ("gnome-setup reported existing data on the blank target disk "
+                     "(empty-disk detection regressed)")
 SCREEN_W, SCREEN_H = 1920, 1080
 TOP_BAR = 32                  # GNOME Shell top bar at scale 1: top of the work area
 ABS_MAX = 0x7FFF              # QEMU absolute pointer axis range
@@ -104,11 +108,11 @@ RESOLV_FACTS = ("echo '== /etc/resolv.conf'; ls -laZ /etc/resolv.conf; readlink 
 REPO = HERE.parent.parent
 # Where the checks the guest runs are copied to, readable by the test user.
 GUEST_SCRIPTS = "/var/tmp/utah-e2e"
-# luks-e2e.sh's default UTAH_E2E_EXTENSIONS: these must reach ACTIVE.
+# GNOME extensions that must reach ACTIVE at first login (#969).
 EXTENSIONS = ("gsconnect@andyholmes.github.io",)
 # fastfetch-ocr-match.sh needs fastfetch's body and this sentinel.
 FASTFETCH_CMD = "fastfetch && echo UTAH-E2E-FASTFETCH"
-# luks-e2e.sh's EFI gate (#1330): /efi exists and neither EFI mount unit failed.
+# /efi exists and neither EFI mount unit failed (#1330).
 EFI_CHECK = ('test -d /efi && for unit in efi.automount efi.mount; do '
              'load=$(systemctl show "$unit" -p LoadState --value) && '
              'state=$(systemctl show "$unit" -p ActiveState --value) && '
@@ -116,7 +120,7 @@ EFI_CHECK = ('test -d /efi && for unit in efi.automount efi.mount; do '
 # clean-stage removes /var/lib from the image: tmpfiles must recreate logrotate's.
 LOGROTATE_CHECK = ("sh -eu -c 'test -d /var/lib/logrotate; systemctl start logrotate.service; "
                    "test -s /var/lib/logrotate/logrotate.status'")
-# What identifies the caller of a denied bootc mac_admin probe (luks-e2e.sh, #1198).
+# What identifies the caller of a denied bootc mac_admin probe (#1198).
 BOOTC_PROBE_DIAG = (
     "echo '## SYSCALL records of chcon/bootc'; grep -E 'type=SYSCALL.*comm=\"(chcon|bootc)\"' /var/log/audit/audit.log; "
     "echo '## labels'; ls -Z /usr/bin/bootc /usr/bin/chcon /usr/bin/bash /usr/bin/unshare "
@@ -126,8 +130,7 @@ BOOTC_PROBE_DIAG = (
     "-p ExecMainStartTimestampMonotonic '*' | awk -F= '/^Id=/{id=$2} /^ExecMainPID=/{pid=$2} "
     "/^ExecMainStartTimestampMonotonic=/{if (pid > 0) print pid, $2, id}' | sort -n")
 
-# The stages results.json reports, in order. compare_paths.py lines them up
-# against the ISO/fisherman luks job's phases.
+# The stages results.json reports, in order.
 STAGES = ("live boot", "install", "first boot unlock", "initial setup",
           "first boot desktop", "bootc switch", "bootc rollback")
 
@@ -336,6 +339,7 @@ class Page(Enum):
     TRY_OR_INSTALL = auto()
     DISK = auto()
     DATA_FOUND = auto()
+    ERASE = auto()
     CONFIRM = auto()
     PASSPHRASE = auto()
     RECOVERY_KEY = auto()
@@ -358,7 +362,14 @@ def classify_setup_page(nodes):
         (Page.RECOVERY_KEY, ("Back Up Recovery Key",)),
         (Page.PASSPHRASE, ("Choose a Disk Passphrase",)),
         (Page.DATA_FOUND, ("Existing Data Found",)),
-        (Page.CONFIRM, ("Begin Installation", "Erase and Install")),
+        # gnome-setup's erase confirmations (src/page/installer/disk/confirm.rs),
+        # after 'Use Entire Disk' or forced for a disk short of free space or
+        # full, all answer 'Erase and Install' (the forced ones count down,
+        # 'Erase and Install (3)'). Not their headings: 'Disk is Full' is a
+        # substring of 'This disk is fully empty'.
+        (Page.ERASE, ("Erase and Install",)),
+        # The nondestructive one an empty disk gets: 'Begin Installation?', 'Install'.
+        (Page.CONFIRM, ("Begin Installation",)),
         (Page.DISK, ("Select a Disk", "Unknown Disk")),
         (Page.PROGRESS, ("Installing", "Copying Partition")),
         (Page.TRY_OR_INSTALL, ("Install Now",)),
@@ -368,6 +379,22 @@ def classify_setup_page(nodes):
         if any(has_text(visible, text) for text in headings):
             return page
     return Page.UNKNOWN
+
+
+def blank_target_problem(page, target_row=()):
+    """Why gnome-setup's view contradicts the blank target, or None.
+
+    install.qcow2 is created fresh (all zeroes) for every run, so the one
+    correct route is the empty-disk one: the target's row reads 'This disk is
+    fully empty' and selecting it asks 'Begin Installation?' with a plain
+    'Install'. The data page or an erase confirmation means gnome-setup
+    misread the disk; it read every disk that way while it judged emptiness
+    from currentSizeBytes, which systemd-repart reports as the device size.
+    target_row: the visible nodes of the target's disk row, when on the disk page.
+    """
+    if page in (Page.DATA_FOUND, Page.ERASE) or has_text(target_row, DISK_DATA_TEXT):
+        return BLANK_TARGET_DATA
+    return None
 
 
 def log(msg):
@@ -578,8 +605,8 @@ class Harness:
     def shot(self, label, proves, retake_until_drawn=False, required=False, below_top_bar=False):
         """A screenshot into the manifest. retake_until_drawn retakes a flat frame
         (below_top_bar: one flat below the top bar) for a minute; required then
-        fails the run on a frame that never drew, as the fisherman harness's
-        UTAH_E2E_REQUIRE_SCREENSHOTS gate did."""
+        fails the run on a frame that never drew (a flat or frozen screen is
+        no proof a session started, #786)."""
         png = self.shots / f"{label}.png"
         for attempt in range(12 if retake_until_drawn else 1):
             ppm = self.screendump(png)
@@ -913,7 +940,7 @@ class Harness:
         previous, since = None, start
         seen = set()
         qr_seen = False
-        free_space_selected = False
+        target_selected = False
         passphrase_filled = False
         confirmed_at = None
         while time.monotonic() < deadline:
@@ -934,6 +961,9 @@ class Harness:
                     raise Fail("installation completed without a recovery key")
                 self.timings["gui-install-seconds-after-confirm"] = int(now - (confirmed_at or start))
                 return
+            problem = blank_target_problem(page)
+            if problem:
+                raise Fail(problem)
             limit = 60 if page is Page.UNKNOWN else (3600 if page is Page.PROGRESS else 120)
             if now - since >= limit:
                 raise Fail(f"gnome-setup stuck on {page.name.lower()} page")
@@ -954,25 +984,20 @@ class Harness:
                 if row is None:
                     self.setup_dump(runner, "miss")
                 else:
+                    shown = subtree(nodes, row)
+                    problem = blank_target_problem(page, shown)
+                    if problem:
+                        raise Fail(problem)
+                    if not target_selected:
+                        status = "empty" if has_text(shown, DISK_EMPTY_TEXT) else "status not exposed"
+                        log(f"  target row {TARGET_SIZE_TEXT}: {status}")
                     self.click_node(nodes, row)
-            elif page is Page.DATA_FOUND:
-                # Prefer the non-destructive free-space route; never silently
-                # fall back to erasing when that option is absent.
-                if free_space_selected:
-                    if self.setup_press(runner, nodes, "Start Installation"):
-                        confirmed_at = confirmed_at or now
-                else:
-                    row = row_containing(nodes, "Install to Free Space")
-                    if row is not None:
-                        self.click_node(nodes, row)
-                        free_space_selected = True
-                    else:
-                        self.setup_dump(runner, "miss")
+                    target_selected = True
             elif page is Page.CONFIRM:
-                if not any(re.search(r"(?<![\w/])" + re.escape(TARGET_DISK) + r"(?![\w/])",
-                                     n["name"] + " " + n["text"]) for n in nodes):
-                    raise Fail(f"refusing destructive confirmation: page does not name {TARGET_DISK}")
-                if self.setup_press(runner, nodes, "Start Installation", "Install", "Erase and Install"):
+                # The dialog names no disk: it confirms the row this run picked by size.
+                if not target_selected:
+                    raise Fail(f"refusing to confirm installation: the {TARGET_SIZE_TEXT} target row was never selected")
+                if self.setup_press(runner, nodes, "Install"):
                     confirmed_at = confirmed_at or now
             elif page is Page.PASSPHRASE:
                 if self.tpm:
@@ -1202,7 +1227,7 @@ class Harness:
         return run
 
     def copy_guest_scripts(self):
-        """The fisherman harness's guest-side checks, from their current paths, readable by the test user."""
+        """The guest-side checks, from their iso/scripts/ paths, readable by the test user."""
         self.ssh("root", f"mkdir -p {GUEST_SCRIPTS}/scripts")
         for src, dst in ((SCRIPTS / "e2e-services.sh", "e2e-services.sh"),
                          (SCRIPTS / "verify-installed-flavor.py", "verify-installed-flavor.py"),
@@ -1212,11 +1237,11 @@ class Harness:
         self.ssh("root", f"chmod -R a+rX {GUEST_SCRIPTS}")
 
     def check_installed(self, phase, prefix, repeat=False):
-        """What luks-e2e.sh checked on the installed system, with its pass/fail.
+        """The checks on the installed system, with their pass/fail.
 
         Every check runs and the boot fails with all their problems together;
-        repeat is the fisherman harness's repeat boot: the Flathub remote and
-        the contract's units again."""
+        repeat is the repeat boot (#19): the Flathub remote and the contract's
+        units again."""
         self.copy_guest_scripts()
         boot_pass = "repeat" if repeat else "first"
         checks = [("flathub remote", self.check_flathub),
@@ -1670,6 +1695,12 @@ def row_containing(nodes, text):
             parts.pop()
         return n
     return None
+
+
+def subtree(nodes, root):
+    """root and the nodes below it (AT-SPI paths are dotted child indices)."""
+    prefix = root["path"] + "."
+    return [n for n in nodes if n is root or n["path"].startswith(prefix)]
 
 
 def top_frame(nodes):

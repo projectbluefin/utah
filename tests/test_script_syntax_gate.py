@@ -98,7 +98,6 @@ class InventoryTests(unittest.TestCase):
             "scripts/update-e2e-readme.py",
             "iso/scripts/live-kernel.py",
             "iso/scripts/luks-unlock.py",
-            "iso/scripts/boot-installed.sh",
             "scripts/build-gnome-extensions.sh",
             "system_files/shared/usr/libexec/bluefin-wallpaper-month-sync",
         ):

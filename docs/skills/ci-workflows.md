@@ -1,7 +1,7 @@
 ---
 name: ci-workflows
-version: "1.4"
-last_updated: "2026-11-22"
+version: "1.5"
+last_updated: "2026-11-27"
 id: ci-workflows
 one_line_purpose: Navigate Utah's build, promote, and sync workflow topology.
 entry_point: docs/skills/ci-workflows.md
@@ -36,11 +36,9 @@ post-build verification workflows, not the complete workflow inventory:
   (`just build-ghcr` refuses an override without them); ordinary builds
   retain the existing pin. Each job uses
   the verified kernel cache, canonicalizes gzip layer bytes before booting its
-  real local candidate's DEBUG=0 ISO through the unchanged offline
-  LUKS/desktop harness (live session over vsock), compares its installed
-  manifest with that exact local manifest, and retains that tested ISO.
-  Main also runs the existing tacklebox builder
-  attestation, size and live-boot gates on local bytes. Publication follows
+  real local candidate through the gnome-setup install medium (`iso/raw`:
+  build, GUI install into LUKS2, first boot, initial setup, `bootc switch`
+  and rollback; #1569). Publication follows
   these gates and rejects digest changes or existing candidate tags. The
   `candidate-manifest/candidate-manifest.json` artifact binds source commits,
   Common layer and native image digests; full configured testsuite suites use
@@ -72,16 +70,15 @@ post-build verification workflows, not the complete workflow inventory:
   dispatched ref's `github.sha`, so a sync race fails closed and `testing`
   waits for the next sync or nightly run.
   With the default `review_vm=false`, only the source checks run. Set
-  `review_vm=true` as well to build a disposable image on the runner, compose
-  and boot an offline ISO, and retain test evidence; `review_iso_all_flavors`
-  expands that job from main flavors to every flavor in `config/flavors.json`,
-  and `review_composefs_backend` installs with the composefs backend (#1129).
-  The review ISO defaults to zstd level 15 so all flavors fit for VM testing.
-  Set `review_iso_compression_level=3` to measure the production ISO budget;
-  `evidence/iso-size.json` records the image size even when the 8 GiB guard
-  fails. This path has read-only registry access and never publishes or signs
-  the review image. For kernel-cache consumers, first build the matching signed
-  cache through the normal pipeline.
+  `review_vm=true` as well to build a disposable image on the runner, build
+  the gnome-setup medium (`iso/raw`) from it, install it with `raw_e2e.py`
+  and retain test evidence (never the medium or the disk);
+  `review_all_flavors` expands that job from main flavors to every flavor in
+  `config/flavors.json`, and `review_backend` picks the medium's bootc
+  backend (`auto`, `composefs` or `ostree`; #1129). This path has read-only
+  registry access and never publishes or signs the review image. For
+  kernel-cache consumers, first build the matching signed cache through the
+  normal pipeline.
 - `.github/workflows/merge-queue.yml` -- `merge_group` only. The `main`
   ruleset requires `contract` and `build_main / Check all testing builds
   successful`; the merge queue waits for both on its own commit. The second
@@ -136,9 +133,9 @@ post-build verification workflows, not the complete workflow inventory:
   the proposed head. The measurement step keeps the read-only job token.
 - `.github/workflows/post-testing-e2e.yml` -- successful non-PR testing builds
   explicitly dispatch this, or manually supply a successful testing build run ID.
-  Its `promote-to-testing` job needs the LUKS jobs (which test and retain the
-  production ISO) and the testsuite. Only when all pass does it record
-  per-digest evidence and move
+  Its `promote-to-testing` job needs the `gnome-setup` install (every
+  flavor) and testsuite jobs; fisherman's jobs and the tacklebox ISO left
+  the pipeline (#1569). Only when all pass does it record per-digest evidence and move
   `:testing` through a monotonic ratchet; a red testsuite leg blocks
   promotion, with no override (#1329). The promotion to `main` sets
   `run_e2e: false`; the release gate requires that evidence for the exact
@@ -160,16 +157,13 @@ post-build verification workflows, not the complete workflow inventory:
   [startup failures](ci-workflows/references/iso-e2e.md#startup-failures).
 - `.github/workflows/image-installer.yml` -- nightly, manual dispatch,
   pull requests touching `iso/raw/**`, and called by Post-Testing E2E
-  (`gnome-setup` job) on every tested digest, beside `luks` and not gating
-  yet: the path to replacing fisherman in the gate (#1569). The experimental image-based installer
+  (`gnome-setup` job) on every tested digest; that job is the install gate
+  for `:testing` (#1569). The experimental image-based installer
   of ADR-0001 (`docs/adr/0001-image-based-installer.md`): builds a raw bootc
   medium on each flavor's current `:testing` digest (main only unless
   `all_flavors`), shrinks it, drives gnome-setup through a LUKS2 install,
   first boot, gnome-initial-setup, bootc switch and rollback with
-  screenshots, and writes a comparison with the Post-Testing E2E `luks` job
-  for the same digest to the job summary and `comparison.json`. It is
-  deliberately non-blocking: not a required check, not in
-  `promote-to-testing`'s needs, read-only permissions, no tag moves;
+  screenshots. Read-only permissions and no tag moves of its own;
   `tests/test_image_installer.py` holds that. Details:
   [image-installer](local-testing/references/image-installer.md).
 - `.github/workflows/publish-installer.yml` -- weekly Monday 09:41 UTC and
@@ -209,6 +203,18 @@ post-build verification workflows, not the complete workflow inventory:
   The four-hour backstop trades scheduled runner use for up to four hours of
   reconciliation delay plus GitHub scheduling delays, not immediate CI-green
   handling. Existing review, check, and queue protections are unchanged.
+- `.github/workflows/pages.yml` -- pushes to `main` touching `site/`, the
+  two manifests or `scripts/generate-site-data.py`, and manual dispatch,
+  publish the status page to GitHub Pages in one job: check the committed
+  package data, run `tests.test_site`, upload `site/` once, deploy. Right
+  after the upload, `actions/deploy-pages` can list no artifact (`Found 0
+  artifact(s)` then `No artifacts named "github-pages"`; actions/deploy-pages#451,
+  runs #83–#86 in November 2026), so the deploy step is retried after 5, 20
+  and 60 s. Never retry the upload and never re-run the failed job: a second
+  `github-pages` artifact in the run fails every later lookup with `Multiple
+  artifacts`. Re-dispatch the workflow instead. `tests/test_site.py` holds
+  the single upload and the retries; drop them once actions/deploy-pages#455
+  is released.
 
 CI delegates builds, vulnerability reporting, keyless signatures, provenance,
 and caching to `projectbluefin/actions@v1` (originated as a `docs/building.md`

@@ -623,8 +623,9 @@ class ImageSizeTests(unittest.TestCase):
             self.assertIn("COPY packages/RPM-GPG-KEY-redhat-release-2 /etc/pki/rpm-gpg/",
                           (ROOT / containerfile).read_text(), containerfile)
 
+class LiveInitramfsTests(unittest.TestCase):
     def test_live_initramfs_build_fails_on_a_dracut_error(self):
-        source = (ROOT / "iso/live/Containerfile").read_text()
+        source = (ROOT / "iso/raw/Containerfile").read_text()
         self.assertIn("mkdir -p /var/roothome", source)
         self.assertIn("set -euxo pipefail", source)
         self.assertIn("dracut\\[E\\]: FAILED", source)

@@ -20,8 +20,8 @@ FILES = [
     Path("scripts/install-ogc-kernel.sh"),
     Path("scripts/install-v4l2loopback.sh"),
     Path("scripts/configure-services.sh"),
-    Path("iso/live/src/install-flatpaks.sh"),
-    Path("iso/scripts/build-iso.sh"),
+    Path("iso/raw/Containerfile"),
+    Path("iso/raw/bake-flatpaks.sh"),
 ]
 
 # Downloads the checker does not flag by extension. They are configuration

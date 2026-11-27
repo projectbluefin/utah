@@ -3,7 +3,7 @@
 Covers the medium's boot configuration and shrink plan (iso/raw/medium.py),
 the harness's per-stage results (iso/raw/raw_e2e.py), the size measurement
 (iso/raw/measure_medium.py), the comparison with the ISO/fisherman luks job
-(iso/raw/compare_paths.py), and the promise that the track never gates
+and the promise that the track never gates
 anything: image-installer.yml is not a required check, not in
 promote-to-testing's needs, and publishes nothing. It also covers the publish
 track that ships the clean medium to ghcr (publish-installer.yml) and what it
@@ -40,7 +40,6 @@ def load(name, path):
 medium = load("raw_medium", RAW / "medium.py")
 raw_e2e = load("raw_e2e", RAW / "raw_e2e.py")
 measure_medium = load("measure_medium", RAW / "measure_medium.py")
-compare = load("compare_paths", RAW / "compare_paths.py")
 kernel_verity = load("kernel_verity", ROOT / "scripts/kernel_verity.py")
 
 ENTRY = """title Fedora Linux 44 (Utah) (ostree:0)
@@ -270,121 +269,6 @@ class ResultsTests(unittest.TestCase):
         self.assertEqual(raw_e2e.parse_failed_units(""), [])
 
 
-LUKS_LOG = """\ufeff2026-11-20T04:35:36.3414740Z ISO ready: /home/runner/work/utah/utah/output/utah-live.iso (5.3G)
-2026-11-20T04:36:01.6028470Z === Phase 1/7: boot the live ISO ===
-2026-11-20T04:36:34.3891307Z === Phase 2/7: prove the live session reached a desktop ===
-2026-11-20T04:36:48.1857085Z === Phase 3/7: install onto an encrypted disk ===
-2026-11-20T04:44:43.1516846Z === Phase 4/7: boot the installed disk ===
-"""
-FAILED_LOG = """2026-11-21T05:10:00.4042580Z ISO ready: /x/utah-live.iso (5.3G)
-2026-11-21T05:10:27.2196484Z === Phase 1/7: boot the live ISO ===
-2026-11-21T05:10:58.4275890Z === Phase 2/7: prove the live session reached a desktop ===
-2026-11-21T05:11:12.3095662Z === Phase 3/7: install onto an encrypted disk ===
-2026-11-21T05:20:37.0384039Z ##[error]Process completed with exit code 13.
-"""
-
-
-class FishermanSideTests(unittest.TestCase):
-    def test_install_time_is_phase_three_to_phase_four(self):
-        parsed = compare.parse_luks_log(LUKS_LOG)
-        self.assertEqual(parsed["iso_size"], "5.3G")
-        self.assertEqual(compare.luks_install_seconds(parsed), (475, "pass"))
-
-    def test_a_failed_install_reports_where_and_after_how_long(self):
-        parsed = compare.parse_luks_log(FAILED_LOG)
-        self.assertEqual(parsed["error"][1], 13)
-        self.assertEqual(compare.luks_install_seconds(parsed), (565, "fail"))
-        status = [s["status"] for s in compare.luks_stages(parsed, "failure")]
-        self.assertEqual(status, ["pass", "pass", "fail", "not run", "not run", "not run", "not run"])
-
-    def test_the_luks_job_is_matched_by_image_and_digest(self):
-        digest = "sha256:" + "1c7956e2" * 8
-        jobs = [{"name": f"luks (utah-gaming, {digest}, ghcr.io/x...)"},
-                {"name": f"luks (utah, sha256:{'0' * 64}, ghcr.io/x...)"},
-                {"name": f"luks (utah, {digest}, ghcr.io/proj..."}]
-        self.assertIs(compare.match_luks_job(jobs, "utah", digest), jobs[2])
-        self.assertIsNone(compare.match_luks_job(jobs, "utah-nvidia", digest))
-
-    def test_fetch_reads_the_newest_completed_run_with_that_job(self):
-        digest = "sha256:" + "ab" * 32
-        job = {"id": 7, "name": f"luks (utah, {digest}, r)", "conclusion": "success", "html_url": "j",
-               "steps": [{"name": compare.ISO_STEP, "started_at": "2026-11-20T04:26:15Z",
-                          "completed_at": "2026-11-20T04:35:36Z"}]}
-        calls = []
-
-        def api(path, raw=False):
-            calls.append(path)
-            if path.endswith("runs?per_page=60"):
-                return {"workflow_runs": [{"id": 3, "status": "in_progress"},
-                                          {"id": 2, "status": "completed", "html_url": "r2"},
-                                          {"id": 1, "status": "completed", "html_url": "r1"}]}
-            if "/runs/2/jobs" in path:
-                return {"jobs": [{"id": 5, "name": "resolve"}]}
-            if "/runs/1/jobs" in path:
-                return {"jobs": [job]}
-            if path.endswith("/jobs/7/logs"):
-                return LUKS_LOG
-            if "/runs/1/artifacts" in path:
-                return {"artifacts": [{"name": "production-iso-utah", "size_in_bytes": 5556307570}]}
-            raise AssertionError(path)
-
-        got = compare.fetch_fisherman("o/r", "utah", digest, api=api)
-        self.assertEqual(got["run"], 1)
-        self.assertEqual(got["install_seconds"], 475)
-        self.assertEqual(got["iso_build_seconds"], 561)
-        self.assertEqual(got["production_iso_artifact_bytes"], 5556307570)
-        self.assertFalse(any("/runs/3/" in c for c in calls))
-
-
-    def test_fetch_reads_the_callers_own_in_progress_run_first(self):
-        digest = "sha256:" + "ab" * 32
-        job = {"id": 9, "name": f"luks (utah, {digest}, r)", "conclusion": "failure", "html_url": "j", "steps": []}
-
-        def api(path, raw=False):
-            if path.endswith("/runs/42"):
-                return {"id": 42, "status": "in_progress", "html_url": "r42"}
-            if "/runs/42/jobs" in path:
-                return {"jobs": [job]}
-            if path.endswith("/jobs/9/logs"):
-                return LUKS_LOG
-            if "/runs/42/artifacts" in path:
-                return {"artifacts": []}
-            raise AssertionError(path)
-
-        got = compare.fetch_fisherman("o/r", "utah", digest, api=api, run_id="42")
-        self.assertEqual((got["run"], got["conclusion"]), (42, "failure"))
-
-
-class ComparisonTests(unittest.TestCase):
-    def test_image_side_and_markdown(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            ev, rev = Path(tmp, "ev"), Path(tmp, "rev")
-            ev.mkdir()
-            rev.mkdir()
-            results = raw_e2e.Results("gui")
-            for stage in raw_e2e.STAGES:
-                results.begin(stage)
-            results.boot("live", "Enforcing", [])
-            results.boot("first boot", "Enforcing", ["x.service"])
-            results.finish()
-            (ev / "results.json").write_text(json.dumps(results.as_dict({"gui-install-seconds-after-confirm": 145})))
-            (rev / "medium.json").write_text('{"raw_apparent_bytes": 1, "raw_allocated_bytes": 1, "bootc_install_seconds": 147}')
-            size = Path(tmp, "size.json")
-            size.write_text(json.dumps({"label": "shrunk", "apparent_bytes": 8 * 2**30, "allocated_bytes": 7 * 2**30,
-                                        "formats": {"zstd-3": {"bytes": 3 * 2**30, "compress_seconds": 60.0,
-                                                               "decompress_seconds": 20.0}}}))
-            img = compare.image_metrics(ev, rev, [size], 300)
-        self.assertEqual(img["bootc_install_seconds"], 147)
-        md = compare.render({"image": "utah", "digest": "sha256:" + "a" * 64, "image_based": img,
-                             "fisherman": None, "references": {"GNOME OS nightly": 3 * 2**30}})
-        self.assertIn("| Install time | GUI confirm-to-done 2 min 25 s", md)
-        self.assertIn("first boot: x.service", md)
-        self.assertIn("| shrunk | 8.00 GiB | 7.00 GiB | 3.00 GiB", md)
-        self.assertIn("no Post-Testing E2E `luks` job found", md)
-        self.assertIn("GNOME OS nightly ISO 3.00 GiB", md)
-
-
-@unittest.skipUnless(shutil.which("zstd"), "zstd not installed")
 class MeasureTests(unittest.TestCase):
     def test_sizes_and_pack_unpack_times_are_recorded_and_packs_removed(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -413,8 +297,7 @@ class NonBlockingTrackTests(unittest.TestCase):
         # Called inputs carry the dispatch defaults, so a call runs the same
         # medium (TPM, Flatpaks, compression) as the nightly run.
         call, dispatch = on["workflow_call"]["inputs"], on["workflow_dispatch"]["inputs"]
-        # e2e_run is the one call-only input: the caller's run id.
-        self.assertEqual(set(call) - {"e2e_run"}, set(dispatch))
+        self.assertEqual(set(call), set(dispatch))
         for name in dispatch:
             self.assertEqual(call[name].get("default"), dispatch[name].get("default"), name)
         self.assertNotIn("merge_group", on)
@@ -425,26 +308,24 @@ class NonBlockingTrackTests(unittest.TestCase):
             for scope, level in (job.get("permissions") or {}).items():
                 self.assertEqual(level, "read", f"{name}: {scope}")
 
-    def test_nothing_gates_on_the_track(self):
+    def test_post_testing_gates_on_it(self):
+        # #1569: the gnome-setup install of every flavor is the install gate.
         e2e = yaml.safe_load((ROOT / ".github/workflows/post-testing-e2e.yml").read_text())
-        needs = e2e["jobs"]["promote-to-testing"]["needs"]
-        self.assertFalse([n for n in needs if "image" in n or "raw" in n])
+        self.assertIn("gnome-setup", e2e["jobs"]["promote-to-testing"]["needs"])
         for other in (ROOT / ".github/workflows").glob("*.yml"):
             if other not in (WORKFLOW, ROOT / ".github/workflows/post-testing-e2e.yml"):
                 self.assertNotIn("image-installer", other.read_text(), other.name)
-        # Post-Testing E2E runs it on every tested digest, beside luks (#1569).
         lane = e2e["jobs"]["gnome-setup"]
         self.assertEqual(lane["uses"], "./.github/workflows/image-installer.yml")
-        self.assertEqual(lane["with"], {"image_ref": "${{ matrix.ref }}", "e2e_run": "${{ github.run_id }}"})
-        # It waits for the luks job it compares with, and runs even if luks is red.
+        self.assertEqual(lane["with"], {"image_ref": "${{ matrix.ref }}"})
+        self.assertEqual(set(lane["needs"]), {"resolve", "verify-provenance"})
+        self.assertNotIn("if", lane)
         # Every need must be a real job: a dangling one makes GitHub reject the
         # whole workflow file and no Post-Testing E2E run starts at all.
-        self.assertIn("luks", lane["needs"])
         for job_name, job in e2e["jobs"].items():
             needs = job.get("needs") or []
             needs = [needs] if isinstance(needs, str) else needs
             self.assertLessEqual(set(needs), set(e2e["jobs"]), job_name)
-        self.assertIn("!cancelled()", lane["if"])
         self.assertEqual(lane["strategy"]["matrix"], "${{ fromJSON(needs.resolve.outputs.matrix) }}")
         self.assertEqual(set(lane["permissions"].values()), {"read"})
         name = self.workflow["jobs"]["e2e"]["name"]
@@ -556,11 +437,9 @@ class OfflineFlatpakTests(unittest.TestCase):
         self.assertIn("setfiles -F -r /stateroot", bake)
         self.assertNotRegex(bake, r"podman (build|commit|push)")
 
-    def test_the_medium_bakes_the_set_the_iso_bakes(self):
+    def test_the_medium_bakes_the_brewfile_set(self):
         bake = (RAW / "bake-flatpaks.sh").read_text()
-        iso = (ROOT / "iso/live/Containerfile").read_text()
         brewfile = "/usr/share/ublue-os/homebrew/system-flatpaks.Brewfile"
-        self.assertIn(f"--flatpaks {brewfile}", iso)
         self.assertIn("/scripts/verify-desktop-contract.py", bake)
         self.assertIn(brewfile, bake)
         self.assertIn("--no-related --or-update flathub", bake)
@@ -585,16 +464,6 @@ class OfflineFlatpakTests(unittest.TestCase):
         # would turn the bake off there.
         self.assertEqual(workflow["jobs"]["e2e"]["env"]["FLATPAKS"],
                          "${{ github.event_name != 'workflow_dispatch' || inputs.flatpaks }}")
-
-    def test_comparison_reports_baked_flatpaks_and_removal(self):
-        cell = compare.flatpak_cell({"baked": {"apps": 20, "bytes": 3 * 2**30, "seconds": 400},
-                                     "checks": {"first boot": {"problems": []},
-                                                "after bootc switch": {"problems": []},
-                                                "after bootc rollback": {"problems": []}}})
-        self.assertIn("20 apps, 3.00 GiB", cell)
-        self.assertIn("stayed removed through switch and rollback", cell)
-        self.assertEqual(compare.flatpak_cell({}), "none baked")
-
 
 DIGEST = "ab" * 64
 COMPOSEFS_ENTRY = f"""title Utah 44.20261120
@@ -659,18 +528,12 @@ class ComposefsTests(unittest.TestCase):
         self.assertIn('--backend "$MEDIUM_BACKEND"', e2e)
         self.assertIn('--backend-decision "$WORK/raw-evidence/backend.json"', e2e)
 
-    def test_the_backend_decision_reaches_results_and_the_summary(self):
+    def test_the_backend_decision_reaches_results(self):
         decision = {"requested": "auto", "backend": "ostree", "kernel": "7.3.5-200.fc44.x86_64", "fixed": False,
                     "reason": "7.3.5-200.fc44.x86_64 is 7.2 or 7.3 without 254e15591ee4 in its changelog"}
         results = raw_e2e.Results("gui")
         results.backend = {"backend": "ostree", **decision}
         self.assertEqual(results.as_dict()["backend"]["kernel"], "7.3.5-200.fc44.x86_64")
-        cell = compare.backend_cell(decision)
-        self.assertIn("**ostree** (requested auto; kernel 7.3.5-200.fc44.x86_64", cell)
-        self.assertEqual(compare.backend_cell(None), "n/a")
-        with tempfile.TemporaryDirectory() as d:
-            (Path(d) / "backend.json").write_text(json.dumps(decision))
-            self.assertEqual(compare.image_metrics(d, d, [], 0)["backend"], decision)
 
     def test_the_live_initramfs_is_the_booted_kernels(self):
         # Gaming images carry a second module tree that sorts above the OGC
@@ -827,7 +690,7 @@ class InstalledSystemCheckTests(unittest.TestCase):
             ppm.write_bytes(b"P6\n%d %d\n255\n" % (w, h) + top * 10)
             self.assertTrue(raw_e2e.drawn(ppm, below_top_bar=True))
 
-    def run_setup_state(self, failed_unit):
+    def run_setup_state(self, failed_unit, disabled="kanata.service"):
         """setup_state_script against e2e-services.sh, with systemctl, sudo and the contract parser stubbed."""
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
@@ -835,7 +698,8 @@ class InstalledSystemCheckTests(unittest.TestCase):
             (d / "bin").mkdir()
             shutil.copy(ROOT / "iso/scripts/e2e-services.sh", d / "e2e-services.sh")
             (d / "scripts/verify-desktop-contract.py").write_text(
-                'import sys\nprint({"enabled": "gdm.service", "user_enabled": "pipewire.socket"}[sys.argv[2]])\n')
+                'import sys\nprint({"enabled": "gdm.service", "user_enabled": "pipewire.socket", '
+                f'"disabled": {disabled!r}}}[sys.argv[2]])\n')
             (d / "bin/sudo").write_text('#!/bin/bash\nwhile [[ $1 == -* ]]; do [[ $1 == -p ]] && shift; shift; done\n'
                                         'cat >/dev/null\nexec "$@"\n')
             (d / "bin/systemctl").write_text(
@@ -865,6 +729,16 @@ class InstalledSystemCheckTests(unittest.TestCase):
         failed = self.run_setup_state("gdm.service")
         self.assertNotEqual(failed.returncode, 0)
         self.assertIn("FAIL: system unit gdm.service failed during repeat boot", failed.stderr)
+
+    def test_kanata_is_checked_only_when_the_installed_contract_lists_it(self):
+        # A :stable built before kanata (#1297) has no unit and no contract
+        # entry; the publish run of that image must not fail on it.
+        old = self.run_setup_state("none", disabled="")
+        self.assertEqual(old.returncode, 0, old.stderr)
+        self.assertNotIn("kanata.service", old.stdout)
+        broken = self.run_setup_state("kanata.service")
+        self.assertNotEqual(broken.returncode, 0)
+        self.assertIn("FAIL: system unit kanata.service failed during repeat boot", broken.stderr)
 
     def test_the_reused_fisherman_checks_exist_where_the_harness_reads_them(self):
         # raw_e2e.py runs these from iso/scripts/: removing the ISO path must keep them.
@@ -942,9 +816,7 @@ class KernelVeritySelectorTests(unittest.TestCase):
             # Only the tree with a vmlinuz is the kernel bootc deploys.
             self.assertEqual(kernel_verity.booted_kernel(Path(d)), "7.1.8-ogc1")
 
-    def test_both_install_paths_consult_it(self):
-        luks = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
-        self.assertIn('ssh_live "python3 - select --backend composefs" <"${ROOT}/scripts/kernel_verity.py"', luks)
+    def test_the_medium_build_consults_it(self):
         build = (RAW / "build-raw-image.sh").read_text()
         self.assertIn('<"${HERE}/../../scripts/kernel_verity.py"', build)
 
@@ -1014,15 +886,62 @@ class GnomeSetupTests(unittest.TestCase):
         self.assertEqual(out["installer"], "gnome-setup")
         self.assertIn("encryption", out)
 
-    def test_wipe_or_free_takes_free_space_without_a_confirm_dialog(self):
-        # The empty target reads as DataDetected ('Existing Data Found'), so the
-        # harness takes 'Install to Free Space' and starts installation directly;
-        # full wipe would ask 'Erase and Install' instead (run 44968690146).
-        harness = (RAW / "raw_e2e.py").read_text()
-        self.assertIn('"Existing Data Found"', harness)
-        self.assertIn('"Install to Free Space"', harness)
-        self.assertIn('"Start Installation"', harness)
-        self.assertIn('"Install"', harness)
+    @staticmethod
+    def showing(*names, role="label"):
+        return [{"path": f"0.{i}", "role": role, "name": name, "text": "",
+                 "ext": [0, 0, 10, 10], "states": ["sensitive", "showing", "visible"]}
+                for i, name in enumerate(names)]
+
+    def test_installer_pages_classify_from_gnome_setup_text(self):
+        # Headings and response labels of gnome-setup 80825ae's dialogs
+        # (src/page/installer/disk/confirm.rs) and pages; the dialogs sit over
+        # the still-showing disk page.
+        disk = self.showing("Select a Disk", "Unknown Disk 51.5\u00a0GB", raw_e2e.DISK_EMPTY_TEXT)
+        page = raw_e2e.Page
+        for nodes, expected in (
+            (disk, page.DISK),
+            (disk + self.showing("Begin Installation?") + self.showing("Cancel", "Install", role="button"),
+             page.CONFIRM),
+            (self.showing("Existing Data Found", "Install to Free Space"), page.DATA_FOUND),
+            (disk + self.showing("Begin Installation?") + self.showing("Cancel", "Erase and Install", role="button"),
+             page.ERASE),
+            (disk + self.showing("Insufficient Free Space") + self.showing("Erase and Install (3)", role="button"),
+             page.ERASE),
+            (disk + self.showing("Disk is Full") + self.showing("Erase and Install", role="button"), page.ERASE),
+        ):
+            with self.subTest(expected=expected, last=nodes[-1]["name"]):
+                self.assertIs(raw_e2e.classify_setup_page(nodes), expected)
+
+    def test_existing_data_on_the_blank_target_is_a_failure(self):
+        # install.qcow2 is created fresh: the data page, any erase confirmation,
+        # or a target row saying it holds data means empty-disk detection broke.
+        page = raw_e2e.Page
+        for p in (page.DATA_FOUND, page.ERASE):
+            self.assertEqual(raw_e2e.blank_target_problem(p), raw_e2e.BLANK_TARGET_DATA)
+        self.assertIn("existing data on the blank target disk", raw_e2e.BLANK_TARGET_DATA)
+        data_row = self.showing("Unknown Disk 51.5\u00a0GB", raw_e2e.DISK_DATA_TEXT)
+        self.assertEqual(raw_e2e.blank_target_problem(page.DISK, data_row), raw_e2e.BLANK_TARGET_DATA)
+        for p in (page.DISK, page.CONFIRM, page.PROGRESS, page.UNKNOWN):
+            self.assertIsNone(raw_e2e.blank_target_problem(p))
+        empty_row = self.showing("Unknown Disk 51.5\u00a0GB", raw_e2e.DISK_EMPTY_TEXT)
+        self.assertIsNone(raw_e2e.blank_target_problem(page.DISK, empty_row))
+
+    def test_the_target_row_status_is_read_from_its_own_subtree(self):
+        # The live medium's row says it holds data; only the target's row counts.
+        nodes = [
+            {"path": "1.0", "role": "table row", "name": "Unknown Disk 51.5\u00a0GB", "text": "",
+             "ext": [0, 0, 100, 20], "states": ["showing"]},
+            {"path": "1.0.1", "role": "label", "name": raw_e2e.DISK_EMPTY_TEXT, "text": "",
+             "ext": [0, 0, 100, 20], "states": ["showing"]},
+            {"path": "1.1", "role": "table row", "name": "Unknown Disk 9.7\u00a0GB", "text": "",
+             "ext": [0, 30, 100, 20], "states": ["showing"]},
+            {"path": "1.1.1", "role": "label", "name": raw_e2e.DISK_DATA_TEXT, "text": "",
+             "ext": [0, 30, 100, 20], "states": ["showing"]},
+        ]
+        row = raw_e2e.row_containing(nodes, raw_e2e.TARGET_SIZE_TEXT)
+        shown = raw_e2e.subtree(nodes, row)
+        self.assertEqual([n["path"] for n in shown], ["1.0", "1.0.1"])
+        self.assertIsNone(raw_e2e.blank_target_problem(raw_e2e.Page.DISK, shown))
 
     def test_recovery_key_read_from_label_shaped_like_a_key(self):
         # Run 44972858422's atspi-timeout-recovery-key.json: the key label's

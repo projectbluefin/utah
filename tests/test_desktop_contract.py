@@ -352,8 +352,9 @@ class FlatpaksModeTests(unittest.TestCase):
 class ServicesModeTests(unittest.TestCase):
     """`--services LIST CONTRACT` prints one [services] list, one unit per line.
 
-    luks-e2e.sh reads the installed contract this way to check every listed
-    unit on the booted system (#19). It must not run the image checks.
+    iso/scripts/e2e-services.sh reads the installed contract this way to check
+    every listed unit on the booted system (#19). It must not run the image
+    checks.
     """
 
     def run_services(self, kind):
@@ -367,7 +368,7 @@ class ServicesModeTests(unittest.TestCase):
 
     def test_prints_each_list_from_the_contract(self):
         services = tomllib.loads((ROOT / "contracts/bluefin-desktop.toml").read_text())["services"]
-        for kind in ("enabled", "user_enabled"):
+        for kind in ("enabled", "user_enabled", "disabled"):
             rc, units = self.run_services(kind)
             self.assertEqual(rc, 0)
             self.assertEqual(units, services[kind])

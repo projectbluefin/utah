@@ -1,4 +1,4 @@
-"""Reject an installed ISO that silently booted another flavor/kernel."""
+"""Reject an installed system that silently booted another flavor/kernel."""
 import importlib.util
 import json
 from pathlib import Path

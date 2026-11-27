@@ -26,7 +26,7 @@ class SyncTriggerTests(unittest.TestCase):
         for path in ("Containerfile", "Containerfile.kernel", "packages/utah.toml",
                      "system_files/shared/usr/bin/x", "scripts/install-packages.py",
                      "config/flavors.json", "contracts/bluefin-desktop.toml", ".gitmodules",
-                     "docs/agent/skills/x.md", "Justfile", "iso/live/src/configure-live.sh",
+                     "docs/agent/skills/x.md", "Justfile", "iso/scripts/e2e-services.sh",
                      ".github/workflows/build.yml"):
             with self.subTest(path):
                 self.assertTrue(triggers(path))

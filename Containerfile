@@ -122,6 +122,7 @@ COPY --from=common /system_files/bluefin /tmp/utah-bluefin
 COPY --from=brew /system_files /tmp/utah-brew
 COPY --from=artwork /out/overlay /tmp/utah-artwork
 COPY system_files/shared /tmp/utah-local
+COPY system_files/nvidia /tmp/utah-nvidia
 
 FROM ${BASE_IMAGE}
 
@@ -134,8 +135,8 @@ FROM ${BASE_IMAGE}
 # export, so unchanged packaged Python source/bytecode timestamps survive.
 # Direct builds retain the legacy fallback unless their caller supplies args.
 # ARG, not ENV: every RUN in this stage already sees it, and an ENV would
-# persist in the image config and leak the epoch into iso/live, every
-# `podman run`, and any downstream FROM.
+# persist in the image config and leak the epoch into the install medium,
+# every `podman run`, and any downstream FROM.
 ARG SOURCE_DATE_EPOCH=1704067200
 ARG UTAH_REWRITE_TIMESTAMPS=0
 
@@ -404,14 +405,19 @@ RUN --mount=type=bind,from=artwork,source=/out/branding,target=/tmp/utah-artwork
 # last also makes the OGC v4l2loopback run the point where the OGC build tree
 # under /usr/src is retired: install-v4l2loopback removes it once its module is
 # verified, in this same layer, so the ~286 MiB tree never ships (#684).
+# system_files/nvidia overlays the NVIDIA flavors only, after utah-install-nvidia
+# has installed the packages whose units it adjusts; system_files/shared, staged
+# in the step that copies Common's files, reaches every flavor.
 RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages,ro \
+    --mount=type=bind,from=inputs,source=/tmp/utah-nvidia,target=/tmp/utah-nvidia,ro \
     case "${IMAGE_FLAVOR}" in \
       gaming|nvidia-gaming) /usr/local/libexec/utah-install-ogc-kernel ;; \
       main|nvidia) ;; \
       *) echo "Unknown Utah image flavor: ${IMAGE_FLAVOR}" >&2; exit 2 ;; \
     esac && \
     case "${IMAGE_FLAVOR}" in \
-      nvidia|nvidia-gaming) /usr/local/libexec/utah-install-nvidia "${IMAGE_FLAVOR}" ;; \
+      nvidia|nvidia-gaming) /usr/local/libexec/utah-install-nvidia "${IMAGE_FLAVOR}" && \
+        cp -a /tmp/utah-nvidia/. / ;; \
       main|gaming) ;; \
     esac && \
     /usr/local/libexec/utah-install-v4l2loopback base && \
@@ -460,8 +466,7 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
 # tmpfiles.d entry (utah-home.conf). The directory must ship in the image:
 # useradd ships HOME=/home (#576) and home.mount binds /var/home over /home,
 # so the homes live there -- the installer pre-creates it in the stateroot,
-# and the tacklebox customize container and live ISO build create liveuser's
-# home in it (#602).
+# and the install medium's live session creates liveuser's home in it (#602).
 #
 # GRUB can report the ESP to systemd, which chooses /efi when /boot is busy.
 # The immutable root cannot create that mountpoint at boot (#1326).

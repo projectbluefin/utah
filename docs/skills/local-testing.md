@@ -1,20 +1,20 @@
 ---
 name: local-testing
 version: "1.0"
-last_updated: "2026-11-21"
+last_updated: "2026-11-26"
 id: local-testing
-one_line_purpose: Build, install, and boot Utah locally in a VM or live ISO.
+one_line_purpose: Build, install, and boot Utah locally in a VM or with the gnome-setup install medium.
 entry_point: docs/skills/local-testing.md
 category: testing
 mcp_compliance_level: partial
 optimization_status: draft
 status: active
 dependencies: []
-tags: [qemu, bootc, iso, vm, testing]
+tags: [qemu, bootc, installer, vm, testing]
 description: >-
   Local validation loop: build-ghcr, bootc install to-disk, QEMU/noVNC boot,
-  live ISO boot paths, and Secure Boot strategy. Use when validating changes
-  end-to-end or debugging boot, GDM, or live-session failures.
+  the gnome-setup install medium, and Secure Boot strategy. Use when validating
+  changes end-to-end or debugging boot, GDM, or live-session failures.
 metadata:
   type: runbook
 ---
@@ -22,8 +22,8 @@ metadata:
 # Local testing
 
 The local loop builds the image, installs it to a disposable disk, and boots
-that disk in a VM with a graphical console in the browser. A live ISO path
-covers initial bring-up. Everything runs from the Justfile; the recipe
+that disk in a VM with a graphical console in the browser. The gnome-setup
+install medium covers the install path. Everything runs from the Justfile; the recipe
 comments cited below are the canonical detail -- cite them, do not copy them.
 
 ## Build and boot the installed disk
@@ -116,385 +116,39 @@ The local OCI ref is not available from the guest's localhost registry, so
 unified-storage service is skipped instead of retrying its registry repull
 forever. Published images omit that argument and keep the service enabled.
 
-## Live ISO (initial bring-up)
+## Secure Boot strategy
 
-The first ISO slice reuses Utah's own kernel, dracut-live, and GNOME image.
-`just iso` builds a single-architecture UEFI live ISO; this first slice proves
-the Utah live boot path, and installer payload integration is intentionally
-the next ISO milestone (comment above `iso` in `Justfile`):
-
-```bash
-just iso testing
-just boot-iso        # QEMU/noVNC live-session validation
-just iso testing 1   # debug=1: liveuser password + sshd, for hosts without vhost-vsock
-just measure-iso     # #875 squashfs size per store/compression strategy
-```
-
-The result is `output/utah-live.iso`, assembled with systemd-boot, a
-`UTAH_LIVE` dmsquash-live root, and a serial `UTAH_LIVE_READY` marker. It is
-intended to prove live desktop boot first; bootc-installer/offline payload
-integration is the next ISO milestone. `luks-e2e.sh`'s live-boot gate asserts
-the `UTAH_LIVE_READY` marker on the serial console in addition to
-`graphical.target`, because the marker is written only by the
-`utah-live-ready.service` oneshot that runs after `display-manager.service`
-has started. `just boot-iso` boots it with QEMU-for-Docker and exposes the
-noVNC console at the printed URL (comment above `boot-iso` in `Justfile`),
-with TPM, UEFI, and `-snapshot` so nothing persists.
-
-### Units that must stand down on live media
-
-The live root is a dmsquash-live overlay: no `/sysroot`, no
-`/run/ostree-booted`. Units written for installed bootc systems must check one
-of those, not the filesystem type of `/sysroot`. bootupd's
-`bootloader-update.service` checked only for an erofs/squashfs `/sysroot`
-and failed in every live session; `bootloader-update.service.d/
-10-utah-ostree-only.conf` adds `ConditionPathExists=/run/ostree-booted`.
-`configure-live.sh` masks the units that must not run there at all
-(`bootc-unified-storage.service` and its timer). On a booted live ISO, `systemctl --failed`
-should be empty.
-
-### Supported and unsupported boot paths
-
-- **UEFI x86_64 (Supported)**: The live ISO is built strictly for UEFI boot
-  using `systemd-boot` located at `EFI/BOOT/BOOTX64.EFI` on the FAT32 ESP.
-  Dracut locates the live squashfs root via `root=live:LABEL=UTAH_LIVE`.
-  This is the only supported and tested live boot path.
-- **Legacy BIOS/CSM (Unsupported)**: Legacy MBR boot is unsupported. The ISO
-  omits MBR boot sectors and isolinux binaries.
-- **File-backed / Ventoy ISO loopback (Unsupported)**: Tools such as Ventoy
-  or GRUB loopback rely on initramfs hooks to mount the ISO container file from
-  a host filesystem before pivoting to the live root. Utah does not implement
-  custom dracut loopback handlers or a `rd.utah.isofile` locator; `loopback.cfg`
-  is deliberately omitted from the ISO to avoid advertising a non-functional
-  boot path. Media must be written directly to physical drives (e.g. via
-  Fedora Media Writer, `dd`, or balenaEtcher).
-
-### Kernel arguments and SELinux enforcement
-
-Production live boot entries configure:
-`root=live:LABEL=UTAH_LIVE rd.live.image rd.live.overlay.overlayfs=1 enforcing=0 console=ttyS0,115200n8`
-
-- Every kernel argument corresponds to an implemented and tested dracut boot
-  path (`dmsquash-live`, `overlayfs`, and serial console logging).
-- **SELinux policy (Documented Exception)**: The live session runs with
-  SELinux in **Permissive** mode (`enforcing=0`) as an approved documented
-  exception (Issue #22). The squashfs live rootfs is assembled rootless inside
-  `podman unshare`, where `security.selinux` extended attributes cannot be
-  written without root privilege, leaving rootfs files unlabeled. Booting an
-  unlabeled live root in Enforcing mode causes denials in systemd and GDM that
-  hang the live session. Permissive mode remains in place for live media until
-  xattr-preserving squashfs build tooling lands. Installed target systems boot
-  in **Enforcing** mode.
-
-### Secure Boot strategy
-
-Every Utah image and the live ISO currently need Secure Boot **off**. The
+Every Utah image and the install medium currently need Secure Boot **off**. The
 owner decided on 2026-11-20 that Utah gets signed through Hummingbird and
 Fedora upstream, never with a Utah key or MOK enrollment the way Dakota does.
 The per-component inventory, the evidence and the upstream route for each
 piece are in
 [kernel-cache/references/secure-boot.md](kernel-cache/references/secure-boot.md).
-In short:
+In short: Fedora shim (Microsoft UEFI CA) loads Fedora GRUB (Fedora CA), which
+is valid, then refuses the kernel, because every flavor boots Utah's rebuilt
+Fedora kernel (`*.utah1`) or the unsigned OGC kernel; and the out-of-tree
+modules (NVIDIA open, v4l2loopback) are unsigned, so lockdown refuses them.
 
-- **Live ISO**: `EFI/BOOT/BOOTX64.EFI` is `systemd-boot-unsigned`, which
-  firmware refuses with Secure Boot on. The kernel it loads is Utah's rebuild
-  (below), so switching the ESP to Fedora's shim and GRUB alone would still not
-  boot it.
-- **Installed systems**: Fedora shim (Microsoft UEFI CA) loads Fedora GRUB
-  (Fedora CA), which is valid. Shim then refuses the kernel, because every
-  flavor boots Utah's rebuilt Fedora kernel (`*.utah1`, signed with pesign's
-  Red Hat Test Certificate) or the unsigned OGC kernel.
-- **Out-of-tree modules** (NVIDIA open, v4l2loopback): unsigned, so lockdown
-  refuses to load them when Secure Boot is on.
+## Install medium (gnome-setup)
 
-The Flatpak list both ISO bakes install comes from
-`scripts/verify-desktop-contract.py --flatpaks` (the single Brewfile parser;
-the desktop contract owns it). The ISO stages are FROM the shipped image,
-which strips build-time scripts, and the `iso/live/` build context cannot
-reach repo-root `scripts/` -- so both build scripts stage the parser into
-`iso/live/src/` (removed by trap afterwards) and both Containerfiles ship it
-persistently at `/usr/local/libexec/utah-verify-desktop-contract`, which is
-also what puts it on the live guest. Never reference the parser by bare name
-on the guest: the overlay is not on the default PATH.
-
-That installed path is live-only. `/usr/local` is the admin's domain, not
-image content, so a bootc deployment never carries `/usr/local/libexec` --
-calling the verifier there on an installed system fails with exit 127.
-`luks-e2e.sh` copies `scripts/verify-desktop-contract.py` to the target over
-`scp_target` and runs it with the target's `python3` instead (stdlib-only,
-so no target dependencies).
-
-`iso/live/src/install-flatpaks.sh` pins the bootc-installer Flatpak bundle to
-a specific `tuna-os/bootc-installer` release with `--no-gpg-verify`; a fixed tag
-keeps ISO composition reproducible. For operator guidance on bumping the pin and
-asset digest, see [iso-review](local-testing/references/iso-review.md#bumping-bootc-installer).
-`install-flatpaks.sh` also shims machine id, session bus, and the `/var/tmp`
-token cache during image build.
-
-### Installer configuration and backend
-
-The live ISO installer configuration (`iso/live/src/etc/bootc-installer/recipe.json`,
-`images.json`, and the recipes generated in `configure-live.sh` and
-`iso/scripts/luks-e2e.sh`) installs with the ostree backend: `composefs` and
-`composeFsBackend` are `false`, and the recipe's empty `image` plus
-`targetImgref` installs offline from the embedded payload.
-
-The `images.json` entry carries `extras` with all four of fisherman's desktop
-steps on (`printServices`, `oemSetup`, `audioNames`, `bootSplash`). Fisherman
-from v2026.11.16 runs them only for an image that asks: the recipe's `extras`,
-else the image's catalog entry, and a catalog entry without `extras` gets none
-(`Desktop extras: none (the catalog entry Utah sets none)` in the install
-log). Without `bootSplash` no `rhgb quiet` reaches the boot entry and the LUKS
-prompt is Plymouth's text mode (#1129, review run 44470274049). The recipes
-carry no `extras`, so the GUI and the e2e both take the catalog's;
-`luks-e2e.sh` fails before the boot on any entry without `rhgb`.
-
-Fisherman (bootc-installer v2026.11.16 and later) refuses to install on live
-media (`/etc/bootc-installer/live-iso-mode`) unless
-`/etc/bootc-installer/media-input.json` binds a verified payload on a
-read-only filesystem; otherwise it fails with `local_source_unavailable`.
-`iso/scripts/embed-store-payload.sh` writes the payload as an unpacked
-containers-storage graphroot at `/usr/lib/containers/storage` in the squashfs
-and writes the receipt, whose `containersStoragePath` is
-`/var/lib/containers/storage`: the live system bind-mounts the store there
-read-only from the squashfs at `/run/rootfsbase`, and moves its own graphroot
-to `/var/lib/containers/live-storage` with the payload as an additional image
-store (`configure-live.sh`). Fisherman then installs only the image
-the receipt names, so recipes name that published ref or leave `image` empty,
-never bootc-installer's `local_imgref`. The
-receipt schema: [iso-review](local-testing/references/iso-review.md#offline-payload-receipt).
-
-Do not switch the payload to an OCI layout (`ociLayoutPath`). Layout blobs are
-tar files, so squashfs keeps them as a second copy of the image that shares no
-blocks with the live root. Review VM run 43870670314 did that: its 40
-uncompressed layers (9.95 GiB) grew the main squashfs from 5.2 GiB to 9.8 GiB
-at zstd 15, and every flavor's ISO (9.6-11.8 GiB) failed the 8 GiB budget.
-Unpacked store files are byte-identical to the live root's, and mksquashfs
-stores them once.
-
-The composefs default (#882, #938) shipped without the LUKS e2e ever running
-on it, because the provenance gate had blocked post-testing-e2e since 10-31.
-When the e2e came back it failed on every flavor (#1129). Exercise composefs
-with `UTAH_E2E_COMPOSEFS_BACKEND=1`, or dispatch the review VM with
-`review_composefs_backend=true`
-([iso-review](local-testing/references/iso-review.md)). Flip the default back
-only after that passes for every flavor. Composefs installs need two things
-that ostree installs did not:
-
-- **bootc-installer v2026.11.16 or later.** fisherman runs composefs installs
-  as `podman run … bootc install to-filesystem` from an OCI layout. Older
-  fisherman let podman stage the imported blobs in the live system's
-  RAM-backed `/var/tmp`, and the review VM stalled there for 2.5 hours
-  (fisherman#345). It also set the account password with
-  `chpasswd --root <deploy dir>`, which runs PAM in a directory that holds
-  only `/etc` state ("pam_chauthtok() failed: Module is unknown";
-  fisherman#396).
-- **The catalog entry's `extras`.** The same bump made fisherman's desktop
-  steps opt-in; see above. Older fisherman ran all four for every install.
-- **No `flatpaks` key in a recipe.** The same bump gave the key a new
-  meaning: absent copies the live system's Flatpaks, `[]` copies none. The
-  e2e recipe sent `[]`, so its installs had no Ghostty and no default
-  Flatpak ("Flatpaks: skipped, the recipe's flatpaks list is empty" in the
-  install log). The GUI leaves the key out for a catalog entry without one.
-- **The OGC kernel needs `CGROUP_BPF`.** crun's cgroup-v2 device filter for
-  that container fails without it ("crun: bpf create: Invalid argument"). See
-  [kernel-cache.md](kernel-cache.md).
-
-## Tacklebox ISOs (unpublished variants)
-
-`just iso-tacklebox` builds a live ISO via
-[tacklebox](https://github.com/tuna-os/tacklebox) (systemd-boot + tbox-live,
-no anaconda) for any `config/flavors.json` flavor -- including variants this
-project publishes no ISO for. Two stages: `iso/live/Containerfile.tacklebox`
-pre-bakes the live Flatpaks rootless (flatpak's bwrap sandbox needs the user
-namespace that tacklebox's rootful customize containers lack), then tacklebox
-assembles the ISO with `configure-live.sh` as the `live_customize` script and
-the published image ref embedded as an offline payload, so the live desktop
-matches the standard ISO:
+Utah installs with GNOME STF's gnome-setup driving systemd-sysinstall (owner
+decision, #1569): a raw bootc disk image that boots live with `utah.live` and
+installs by block copy into LUKS2. It is the install Post-Testing E2E gates
+`:testing` on, for every flavor. The fisherman live ISO (`iso/live/`,
+`luks-e2e.sh`, `lifecycle-e2e.sh`) and the tacklebox ISO were removed with
+it.
 
 ```bash
-just iso-tacklebox main                              # from localhost/utah:testing
-just iso-tacklebox main testing ghcr testing-20260922-256d837
+sudo just build-ghcr utah testing main   # the image, in root's storage
+sudo just medium testing                 # -> output/medium.raw
 ```
 
-Both ISO builders fetch the installer mascot: [iso-review](local-testing/references/iso-review.md#installer-art).
-
-The script (`iso/scripts/build-iso-tacklebox.sh`) resolves flavored image
-names through `scripts/flavors.py image` -- no literals, enforced by
-`just check` -- requires root (loop devices, mkfs), and writes
-`output/utah-<flavor>-tacklebox.iso`. Tacklebox itself comes from
-a digest-pinned `ghcr.io/tuna-os/tacklebox` image (pinned in
-`config/tacklebox-image`; a `TACKLEBOX_IMAGE` override must also be
-digest-pinned) unless `TACKLEBOX_FROM_SOURCE=1`; a host
-binary wins when present (`TACKLEBOX_BIN`, or `tacklebox` on `PATH`), which
-matters on hosts where nested podman breaks container DNS (observed: the
-customize container's resolver unreachable from inside the tacklebox
-container while identical host-level runs resolve fine).
-
-Two hard differences from `just iso`:
-
-- **Secure Boot: unsupported.** Tacklebox emits an unsigned systemd-boot
-  chain. These ISOs boot with Secure Boot disabled only.
-- **Kargs are `enforcing=0 console=ttyS0,115200n8`**, same rationale as the
-  standard live ISO (unlabeled squashfs root, serial E2E).
-
-The same images build in the browser at
-[iso.tunaos.org](https://iso.tunaos.org) via `?image=` presets -- no Utah-side
-registration exists because none is needed: `projectbluefin` is on the relay
-org allowlist (`ORGS` in `worker/cors-shim.js`, tuna-os/iso-builder), and any
-bootable container (kernel under `/usr/lib/modules`, systemd) is accepted.
-Shareable form: `https://iso.tunaos.org/?image=projectbluefin/<name>:<tag>`
-using a dated published tag (`testing-*`), since Utah publishes no floating
-`testing` tag. Verify a preset by confirming the relay mints a pull token for
-the scope (`/token?scope=repository:projectbluefin/<name>:pull`).
-
-## Image-based installer (experimental, ADR-0001)
-
-A raw bootc disk image that boots live with `utah.live` and installs by
-block copy into LUKS2 through gnome-setup runs beside the ISO path in
-`image-installer.yml`, which compares both on the same `:testing` digest.
-It gates nothing. Build, run and gotchas:
-[image-installer](local-testing/references/image-installer.md).
-
-## Verification
-
-### Encrypted install and screenshot harness
-
-`just luks-test` runs `iso/scripts/luks-e2e.sh` against the live ISO. With a
-writable `/dev/vhost-vsock` (`sudo modprobe vhost_vsock`) and
-`systemd-ssh-proxy` or a vsock-capable socat, any ISO works, `just iso
-testing` included: a per-run key reaches the live guest as the
-`ssh.ephemeral-authorized_keys-all` SMBIOS credential and the harness logs in
-as root over AF_VSOCK (#1448; mechanism in
-[iso-e2e](ci-workflows/references/iso-e2e.md)). Otherwise only a debug ISO
-(`just iso testing 1`) answers. `UTAH_E2E_LIVE_SSH` is `auto` (default),
-`vsock` (CI; exits 77 without host support) or `password`;
-`UTAH_E2E_VSOCK_CID` (default SSH port + 1000) must be unique on the host.
-The harness checks the live GNOME session, installs to a
-disposable LUKS2 disk from the embedded payload, boots without the ISO,
-requires Plymouth's graphical passphrase prompt with the theme's watermark on
-screen (`iso/scripts/plymouth-prompt.py`; the text fallback fails, see
-[the boot splash](desktop-contract/references/boot-splash.md)),
-unlocks the disk, confirms `bootc status` reports the offline embedded
-payload (not a network pull) on a guest with no route out, and checks
-graphical login and extension states. A trailing check, after login,
-confirms every default Flatpak in the Brewfile contract is also present
-offline -- deferred past login because it deploys asynchronously on first
-boot. Both gates have escape hatches for unblocking a promotion when the
-gate itself, rather than the image, is at fault: `UTAH_E2E_FLATPAKS` sets the
-expected Flatpak set directly (empty skips the check), and
-`UTAH_E2E_PAYLOAD_CHECK=""` skips the booted-image assertion. The booted-image
-read falls back to `sudo` when `bootc status --json` returns nothing to the
-unprivileged test user. A failure exits 10 + the failing phase number
-([exit codes](lifecycle-e2e.md#exit-codes)).
-
-Every run then checks first-boot service state (#19), except the lifecycle's
-baseline install (`UTAH_E2E_BASELINE=1`), whose upgraded candidate is checked
-instead ([lifecycle-e2e.md](lifecycle-e2e.md)). The check lives in
-`iso/scripts/e2e-services.sh`. It reads the installed
-image's own `/usr/share/utah/bluefin-desktop.toml` through
-`verify-desktop-contract.py --services enabled|user_enabled` and requires each
-listed unit to be loaded, still enabled after first-boot presets, and not
-failed. "Not failed" means `Result=success` for a unit that runs something.
-A target, slice or device has no `Result=` property, so only its
-`ActiveState` counts (`nfs-client.target`). A template such as
-`kmsconvt@.service` has no runtime state of its own, so it must be enabled and
-none of its instances may have failed.
-`flatpak-preinstall`, `ublue-system-setup` and `ublue-user-setup` must
-also have run. `brew-preinstall.service` needs the network, so the offline VM
-only checks that it is enabled. When `UTAH_E2E_REPEAT_BOOT=1` (set by the
-post-testing `luks` job for every candidate) or `UTAH_E2E_EXPECT_FLAVOR` (the
-`review_vm` and candidate workflows) is set, the harness also checks the
-Flathub remote, then performs a graceful second boot, unlocks the same LUKS
-disk, and rechecks services, Flathub, and the default Flatpaks. This is the
-repeat-boot idempotence gate. It never runs on the lifecycle baseline; plain
-`just luks-test` remains a single boot unless `UTAH_E2E_REPEAT_BOOT=1` is
-exported.
-`iso/raw/raw_e2e.py` reuses this check and the other installed-system ones
-([image-installer.md](local-testing/references/image-installer.md#installed-system-checks-ported-from-the-fisherman-harness)).
-Read the recipe and script prerequisites before running it: it creates test
-accounts and requires local QEMU/KVM access, not a production installation.
-
-The installed-boot gate also checks `/var/lib/logrotate` before starting
-`logrotate.service`, then requires a nonempty `logrotate.status` state file.
-Do not create the directory in the test: `scripts/clean-stage.sh` removes
-`/var/lib` during composition, so writable service state must be recreated at
-boot by a rule shipped under `system_files/shared/usr/lib/tmpfiles.d/`.
-`utah-logrotate.conf` supplies the root-owned directory for logrotate (#386).
-A build-time `mkdir` or a clean bootc lint result alone does not prove that
-service state exists on a fresh installed system. The same gate fails on any
-AVC denial whose `comm` is `chcon` or `bootc`: bootc's
-`mac_admin` probe from a plain service must stay hidden by the
-`utah_bootc_probe` policy module (#1198; [SELinux modules](desktop-contract/references/selinux-modules.md)).
-
-Passing runs refresh `docs/verification/README.md`, its screenshots, and the
-delimited verification block in the root README. These are historical local
-test records, not proof that the current commit passed CI. The harness gates
-the terminal autostart release via a trigger file so `installed-desktop.png`
-captures a clean desktop state before `installed-fastfetch.png` captures the
-terminal overlay, preventing duplicate verification evidence (#240). CI sets
-`UTAH_E2E_REQUIRE_FASTFETCH=1` to require OCR of its completion marker and
-one field only fastfetch prints (kernel, desktop, window manager, terminal,
-shell or package count; `iso/scripts/fastfetch-ocr-match.sh`), since
-tesseract regularly drops the kernel line, and `UTAH_E2E_REQUIRE_SCREENSHOTS=1` to reject missing PNGs and
-blank or flat-colour frames: a solid-black or frozen screen would otherwise pass
-the non-empty check and be published as proof a session started (#786). GDM
-blanks the greeter while a slow boot unit holds `graphical.target`, so the
-harness presses Shift, which types nothing, before it retakes the greeter shot
-until it has drawn. CI retains the tested commit/image digest and proposes evidence updates in a
-documentation PR only after all flavors pass. See [ci-workflows.md](ci-workflows.md).
-
-Ghostty is the only terminal the harness's fastfetch capture can show, and
-this VM never has a GPU (plain stdvga, no `/dev/dri`), so its terminal
-autostart entry (`iso/scripts/luks-e2e.sh`) launches it with
-`LIBGL_ALWAYS_SOFTWARE=1 MESA_LOADER_DRIVER_OVERRIDE=llvmpipe`. A
-`flatpak override --env=GDK_DISABLE=...` looks like the obvious fix but does
-not work: Ghostty computes `GDK_DISABLE` from a hardcoded struct and
-`setenv(3)`s it with `overwrite=1` right before `gtk_init`, clobbering any
-inherited value, and an upstream build on 2026-09-20 dropped `gles-api` from
-that struct and broke every flavor's harness run this way (#183). The two
-Mesa variables above are never among the ones Ghostty itself sets, so they
-are the ones that actually reach the process.
-
-The harness blocks outbound guest networking while retaining loopback-only
-SSH forwards, so installation cannot silently fall back to an online pull.
-For digest-pinned builds, the builder exports the original registry blobs
-through Skopeo's `dir` transport with `--preserve-digests`, and copies that
-export into the payload store with `--preserve-digests` too.
-Do not export from containers-storage or substitute an OCI archive: the
-former exports uncompressed layers, while the latter can convert manifest
-formats. Either changes the digest and breaks the embedded `image@sha256:...`
-reference. Local tag-based builds may export their local containers-storage.
-The builder fails if the store reports another digest than the exported
-manifest. A digest-preserving copy failure must fail ISO composition, not fall
-back to a mutable tag.
-The installed system does not boot that manifest digest: on both backends
-fisherman installs from `skopeo copy containers-storage:<payload>
-oci:<scratch>`, which re-serializes the manifest, so bootc reports the copy's
-digest. The config digest survives the copy. `luks-e2e.sh` checks that what
-bootc stored at install (the composefs repository's streams, or the
-`ostree.manifest-digest` and `ostree.manifest` keys on the booted ostree
-commit) is the booted manifest with the receipt's config, and the review VM
-compares that config with the payload manifest's.
-The live assembler selects a release from `/usr/lib/modules` and uses its
-matching initramfs. Kernel-core provides that release's `vmlinuz` in the module
-directory, while the OGC installer writes `/boot/vmlinuz-<release>`.
-`iso/scripts/live-kernel.py` supports both paths and resolves symlinks inside
-the mounted image, never against the host root. The installed gaming image
-promotes its OGC kernel into the single bootc `vmlinuz` layout before rebuilding
-the matching initramfs; the live ISO builder then selects that same release.
-Do not use `/boot/vmlinuz` or another release as a fallback: that can silently
-pair mismatched boot files.
-It enables sshd through a boot argument on the disposable installed disk,
-never by rebuilding or changing the published image. `UTAH_E2E_RAM` and
-`UTAH_E2E_CPUS` control VM resources (defaults 8192 MiB and four CPUs).
-
-When integrating this harness with newer image-build fixes, retain the
-currently verified package-image digest and available-package contract.
-The older ISO branch's package pin and exclusions must not replace them.
-
-The atomic upgrade/rollback lifecycle harness and its BLS boot-file and
-boot-manager validation live on their own page now, since the combined file hit
-the hard documentation size limit. See [lifecycle-e2e.md](lifecycle-e2e.md) for
-`just lifecycle-test`, the `bootc_lifecycle.py` / `verify-boot-files.sh`
-checks, the uupd versus `bootc switch` staging policy, and the QEMU harness.
+Boot `output/medium.raw` read-only next to a blank target disk of at least 48
+GB, or write it to a USB stick. Build, VM steps, the CI harness
+(`iso/raw/raw_e2e.py`: live boot, GUI install, TPM2 and recovery-key unlock,
+gnome-initial-setup, `bootc switch` and `rollback`), its installed-system
+checks (`iso/scripts/e2e-services.sh` and the others it runs in the guest:
+[installed-system checks](local-testing/references/image-installer.md#installed-system-checks-ported-from-the-fisherman-harness))
+and gotchas: [image-installer](local-testing/references/image-installer.md).
+A candidate in CI: dispatch `build.yml` with `contract_only` and `review_vm`
+([review VM](local-testing/references/iso-review.md)).

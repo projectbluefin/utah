@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Service-state checks shared by luks-e2e.sh, lifecycle-e2e.sh and
-# iso/raw/raw_e2e.py. Sourced, never run.
+# Service-state checks for an installed Utah system. Sourced, never run.
 #
 # The caller provides ssh_target and scp_target (the installed system, as
 # TEST_USER), fail (report and exit), ROOT, TEST_USER and TEST_PASSWORD.
@@ -9,9 +8,7 @@
 #
 # verify_setup_state is a content gate: it holds the booted image to the
 # [services] lists of its contract, a check added after earlier :testing
-# images were built (#1282). luks-e2e.sh runs it on every image it installs
-# except the lifecycle's baseline (UTAH_E2E_BASELINE=1); lifecycle-e2e.sh runs
-# it on the upgraded candidate instead.
+# images were built (#1282).
 
 check_system_unit_state() {
     local unit="$1" required_enabled="${2:-false}" required_run="${3:-false}" boot_pass="${4:-first}"
@@ -104,14 +101,17 @@ check_template_unit_state() {
 # rather than a list copied into this script. The parser is the repo's
 # verifier, copied over because /usr/local/libexec does not survive into a
 # bootc deployment.
+# An empty list fails unless the second argument is "optional": a list an
+# older image under test may not have yet.
 contract_units() {
-    local kind="$1" units
+    local kind="$1" optional="${2:-}" units
     scp_target "${ROOT}/scripts/verify-desktop-contract.py" \
         "${TEST_USER}@127.0.0.1:/tmp/utah-e2e-verify-desktop-contract.py" >/dev/null \
         || fail "could not copy the contract parser to the installed system"
     units="$(ssh_target "python3 /tmp/utah-e2e-verify-desktop-contract.py --services '${kind}' /usr/share/utah/bluefin-desktop.toml" 2>/dev/null)" \
         || fail "could not read [services].${kind} from the installed contract"
-    [[ -n "${units}" ]] || fail "the installed contract lists no [services].${kind} units"
+    [[ -n "${units}" || "${optional}" == optional ]] \
+        || fail "the installed contract lists no [services].${kind} units"
     printf '%s\n' "${units}"
 }
 
@@ -128,7 +128,7 @@ verify_setup_state() {
     # after first-boot presets ran, and must not have failed. Units whose
     # conditions skip them in a VM (thermald, intel_lpmd) end inactive with
     # Result=success and pass. Timers are checked, not the network jobs they
-    # trigger, because the luks VM has no network.
+    # trigger, so the verdict does not depend on the test VM's network.
     # The lists are read into arrays first: ssh_target reads stdin, so a
     # `while read ... <<< "${units}"` loop lost every unit after the first.
     # Command substitution, not process substitution, so a contract_units
@@ -147,14 +147,21 @@ verify_setup_state() {
     for unit in "${units[@]}"; do
         [[ -n "${unit}" ]] || continue
         case "${unit}" in
-            # Installs Homebrew packages from the network, so it fails in the
-            # offline luks VM by design; its enablement is still asserted.
+            # Installs Homebrew packages from the network, so its run depends
+            # on the test VM's network; its enablement is still asserted.
             brew-preinstall.service) check_user_unit_state "${unit}" false "${boot_pass}" true ;;
             *@.*) check_template_unit_state "${unit}" user "${boot_pass}" ;;
             *) check_user_unit_state "${unit}" false "${boot_pass}" ;;
         esac
     done
     # kanata replaced input-remapper (#1222): installed and loaded, opt-in, so
-    # neither enablement nor a run is required.
-    check_system_unit_state kanata.service false false "${boot_pass}"
+    # neither enablement nor a run is required. Checked only when the
+    # installed contract lists it under [services].disabled, like the units
+    # above: a :stable built before kanata (#1297) has neither the unit nor the
+    # entry, and the hardcoded check failed its publish run (dakota-iso run
+    # 45923328467, "required system unit kanata.service is not-found").
+    listed="$(contract_units disabled optional)"
+    if grep -qx kanata.service <<< "${listed}"; then
+        check_system_unit_state kanata.service false false "${boot_pass}"
+    fi
 }

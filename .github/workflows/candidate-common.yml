@@ -122,16 +122,13 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
           sudo apt-get update
           sudo apt-get install -y podman skopeo uidmap slirp4netns fuse-overlayfs acl \
-            squashfs-tools xorriso dosfstools mtools qemu-system-x86 qemu-utils \
-            ovmf sshpass socat ffmpeg tesseract-ocr
+            qemu-system-x86 qemu-utils ovmf sshpass ffmpeg imagemagick zstd jq \
+            tesseract-ocr swtpm swtpm-tools
+          # Ubuntu's AppArmor profile keeps swtpm out of the work dir (raw_e2e.py --tpm).
+          if [[ -f /etc/apparmor.d/usr.bin.swtpm ]]; then sudo apparmor_parser -R /etc/apparmor.d/usr.bin.swtpm || true; fi
           test -c /dev/kvm
           sudo setfacl -m "u:$(id -u):rw" /dev/kvm
           test -r /dev/kvm && test -w /dev/kvm
-          # The LUKS harness logs in to the production ISO's live session over
-          # AF_VSOCK with a per-run key (its LIVE_SSH setting).
-          sudo modprobe vhost_vsock
-          sudo setfacl -m "u:$(id -u):rw" /dev/vhost-vsock
-          test -w /dev/vhost-vsock
           mkdir -p output evidence
           podman load --input "$RUNNER_TEMP/common.oci.tar"
       - name: Run native source and package contracts
@@ -184,47 +181,51 @@ jobs:
           rm -rf "$canonical"
           sha256sum evidence/payload-manifest.json > evidence/payload-manifest.sha256
           just check-desktop-contract "$local_ref"
-      # DEBUG=0: the media retained below is these tested bytes, not a rebuild.
-      - name: Compose local production ISO
+      # Install-test the local candidate with the gnome-setup medium (iso/raw),
+      # the install Post-Testing E2E gates :testing on (#1569). The medium is
+      # built in root's storage on /mnt; the candidate stays in this user's
+      # storage for the publish step below.
+      - name: Build the gnome-setup medium from the local candidate
         env:
-          UTAH_ISO_WORKDIR: ${{ runner.temp }}
+          WORK: /mnt/candidate
+          FLAVOR: ${{ matrix.flavor }}
         run: |
           set -euo pipefail
           ref=$(cat evidence/local-ref.txt)
-          bash iso/scripts/build-iso.sh "$ref" "$PWD/output/utah-live.iso" "Utah Candidate Live" 0 "$ref" 2>&1 | tee evidence/iso-build.log
-      - name: Verify LUKS offline install and graphical desktop against local bytes
+          image=$(python3 scripts/flavors.py image "$FLAVOR")
+          sudo mkdir -p /mnt/containers /var/lib/containers "$WORK"
+          sudo mount --bind /mnt/containers /var/lib/containers
+          sudo chown "$USER" "$WORK"
+          podman save --format oci-archive -o "$WORK/candidate.tar" "$ref"
+          sudo podman load -q -i "$WORK/candidate.tar"
+          rm -f "$WORK/candidate.tar"
+          sudo podman build --layers=false -t localhost/utah-raw:candidate \
+            --build-arg SOURCE_IMAGE="$ref" -f iso/raw/Containerfile iso/raw 2>&1 | tail -150
+          ssh-keygen -q -t ed25519 -N '' -f "$WORK/id_ed25519"
+          sudo env UTAH_RAW_LIVE_KARGS="utah.live.debug systemd.journald.forward_to_console=1 plymouth.enable=0 rd.plymouth=0" \
+            UTAH_RAW_SSH_PUBKEY="$WORK/id_ed25519.pub" UTAH_RAW_DEBUG_SSHD=1 UTAH_RAW_EVIDENCE="$WORK/raw-evidence" \
+            bash iso/raw/build-raw-image.sh localhost/utah-raw:candidate "$WORK/medium.raw" "ghcr.io/projectbluefin/$image:testing"
+          echo "MEDIUM_BACKEND=$(jq -r .backend "$WORK/raw-evidence/backend.json")" >> "$GITHUB_ENV"
+          sudo env UTAH_RAW_EVIDENCE="$WORK/raw-evidence" bash iso/raw/bake-flatpaks.sh localhost/utah-raw:candidate "$WORK/medium.raw"
+          sudo env UTAH_RAW_EVIDENCE="$WORK/raw-evidence" UTAH_RAW_BTRFS_COMPRESS="zstd:3" \
+            bash iso/raw/shrink-raw-image.sh localhost/utah-raw:candidate "$WORK/medium.raw"
+          sudo chown "$USER" "$WORK/medium.raw"
+          sudo chown -R "$USER" "$WORK/raw-evidence"
+          sudo podman rmi -af >/dev/null || true
+      - name: Install with gnome-setup, boot, switch and roll back
         env:
-          UTAH_E2E_WORK: ${{ runner.temp }}/utah-luks-e2e
-          UTAH_E2E_REQUIRE_SCREENSHOTS: "1"
-          UTAH_E2E_REQUIRE_FASTFETCH: "1"
-          UTAH_E2E_RAM: "6144"
-          UTAH_E2E_CPUS: "2"
-          UTAH_E2E_EXPECT_FLAVOR: ${{ matrix.flavor }}
-          UTAH_E2E_README: none
-          UTAH_E2E_LIVE_SSH: vsock
+          WORK: /mnt/candidate
+          FLAVOR: ${{ matrix.flavor }}
         run: |
           set -euo pipefail
-          bash iso/scripts/luks-e2e.sh "$PWD/output/utah-live.iso" "$(cat evidence/local-ref.txt)" 2>&1 | tee evidence/luks-test.log
-          test "$(jq -r .status.booted.image.imageDigest "$UTAH_E2E_WORK/bootc-status.json")" = "sha256:$(cut -d ' ' -f1 evidence/payload-manifest.sha256)"
-          cp "$UTAH_E2E_WORK/bootc-status.json" evidence/
-          (cd output && sha256sum utah-live.iso > utah-live.iso.sha256)
-      - name: Verify main local tacklebox ISO and live boot
-        if: matrix.flavor == 'main'
-        env:
-          UTAH_ISO_BOOT_TIMEOUT: "1800"
-        run: |
-          set -euo pipefail
-          sudo bash iso/scripts/build-iso-tacklebox.sh main testing local "" 1 2>&1 | tee evidence/tbx-build.log
-          tacklebox_image=$(cat config/tacklebox-image)
-          [[ "$tacklebox_image" =~ ^[^[:space:]@]+@sha256:[a-f0-9]{64}$ ]]
-          tacklebox_repository=${tacklebox_image%@sha256:*}
-          tacklebox_digest=${tacklebox_image##*@sha256:}
-          sudo TACKLEBOX_IMAGE="$tacklebox_image" bash iso/scripts/verify-tacklebox-attestation.sh
-          sudo podman pull "$tacklebox_image"
-          sudo podman run --rm --privileged --security-opt label=disable -v /dev:/dev -v "$PWD/output:/out:ro" "${tacklebox_repository}@sha256:${tacklebox_digest}" verify /out/utah-main-tacklebox.iso 2>&1 | tee evidence/tbx-verify.log
-          test "$(stat -c %s output/utah-main-tacklebox.iso)" -le "$((8 * 1024 * 1024 * 1024))"
-          bash iso/scripts/tacklebox-boot-gate.sh "$PWD/output/utah-main-tacklebox.iso" UTAH_LIVE_READY 2>&1 | tee evidence/tbx-boot.log
-          sudo rm output/utah-main-tacklebox.iso
+          image=$(python3 scripts/flavors.py image "$FLAVOR")
+          repo="ghcr.io/projectbluefin/$image"
+          candidate="$repo@$(skopeo inspect --format '{{.Digest}}' "docker://$repo:testing")"
+          python3 iso/raw/raw_e2e.py --raw "$WORK/medium.raw" --work "$WORK/e2e" --install gui --tpm \
+            --candidate "$candidate" --ssh-key "$WORK/id_ed25519" --backend "$MEDIUM_BACKEND" \
+            --backend-decision "$WORK/raw-evidence/backend.json" \
+            --flatpaks "$WORK/raw-evidence/flatpak-apps.txt" 2>&1 | tee evidence/install-test.log
+          rm -f "$WORK/medium.raw"
       - name: Publish only tested candidate bytes
         env:
           GH_TOKEN: ${{ github.token }}
@@ -245,13 +246,6 @@ jobs:
           exact="${ref%:*}@$digest"
           test "$(skopeo inspect --format '{{.Digest}}' "docker://$exact")" = "$digest"
           jq -n --arg flavor "$FLAVOR" --arg digest "$digest" --arg ref "$exact" '{flavor:$flavor,digest:$digest,ref:$ref}' > evidence/candidate-image.json
-      - name: Retain production media only
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-        with:
-          name: candidate-production-iso-${{ matrix.flavor }}
-          path: output/utah-live.iso*
-          if-no-files-found: error
-          retention-days: 14
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: candidate-image-${{ matrix.flavor }}
@@ -264,10 +258,10 @@ jobs:
           name: candidate-evidence-${{ matrix.flavor }}
           path: |
             evidence/
-            ${{ runner.temp }}/utah-luks-e2e/*.log
-            ${{ runner.temp }}/utah-luks-e2e/*.json
-            ${{ runner.temp }}/utah-luks-e2e/fastfetch-ocr.txt
-            ${{ runner.temp }}/utah-luks-e2e/screenshots/
+            /mnt/candidate/e2e/screenshots/
+            /mnt/candidate/e2e/evidence/
+            /mnt/candidate/e2e/*.log
+            /mnt/candidate/raw-evidence/
           retention-days: 14
 
   manifest:
@@ -313,10 +307,10 @@ jobs:
     # The reviewed testsuite v1 commit, the one post-testing-e2e.yml runs: this
     # job holds packages: write, so it must never call unmerged testsuite code.
     # Renovate moves the uses: digest and test_ref together.
-    uses: projectbluefin/testsuite/.github/workflows/e2e.yml@37346780cb31073d5f387d8aa420fd78ae64939c # v1
+    uses: projectbluefin/testsuite/.github/workflows/e2e.yml@042fe75d28465de13878ee14c994a5532a41bec0 # v1
     with:
       image: ${{ matrix.ref }}
       compose_image: false
       suites: ${{ matrix.suites }}
       test_repository: projectbluefin/testsuite
-      test_ref: 37346780cb31073d5f387d8aa420fd78ae64939c # v1
+      test_ref: 042fe75d28465de13878ee14c994a5532a41bec0 # v1

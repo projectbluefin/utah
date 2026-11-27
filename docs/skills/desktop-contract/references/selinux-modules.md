@@ -66,5 +66,6 @@ The module is two rules for the probe, one per domain:
 
 Pinned by `tests/test_selinux_bootc_probe.py`. The verifier side is covered
 in `tests/test_desktop_contract_verify.py` (`SelinuxModuleTests`). On a booted
-system, `iso/scripts/luks-e2e.sh` (the `review_vm` run) fails on any AVC
-denial whose `comm` is `chcon` or `bootc`.
+system, `iso/raw/raw_e2e.py` (Post-Testing E2E, `review_vm` and the
+candidate run) records every boot's SELinux denials and fails a boot that has
+them.

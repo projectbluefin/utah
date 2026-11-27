@@ -1,7 +1,7 @@
 ---
 name: desktop-contract
 version: "1.0"
-last_updated: "2026-11-16"
+last_updated: "2026-11-27"
 id: desktop-contract
 one_line_purpose: Maintain Bluefin Utah identity, Bluefin desktop defaults, and first-boot Flatpak policy.
 entry_point: docs/skills/desktop-contract.md
@@ -206,6 +206,9 @@ one is pending a composefs boot check (see below):
   contract. Not yet boot-verified: on a composefs VM, confirm
   `systemctl show -p ActiveState,ConditionResult systemd-remount-fs` reports
   `inactive`/`no` and `systemctl is-system-running` reports `running`.
+- `nvidia-cdi-refresh.{service,path}` failed (`start-limit-hit`) on the NVIDIA flavors with no NVIDIA GPU (E2E run 45918946265):
+  `system_files/nvidia/.../nvidia-cdi-refresh.service.d/10-utah-require-gpu.conf` skips, not fails, the unit unless a PCI device
+  `nvidia.ko` binds is present; its header says why (not `/dev/nvidiactl`: the unit creates it). Not yet boot-verified on an image.
 
 When something new appears in `journalctl -b -p err` on a fresh VM, treat it
 the same way rather than filtering it out of the report.
@@ -235,13 +238,12 @@ covers the missing-remote case.
 
 This rule is enforced, not just documented:
 `tests/test_systemd_exit_tolerance.py` scans every unit shipped under
-`system_files/` and `iso/live/` and fails if one carries a
+`system_files/` and `iso/raw/` and fails if one carries a
 `SuccessExitStatus=`, an unprefixed `remote-delete`, or a `--force` on one. It
 runs inside `just test`, which `just check` invokes, so the `--force` variant
 of a `remote-delete` fails the build instead of waiting to be caught in review.
 The scan covers unit files only: a shell script may still use `--force` on a
-throwaway remote it created itself, as `iso/live/src/install-flatpaks.sh` does
-for the live image's own `installer-local` remote.
+throwaway remote it created itself.
 
 ## GNOME extensions are pinned submodules
 

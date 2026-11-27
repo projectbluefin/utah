@@ -1,76 +1,7 @@
-"""The ISO build pipeline: Flatpak retries, fork PRs, concurrency, tooling removal."""
-import re
-import subprocess
+"""The image build pipeline: fork PRs, concurrency, tooling removal."""
 import unittest
 
 from test_iso_ci import ROOT
-
-
-class FlatpakRetryTests(unittest.TestCase):
-    """A Flathub timeout must not fail a whole flavor's end-to-end run.
-
-    Run 35432516418 lost utah-gaming to a single timed-out object while pulling
-    Firefox, three minutes into composing the ISO, with nothing wrong in the
-    image. The installs are the largest network operation in the build and had
-    no retry, while the curl beside them has had one all along.
-    """
-
-    SCRIPT = ROOT / "iso/live/src/install-flatpaks.sh"
-
-    def drive(self, stub: str) -> subprocess.CompletedProcess:
-        """Run the real retry_flatpak against a stub flatpak, with sleep off."""
-        harness = f"""
-        set -uo pipefail
-        eval "$(sed -n '/^retry_flatpak() {{/,/^}}/p' {self.SCRIPT})"
-        sleep() {{ :; }}
-        attempts=0
-        {stub}
-        retry_flatpak install org.example.App >/dev/null 2>&1
-        echo "rc=$? attempts=$attempts"
-        """
-        return subprocess.run(["bash", "-c", harness], capture_output=True, text=True,
-                              cwd=ROOT)
-
-    def test_a_transient_failure_is_retried_and_succeeds(self):
-        result = self.drive('flatpak() { attempts=$((attempts+1)); [ "$attempts" -ge 3 ]; }')
-        self.assertEqual(result.stdout.strip(), "rc=0 attempts=3", result.stderr)
-
-    def test_a_longer_outage_is_retried_and_succeeds_on_the_fifth_attempt(self):
-        # Run 36230660725 lost utah to dl.flathub.org timeouts on attempts
-        # 1-3 spread over ~20 minutes: the retry budget is five attempts.
-        result = self.drive('flatpak() { attempts=$((attempts+1)); [ "$attempts" -ge 5 ]; }')
-        self.assertEqual(result.stdout.strip(), "rc=0 attempts=5", result.stderr)
-
-    def test_a_persistent_failure_still_fails_after_five_attempts(self):
-        # The point is resilience, not swallowing errors: a repository that is
-        # genuinely gone must still fail the build.
-        result = self.drive("flatpak() { attempts=$((attempts+1)); return 1; }")
-        self.assertEqual(result.stdout.strip(), "rc=1 attempts=5", result.stderr)
-
-    def test_every_network_install_goes_through_the_retry(self):
-        script = self.SCRIPT.read_text()
-        installs = [line for line in script.splitlines()
-                    if line.startswith("flatpak install")
-                    or line.startswith("retry_flatpak install")]
-        self.assertTrue(installs)
-        for line in installs:
-            with self.subTest(line=line):
-                self.assertTrue(line.startswith("retry_flatpak install"),
-                                f"unretried network install: {line}")
-
-    def test_every_retried_install_is_idempotent(self):
-        # The retry is only safe if re-running it is a no-op for a ref that
-        # already completed. Without --or-update, an attempt that installed the
-        # app but still exited nonzero makes the next attempt fail with
-        # "already installed" -- the retry would turn a flaky success into a
-        # hard failure, which is the opposite of why it was added.
-        script = self.SCRIPT.read_text()
-        calls = re.findall(r"^retry_flatpak install.*?(?=\n\S|\Z)", script,
-                           re.MULTILINE | re.DOTALL)
-        self.assertTrue(calls)
-        for call in calls:
-            with self.subTest(call=call.splitlines()[0]):
-                self.assertIn("--or-update", call)
 
 
 class ForkPullRequestKernelCacheTests(unittest.TestCase):

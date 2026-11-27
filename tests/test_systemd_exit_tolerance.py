@@ -18,10 +18,9 @@ The two failure modes this guards:
   so it deletes the remote *and* the apps installed from it, leaving those refs
   with no origin to update from.
 
-The scan is deliberately scoped to unit files under `system_files/` and
-`iso/live/`. A shell script may legitimately use `--force` on a throwaway
-remote it created itself -- `iso/live/src/install-flatpaks.sh` does exactly
-that for the live image's own `installer-local` remote, and that is not the
+The scan is deliberately scoped to unit files under `system_files/` and the
+install medium's `iso/raw/src/`. A shell script may legitimately use
+`--force` on a throwaway remote it created itself, and that is not the
 `fedora` remote this convention is about.
 """
 
@@ -31,7 +30,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-UNIT_ROOTS = ("system_files", "iso/live")
+UNIT_ROOTS = ("system_files", "iso/raw/src")
 NUKE_FEDORA = (
     ROOT / "system_files/shared/usr/lib/systemd/system/flatpak-nuke-fedora.service"
 )

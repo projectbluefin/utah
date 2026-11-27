@@ -15,8 +15,8 @@
         "promotion"
       ],
       "description": "Build and contract jobs, promotion, branch sync, parity and extension update workflows, reusable actions and Renovate pins. Use when editing GitHub Actions or debugging CI.",
-      "version": "1.4",
-      "last_updated": "2026-11-22",
+      "version": "1.5",
+      "last_updated": "2026-11-27",
       "doc_type": "reference"
     },
     {
@@ -34,7 +34,7 @@
       ],
       "description": "Layer discipline: COPY folding, late per-image ARGs, script staging, clean+lint in one layer. Use when modifying the Containerfile, adding a script, or investigating build time.",
       "version": "1.0",
-      "last_updated": "2026-11-21",
+      "last_updated": "2026-11-27",
       "doc_type": "policy"
     },
     {
@@ -52,7 +52,7 @@
       ],
       "description": "The runtime desktop contract in contracts/bluefin-desktop.toml and its in-image verifiers. Use when changing branding, os-release, service presets, GNOME extensions, or first-boot Flatpak behavior.",
       "version": "1.0",
-      "last_updated": "2026-11-16",
+      "last_updated": "2026-11-27",
       "doc_type": "policy"
     },
     {
@@ -131,41 +131,22 @@
       "doc_type": "reference"
     },
     {
-      "id": "lifecycle-e2e",
-      "name": "lifecycle-e2e",
-      "one_line_purpose": "Run the QEMU lifecycle harness and validate bootc upgrade, rollback, and BLS boot files.",
-      "entry_point": "docs/skills/lifecycle-e2e.md",
-      "category": "testing",
-      "status": "active",
-      "tags": [
-        "qemu",
-        "bootc",
-        "lifecycle",
-        "iso",
-        "e2e"
-      ],
-      "description": "Atomic bootc lifecycle transitions between two immutable Utah digests in QEMU: baseline, staging, reboot, and rollback. BLS boot-file and boot-manager checks, verify-boot-files.sh, uupd versus bootc staging, and the e2e harness.",
-      "version": "1.0",
-      "last_updated": "2026-11-24",
-      "doc_type": "runbook"
-    },
-    {
       "id": "local-testing",
       "name": "local-testing",
-      "one_line_purpose": "Build, install, and boot Utah locally in a VM or live ISO.",
+      "one_line_purpose": "Build, install, and boot Utah locally in a VM or with the gnome-setup install medium.",
       "entry_point": "docs/skills/local-testing.md",
       "category": "testing",
       "status": "active",
       "tags": [
         "qemu",
         "bootc",
-        "iso",
+        "installer",
         "vm",
         "testing"
       ],
-      "description": "Local validation loop: build-ghcr, bootc install to-disk, QEMU/noVNC boot, live ISO boot paths, and Secure Boot strategy. Use when validating changes end-to-end or debugging boot, GDM, or live-session failures.",
+      "description": "Local validation loop: build-ghcr, bootc install to-disk, QEMU/noVNC boot, the gnome-setup install medium, and Secure Boot strategy. Use when validating changes end-to-end or debugging boot, GDM, or live-session failures.",
       "version": "1.0",
-      "last_updated": "2026-11-21",
+      "last_updated": "2026-11-26",
       "doc_type": "runbook"
     },
     {

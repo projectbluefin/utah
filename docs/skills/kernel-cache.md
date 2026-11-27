@@ -78,7 +78,7 @@ the base image's kernel (Koji's copy signed with the Fedora 44 key, also
 checked against a recorded SHA-256) with `packages/kernel-patches/*.patch`
 concatenated into the spec's `linux-kernel-test.patch` hook. Base variant only:
 no debug kernels, debuginfo, UKI, tools or headers. The release gains
-`.1.utah1` (`7.3.4-200.1.utah1.fc44`), which sorts above Fedora's build and
+`.1.utah1` (`7.3.5-200.1.utah1.fc44`), which sorts above Fedora's build and
 below any later one.
 
 Koji deletes the signed copy once a newer kernel supersedes it (7.3.3's was
@@ -228,11 +228,9 @@ and the mount then failed with `unknown filesystem type 'btrfs'`, the same
 missing `/dev/btrfs-control` as a bare module, which looked like a bad
 filesystem at install time. `install-ogc-kernel.sh` enables `BTRFS_FS` as a
 module beside SquashFS/EROFS and asserts it in `required_config`, so the
-absence fails the build rather than the install. `iso/scripts/luks-e2e.sh`
-adds a `modprobe btrfs` pre-check before the installer runs, turning a repeat
-into a one-line diagnosis. Changes to this contract invalidate the cache
-through the existing script hash and require a real kernel rebuild plus the ISO
-boot tests.
+absence fails the build rather than the install. Changes to this contract
+invalidate the cache through the existing script hash and require a real
+kernel rebuild plus the install tests.
 
 Containers need `CGROUP_BPF`. Cgroup v2 enforces device access with a BPF
 program that crun loads for every container (systemd does the same for
@@ -263,14 +261,17 @@ kernel ignores them, and `/var/swap/swapfile` runs as plain uncompressed swap.
 `ZSWAP` and `CRYPTO_ZSTD` are built in with `ZSMALLOC`, gated. zram is not
 built: Utah dropped zram-generator for Dakota's zswap swapfile.
 
-Two more gaps showed up only under the E2E harnesses, both built in and gated.
-With no TPM driver (`TCG_TPM`, `TCG_TIS`, `TCG_CRB`) the gaming kernel sees
-no TPM 2.0, so gnome-setup asks for a passphrase and TPM2 unlock cannot work
-(#1579). Without guest vsock (`VSOCKETS`, `VIRTIO_VSOCKETS`) the harnesses,
-which reach the live session over AF_VSOCK since #1508, get no SSH, and the
-gaming `luks` legs fail `no SSH from the live ISO` while `main` and `nvidia`,
-on the Fedora kernel, pass. When only the gaming legs fail an E2E step,
-check the OGC config against `x86_64_defconfig` first.
+Two more options came out of E2E failures, both built in and gated. With no
+TPM driver (`TCG_TPM`, `TCG_TIS`, `TCG_CRB`) the gaming kernel sees no TPM
+2.0, so gnome-setup asks for a passphrase and TPM2 unlock cannot work
+(#1579); the gnome-setup install passed on both gaming flavors once they
+were in. Guest vsock (`VSOCKETS`, `VIRTIO_VSOCKETS`, #1595) was added for the
+fisherman harness's AF_VSOCK login, but it was not sufficient: the gaming
+`luks` legs still failed `no SSH from the live ISO` with it (run
+45900706077), cause not found, and #1578 removed that harness. When only the
+gaming legs fail an E2E step, check the OGC config against
+`x86_64_defconfig` first, and prove a fix with a gaming run before calling
+it the cause.
 
 The contract also covers the display. `x86_64_defconfig` enables DRM and the
 Intel i915 driver and nothing else, so on any other GPU, QEMU's included, the
