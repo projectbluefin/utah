@@ -90,7 +90,7 @@ class NonBlockingTrackTests(unittest.TestCase):
     def test_the_medium_is_never_uploaded(self):
         upload = next(s for s in self.workflow["jobs"]["e2e"]["steps"] if "upload-artifact" in s.get("uses", ""))
         paths = upload["with"]["path"]
-        self.assertNotRegex(paths, r"medium\.raw|\.qcow2|id_ed25519")
+        self.assertNotRegex(paths, r"medium\.(raw|iso)|\.qcow2|id_ed25519")
 
 
 class PublishTrackTests(unittest.TestCase):

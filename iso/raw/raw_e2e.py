@@ -2,12 +2,20 @@
 """End-to-end test of the experimental image-based installer, with screenshots.
 
   raw_e2e.py --raw medium.raw --work DIR --candidate IMAGE@sha256:... --ssh-key KEY
+             [--iso medium.iso --boot-as cdrom|usb]
 
 Stages (every screenshot is listed in DIR/screenshots/manifest.json):
   1. Boot the raw disk image as live media (read-only virtio disk, GRUB's
      default "Utah Live" entry: ro utah.live, tmpfs overlay over the root).
      GRUB's menu is held and read back by tesseract: shim's fallback screen
      or no menu with the live entry fails the stage.
+     With --iso the live VM boots the hybrid ISO (build-hybrid-iso.sh)
+     instead, as a CD-ROM (AHCI, media=cdrom) or a USB stick (usb-storage):
+     systemd-boot's menu is held and read back by tesseract
+     (00-systemd-boot-menu), and the live system must show it was booted by
+     systemd-boot from that drive, the root on a loop device over the CD-ROM
+     or on the USB disk (evidence/iso-boot.txt). After the install the
+     target's ESP must hold shim again and none of the ISO's live boot files.
   2. Install with the real gnome-setup window driving systemd-sysinstall
      (--install gui): language, keyboard, try-or-install, disk, confirmation,
      progress, the recovery key with its QR code, done. --install script runs
@@ -89,7 +97,6 @@ GIS_APP = "initial-setup"
 # set it yourself."): without a GeoClue location the harness searches this city.
 TIMEZONE_SEARCH_HINT = "search for a city"
 TIMEZONE_CITY = "Berlin"
-TARGET_DISK = "/dev/vdb"
 TARGET_SIZE_TEXT = "51.5 GB"  # glib's format_size of the 48 GiB target, as gnome-setup's disk row shows it
 # gnome-setup's disk row subtitles (src/models/disk/disk.rs, display_desc).
 DISK_EMPTY_TEXT = "This disk is fully empty"
@@ -157,6 +164,33 @@ BOOTC_PROBE_DIAG = (
 STAGES = ("live boot", "install", "first boot unlock", "initial setup",
           "first boot desktop", "bootc switch", "bootc rollback")
 
+# The hybrid ISO (--iso, build-hybrid-iso.sh). systemd-boot's menu lists the
+# live entry (medium.LIVE_TITLE) and, with auto-firmware, "Reboot Into
+# Firmware Interface", where GRUB says "UEFI Firmware Settings". The harness
+# presses SDBOOT_HOLD_KEY between screendumps until the menu is read:
+# systemd-boot drops keys typed before its menu, but one typed while it shows
+# stops the 5 s countdown (loader.conf), and this one is no hotkey there
+# (boot.c) and names no entry. Then Enter boots the default entry.
+BOOT_AS = ("cdrom", "usb")
+SDBOOT_LIVE_TEXT = "utah live"
+SDBOOT_MENU_TEXT = "reboot into firmware"
+GRUB_TEXT = ("gnu grub", "entry is highlighted", "uefi firmware settings")
+SDBOOT_HOLD_KEY = "x"
+SDBOOT_WAIT = 180
+ESP_TYPE = "c12a7328-f81f-11d2-ba4b-00a0c93ec93b"
+LOADER_GUID = "4a67b082-0a4c-41cf-b6c7-440b29bb8c4f"
+# How the live system was booted and where its root is: key=value lines
+# (parse_facts) for iso_boot_problems.
+ISO_BOOT_FACTS = (
+    "efivar() { tail -c +5 /sys/firmware/efi/efivars/$1-" + LOADER_GUID + " 2>/dev/null | tr -d '\\0'; }; "
+    "uuid=$(sed -n 's/.*root=UUID=\\([^ ]*\\).*/\\1/p' /proc/cmdline); "
+    "part=$(realpath /dev/disk/by-uuid/$uuid); disk=/dev/$(lsblk -rno PKNAME $part); "
+    "echo loader=$(efivar LoaderInfo); echo loader_part_uuid=$(efivar LoaderDevicePartUUID); "
+    "echo root_part=$part; echo root_disk=$disk; echo root_tran=$(lsblk -dno TRAN $disk); "
+    "echo loop_backing=$(losetup -nO BACK-FILE $disk 2>/dev/null); "
+    "echo loop_devices=$(losetup -nO NAME,BACK-FILE | tr -s ' ' ':' | tr '\\n' ' ')"
+)
+
 
 def parse_failed_units(text):
     """Unit names from `systemctl --failed --no-legend --plain` output."""
@@ -181,6 +215,7 @@ class Results:
         self.backend = None
         self.installer = "gnome-setup"
         self.encryption = {}
+        self.medium = {"medium": "raw"}
         self.current = None
         self.started = None
         self.error = None
@@ -220,7 +255,8 @@ class Results:
         stages = [{"stage": s, **self.stages.get(s, {"status": "not run", "seconds": None})} for s in STAGES]
         passed = self.error is None and all(s["status"] == "pass" for s in stages)
         return {"result": "pass" if passed else "fail", "error": self.error, "install": self.install,
-                "installer": self.installer, "backend": self.backend, "encryption": self.encryption,
+                "installer": self.installer, "medium": self.medium, "backend": self.backend,
+                "encryption": self.encryption,
                 "stages": stages, "boots": self.boots, "flatpaks": self.flatpaks,
                 "composefs": self.composefs, "installed_checks": self.checks, "timings": dict(timings or {})}
 
@@ -432,6 +468,109 @@ def blank_target_problem(page, target_row=()):
     return None
 
 
+def medium_drive(raw, iso=None, boot_as=None):
+    """The live VM's medium: the raw image as a read-only virtio disk, or the
+    hybrid ISO as a CD-ROM on q35's AHCI controller (media=cdrom, 2048-byte
+    sectors) or as a USB stick on the xHCI controller the VM always has."""
+    if iso is None:
+        return {"drive": f"file={raw},format=raw,if=none,id=medium,readonly=on",
+                "device": "virtio-blk-pci,drive=medium,bootindex=1"}
+    if boot_as == "cdrom":
+        return {"drive": f"file={iso},format=raw,if=none,id=medium,media=cdrom,readonly=on",
+                "device": "ide-cd,drive=medium,bootindex=1"}
+    if boot_as == "usb":
+        return {"drive": f"file={iso},format=raw,if=none,id=medium,readonly=on",
+                "device": "usb-storage,drive=medium,bootindex=1,removable=on"}
+    raise ValueError(f"--boot-as must be one of {BOOT_AS}, not {boot_as!r}")
+
+
+def target_disk(iso=None):
+    """The install target as the live system names it: virtio-blk disks take
+    vdX names in PCI order, and only the raw medium is one of them."""
+    return "/dev/vdb" if iso is None else "/dev/vda"
+
+
+def sdboot_frame(ocr):
+    """What a tesseract transcript of an early boot frame of the hybrid ISO
+    shows: "sdboot" (systemd-boot's menu listing the live entry), "grub"
+    (GRUB's menu: the medium booted shim -> GRUB instead) or "other"."""
+    text = " ".join(ocr.lower().split())
+    if any(s in text for s in GRUB_TEXT):
+        return "grub"
+    if SDBOOT_LIVE_TEXT in text and SDBOOT_MENU_TEXT in text:
+        return "sdboot"
+    return "other"
+
+
+def parse_facts(text):
+    """key=value lines (ISO_BOOT_FACTS) into a dict; the first of a key wins,
+    so the diagnostics printed after the facts cannot shadow them."""
+    facts = {}
+    for line in (text or "").splitlines():
+        key, sep, value = line.partition("=")
+        if sep and key and " " not in key:
+            facts.setdefault(key, value.strip())
+    return facts
+
+
+def optical(path):
+    """Whether a device path names an optical drive (sr0, /dev/sr0)."""
+    return re.fullmatch(r"(.*/)?sr[0-9]+", path or "") is not None
+
+
+def iso_boot_problems(boot_as, facts):
+    """What contradicts a live boot of the hybrid ISO from boot_as.
+
+    systemd-boot must have booted it (LoaderInfo) and reported the ESP it
+    started from. As a CD-ROM the kernel sees no partitions on the drive, so
+    the root must sit on one loop device over the optical drive (the
+    initrd's systemd-loop@ attaches it, the live system attaches no second
+    one). As a USB stick the root is on the USB disk itself."""
+    problems = []
+    if not facts.get("loader", "").startswith("systemd-boot"):
+        problems.append(f"booted by {facts.get('loader') or 'an unknown loader'}, not systemd-boot")
+    if not facts.get("loader_part_uuid"):
+        problems.append("systemd-boot exported no LoaderDevicePartUUID")
+    disk = facts.get("root_disk", "")
+    if boot_as == "cdrom":
+        # The loop device was attached in the initrd, so losetup reports its
+        # backing device relative to the initrd's /dev ("/sr0").
+        if not disk.startswith("/dev/loop") or not optical(facts.get("loop_backing", "")):
+            problems.append(f"root is on {disk or 'no disk'} (backed by {facts.get('loop_backing') or 'nothing'}), "
+                            "not on a loop device over the CD-ROM")
+        over_drive = [d for d in facts.get("loop_devices", "").split() if optical(d.split(":", 1)[-1])]
+        if len(over_drive) > 1:
+            problems.append(f"{len(over_drive)} loop devices over the CD-ROM: {' '.join(over_drive)}")
+    elif boot_as == "usb":
+        if facts.get("root_tran") != "usb":
+            problems.append(f"root is on {disk or 'no disk'} (transport {facts.get('root_tran') or 'none'}), not on the USB disk")
+    else:
+        raise ValueError(f"unknown boot_as {boot_as!r}")
+    return problems
+
+
+# check_target_esp prints it when EFI/BOOT/grubx64.efi is the vendor GRUB
+# again, not the systemd-boot the hybrid ISO's shim started.
+VENDOR_GRUB_MARK = "REMOVABLE-GRUB-IS-VENDOR-GRUB"
+
+
+def target_esp_problems(files):
+    """What the installed ESP (paths relative to it, plus VENDOR_GRUB_MARK)
+    still carries of the hybrid ISO's live systemd-boot setup, or lacks of
+    shim -> GRUB on the removable path."""
+    lower = {f.lower().strip("/") for f in files}
+    problems = []
+    for need in ("EFI/BOOT/BOOTX64.EFI", "EFI/BOOT/grubx64.efi"):
+        if need.lower() not in lower:
+            problems.append(f"no {need}")
+    if "efi/boot/grubx64.efi" in lower and VENDOR_GRUB_MARK not in files:
+        problems.append("EFI/BOOT/grubx64.efi is not the vendor GRUB")
+    leftovers = sorted(f for f in files if f.lower().strip("/").split("/", 1)[0] in ("utah-live", "loader"))
+    if leftovers:
+        problems.append("live boot files left: " + " ".join(leftovers))
+    return problems
+
+
 def log(msg):
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
@@ -477,6 +616,9 @@ class Harness:
         self.swtpm = None
         self.recovery_key = None
         self.results.encryption = {"tpm2": self.tpm, "unlocks": {}}
+        self.target_disk = target_disk(args.iso)
+        self.results.medium = ({"medium": "raw"} if args.iso is None
+                               else {"medium": "iso", "boot_as": args.boot_as})
         if not shutil.which("tesseract"):
             raise SystemExit("needs tesseract: the fastfetch screenshot is read back by OCR")
         self.flavor = args.flavor or flavor_of(args.candidate)
@@ -860,7 +1002,9 @@ class Harness:
 
     # ---- Stages -------------------------------------------------------------
     def live(self):
-        log("=== Stage 1: live boot of the raw disk image ===")
+        iso = self.args.iso
+        what = "the raw disk image" if iso is None else f"the hybrid ISO as {self.args.boot_as}"
+        log(f"=== Stage 1: live boot of {what} ===")
         self.results.begin("live boot")
         target = self.work / "install.qcow2"
         target.unlink(missing_ok=True)
@@ -868,12 +1012,14 @@ class Harness:
         self.vars_live = self.work / "vars-live.fd"
         shutil.copy(self.vars_src, self.vars_live)
         self.start_vm("live", [
-            {"drive": f"file={self.args.raw},format=raw,if=none,id=medium,readonly=on",
-             "device": "virtio-blk-pci,drive=medium,bootindex=1"},
+            medium_drive(self.args.raw, iso, self.args.boot_as),
             {"drive": f"file={target},format=qcow2,if=none,id=target",
              "device": "virtio-blk-pci,drive=target"},
         ], self.vars_live, self.args.ssh_port, tpm=self.tpm)
-        self.shot_when_grub()
+        if iso is None:
+            self.shot_when_grub()
+        else:
+            self.shot_when_sdboot()
         self.wait_serial("UTAH_LIVE_READY", 1200)
         live_pw = "live"
         self.wait_ssh("liveuser", 300, password=live_pw)
@@ -887,6 +1033,8 @@ class Harness:
         self.record_boot("live", "liveuser", password=live_pw)
         if "utah.live" not in facts.split("\n", 1)[0]:
             raise Fail("live VM did not boot the utah.live entry")
+        if iso is not None:
+            self.check_iso_boot(live_pw)
         self.scp_to("liveuser", HERE / "atspi_drive.py", "/var/tmp/atspi_drive.py", password=live_pw)
         # Plymouth's theme and watermark, for the installed-boot prompt check.
         self.ssh("liveuser", 'theme=$(plymouth-set-default-theme) && file=/usr/share/plymouth/themes/$theme/$theme.plymouth && '
@@ -898,7 +1046,7 @@ class Harness:
         while time.time() < end and "gnome-shell" not in self.ssh("liveuser", "pgrep -a -u liveuser gnome-shell || true", password=live_pw):
             time.sleep(5)
         time.sleep(10)
-        self.shot("01-live-session", "Raw disk image booted as live media (utah.live, tmpfs overlay): GNOME session for the live user",
+        self.shot("01-live-session", f"{what[0].upper()}{what[1:]} booted as live media (utah.live, tmpfs overlay): GNOME session for the live user",
                   True, required=True, below_top_bar=True)
 
     def hold_key(self, key, stop):
@@ -955,6 +1103,78 @@ class Harness:
             stop.set()
             holder.join()
             self.save("grub-menu-ocr.txt", "\n".join(transcripts))
+
+    def shot_when_sdboot(self):
+        """00-systemd-boot-menu: systemd-boot's menu on the hybrid ISO, read
+        back by tesseract (sdboot_frame, evidence/sdboot-menu-ocr.txt).
+        SDBOOT_HOLD_KEY is pressed between screendumps until the menu is read,
+        so the countdown stops; Enter then boots the default entry. GRUB's menu,
+        or no menu within SDBOOT_WAIT, fails the stage."""
+        proves = (f"Firmware -> El Torito/{self.args.boot_as} -> shim -> systemd-boot on the hybrid ISO's ESP; "
+                  "'Utah Live' Type #1 entry listed")
+        probe = self.debug / "sdboot-probe.png"
+        transcripts = []
+        try:
+            end = time.time() + SDBOOT_WAIT
+            while time.time() < end:
+                if self.vm.poll() is not None:
+                    raise Fail("live VM exited before systemd-boot's menu was drawn")
+                self.key(SDBOOT_HOLD_KEY)
+                ppm = self.screendump(probe)
+                if not drawn(ppm, min_colors=2):
+                    continue
+                ocr = subprocess.run(["tesseract", str(ppm), "stdout"], capture_output=True, text=True).stdout
+                verdict = sdboot_frame(ocr)
+                transcripts.append(f"== {time.strftime('%H:%M:%S')} {verdict}\n{ocr}")
+                if verdict == "other":
+                    continue
+                png = self.shots / "00-systemd-boot-menu.png"
+                self.to_png(ppm, png)
+                self.record_shot(png, "00-systemd-boot-menu", proves)
+                if verdict == "grub":
+                    raise Fail("GRUB's menu showed instead of systemd-boot's: screenshots/00-systemd-boot-menu.png")
+                self.key("ret")
+                return
+            if probe.with_suffix(".ppm").exists():
+                self.to_png(probe.with_suffix(".ppm"), probe)
+            raise Fail(f"no systemd-boot menu listing the live entry read back within {SDBOOT_WAIT}s "
+                       "(evidence/sdboot-menu-ocr.txt, debug/sdboot-probe.png)")
+        finally:
+            self.save("sdboot-menu-ocr.txt", "\n".join(transcripts))
+
+    def check_iso_boot(self, password):
+        """The live system came from the hybrid ISO through systemd-boot, its
+        root where the drive puts it (iso_boot_problems, evidence/iso-boot.txt)."""
+        out = self.ssh("liveuser", ISO_BOOT_FACTS + "; echo; lsblk -o NAME,SIZE,RO,TYPE,TRAN,FSTYPE,PARTUUID; "
+                       "systemctl status --no-pager 'systemd-loop@*' 2>&1; "
+                       "sudo journalctl -b --no-pager -o short-monotonic -u 'systemd-loop@*' 2>&1 | tail -20",
+                       password=password, check=False)
+        self.save("iso-boot.txt", out)
+        facts = parse_facts(out)
+        problems = iso_boot_problems(self.args.boot_as, facts)
+        self.results.medium.update({k: facts.get(k, "") for k in ("loader", "root_part", "root_disk", "loop_backing")},
+                                   problems=problems)
+        log(f"  ISO boot ({self.args.boot_as}): {facts.get('loader')}, root {facts.get('root_part')} "
+            f"on {facts.get('root_disk')} {facts.get('loop_backing') or facts.get('root_tran')}")
+        if problems:
+            raise Fail(f"hybrid ISO as {self.args.boot_as}: " + "; ".join(problems) + " (evidence/iso-boot.txt)")
+
+    def check_target_esp(self):
+        """After an install from the hybrid ISO, the target's ESP boots shim ->
+        GRUB like a raw-medium install: utah-sysinstall-post put the medium's
+        EFI/BOOT files back and removed the ISO's systemd-boot setup
+        (target_esp_problems)."""
+        out = self.ssh("liveuser", f"esp=$(lsblk -rnpo NAME,PARTTYPE {self.target_disk} | awk 'tolower($2) == \"{ESP_TYPE}\" {{print $1}}'); "
+                       "sudo sh -c 'd=$(mktemp -d) && mount -o ro \"$1\" \"$d\" && find \"$d\" -type f -printf \"%P\\n\" | sort; "
+                       "for v in \"$d\"/EFI/*/grubx64.efi; do case \"$v\" in */EFI/BOOT/*) ;; "
+                       f"*) cmp -s \"$v\" \"$d/EFI/BOOT/grubx64.efi\" && echo {VENDOR_GRUB_MARK} ;; esac; done; "
+                       "umount \"$d\"; rmdir \"$d\"' sh \"$esp\"",
+                       password="live", check=False)
+        self.save("target-esp-files.txt", out)
+        problems = target_esp_problems(out.split())
+        self.results.medium["target_esp_problems"] = problems
+        if problems:
+            raise Fail("the installed ESP after an ISO install: " + "; ".join(problems) + " (evidence/target-esp-files.txt)")
 
     # ---- gnome-setup ----------------------------------------------------------
     def gnome_setup_install(self):
@@ -1159,7 +1379,7 @@ class Harness:
 
         The empty passphrase systemd-repart enrolled must be gone: with a TPM no password slot
         is left, without one exactly one (the passphrase from the disk passphrase page)."""
-        out = self.ssh("liveuser", f"dev=$(lsblk -rnpo NAME,FSTYPE {TARGET_DISK} | awk '$2 == \"crypto_LUKS\" {{print $1}}'); "
+        out = self.ssh("liveuser", f"dev=$(lsblk -rnpo NAME,FSTYPE {self.target_disk} | awk '$2 == \"crypto_LUKS\" {{print $1}}'); "
                        "echo \"$dev\"; sudo /usr/libexec/utah-sysinstall/systemd-cryptenroll \"$dev\"",
                        password="live", check=False)
         self.save("luks-slots.txt", out)
@@ -1171,7 +1391,7 @@ class Harness:
             raise Fail(f"target keyslots are {sorted(types)}, expected {want} (evidence/luks-slots.txt)")
         if not self.tpm:
             # The password slot is the user's passphrase, not the empty one systemd-repart enrolled.
-            test = self.ssh("liveuser", f"dev=$(lsblk -rnpo NAME,FSTYPE {TARGET_DISK} | awk '$2 == \"crypto_LUKS\" {{print $1}}'); "
+            test = self.ssh("liveuser", f"dev=$(lsblk -rnpo NAME,FSTYPE {self.target_disk} | awk '$2 == \"crypto_LUKS\" {{print $1}}'); "
                             f"printf %s {PIN} | sudo cryptsetup open --test-passphrase --key-file=- \"$dev\" && echo PASSPHRASE-OK; "
                             "printf '' | sudo cryptsetup open --test-passphrase --key-file=- \"$dev\" && echo EMPTY-OK",
                             password="live", check=False)
@@ -1185,13 +1405,13 @@ class Harness:
         log("=== Stage 2 (script): systemd-sysinstall + utah-sysinstall-post over SSH ===")
         self.results.begin("install")
         start = time.time()
-        call = json.dumps({"node": TARGET_DISK, "definitions": ["/run/utah-live/repart.d"], "erase": True})
-        unit = "utah-sysinstall-post@" + TARGET_DISK.strip("/").replace("/", "-") + ".service"
+        call = json.dumps({"node": self.target_disk, "definitions": ["/run/utah-live/repart.d"], "erase": True})
+        unit = "utah-sysinstall-post@" + self.target_disk.strip("/").replace("/", "-") + ".service"
         cryptenroll = "/usr/libexec/utah-sysinstall/systemd-cryptenroll"
         passphrase = "" if self.tpm else f"sudo NEWPASSWORD={PIN} {cryptenroll} --unlock-key-file=/dev/null --password \"$dev\" && "
         out = self.ssh("liveuser", f"sudo varlinkctl call --more /run/systemd/io.systemd.SysInstall io.systemd.SysInstall.Run "
                        f"{shlex.quote(call)} && sudo systemctl start {unit} && "
-                       f"dev=$(lsblk -rnpo NAME,FSTYPE {TARGET_DISK} | awk '$2 == \"crypto_LUKS\" {{print $1}}') && "
+                       f"dev=$(lsblk -rnpo NAME,FSTYPE {self.target_disk} | awk '$2 == \"crypto_LUKS\" {{print $1}}') && "
                        f"empty=$(sudo {cryptenroll} \"$dev\" | awk '$2 == \"password\" {{print $1}}') && {passphrase}"
                        f"sudo {cryptenroll} --unlock-key-file=/dev/null --recovery-key --wipe-slot=\"$empty\" \"$dev\" 2>&1",
                        password="live", timeout=3600, check=False)
@@ -1210,6 +1430,8 @@ class Harness:
     def after_install(self):
         facts = self.ssh("liveuser", "sudo efibootmgr -v; lsblk -o NAME,SIZE,TYPE,FSTYPE,UUID,PARTLABEL", password="live", check=False)
         self.save("live-after-install.txt", facts)
+        if self.args.iso is not None:
+            self.check_target_esp()
         self.stop_vm(lambda: self.ssh("liveuser", "sudo systemctl poweroff --no-block", password="live", check=False))
 
     def grab_install_log(self):
@@ -1873,6 +2095,8 @@ def flavor_of(ref):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--raw", required=True)
+    ap.add_argument("--iso", help="hybrid ISO of the medium (build-hybrid-iso.sh): the live VM boots it instead of --raw")
+    ap.add_argument("--boot-as", choices=BOOT_AS, help="how the live VM attaches --iso: an optical drive or a USB stick")
     ap.add_argument("--work", required=True)
     ap.add_argument("--candidate", required=True, help="image ref (prefer @sha256 digest) for bootc switch")
     ap.add_argument("--ssh-key", required=True, help="private key whose public half is root's authorized key on the image")
@@ -1895,6 +2119,8 @@ def main():
                     help="flavor the installed system must be (config/flavors.json); default: the flavor "
                          "that publishes --candidate's image, which is the image under test's repository")
     args = ap.parse_args()
+    if (args.iso is None) != (args.boot_as is None):
+        ap.error("--iso and --boot-as go together")
     h = Harness(args)
     try:
         h.live()

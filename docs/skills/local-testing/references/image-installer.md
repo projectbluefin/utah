@@ -15,6 +15,7 @@ without the CI debug kargs. Tracking issue: #1403. History: spike #1399.
 | Raw medium: GPT BIOS-BOOT, 512 MiB ESP, 1 GiB ext4 `/boot`, btrfs root; one `bootc install to-filesystem --generic-image --karg rhgb --karg quiet`, with `--composefs-backend` when the image's kernel has the btrfs fs-verity fix (`UTAH_RAW_BACKEND=auto`, `scripts/kernel_verity.py`; ostree otherwise); "Utah Live" BLS entry as GRUB default; removable path `EFI/BOOT/BOOTX64.EFI` (shim) + `EFI/BOOT/grubx64.efi`, without shim's fallback `fbx64.efi` ([gotcha](#gotchas-found-on-the-way)) | `iso/raw/build-raw-image.sh`, `iso/raw/medium.py`, `scripts/kernel_verity.py` |
 | Offline Flatpaks in the medium's stateful `/var` (`state/os/default/var` on composefs, the stateroot's `var` on ostree), never in an image: the set the ISO bakes (`system-flatpaks.Brewfile` apps via `scripts/verify-desktop-contract.py --flatpaks`, `--no-related`, listed runtimes pinned) plus `flatpak preinstall` of the image's `preinstall.d`, run in the image with that directory bind-mounted, then `setfiles` with the image's contexts | `iso/raw/bake-flatpaks.sh` |
 | Shrink to content: fstrim, btrfs balance + resize to minimum (+256 MiB, stepping up while btrfs refuses), fstrim again, cut the root partition and the file, rewrite the backup GPT; `size-breakdown.txt` shows what takes the space | `iso/raw/shrink-raw-image.sh`, `medium.py shrink-plan` |
+| Hybrid ISO (#1404, main flavor, Secure Boot off): the shrunk medium plus systemd-boot on its ESP and an El Torito catalog for it, written by the medium's own `systemd-repart --el-torito`; GPT, partitions and filesystems unchanged ([below](#hybrid-iso)) | `iso/raw/build-hybrid-iso.sh`, `medium.py iso-entry`/`eltorito-rba` |
 | End to end with screenshots and `evidence/results.json`; on composefs, fs-verity checks on every installed boot; the fisherman harness's installed-system checks ([below](#installed-system-checks-ported-from-the-fisherman-harness)) | `iso/raw/raw_e2e.py`, `composefs_check.py`, `atspi_drive.py`, `vte_term.py` |
 | Size per step (raw, allocated, zstd -3, zstd -19 --long, xz -9, pack/unpack time) | `iso/raw/measure_medium.py` |
 
@@ -220,6 +221,104 @@ flatpak-preinstall.service has run with the network up.
 Each run also measures the same medium without Flatpaks (`size-2-no-flatpaks.json`)
 so the comparison shows what the offline set costs in download size.
 
+### Hybrid ISO
+
+`build-hybrid-iso.sh RAW OUT_ISO` (root, from the repository root, after the
+bake and the shrink) turns the medium into an El Torito hybrid, the layout
+GNOME OS builds with `systemd-repart --el-torito=yes` (gnome-build-meta
+`elements/gnomeos/live-image.bst`). The ISO is the raw medium byte for byte
+except:
+
+- **The ESP also boots systemd-boot.** Firmware booting El Torito media
+  exposes only the El Torito image (the ESP), and GRUB reads the kernel from
+  the separate ext4 `/boot`, so the kernel has to move to the ESP. shim
+  stays on the removable path (`EFI/BOOT/BOOTX64.EFI`) and starts the
+  image's unsigned systemd-boot (`systemd-boot-unsigned`; Secure Boot off
+  until #1380 brings a signed one) as its second stage
+  `EFI/BOOT/grubx64.efi`; `loader/entries/utah-live.conf` is GRUB's live
+  entry with the same options and the kernel and initrd copied to
+  `/utah-live` (`medium.py iso-entry`), `loader/loader.conf` makes it the
+  default with a 5 s menu, and the medium's own `EFI/BOOT/grubx64.efi` waits
+  in `/utah-live/BOOT` (the raw medium has no `fbx64.efi`; the build fails
+  if one is there, since shim would start the fallback instead). shim
+  has to stay first: it extends PCR 7 (SBAT, MOK state) even with Secure
+  Boot off, and gnome-setup seals the TPM2 policy (PCR 7) in the live
+  session. With systemd-boot itself on the removable path, the first
+  installed boot (shim -> GRUB) asked for the recovery key instead of
+  unlocking (run 45940409726, `fail-tpm-unlock-first-boot.png`).
+- **An El Torito catalog** (EFI platform, no emulation, sector count 0 =
+  "to the end of the medium") pointing at the ESP's first 2048-byte block,
+  written into the gap between the GPT and the first partition (ISO9660
+  descriptors at block 16 = 32 KiB, BIOS-BOOT at 1 MiB). The build feeds
+  repart one definition matching the existing ESP at its exact size, so
+  repart changes no partition and only writes the catalog; the other
+  partitions are foreign to it. It then reads the catalog back
+  (`eltorito-rba` must be the ESP's block), diffs `sfdisk --dump` against
+  the raw medium and compares every other partition byte for byte.
+
+No container and no ISO tools: `systemd-repart` (261 has `--el-torito`) and
+systemd-boot come from the medium's own deployment, mounted read-only (on
+composefs the deployment's erofs image over `composefs/objects` as an
+overlayfs data-only layer, the way bootc's initramfs-setup mounts it), and
+repart runs in a private mount namespace chrooted into it. The host needs
+util-linux, coreutils, diffutils, python3 and udev, plus the kernel's loop,
+vfat, ext4, btrfs, erofs and overlay drivers (all on GitHub's Ubuntu runners).
+Evidence: `raw-evidence/iso.json` (`iso_bytes`, `build_seconds`),
+`iso-entry.conf`, `iso-loader.conf`, `iso-esp-files.txt`, `iso-repart.json`.
+
+How the root is found:
+
+- **USB disk** (or `dd` to any disk): 512-byte sectors, the kernel reads the
+  GPT as on the raw medium; `root=UUID=` is found as before.
+- **CD-ROM**: the drive has 2048-byte sectors and the GPT is written for 512,
+  and Linux does not partition-scan optical drives anyway. systemd 261
+  covers that (systemd NEWS, 261: "udev's blkid builtin will now set
+  ID_PART_GPT_AUTO_ROOT_DISK_NEEDS_LOOP=1 ... systemd-loop@.service ...
+  booting a fully valid GPT disk image on a block device with a
+  non-matching sector size will now just work"): systemd-boot finds the
+  ESP's PARTUUID from the El Torito device path (`part-discovery.c`
+  `disk_get_part_uuid_eltorito`, also 261) and exports it as
+  `LoaderDevicePartUUID`; udev's blkid builtin sees a GPT holding that ESP on
+  a drive whose sector size does not match, and `99-systemd.rules` pulls in
+  `systemd-loop@dev-sr0.service`, which runs `systemd-dissect --attach` to
+  create a partitioned loop device with the GPT's sector size. Hummingbird's
+  dracut leaves both out of the initramfs, so `60-utah-live.conf` adds
+  `systemd-dissect`, the unit and the `loop` module; `root=UUID=` then
+  resolves to `loop0p4`. A drop-in
+  (`systemd-loop@.service.d/50-utah-live.conf`) keeps the live system from
+  attaching a second loop device when udev replays the drive after
+  switch-root: the same PARTUUIDs twice would leave the installer's
+  `CopyBlocks=` sources ambiguous. GNOME OS itself does not need this: its
+  live root is a zram device.
+
+The install path is unchanged: `utah-live-definitions` reads the GPT of the
+disk holding the root (`loop0` from a CD), and the block copy puts the ISO's
+ESP on the target. `utah-sysinstall-post` then moves `/utah-live/BOOT/*`
+back to `EFI/BOOT/` and deletes `/utah-live` and `/loader`, so the installed
+ESP is the raw medium's again (shim -> GRUB -> ext4 `/boot`, the same bytes
+`bootupd-state.json` records) and fails if the live entry survives.
+
+The E2E runs the hybrid ISO for the main flavor only (the resolve job's
+`iso` matrix field), after the raw leg: `raw_e2e.py --iso medium.iso
+--boot-as cdrom` (AHCI `ide-cd`, `media=cdrom`) and `--boot-as usb`
+(`usb-storage` on the VM's xHCI), each a full install with its own work
+directory (`e2e-iso-cdrom/`, `e2e-iso-usb/`). Stage 1 presses `x` (no
+systemd-boot hotkey, names no entry) between screendumps: systemd-boot drops
+keys typed before its menu, but one typed while it shows stops the 5 s
+countdown. It reads the menu back with tesseract (`sdboot_frame`: the live
+title plus "Reboot Into Firmware Interface", GRUB's "UEFI Firmware Settings"
+or "GNU GRUB" fails) and keeps it as `00-systemd-boot-menu.png`
+(`evidence/sdboot-menu-ocr.txt`). The live system must report systemd-boot
+in `LoaderInfo`, a `LoaderDevicePartUUID`, and its root on one loop device
+backed by `/dev/sr0` (CD-ROM) or on a disk with transport `usb`
+(`iso_boot_problems`, `evidence/iso-boot.txt`). After the install the
+target's ESP must have `EFI/BOOT/BOOTX64.EFI` and an `EFI/BOOT/grubx64.efi`
+identical to the vendor GRUB, and no `utah-live/` or `loader/`
+(`target_esp_problems`, `evidence/target-esp-files.txt`).
+`results.json` records the medium under `medium`. The target is `/dev/vda`
+in the ISO legs: virtio disks are named in PCI order and the ISO is no
+virtio disk.
+
 ### Installed-system checks (ported from the fisherman harness)
 
 Everything the removed fisherman harness (`luks-e2e.sh`) asserted on the
@@ -314,9 +413,15 @@ sudo env UTAH_RAW_BTRFS_COMPRESS=zstd:3 \
 sudo chown "$USER" output/medium.raw
 ```
 
-`dd` the shrunk `medium.raw` to a USB stick (UEFI only; no El Torito yet,
-#1404). Without `UTAH_RAW_LIVE_KARGS=utah.live.debug` the live user has no
-password and there is no sshd.
+`dd` the shrunk `medium.raw` to a USB stick (UEFI only), or build the hybrid
+ISO from it and write or burn that:
+
+```bash
+sudo bash iso/raw/build-hybrid-iso.sh output/medium.raw output/medium.iso
+```
+
+Without `UTAH_RAW_LIVE_KARGS=utah.live.debug` the live user has no
+password and there is no sshd. The ISO needs Secure Boot off.
 
 ### Try it in a VM
 
@@ -353,6 +458,11 @@ qemu-system-x86_64 -enable-kvm -machine q35 -cpu host -smp 4 -m 8192 \
 
 Keep `vars.fd` between boots: the installer's firmware entry lives there.
 Recreate `target.qcow2` (and copy a fresh `vars.fd`) to install again.
+
+To boot the hybrid ISO instead, as a CD-ROM, replace the `medium.raw` line
+with `-drive file=medium.iso,format=raw,if=none,id=cd,media=cdrom,readonly=on
+-device ide-cd,drive=cd,bootindex=1` (the target is then `/dev/vda`);
+systemd-boot shows "Utah Live (try or install)" for 5 seconds.
 
 ## Gotchas found on the way
 
@@ -397,3 +507,16 @@ Recreate `target.qcow2` (and copy a fresh `vars.fd`) to install again.
   boots through utah-sysinstall-post's efibootmgr entry, its removable path
   still reaches GRUB, and a later `bootupctl update` restores `fbx64.efi`
   there (Fedora's stock layout on an installed disk).
+- repart's El Torito primary descriptor declares a 21-block volume and its
+  boot entry a sector count of 0 ("to the end of the medium" per the UEFI
+  spec). OVMF boots it as a CD-ROM all the same (local TCG boot of a 9.5 GB
+  ISO). The ESP must start on a 2048-byte block: `build-hybrid-iso.sh` and
+  repart both refuse otherwise.
+- After a CD-ROM boot, `losetup` in the live system names the loop device's
+  backing device `/sr0`: it was attached in the initrd. `iso_boot_problems`
+  accepts any path ending in `srN`.
+- The host kernel decides whether `build-raw-image.sh` can build a composefs
+  medium: bootc mounts the erofs image from a file, which needs file-backed
+  erofs (Linux 6.12+). Ubuntu 24.04's 6.8 fails with "Block device required";
+  build with `UTAH_RAW_BACKEND=ostree` there. `build-hybrid-iso.sh` mounts
+  the composefs image through a loop device instead.

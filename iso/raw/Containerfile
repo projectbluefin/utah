@@ -111,6 +111,8 @@ COPY src/usr/ /usr/
 # in /boot"). scripts/clean-stage.sh empties it in images built since #1131;
 # older digests (the comparison's 1c7956e2 among them) still carry
 # kernel-install's entry, and the ostree backend never reads the image's /boot.
+# The initramfs also attaches the hybrid ISO's partitions when it boots as a
+# CD-ROM (systemd-loop@.service and systemd-dissect, build-hybrid-iso.sh).
 # gnome-setup: Utah's pages.conf over its own, the live sockets enabled
 # (they only start with utah.live.installer=gnome-setup), and the TPM2
 # stack in the initramfs when dracut has it, so a root that gnome-setup
@@ -140,7 +142,10 @@ RUN set -euxo pipefail; \
              usr/lib/systemd/system/ostree-prepare-root.service.d/10-utah-live.conf \
              usr/lib/systemd/system/bootc-root-setup.service.d/10-utah-live.conf \
              usr/lib/systemd/system/bootc-root-setup.service \
-             usr/lib/bootc/initramfs-setup; do \
+             usr/lib/bootc/initramfs-setup \
+             usr/bin/systemd-dissect \
+             usr/lib/systemd/system/systemd-loop@.service \
+             usr/lib/systemd/system/systemd-loop@.service.d/50-utah-live.conf; do \
         grep -q " ${f}\$" <<<"${listing}"; \
     done; \
     grep -E 'tpm2|cryptsetup' <<<"${listing}" || true; \
