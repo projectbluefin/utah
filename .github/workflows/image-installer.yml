@@ -15,7 +15,10 @@ name: Image-based installer (experimental)
 #   3. iso/raw/raw_e2e.py: live boot -> GUI install into LUKS2 (gnome-setup
 #      with a recovery key and a software TPM, or without a TPM a disk
 #      passphrase) -> unlock -> gnome-initial-setup -> desktop + bootc status
-#      -> bootc switch -> bootc rollback, with a screenshot of every stage;
+#      -> bootc switch -> bootc rollback, with a screenshot of every stage.
+#      Pull requests and the nightly run add a leg for the main flavor with
+#      gnome-setup's "Encrypt Disk" switch off (--encryption off): an
+#      unencrypted root, no passphrase or recovery key page, no unlock;
 #   4. main flavor only (#1404): turn the medium into an El Torito hybrid ISO
 #      (iso/raw/build-hybrid-iso.sh: systemd-boot on its ESP, Secure Boot
 #      off) and run the same end-to-end from it, booted once as a CD-ROM and
@@ -44,6 +47,11 @@ on:
         description: Give the VMs a software TPM 2.0 (off = no TPM; gnome-setup asks for a disk passphrase)
         type: boolean
         default: true
+      encryption:
+        description: gnome-setup's "Encrypt Disk" switch (on = its default, LUKS2 root; off = unencrypted root, no passphrase or recovery key)
+        type: choice
+        options: ['on', 'off']
+        default: 'on'
       backend:
         description: bootc backend of the medium (auto = composefs if the image's kernel has the btrfs fs-verity fix, else ostree; composefs fails on an unfixed kernel)
         type: choice
@@ -80,6 +88,10 @@ on:
         description: Give the VMs a software TPM 2.0 (off = no TPM; gnome-setup asks for a disk passphrase)
         type: boolean
         default: true
+      encryption:
+        description: gnome-setup's "Encrypt Disk" switch (on = its default, LUKS2 root; off = unencrypted root, no passphrase or recovery key)
+        type: string
+        default: 'on'
       backend:
         description: bootc backend of the medium (auto = composefs if the image's kernel has the btrfs fs-verity fix, else ostree; composefs fails on an unfixed kernel)
         type: string
@@ -130,6 +142,8 @@ jobs:
         env:
           IMAGE_REF: ${{ inputs.image_ref }}
           ALL_FLAVORS: ${{ inputs.all_flavors && 'true' || 'false' }}
+          ENCRYPTION: ${{ inputs.encryption || 'on' }}
+          EVENT: ${{ github.event_name }}
         run: |
           set -euo pipefail
           # The bootc switch target: the newest testing-YYYYMMDD-* digest that is not the baseline.
@@ -142,7 +156,8 @@ jobs:
             echo "no candidate digest for $repo" >&2; return 1
           }
           entries=()
-          # The hybrid ISO legs (#1404) run for the main flavor's image only.
+          # The hybrid ISO legs (#1404) and, on pull requests and the nightly
+          # run, the unencrypted leg run for the main flavor's image only.
           mapfile -t main_images < <(python3 scripts/flavors.py list-main | jq -r '.[]' | xargs -n1 python3 scripts/flavors.py image)
           if [[ -n "$IMAGE_REF" ]]; then
             [[ "$IMAGE_REF" =~ ^ghcr\.io/projectbluefin/[a-z0-9-]+@sha256:[0-9a-f]{64}$ ]] \
@@ -159,16 +174,21 @@ jobs:
             else digest=$(skopeo inspect --format '{{.Digest}}' "docker://$repo:testing"); fi
             iso=false
             for main in "${main_images[@]}"; do [[ "$image" != "$main" ]] || iso=true; done
-            entries+=("$(jq -cn --arg image "$image" --arg ref "$repo@$digest" --arg digest "$digest" \
-              --arg candidate "$(candidate "$repo" "$digest")" --argjson iso "$iso" \
-              '{image:$image,ref:$ref,digest:$digest,candidate:$candidate,iso:$iso}')")
+            entry="$(jq -cn --arg image "$image" --arg ref "$repo@$digest" --arg digest "$digest" \
+              --arg candidate "$(candidate "$repo" "$digest")" --argjson iso "$iso" --arg encryption "$ENCRYPTION" \
+              '{image:$image,ref:$ref,digest:$digest,candidate:$candidate,iso:$iso,encryption:$encryption}')"
+            entries+=("$entry")
+            # The same medium installed with gnome-setup's "Encrypt Disk" switch off (raw medium only).
+            if [[ "$iso" == true && "$ENCRYPTION" == on && ( "$EVENT" == pull_request || "$EVENT" == schedule ) ]]; then
+              entries+=("$(jq -c '.encryption = "off" | .iso = false' <<<"$entry")")
+            fi
           done
           matrix=$(printf '%s\n' "${entries[@]}" | jq -cs '{include: .}')
           echo "$matrix" | jq .
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
   e2e:
-    name: e2e (${{ matrix.image }})
+    name: e2e (${{ matrix.image }}${{ matrix.encryption == 'off' && ', unencrypted' || '' }})
     needs: resolve
     runs-on: ubuntu-26.04
     timeout-minutes: 330
@@ -191,6 +211,8 @@ jobs:
       FLATPAKS: ${{ github.event_name != 'workflow_dispatch' || inputs.flatpaks }}
       FORMATS: ${{ inputs.formats || 'zstd-3,zstd-19-long' }}
       TPM: ${{ github.event_name != 'workflow_dispatch' || inputs.tpm }}
+      # gnome-setup's "Encrypt Disk" switch for every E2E of this leg (raw_e2e.py --encryption).
+      ENCRYPTION: ${{ matrix.encryption }}
     steps:
       - name: Resolve the btrfs compression
         timeout-minutes: 5
@@ -307,7 +329,7 @@ jobs:
           tpm=()
           [[ "$TPM" != true ]] || tpm=(--tpm)
           python3 iso/raw/raw_e2e.py --raw "$WORK/medium.raw" --work "$WORK/e2e" --install "$INSTALL" \
-            "${tpm[@]}" \
+            "${tpm[@]}" --encryption "$ENCRYPTION" \
             --candidate "$CANDIDATE" --ssh-key "$WORK/id_ed25519" --backend "$MEDIUM_BACKEND" \
             --backend-decision "$WORK/raw-evidence/backend.json" "${baked[@]}" 2>&1 | tee "$WORK/e2e.log"
       # The ISO legs run even when an earlier E2E failed; the job fails if any did.
@@ -324,7 +346,7 @@ jobs:
           tpm=()
           [[ "$TPM" != true ]] || tpm=(--tpm)
           python3 iso/raw/raw_e2e.py --raw "$WORK/medium.raw" --iso "$WORK/medium.iso" --boot-as "$BOOT_AS" \
-            --work "$WORK/e2e-iso-$BOOT_AS" --install "$INSTALL" "${tpm[@]}" \
+            --work "$WORK/e2e-iso-$BOOT_AS" --install "$INSTALL" "${tpm[@]}" --encryption "$ENCRYPTION" \
             --candidate "$CANDIDATE" --ssh-key "$WORK/id_ed25519" --backend "$MEDIUM_BACKEND" \
             --backend-decision "$WORK/raw-evidence/backend.json" "${baked[@]}" 2>&1 | tee "$WORK/e2e-iso-$BOOT_AS.log"
       - name: End-to-end, hybrid ISO booted as a USB disk
@@ -340,7 +362,7 @@ jobs:
           tpm=()
           [[ "$TPM" != true ]] || tpm=(--tpm)
           python3 iso/raw/raw_e2e.py --raw "$WORK/medium.raw" --iso "$WORK/medium.iso" --boot-as "$BOOT_AS" \
-            --work "$WORK/e2e-iso-$BOOT_AS" --install "$INSTALL" "${tpm[@]}" \
+            --work "$WORK/e2e-iso-$BOOT_AS" --install "$INSTALL" "${tpm[@]}" --encryption "$ENCRYPTION" \
             --candidate "$CANDIDATE" --ssh-key "$WORK/id_ed25519" --backend "$MEDIUM_BACKEND" \
             --backend-decision "$WORK/raw-evidence/backend.json" "${baked[@]}" 2>&1 | tee "$WORK/e2e-iso-$BOOT_AS.log"
       - name: Measure the medium
@@ -368,7 +390,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: image-installer-${{ matrix.image }}
+          name: image-installer-${{ matrix.image }}${{ matrix.encryption == 'off' && '-unencrypted' || '' }}
           retention-days: 30
           if-no-files-found: warn
           path: |

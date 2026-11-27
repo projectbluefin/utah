@@ -24,12 +24,14 @@ def page(heading, *buttons):
 
 
 def disk_page(target_status=raw.DISK_EMPTY_TEXT):
-    """gnome-setup's disk list: the blank target and the live medium, each a
-    row whose title and subtitle labels sit below it."""
+    """gnome-setup's disk list: the 'Encrypt Disk' switch (on, its default)
+    above the blank target and the live medium, each a row whose title and
+    subtitle labels sit below it."""
     def row(path, title, subtitle):
         return [dict(node(title, "table row"), path=path),
                 dict(node(title), path=path + ".0"), dict(node(subtitle), path=path + ".1")]
-    return ([node("Select a Disk")]
+    return ([node("Select a Disk"),
+             node(raw.ENCRYPT_SWITCH, "switch", ["showing", "sensitive", "checked"])]
             + row("1.0", "Unknown Disk 51.5\u00a0GB", target_status)
             + row("1.1", "Unknown Disk 9.7\u00a0GB", raw.DISK_DATA_TEXT))
 
@@ -47,6 +49,8 @@ class SetupPages(unittest.TestCase):
     def harness(self, snapshots):
         h = object.__new__(raw.Harness)
         h.tpm = True
+        h.encrypt = True
+        h.results = Mock(encryption={"encrypted": True, "tpm2": True, "unlocks": {}})
         h.recovery_key = None
         h.timings = {}
         h.snapshot = Mock(side_effect=snapshots)

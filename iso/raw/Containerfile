@@ -55,7 +55,8 @@ RUN dnf -y install --setopt=install_weak_deps=False \
 # upstream main plus small fixes proposed upstream (no forced demo mode,
 # install errors shown, a distro post-install unit, the recovery key enrolled
 # on the installed disk, a disk passphrase page without a TPM, empty disks told
-# apart by their partition count). Built on
+# apart by their partition count, an "Encrypt Disk" switch with unencrypted
+# definitions from pages.conf, Copy and Save to File on the recovery key). Built on
 # Fedora for the GTK -devel packages Hummingbird lacks; it runs against Utah's
 # GTK 4.24 and libadwaita 1.10 (it needs GTK 4.18 and libadwaita 1.5). Its
 # templates use translated strings in closures (blueprint-compiler 0.20+;
@@ -67,7 +68,7 @@ RUN dnf -y install --setopt=install_weak_deps=False \
 FROM ${BUILDER_IMAGE} AS gnome-setup
 ARG GS_REPO=https://github.com/hanthor/gnome-setup.git
 # Full commit of hanthor/gnome-setup (branch bluefin, shared with Dakota).
-ARG GS_REF=80825aedc1115e1e309f002d7e4fd2e7f4323a8a
+ARG GS_REF=7f4347c469c066f90fce9733d1e1e7dee186c376
 ARG BP_REPO=https://gitlab.gnome.org/GNOME/blueprint-compiler.git
 # blueprint-compiler v0.22.2.
 ARG BP_REF=ed35ac74de0c1bb1f5e852410b97edd1f08904c9

@@ -303,20 +303,36 @@ was 13.10 GB allocated and 3.87 GB at zstd -19 --long. The ISO is 5.56 GB.
 ### Recorded policy
 
 The gnome-setup implementation merged in #1437 supplies the encryption
-policy for this experimental track; this records that existing behavior,
-not a change to the ISO/fisherman installer or its defaults.
+policy for this experimental track. It first encrypted every install; the
+owner then made encryption the default the user may switch off, below. Neither
+changes the ISO/fisherman installer or its defaults.
 
-- **Encrypt root on every install.** With a TPM 2.0, systemd-repart uses
-  `Encrypt=key-file+tpm2` and enrolls the TPM during the copy. Without one,
-  it uses `Encrypt=key-file`, and gnome-setup asks for a disk passphrase.
-  TPM enrollment is automatic when the hardware is present, not a separate
-  opt-in page. The workflow defaults to `installer=gnome-setup`, `tpm=true`.
-- **Always enroll a generated recovery key.** gnome-setup presents the
-  systemd-cryptenroll recovery key and QR code on its recovery-key page.
-  The user must save it outside the installed disk. After post-copy fixups,
-  enrollment removes the temporary empty passphrase: the final keys are
-  TPM2 + recovery with a TPM, or the user's passphrase + recovery without
-  one. A recovery key must never be the only boot key on a TPM-less machine.
+- **Encrypt the root by default; the user may switch it off.** The disk
+  page shows an "Encrypt Disk" switch (`Adw.SwitchRow`), on by default,
+  before the install starts; its subtitle says a recovery key will be shown
+  and must be saved (and, without a TPM, that a passphrase is asked). On,
+  with a TPM 2.0, systemd-repart uses `Encrypt=key-file+tpm2` and enrolls the
+  TPM during the copy; without one, it uses `Encrypt=key-file`, and
+  gnome-setup asks for a disk passphrase. TPM enrollment is automatic when
+  the hardware is present, not a separate opt-in page. Off, gnome-setup
+  installs with `/run/utah-live/repart-unencrypted.d` (`pages.conf`
+  `[page:installer] unencrypted-definitions`: the same partitions, the root
+  without `Encrypt=`), skips the passphrase and recovery-key pages, and
+  `utah-sysinstall-post` writes no crypttab or `rd.luks.*` kargs. The
+  confirmation states which it will be. Without the `pages.conf` key
+  gnome-setup shows no switch and always encrypts. The workflow defaults to
+  `installer=gnome-setup`, `tpm=true`, `encryption=on`; pull requests and
+  the nightly run add an unencrypted leg for the main flavor. Dakota uses
+  the same gnome-setup fork and Utah installer files, so it gets the same
+  switch.
+- **Always enroll a generated recovery key on an encrypted root.**
+  gnome-setup presents the systemd-cryptenroll recovery key and QR code on
+  its recovery-key page, with Copy and Save to File… buttons, and reads the
+  key to screen readers group by group. The user must save it outside the
+  installed disk. After post-copy fixups, enrollment removes the temporary
+  empty passphrase: the final keys are TPM2 + recovery with a TPM, or the
+  user's passphrase + recovery without one. A recovery key must never be
+  the only boot key on a TPM-less machine.
 - **Bind the TPM to PCR 7, not pcrlock.** The current repart definitions
   set `TPM2PCRs=7`. This is the implemented policy for the existing
   shim/GRUB chain; it does not bind unlock to each bootc deployment's kernel

@@ -1,13 +1,17 @@
 #!/usr/bin/bash
 # Write the systemd-repart definitions gnome-setup hands to systemd-sysinstall
 # (utah.live.installer=gnome-setup): the medium's GPT mirrored partition by
-# partition with CopyBlocks=, the root into LUKS2.
+# partition with CopyBlocks=, the root into LUKS2 by default.
 #
 # gnome-setup reads its definitions from /usr/lib/gnome-setup/definitions,
 # which the live layer links to /run/utah-live/repart.d (written here at boot):
 # the sources are this medium's own partitions, named by PARTUUID (unique per
 # medium, unlike labels the installed copy shares), and the encryption depends
-# on whether the machine has a TPM.
+# on whether the machine has a TPM. Encryption is the default; the disk page's
+# "Encrypt Disk" switch lets the user turn it off, and gnome-setup then installs
+# with /run/utah-live/repart-unencrypted.d (pages.conf: [page:installer]
+# unencrypted-definitions), also written here: the same partitions, the root
+# without Encrypt= and TPM2PCRs=.
 #
 #   * BIOS boot is skipped (UEFI-only target, as install.sh does).
 #   * ESP and /boot keep their size; the root takes the rest of the disk
@@ -19,9 +23,11 @@
 #     gnome-setup's recovery key page then enrolls a recovery key and wipes
 #     it. Without a TPM gnome-setup's disk passphrase page first enrolls the
 #     passphrase the user picks, so the recovery key is the second key.
+#     Unencrypted, the root is a plain copy and neither page shows.
 set -euo pipefail
 
 out=/run/utah-live/repart.d
+out_plain=/run/utah-live/repart-unencrypted.d
 bios_type=21686148-6449-6e6f-744e-656564454649
 
 root_uuid=""
@@ -37,14 +43,15 @@ src_disk="/dev/$(lsblk -rno PKNAME "${src_root_part}")"
 tpm2=0
 if [[ "$(cat /sys/class/tpm/tpm0/tpm_version_major 2>/dev/null)" == 2 ]]; then tpm2=1; fi
 
-rm -rf "${out}"
-mkdir -p "${out}"
+rm -rf "${out}" "${out_plain}"
+mkdir -p "${out}" "${out_plain}"
 # The heredoc is python's stdin (the script), so the table goes in as an argument.
 table="$(sfdisk --json "${src_disk}")"
-python3 - "${out}" "${src_root_part}" "${tpm2}" "${bios_type}" "${table}" <<'PY'
+python3 - "${out}" "${src_root_part}" "${tpm2}" "${bios_type}" "${table}" "${out_plain}" <<'PY'
 import json, pathlib, sys
 table = json.loads(sys.argv[5])["partitiontable"]
 out, root_node, tpm2, bios = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3] == "1", sys.argv[4]
+out_plain = pathlib.Path(sys.argv[6])
 sector = table.get("sectorsize", 512)
 for index, part in enumerate(table["partitions"], start=1):
     ptype = part["type"].lower()
@@ -53,13 +60,16 @@ for index, part in enumerate(table["partitions"], start=1):
     lines = ["[Partition]", f"Type={ptype}", f"CopyBlocks=/dev/disk/by-partuuid/{part['uuid'].lower()}"]
     if part.get("name"):
         lines.append(f"Label={part['name']}")
+    encrypt = []
     if part["node"] == root_node:
-        lines.append("Encrypt=key-file+tpm2" if tpm2 else "Encrypt=key-file")
+        encrypt.append("Encrypt=key-file+tpm2" if tpm2 else "Encrypt=key-file")
         if tpm2:
-            lines.append("TPM2PCRs=7")
+            encrypt.append("TPM2PCRs=7")
     else:
         size = part["size"] * sector
         lines += [f"SizeMinBytes={size}", f"SizeMaxBytes={size}"]
-    (out / f"{index:02d}-copy.conf").write_text("\n".join(lines) + "\n")
+    name = f"{index:02d}-copy.conf"
+    (out / name).write_text("\n".join(lines + encrypt) + "\n")
+    (out_plain / name).write_text("\n".join(lines) + "\n")
 PY
-for f in "${out}"/*.conf; do echo "$(basename "$f"): $(tr '\n' ' ' <"$f")"; done
+for f in "${out}"/*.conf "${out_plain}"/*.conf; do echo "${f#/run/utah-live/}: $(tr '\n' ' ' <"$f")"; done
