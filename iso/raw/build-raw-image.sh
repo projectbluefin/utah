@@ -65,7 +65,7 @@ rm -f "${OUT}"
 truncate -s "${SIZE}" "${OUT}"
 # The medium's partition table and the deployment's install-time kargs are
 # the contract in medium.py (LAYOUT, INSTALL_KARGS), held by
-# tests/test_image_installer.py.
+# tests/test_image_installer_boot.py.
 python3 "${HERE}/medium.py" layout | sfdisk --quiet "${OUT}"
 loop="$(losetup --find --show --partscan "${OUT}")"
 mnt="$(mktemp -d)"
