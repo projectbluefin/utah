@@ -145,6 +145,7 @@
         "bsdunzip",
         "buildah",
         "bzip2",
+        "c-ares",
         "c2esp",
         "capstone",
         "cifs-utils",
@@ -276,11 +277,13 @@
         "libavfilter-free",
         "libavformat-free",
         "libavutil-free",
+        "libbluray",
         "libcamera-v4l2",
         "libhangul",
         "libieee1284",
         "libimobiledevice-utils",
         "libnma",
+        "libpaper",
         "libpcap",
         "libpinyin",
         "libsane-airscan",
@@ -385,6 +388,7 @@
         "setools-console",
         "smbios-utils-bin",
         "smbios-utils-python",
+        "sonic",
         "soundtouch",
         "speech-dispatcher",
         "speech-dispatcher-espeak-ng",
@@ -430,6 +434,7 @@
         "wireless-regdb",
         "words",
         "wpa_supplicant",
+        "xcb-util-cursor",
         "xdg-utils",
         "xmlsec1",
         "xxd",
@@ -489,7 +494,7 @@
     }
   ],
   "totals": {
-    "installed": 432,
+    "installed": 437,
     "unavailable": 5
   },
   "unavailable": [

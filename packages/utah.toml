@@ -205,6 +205,13 @@ packages = [
     "totem-pl-parser",
     "gstreamer1-plugin-openh264",
     "openh264",
+    # Runtime libraries used by Dakota's shipped packages. c-ares comes from
+    # Hummingbird; the remaining packages are published by utah-packages.
+    "c-ares",
+    "xcb-util-cursor",
+    "libbluray",
+    "libpaper",
+    "sonic",
     # Locale and fonts
     "langpacks-en",
     "langpacks-fonts-en",
