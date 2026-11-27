@@ -584,6 +584,13 @@ class ComposefsTests(unittest.TestCase):
         self.assertIn("ConditionKernelCommandLine=!utah.live",
                       (units / "flatpak-preinstall.service.d/50-utah-live.conf").read_text())
 
+    def test_the_live_session_skips_the_booted_image_snapshot(self):
+        # Its bootc status remounts /sysroot read-write, which the live RAM
+        # overlay refuses, so the unit failed every live boot (run 45918946265).
+        units = RAW / "src/usr/lib/systemd/system"
+        self.assertIn("ConditionKernelCommandLine=!utah.live",
+                      (units / "ublue-booted-image.service.d/50-utah-live.conf").read_text())
+
     def test_build_injected_etc_placeholders_are_removed(self):
         # podman RUN leaves empty 0700 resolv.conf/hostname; ostree-ext drops
         # them, bootc's composefs backend does not.
@@ -847,6 +854,20 @@ class GnomeSetupTests(unittest.TestCase):
         containerfile = (RAW / "Containerfile").read_text()
         self.assertIn("ln -s /run/utah-live/repart.d /out/usr/lib/gnome-setup/definitions", containerfile)
         self.assertIn("/usr/share/utah/gnome-setup/pages.conf /usr/lib/gnome-setup/pages.conf", containerfile)
+
+    def test_the_live_user_is_authorized_by_name_not_by_a_marker_polkit_cannot_read(self):
+        # gnome-setup's rule cats /run/gnomeos/is-live from polkitd, which
+        # SELinux denies (policykit_t, var_run_t) on every check
+        # (run 45918946265); the live user is granted by name instead.
+        setup = (RAW / "src/usr/libexec/utah-live-setup").read_text()
+        code = [line for line in setup.splitlines() if not line.lstrip().startswith("#")]
+        self.assertFalse([line for line in code if "/run/gnomeos" in line])
+        rules = (RAW / "src/usr/share/polkit-1/rules.d/50-utah-live-gnome-setup.rules").read_text()
+        self.assertIn('subject.user != "liveuser"', rules)
+        for action in ("io.systemd.sysinstall.Run", "io.systemd.sysinstall.ListCandidateDevices",
+                       "io.systemd.cryptenroll.enroll", "io.systemd.cryptenroll.list-slots"):
+            self.assertIn(f'action.id == "{action}"', rules)
+        self.assertNotIn("polkit.spawn", rules)
 
     def test_without_a_tpm_the_user_picks_a_passphrase_next_to_the_recovery_key(self):
         pages = (RAW / "src/usr/share/utah/gnome-setup/pages.conf").read_text()
