@@ -18,6 +18,14 @@ filesystem has been shrunk to its content:
   medium.py shrink-plan SFDISK_JSON FS_BYTES     print "PARTNO SECTORS IMAGE_BYTES"
   medium.py shrunk-dump DUMP PARTNO SECTORS      the sfdisk dump to write after the cut
 
+and build-hybrid-iso.sh asks it for the hybrid ISO's systemd-boot setup on
+the ESP and checks the El Torito catalog systemd-repart wrote:
+
+  medium.py iso-entry LIVE_ENTRY OUT             write systemd-boot's live entry,
+                                                 print "ESP_PATH BOOT_PATH" per file to copy
+  medium.py iso-loader-conf OUT                  write loader.conf
+  medium.py eltorito-rba IMAGE                   print the El Torito EFI image's block
+
 The live entry is the deployment's own entry with `ro utah.live` in place of
 `rw` (utah-live-root.service overlays the root with tmpfs in the initrd). Its
 version is raised so GRUB's blscfg, which sorts highest first, lists it first.
@@ -38,6 +46,16 @@ GRUBENV_HEADER = "# GRUB Environment Block\n"
 ALIGN_BYTES = 1024 * 1024
 # Room after the last partition for the backup GPT (33 sectors), aligned.
 GPT_TAIL_BYTES = ALIGN_BYTES
+# The hybrid ISO (build-hybrid-iso.sh): systemd-boot's live entry, the
+# kernel and initrd it boots and the medium's own removable-path loader
+# (shim) live under /ISO_ESP_DIR on the ESP; utah-sysinstall-post puts shim
+# back and removes the directory and /loader from the installed copy.
+ISO_ESP_DIR = "utah-live"
+ISO_ENTRY_ID = "utah-live.conf"
+ISO_LOADER_TIMEOUT = 5
+# Covers the ISO9660 volume descriptors (block 16 on) and the boot catalog
+# systemd-repart writes right after them.
+ISO9660_HEAD = 64 * 1024
 
 # The medium's GPT, in order: (name, partition type, size; None = the rest).
 # - BIOS-BOOT only because bootupd installs its BIOS component when it finds
@@ -162,7 +180,83 @@ def shrunk_dump(dump: str, partno: int, sectors: int) -> str:
     return "\n".join(out) + "\n"
 
 
+def iso_entry(live: str, esp_dir: str = ISO_ESP_DIR) -> tuple[str, list[tuple[str, str]]]:
+    """systemd-boot's Type #1 entry on the hybrid ISO's ESP, from the live BLS entry.
+
+    Same title, version and options as GRUB's live entry; `linux` and
+    `initrd` point at copies on the ESP under /esp_dir, because a medium
+    booted from El Torito exposes only its ESP to the firmware. Returns the
+    entry text and the (ESP path, /boot path) pairs to copy.
+    """
+    out, files, options = [], [], None
+    for line in live.splitlines():
+        key, _, value = line.partition(" ")
+        value = value.strip()
+        if key in ("linux", "initrd"):
+            dest = f"/{esp_dir}/{value.rsplit('/', 1)[-1]}"
+            if any(d == dest for d, _ in files):
+                raise ValueError(f"two boot files named {dest}")
+            files.append((dest, value))
+            line = f"{key} {dest}"
+        elif key == "options":
+            options = value.split()
+        out.append(line)
+    if not any(line.startswith("linux ") for line in out):
+        raise ValueError("live entry has no linux line")
+    if options is None or LIVE_KARG not in options:
+        raise ValueError(f"live entry options lack {LIVE_KARG}")
+    return "\n".join(out) + "\n", files
+
+
+def iso_loader_conf(entry_id: str = ISO_ENTRY_ID, timeout: int = ISO_LOADER_TIMEOUT) -> str:
+    """loader.conf on the hybrid ISO's ESP: the live entry is the default,
+    the menu shows for timeout seconds, and the auto-detected entries other
+    than the firmware setup one stay hidden."""
+    return f"default {entry_id}\ntimeout {timeout}\nauto-entries no\nauto-firmware yes\n"
+
+
+def eltorito_boot_rba(head: bytes) -> int:
+    """The load RBA (2048-byte blocks) of the El Torito EFI boot entry in the
+    first ISO9660_HEAD bytes of an image, or raise ValueError.
+
+    ECMA-119 puts the volume descriptors at block 16 on; El Torito's boot
+    record names the catalog block, whose validation entry (platform 0xEF,
+    EFI) is followed by the bootable no-emulation initial entry.
+    """
+    block = 2048
+    for n in range(16, len(head) // block):
+        desc = head[n * block:(n + 1) * block]
+        if desc[1:6] != b"CD001":
+            break
+        if desc[0] == 255:
+            break
+        if desc[0] == 0 and desc[7:30] == b"EL TORITO SPECIFICATION":
+            catalog = int.from_bytes(desc[0x47:0x4B], "little")
+            entries = head[catalog * block:catalog * block + 64]
+            if len(entries) < 64:
+                raise ValueError(f"boot catalog at block {catalog} is past the bytes read")
+            if entries[0] != 1 or entries[1] != 0xEF or entries[30:32] != b"\x55\xaa":
+                raise ValueError("boot catalog has no EFI validation entry")
+            if entries[32] != 0x88 or entries[33] != 0:
+                raise ValueError("boot catalog's initial entry is not bootable without emulation")
+            return int.from_bytes(entries[40:44], "little")
+    raise ValueError("no El Torito boot record")
+
+
 def main(argv: list[str]) -> int:
+    if len(argv) == 4 and argv[1] == "iso-entry":
+        entry, files = iso_entry(Path(argv[2]).read_text())
+        Path(argv[3]).write_text(entry)
+        for dest, src in files:
+            print(dest, src)
+        return 0
+    if len(argv) == 3 and argv[1] == "iso-loader-conf":
+        Path(argv[2]).write_text(iso_loader_conf())
+        return 0
+    if len(argv) == 3 and argv[1] == "eltorito-rba":
+        with open(argv[2], "rb") as f:
+            print(eltorito_boot_rba(f.read(ISO9660_HEAD)))
+        return 0
     if len(argv) >= 4 and argv[1] == "live-entry":
         extra = argv[4].split() if len(argv) > 4 else []
         Path(argv[3]).write_text(live_entry(Path(argv[2]).read_text(), extra))

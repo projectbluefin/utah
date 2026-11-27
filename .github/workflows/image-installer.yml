@@ -16,7 +16,11 @@ name: Image-based installer (experimental)
 #      with a recovery key and a software TPM, or without a TPM a disk
 #      passphrase) -> unlock -> gnome-initial-setup -> desktop + bootc status
 #      -> bootc switch -> bootc rollback, with a screenshot of every stage;
-#   4. measure the medium (raw, allocated, compressed, time to pack/unpack;
+#   4. main flavor only (#1404): turn the medium into an El Torito hybrid ISO
+#      (iso/raw/build-hybrid-iso.sh: systemd-boot on its ESP, Secure Boot
+#      off) and run the same end-to-end from it, booted once as a CD-ROM and
+#      once as a USB disk;
+#   5. measure the medium (raw, allocated, compressed, time to pack/unpack;
 #      iso/raw/measure_medium.py).
 # Screenshots and logs are uploaded; the medium and disks are never uploaded
 # (CI media carry test credentials).
@@ -138,6 +142,8 @@ jobs:
             echo "no candidate digest for $repo" >&2; return 1
           }
           entries=()
+          # The hybrid ISO legs (#1404) run for the main flavor's image only.
+          mapfile -t main_images < <(python3 scripts/flavors.py list-main | jq -r '.[]' | xargs -n1 python3 scripts/flavors.py image)
           if [[ -n "$IMAGE_REF" ]]; then
             [[ "$IMAGE_REF" =~ ^ghcr\.io/projectbluefin/[a-z0-9-]+@sha256:[0-9a-f]{64}$ ]] \
               || { echo "image_ref must be ghcr.io/projectbluefin/<image>@sha256:<digest>" >&2; exit 1; }
@@ -145,14 +151,17 @@ jobs:
           elif [[ "$ALL_FLAVORS" == true ]]; then
             mapfile -t images < <(python3 scripts/flavors.py images | jq -r '.[].image')
           else
-            mapfile -t images < <(python3 scripts/flavors.py list-main | jq -r '.[]' | xargs -n1 python3 scripts/flavors.py image)
+            images=("${main_images[@]}")
           fi
           for image in "${images[@]}"; do
             repo="ghcr.io/projectbluefin/$image"
             if [[ -n "$IMAGE_REF" ]]; then digest="${IMAGE_REF#*@}"
             else digest=$(skopeo inspect --format '{{.Digest}}' "docker://$repo:testing"); fi
+            iso=false
+            for main in "${main_images[@]}"; do [[ "$image" != "$main" ]] || iso=true; done
             entries+=("$(jq -cn --arg image "$image" --arg ref "$repo@$digest" --arg digest "$digest" \
-              --arg candidate "$(candidate "$repo" "$digest")" '{image:$image,ref:$ref,digest:$digest,candidate:$candidate}')")
+              --arg candidate "$(candidate "$repo" "$digest")" --argjson iso "$iso" \
+              '{image:$image,ref:$ref,digest:$digest,candidate:$candidate,iso:$iso}')")
           done
           matrix=$(printf '%s\n' "${entries[@]}" | jq -cs '{include: .}')
           echo "$matrix" | jq .
@@ -274,6 +283,18 @@ jobs:
           sudo chown -R "$USER" "$ev"
           sudo podman rmi -af >/dev/null || true
           df -h / /mnt
+      # #1404: the same medium as an El Torito hybrid ISO (systemd-boot on its
+      # ESP, Secure Boot off), for the main flavor.
+      - name: Build the hybrid ISO
+        id: iso
+        if: matrix.iso
+        run: |
+          set -euo pipefail
+          sudo env UTAH_RAW_EVIDENCE="$WORK/raw-evidence" \
+            bash iso/raw/build-hybrid-iso.sh "$WORK/medium.raw" "$WORK/medium.iso"
+          sudo chown "$USER" "$WORK/medium.iso"
+          sudo chown -R "$USER" "$WORK/raw-evidence"
+          df -h / /mnt
       - name: End-to-end with screenshots
         env:
           CANDIDATE: ${{ matrix.candidate }}
@@ -289,6 +310,39 @@ jobs:
             "${tpm[@]}" \
             --candidate "$CANDIDATE" --ssh-key "$WORK/id_ed25519" --backend "$MEDIUM_BACKEND" \
             --backend-decision "$WORK/raw-evidence/backend.json" "${baked[@]}" 2>&1 | tee "$WORK/e2e.log"
+      # The ISO legs run even when an earlier E2E failed; the job fails if any did.
+      - name: End-to-end, hybrid ISO booted as a CD-ROM
+        if: ${{ !cancelled() && steps.iso.outcome == 'success' }}
+        env:
+          CANDIDATE: ${{ matrix.candidate }}
+          BOOT_AS: cdrom
+        run: |
+          set -euo pipefail
+          rm -f "$WORK"/e2e*/install.qcow2
+          baked=()
+          [[ "$FLATPAKS" != true ]] || baked=(--flatpaks "$WORK/raw-evidence/flatpak-apps.txt")
+          tpm=()
+          [[ "$TPM" != true ]] || tpm=(--tpm)
+          python3 iso/raw/raw_e2e.py --raw "$WORK/medium.raw" --iso "$WORK/medium.iso" --boot-as "$BOOT_AS" \
+            --work "$WORK/e2e-iso-$BOOT_AS" --install "$INSTALL" "${tpm[@]}" \
+            --candidate "$CANDIDATE" --ssh-key "$WORK/id_ed25519" --backend "$MEDIUM_BACKEND" \
+            --backend-decision "$WORK/raw-evidence/backend.json" "${baked[@]}" 2>&1 | tee "$WORK/e2e-iso-$BOOT_AS.log"
+      - name: End-to-end, hybrid ISO booted as a USB disk
+        if: ${{ !cancelled() && steps.iso.outcome == 'success' }}
+        env:
+          CANDIDATE: ${{ matrix.candidate }}
+          BOOT_AS: usb
+        run: |
+          set -euo pipefail
+          rm -f "$WORK"/e2e*/install.qcow2
+          baked=()
+          [[ "$FLATPAKS" != true ]] || baked=(--flatpaks "$WORK/raw-evidence/flatpak-apps.txt")
+          tpm=()
+          [[ "$TPM" != true ]] || tpm=(--tpm)
+          python3 iso/raw/raw_e2e.py --raw "$WORK/medium.raw" --iso "$WORK/medium.iso" --boot-as "$BOOT_AS" \
+            --work "$WORK/e2e-iso-$BOOT_AS" --install "$INSTALL" "${tpm[@]}" \
+            --candidate "$CANDIDATE" --ssh-key "$WORK/id_ed25519" --backend "$MEDIUM_BACKEND" \
+            --backend-decision "$WORK/raw-evidence/backend.json" "${baked[@]}" 2>&1 | tee "$WORK/e2e-iso-$BOOT_AS.log"
       - name: Measure the medium
         # A medium whose bake or shrink failed is not the one under test.
         if: always() && steps.medium.outcome == 'success'
@@ -303,12 +357,13 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
-          cd "$WORK/e2e/screenshots" 2>/dev/null || exit 0
           shopt -s nullglob
-          shots=(./*.png)
-          (( ${#shots[@]} )) || exit 0
-          montage -font DejaVu-Sans -pointsize 14 -label '%t' "${shots[@]}" \
-            -tile 4x -geometry 480x270+8+8 -background '#202020' -fill white contact-sheet.png
+          for dir in "$WORK"/e2e "$WORK"/e2e-iso-*; do
+            shots=("$dir"/screenshots/*.png)
+            (( ${#shots[@]} )) || continue
+            montage -font DejaVu-Sans -pointsize 14 -label '%t' "${shots[@]}" \
+              -tile 4x -geometry 480x270+8+8 -background '#202020' -fill white "$dir/screenshots/contact-sheet.png"
+          done
       - name: Upload screenshots and logs
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -322,4 +377,9 @@ jobs:
             ${{ env.WORK }}/e2e/debug/
             ${{ env.WORK }}/e2e/*.log
             ${{ env.WORK }}/e2e.log
+            ${{ env.WORK }}/e2e-iso-*/screenshots/
+            ${{ env.WORK }}/e2e-iso-*/evidence/
+            ${{ env.WORK }}/e2e-iso-*/debug/
+            ${{ env.WORK }}/e2e-iso-*/*.log
+            ${{ env.WORK }}/e2e-iso-*.log
             ${{ env.WORK }}/raw-evidence/

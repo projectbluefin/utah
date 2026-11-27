@@ -20,6 +20,9 @@
 #   * rd.luks.uuid (and tpm2-device=auto when a TPM2 token is enrolled) on the
 #     BLS entries and an /etc/crypttab line in every deployment;
 #   * the root filesystem grown to the partition systemd-repart grew;
+#   * from the hybrid ISO (build-hybrid-iso.sh), the ESP's live systemd-boot
+#     setup undone: shim back on the removable path, /utah-live and /loader
+#     removed;
 #   * a firmware boot entry for shim.
 #
 # Both bootc backends are handled: ostree (/ostree/deploy/<stateroot>/deploy)
@@ -33,6 +36,8 @@ read -r -a cmdline </proc/cmdline
 grep -qw utah.live /proc/cmdline || { echo "ERROR: not running from Utah live media" >&2; exit 1; }
 LIVE_KARG=utah.live
 LIVE_ENTRY=utah-live
+# medium.ISO_ESP_DIR: the hybrid ISO's kernel, initrd and the medium's shim.
+ISO_ESP_DIR=utah-live
 
 exec > >(tee -a /run/utah-install.log) 2>&1
 start=$(date +%s)
@@ -156,6 +161,20 @@ if [[ -n "${boot}" ]]; then
     bootdir="${work}/mnt/boot"
 fi
 mount "${esp}" "${work}/mnt/efi"
+
+# --- The hybrid ISO's live boot setup on the copied ESP. ---------------------
+# The ISO's ESP boots systemd-boot from the removable path with the live
+# entry (/loader) and its kernel and initrd under /utah-live, where the
+# medium's own removable-path shim waits. The installed system boots
+# shim -> GRUB -> /boot like a copy of the raw medium.
+iso_dir="${work}/mnt/efi/${ISO_ESP_DIR}"
+if [[ -e "${iso_dir}" ]]; then
+    [[ -f "${iso_dir}/BOOTX64.EFI" ]] || fail "the copied ESP has /${ISO_ESP_DIR} without the medium's shim (BOOTX64.EFI)"
+    mv -f "${iso_dir}/BOOTX64.EFI" "${work}/mnt/efi/EFI/BOOT/BOOTX64.EFI"
+    rm -rf "${iso_dir}" "${work}/mnt/efi/loader"
+    log "ESP: hybrid ISO's systemd-boot and live entry removed, shim back on EFI/BOOT/BOOTX64.EFI"
+fi
+[[ ! -e "${work}/mnt/efi/loader/entries/${LIVE_ENTRY}.conf" ]] || fail "the ESP still carries the live entry"
 
 deployments=()
 for d in "${work}"/mnt/root/ostree/deploy/*/deploy/* "${work}"/mnt/root/state/deploy/*; do
