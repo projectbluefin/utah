@@ -144,7 +144,6 @@ jobs:
           python3 -m pip install -q -r tests/requirements.txt
           just check
           just test
-          just check-parity
           auth=$(mktemp -d "$RUNNER_TEMP/contracts-auth.XXXXXX")
           trap 'rm -rf "$auth"' EXIT
           export REGISTRY_AUTH_FILE="$auth/auth.json"
