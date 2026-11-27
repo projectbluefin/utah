@@ -1,9 +1,9 @@
 # Utahraptor
 
 <!-- BEGIN E2E VERIFICATION -->
-[![Verified ISO desktop](https://github.com/projectbluefin/utah/raw/37475fd6bd01ef42f1fc31e1506b56106b667778/screenshots/installed-fastfetch.png)](https://github.com/projectbluefin/utah/blob/37475fd6bd01ef42f1fc31e1506b56106b667778/README.md)
+[![Verified install desktop](https://github.com/projectbluefin/utah/raw/59850bb11170d927ddcca427c7daa2a869a1f8ac/screenshots/14-first-boot-desktop.png)](https://github.com/projectbluefin/utah/blob/59850bb11170d927ddcca427c7daa2a869a1f8ac/README.md)
 
-*LUKS ISO test passed for commit `0e9177b93bc0`. [CI run](https://github.com/projectbluefin/utah/actions/runs/45806368037) also runs independent desktop tests that do not gate this record; the LUKS test passed on the production ISO it retains; [screenshots and provenance](https://github.com/projectbluefin/utah/tree/37475fd6bd01ef42f1fc31e1506b56106b667778).*
+*gnome-setup install test passed for commit `610eccb4c18b`. [CI run](https://github.com/projectbluefin/utah/actions/runs/45914335730) also runs independent desktop tests that do not gate this record; every flavor installed, booted, switched and rolled back; [screenshots and provenance](https://github.com/projectbluefin/utah/tree/59850bb11170d927ddcca427c7daa2a869a1f8ac).*
 <!-- END E2E VERIFICATION -->
 
 †Utahraptor ostrommaysi
