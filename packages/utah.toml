@@ -232,6 +232,12 @@ packages = [
     "google-noto-serif-vf-fonts",
     "google-noto-sans-symbols-2-fonts",
     "google-noto-sans-math-fonts",
+    # Arabic script: gnome-setup's language list drew a missing-glyph box in
+    # "العربية — مصر" (installer E2E run 45918946265, setup-language.png, all
+    # flavors). Bluefin gets these from Fedora's langpacks, which the
+    # os-minimal base lacks; Hummingbird publishes both.
+    "google-noto-sans-arabic-vf-fonts",
+    "google-noto-naskh-arabic-vf-fonts",
     # Math-font core set. stix-fonts is published in the pinned factory image
     # (resolves utah-packages#147). default-fonts-core-math, which Requires
     # it, stays out until its own parity ticket (#263); this adds the font
