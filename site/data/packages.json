@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-26",
+  "generated_at": "2026-11-27",
   "generator": "scripts/generate-site-data.py",
   "groups": [
     {
@@ -215,6 +215,8 @@
         "gnupg2-smime",
         "gnupg2-utils",
         "gnutls-utils",
+        "google-noto-naskh-arabic-vf-fonts",
+        "google-noto-sans-arabic-vf-fonts",
         "google-noto-sans-math-fonts",
         "google-noto-sans-mono-vf-fonts",
         "google-noto-sans-symbols-2-fonts",
@@ -487,7 +489,7 @@
     }
   ],
   "totals": {
-    "installed": 430,
+    "installed": 432,
     "unavailable": 5
   },
   "unavailable": [
