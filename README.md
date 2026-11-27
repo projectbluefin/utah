@@ -1,9 +1,9 @@
 # Utahraptor
 
 <!-- BEGIN E2E VERIFICATION -->
-[![Verified install desktop](https://github.com/projectbluefin/utah/raw/59850bb11170d927ddcca427c7daa2a869a1f8ac/screenshots/14-first-boot-desktop.png)](https://github.com/projectbluefin/utah/blob/59850bb11170d927ddcca427c7daa2a869a1f8ac/README.md)
+[![Verified install desktop](https://github.com/projectbluefin/utah/raw/17f97241dbd92d28cff0312c9a377e40286cea6d/screenshots/14-first-boot-desktop.png)](https://github.com/projectbluefin/utah/blob/17f97241dbd92d28cff0312c9a377e40286cea6d/README.md)
 
-*gnome-setup install test passed for commit `610eccb4c18b`. [CI run](https://github.com/projectbluefin/utah/actions/runs/45914335730) also runs independent desktop tests that do not gate this record; every flavor installed, booted, switched and rolled back; [screenshots and provenance](https://github.com/projectbluefin/utah/tree/59850bb11170d927ddcca427c7daa2a869a1f8ac).*
+*gnome-setup install test passed for commit `2de3690382d8`. [CI run](https://github.com/projectbluefin/utah/actions/runs/45918946265) also runs independent desktop tests that do not gate this record; every flavor installed, booted, switched and rolled back; [screenshots and provenance](https://github.com/projectbluefin/utah/tree/17f97241dbd92d28cff0312c9a377e40286cea6d).*
 <!-- END E2E VERIFICATION -->
 
 †Utahraptor ostrommaysi
