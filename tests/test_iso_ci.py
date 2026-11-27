@@ -151,7 +151,9 @@ class EvidenceTests(unittest.TestCase):
         self.assertIn("actions/runs/123", result)
         # The evidence links pin to the record's own commit, not the mutable
         # `verification` branch, so a frozen block stays self-consistent.
-        self.assertIn(f"raw/{record_commit}/screenshots", result)
+        self.assertIn(f"raw.githubusercontent.com/projectbluefin/utah/{record_commit}/screenshots", result)
+        # github.com/<repo>/raw/<sha> answers 504 for the orphan record commit.
+        self.assertNotIn("github.com/projectbluefin/utah/raw/", result)
         self.assertIn(f"tree/{record_commit}", result)
         # The record commit has no README.md, so the screenshot must not link to a blob path (404, #1637).
         self.assertNotIn(f"blob/{record_commit}/README.md", result)
@@ -161,7 +163,7 @@ class EvidenceTests(unittest.TestCase):
         self.assertIn("independent desktop tests that do not gate this record", result)
         self.assertNotIn("failure", result)
         self.assertIn("every flavor installed, booted, switched and rolled back", result)
-        self.assertIn("screenshots/14-first-boot-desktop.png", result)
+        self.assertIn("screenshots/14-first-boot-fastfetch.png", result)
 
     def test_the_iso_record_pr_is_opened_as_mergeraptor(self):
         # A PR opened with the workflow token gets no pull_request checks and

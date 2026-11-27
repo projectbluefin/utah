@@ -154,8 +154,10 @@ the main flavor's `image-installer-utah` artifact (every stage's screenshot and
 evidence), writes `provenance.json` (source commit, E2E run, image) and
 force-pushes it as the single commit of the orphan `verification` branch, so
 screenshots never accumulate in `main`'s history. It then proposes a README
-PR (`scripts/update-e2e-readme.py`) whose evidence block shows
-`14-first-boot-desktop.png`, pinned to that commit. The job token only pushes
+PR (`scripts/update-e2e-readme.py`) whose evidence block shows the first
+boot's `14-first-boot-fastfetch.png`, pinned to that commit and served from
+`raw.githubusercontent.com` (`github.com/<repo>/raw/<sha>` answers 504 for the
+orphan record commit, so the README image never loaded). The job token only pushes
 the `verification` branch; trusted `main` alone mints a repository-scoped
 Mergeraptor App token to open the PR, so its pull_request checks run. A
 missing App secret fails this job visibly without deleting test artifacts.
