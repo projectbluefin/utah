@@ -10,10 +10,9 @@
 # the commit without moving the checksums fails the same way. raw.githubusercontent.com
 # serves a commit-addressed path immutably, which a tag or branch would not.
 #
-# Used by the `artwork` stage of the Containerfile and by the ISO builders
-# (iso/scripts/build-iso*.sh), which stage the installer art into the live
-# overlay's build context. UTAH_ARTWORK_LOCK overrides the lock path and
-# UTAH_ARTWORK_BASE the URL prefix (tests point it at a file:// tree).
+# Used by the `artwork` stage of the Containerfile. UTAH_ARTWORK_LOCK overrides
+# the lock path and UTAH_ARTWORK_BASE the URL prefix (tests point it at a
+# file:// tree).
 set -euo pipefail
 
 if [ "$#" -ne 2 ]; then

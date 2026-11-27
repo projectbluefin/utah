@@ -36,11 +36,9 @@ post-build verification workflows, not the complete workflow inventory:
   (`just build-ghcr` refuses an override without them); ordinary builds
   retain the existing pin. Each job uses
   the verified kernel cache, canonicalizes gzip layer bytes before booting its
-  real local candidate's DEBUG=0 ISO through the unchanged offline
-  LUKS/desktop harness (live session over vsock), compares its installed
-  manifest with that exact local manifest, and retains that tested ISO.
-  Main also runs the existing tacklebox builder
-  attestation, size and live-boot gates on local bytes. Publication follows
+  real local candidate through the gnome-setup install medium (`iso/raw`:
+  build, GUI install into LUKS2, first boot, initial setup, `bootc switch`
+  and rollback; #1569). Publication follows
   these gates and rejects digest changes or existing candidate tags. The
   `candidate-manifest/candidate-manifest.json` artifact binds source commits,
   Common layer and native image digests; full configured testsuite suites use
@@ -72,16 +70,15 @@ post-build verification workflows, not the complete workflow inventory:
   dispatched ref's `github.sha`, so a sync race fails closed and `testing`
   waits for the next sync or nightly run.
   With the default `review_vm=false`, only the source checks run. Set
-  `review_vm=true` as well to build a disposable image on the runner, compose
-  and boot an offline ISO, and retain test evidence; `review_iso_all_flavors`
-  expands that job from main flavors to every flavor in `config/flavors.json`,
-  and `review_composefs_backend` installs with the composefs backend (#1129).
-  The review ISO defaults to zstd level 15 so all flavors fit for VM testing.
-  Set `review_iso_compression_level=3` to measure the production ISO budget;
-  `evidence/iso-size.json` records the image size even when the 8 GiB guard
-  fails. This path has read-only registry access and never publishes or signs
-  the review image. For kernel-cache consumers, first build the matching signed
-  cache through the normal pipeline.
+  `review_vm=true` as well to build a disposable image on the runner, build
+  the gnome-setup medium (`iso/raw`) from it, install it with `raw_e2e.py`
+  and retain test evidence (never the medium or the disk);
+  `review_all_flavors` expands that job from main flavors to every flavor in
+  `config/flavors.json`, and `review_backend` picks the medium's bootc
+  backend (`auto`, `composefs` or `ostree`; #1129). This path has read-only
+  registry access and never publishes or signs the review image. For
+  kernel-cache consumers, first build the matching signed cache through the
+  normal pipeline.
 - `.github/workflows/merge-queue.yml` -- `merge_group` only. The `main`
   ruleset requires `contract` and `build_main / Check all testing builds
   successful`; the merge queue waits for both on its own commit. The second
@@ -137,8 +134,8 @@ post-build verification workflows, not the complete workflow inventory:
 - `.github/workflows/post-testing-e2e.yml` -- successful non-PR testing builds
   explicitly dispatch this, or manually supply a successful testing build run ID.
   Its `promote-to-testing` job needs the `gnome-setup` install (every
-  flavor) and testsuite jobs; fisherman's `luks`, `lifecycle` and
-  `production-iso` jobs left the pipeline (#1569). Only when all pass does it record per-digest evidence and move
+  flavor) and testsuite jobs; fisherman's jobs and the tacklebox ISO left
+  the pipeline (#1569). Only when all pass does it record per-digest evidence and move
   `:testing` through a monotonic ratchet; a red testsuite leg blocks
   promotion, with no override (#1329). The promotion to `main` sets
   `run_e2e: false`; the release gate requires that evidence for the exact

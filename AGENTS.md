@@ -34,7 +34,7 @@ just build-ghcr utah testing main     # local image build -> localhost/utah:test
 just check-desktop-contract           # in-image verifiers against a built image
 just generate-bootable-image testing  # bootc install to-disk -> output/bootable.raw
 just boot-vm                          # QEMU/noVNC; confirm GDM + GNOME Shell render
-just iso testing && just boot-iso     # live ISO build + boot (see docs/skills/local-testing.md)
+sudo just medium testing              # gnome-setup install medium -> output/medium.raw (docs/skills/local-testing.md)
 ```
 
 `just check` is the gate CI runs first; a change that fails it fails the whole

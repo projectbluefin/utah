@@ -134,8 +134,8 @@ FROM ${BASE_IMAGE}
 # export, so unchanged packaged Python source/bytecode timestamps survive.
 # Direct builds retain the legacy fallback unless their caller supplies args.
 # ARG, not ENV: every RUN in this stage already sees it, and an ENV would
-# persist in the image config and leak the epoch into iso/live, every
-# `podman run`, and any downstream FROM.
+# persist in the image config and leak the epoch into the install medium,
+# every `podman run`, and any downstream FROM.
 ARG SOURCE_DATE_EPOCH=1704067200
 ARG UTAH_REWRITE_TIMESTAMPS=0
 
@@ -460,8 +460,7 @@ RUN --mount=type=bind,from=packages,source=/repository,target=/etc/utah-packages
 # tmpfiles.d entry (utah-home.conf). The directory must ship in the image:
 # useradd ships HOME=/home (#576) and home.mount binds /var/home over /home,
 # so the homes live there -- the installer pre-creates it in the stateroot,
-# and the tacklebox customize container and live ISO build create liveuser's
-# home in it (#602).
+# and the install medium's live session creates liveuser's home in it (#602).
 #
 # GRUB can report the ESP to systemd, which chooses /efi when /boot is busy.
 # The immutable root cannot create that mountpoint at boot (#1326).

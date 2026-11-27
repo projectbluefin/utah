@@ -235,13 +235,12 @@ covers the missing-remote case.
 
 This rule is enforced, not just documented:
 `tests/test_systemd_exit_tolerance.py` scans every unit shipped under
-`system_files/` and `iso/live/` and fails if one carries a
+`system_files/` and `iso/raw/` and fails if one carries a
 `SuccessExitStatus=`, an unprefixed `remote-delete`, or a `--force` on one. It
 runs inside `just test`, which `just check` invokes, so the `--force` variant
 of a `remote-delete` fails the build instead of waiting to be caught in review.
 The scan covers unit files only: a shell script may still use `--force` on a
-throwaway remote it created itself, as `iso/live/src/install-flatpaks.sh` does
-for the live image's own `installer-local` remote.
+throwaway remote it created itself.
 
 ## GNOME extensions are pinned submodules
 

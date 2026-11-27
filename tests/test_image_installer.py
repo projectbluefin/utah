@@ -437,11 +437,9 @@ class OfflineFlatpakTests(unittest.TestCase):
         self.assertIn("setfiles -F -r /stateroot", bake)
         self.assertNotRegex(bake, r"podman (build|commit|push)")
 
-    def test_the_medium_bakes_the_set_the_iso_bakes(self):
+    def test_the_medium_bakes_the_brewfile_set(self):
         bake = (RAW / "bake-flatpaks.sh").read_text()
-        iso = (ROOT / "iso/live/Containerfile").read_text()
         brewfile = "/usr/share/ublue-os/homebrew/system-flatpaks.Brewfile"
-        self.assertIn(f"--flatpaks {brewfile}", iso)
         self.assertIn("/scripts/verify-desktop-contract.py", bake)
         self.assertIn(brewfile, bake)
         self.assertIn("--no-related --or-update flathub", bake)
@@ -807,9 +805,7 @@ class KernelVeritySelectorTests(unittest.TestCase):
             # Only the tree with a vmlinuz is the kernel bootc deploys.
             self.assertEqual(kernel_verity.booted_kernel(Path(d)), "7.1.8-ogc1")
 
-    def test_both_install_paths_consult_it(self):
-        luks = (ROOT / "iso/scripts/luks-e2e.sh").read_text()
-        self.assertIn('ssh_live "python3 - select --backend composefs" <"${ROOT}/scripts/kernel_verity.py"', luks)
+    def test_the_medium_build_consults_it(self):
         build = (RAW / "build-raw-image.sh").read_text()
         self.assertIn('<"${HERE}/../../scripts/kernel_verity.py"', build)
 

@@ -7,7 +7,7 @@ not harness bugs. Triage in this order; each step names where its evidence
 lives.
 
 The testsuite matrix gates promotion (#1329): `promote-to-testing` needs
-`resolve`, `luks`, `lifecycle` and `testsuite`, so one red
+`resolve`, `gnome-setup` and `testsuite`, so one red
 leg leaves `:testing` where it is and records no E2E evidence for the run's
 digests. `:stable` only releases digests that carry that evidence. There is
 no override: fix the image, or fix or scope the scenario upstream.
@@ -92,7 +92,6 @@ condition. Never exclude a scenario to hide a Utah-side defect.
 If push-triggered PR builds stop firing for a branch (only `prow` runs),
 dispatch explicitly: `gh workflow run build.yml --ref <branch> -f
 contract_only=true -f review_vm=true -f sha=<head-sha>`. This runs the full
-image build including `utah-verify-desktop-contract` plus an installed-VM
-check. `review_iso_compression_level=3` with `review_iso_all_flavors=true`
-measures the production ISO budget; per-flavor `evidence/iso-size.json`
-lands in the artifacts whether or not the 8 GiB guard passes.
+image build including `utah-verify-desktop-contract` plus a gnome-setup
+install of it in a VM. `review_all_flavors=true` covers every flavor;
+`review_backend` picks the medium's bootc backend.

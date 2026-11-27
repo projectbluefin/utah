@@ -13,11 +13,11 @@ Bluefin built on Fedora Hummingbird. The more ... civilized murder machine.
 > Your day keeps getting worse. Why are there more.
 
 **Experimental pre-alpha** — the image builds, boots, and installs end to
-end in local QEMU validation: the live ISO's bootc-installer creates a
-LUKS2-encrypted disk from the ISO's embedded container store with no
-network, and the installed system boots on its own to GDM and a GNOME
-session (verified record: [docs/verification](https://github.com/projectbluefin/utah/tree/verification)).
-Testing container images and live ISOs are available for hardware testing,
+end in QEMU validation: the live medium boots, GNOME STF's gnome-setup
+installs it by block copy into a LUKS2 disk, and every flavor's installed
+system boots to gnome-initial-setup and a GNOME session, then switches and
+rolls back with bootc (verified record: [verification](https://github.com/projectbluefin/utah/tree/verification)).
+Testing container images and install media are available for hardware testing,
 but nothing here is ready to run on a machine you care about yet. [Filing
 issues](https://github.com/projectbluefin/utah/issues) is the whole point.
 
@@ -40,8 +40,7 @@ Utah is built across two repositories:
 
 ## Download and image streams
 
-- **Live ISO (AMD / Intel, Secure Boot off):** [`utah-live-latest.iso`](https://projectbluefin.dev/utah-live-latest.iso) ([SHA-256 checksum](https://projectbluefin.dev/utah-live-latest.iso-CHECKSUM)), built monthly from `:stable`
-- **Image-based installer medium (experimental):** [`ghcr.io/projectbluefin/utah-installer`](https://github.com/projectbluefin/utah/pkgs/container/utah-installer) (`testing` tag), published weekly and on demand from `:testing` — the live medium for [docs/adr/0001](https://github.com/projectbluefin/utah/blob/main/docs/adr/0001-image-based-installer.md), baked Flatpaks included
+- **Install medium (gnome-setup, Secure Boot off):** [`ghcr.io/projectbluefin/utah-installer`](https://github.com/projectbluefin/utah/pkgs/container/utah-installer) (`testing` tag), published weekly and on demand from `:testing` — a raw disk image that boots live and installs with GNOME STF's gnome-setup ([docs/adr/0001](https://github.com/projectbluefin/utah/blob/main/docs/adr/0001-image-based-installer.md)), baked Flatpaks included. A projectbluefin.dev download from `:stable` follows when [projectbluefin/dakota-iso#414](https://github.com/projectbluefin/dakota-iso/pull/414) publishes it.
 
   ```sh
   # Fetch the OCI artifact, verify its checksum, decompress, then flash it.
@@ -52,21 +51,20 @@ Utah is built across two repositories:
   ```
 
   `--long=31` is required to decompress, because the medium was compressed with it.
+- **Older live ISO (fisherman installer, retiring):** [`utah-live-latest.iso`](https://projectbluefin.dev/utah-live-latest.iso) ([SHA-256 checksum](https://projectbluefin.dev/utah-live-latest.iso-CHECKSUM)), last built from `:stable` by projectbluefin/dakota-iso; Utah no longer tests this installer (#1569)
 - **Live versions & downloads:** [docs.projectbluefin.io/utah](https://docs.projectbluefin.io/utah)
 
-The live ISO is hosted on projectbluefin.dev and built by
-[`projectbluefin/dakota-iso`](https://github.com/projectbluefin/dakota-iso)
-(`build-iso-utah.yml`, monthly on the 8th, from `ghcr.io/projectbluefin/utah:stable`),
-not published by this repository's workflows (CI here only uploads
-`utah-live.iso` as a short-lived workflow artifact). Verify the download against
-its checksum before use.
+Downloads on projectbluefin.dev are built by
+[`projectbluefin/dakota-iso`](https://github.com/projectbluefin/dakota-iso), the
+repository that builds the install media for Utah and Dakota. Verify every
+download against its checksum before use.
 
 Like Bluefin, Utah builds four hardware flavors (`utah`, `utah-nvidia`,
 `utah-gaming`, `utah-nvidia-gaming`) from `config/flavors.json`:
 
 | Tag | Stream | Status |
 | ---: | ---: | :--- |
-| `:testing` | Testing | Published at `ghcr.io/projectbluefin/utah:testing` after end-to-end ISO validation passes. |
+| `:testing` | Testing | Published at `ghcr.io/projectbluefin/utah:testing` after every flavor passes the gnome-setup install test and the testsuite. |
 | `:stable` | Stable | Rolling tag, moved from `:testing` on each promotion to `main` after the release gate passes on the exact candidate digests, and by a daily check once `:stable` is over a week old and `:testing` has moved on. Pre-alpha like everything here. |
 
 ## Parity with Dakota

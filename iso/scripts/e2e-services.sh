@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Service-state checks shared by luks-e2e.sh, lifecycle-e2e.sh and
-# iso/raw/raw_e2e.py. Sourced, never run.
+# Service-state checks for an installed Utah system. Sourced, never run.
 #
 # The caller provides ssh_target and scp_target (the installed system, as
 # TEST_USER), fail (report and exit), ROOT, TEST_USER and TEST_PASSWORD.
@@ -9,9 +8,7 @@
 #
 # verify_setup_state is a content gate: it holds the booted image to the
 # [services] lists of its contract, a check added after earlier :testing
-# images were built (#1282). luks-e2e.sh runs it on every image it installs
-# except the lifecycle's baseline (UTAH_E2E_BASELINE=1); lifecycle-e2e.sh runs
-# it on the upgraded candidate instead.
+# images were built (#1282).
 
 check_system_unit_state() {
     local unit="$1" required_enabled="${2:-false}" required_run="${3:-false}" boot_pass="${4:-first}"
@@ -128,7 +125,7 @@ verify_setup_state() {
     # after first-boot presets ran, and must not have failed. Units whose
     # conditions skip them in a VM (thermald, intel_lpmd) end inactive with
     # Result=success and pass. Timers are checked, not the network jobs they
-    # trigger, because the luks VM has no network.
+    # trigger, so the verdict does not depend on the test VM's network.
     # The lists are read into arrays first: ssh_target reads stdin, so a
     # `while read ... <<< "${units}"` loop lost every unit after the first.
     # Command substitution, not process substitution, so a contract_units
@@ -147,8 +144,8 @@ verify_setup_state() {
     for unit in "${units[@]}"; do
         [[ -n "${unit}" ]] || continue
         case "${unit}" in
-            # Installs Homebrew packages from the network, so it fails in the
-            # offline luks VM by design; its enablement is still asserted.
+            # Installs Homebrew packages from the network, so its run depends
+            # on the test VM's network; its enablement is still asserted.
             brew-preinstall.service) check_user_unit_state "${unit}" false "${boot_pass}" true ;;
             *@.*) check_template_unit_state "${unit}" user "${boot_pass}" ;;
             *) check_user_unit_state "${unit}" false "${boot_pass}" ;;

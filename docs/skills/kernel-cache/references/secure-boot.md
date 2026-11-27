@@ -30,10 +30,9 @@ re-check.
 | `systemd-bootx64.efi` (`systemd-boot-unsigned` 261.2-1.1.hum1, Hummingbird) | all (bootctl updates); live ISO `EFI/BOOT/BOOTX64.EFI` | none | **refused by firmware** |
 | UKIs | none shipped | n/a | n/a |
 
-The installed chain is shim → GRUB → kernel, as `bootc-installer` writes it
-(`"bootloader": "grub2"`). It breaks at the kernel. The live ISO (`just iso`,
-and dakota-iso's `utah-live.iso` built from `:stable`) breaks at its first
-binary.
+The installed chain is shim → GRUB → kernel, as `bootc install` writes it and
+the gnome-setup medium copies it. It breaks at the kernel. The retired
+fisherman ISO (dakota-iso's `utah-live.iso`) broke at its first binary.
 
 ## Route per piece
 

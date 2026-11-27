@@ -352,8 +352,9 @@ class FlatpaksModeTests(unittest.TestCase):
 class ServicesModeTests(unittest.TestCase):
     """`--services LIST CONTRACT` prints one [services] list, one unit per line.
 
-    luks-e2e.sh reads the installed contract this way to check every listed
-    unit on the booted system (#19). It must not run the image checks.
+    iso/scripts/e2e-services.sh reads the installed contract this way to check
+    every listed unit on the booted system (#19). It must not run the image
+    checks.
     """
 
     def run_services(self, kind):

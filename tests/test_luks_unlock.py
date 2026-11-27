@@ -1,8 +1,8 @@
 """luks-unlock.py decides whether an encrypted install actually booted.
 
-The LUKS e2e (iso/scripts/luks-e2e.sh, lifecycle-e2e.sh) hands the passphrase
-typing and the boot verdict to iso/scripts/luks-unlock.py. CI only ever shows
-it the happy path: a stable framebuffer prompt followed by an sshd banner.
+The gnome-setup E2E (iso/raw/raw_e2e.py) hands the passphrase typing and the
+boot verdict to iso/scripts/luks-unlock.py. CI only ever shows it the happy
+path: a stable framebuffer prompt followed by an sshd banner.
 Every failure verdict -- emergency shell, a prompt that never appears, a boot
 that never finishes -- and the libvirt mode are exercised nowhere else, so a
 regression there would turn a broken encrypted boot into a green check.

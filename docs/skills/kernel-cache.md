@@ -228,11 +228,9 @@ and the mount then failed with `unknown filesystem type 'btrfs'`, the same
 missing `/dev/btrfs-control` as a bare module, which looked like a bad
 filesystem at install time. `install-ogc-kernel.sh` enables `BTRFS_FS` as a
 module beside SquashFS/EROFS and asserts it in `required_config`, so the
-absence fails the build rather than the install. `iso/scripts/luks-e2e.sh`
-adds a `modprobe btrfs` pre-check before the installer runs, turning a repeat
-into a one-line diagnosis. Changes to this contract invalidate the cache
-through the existing script hash and require a real kernel rebuild plus the ISO
-boot tests.
+absence fails the build rather than the install. Changes to this contract
+invalidate the cache through the existing script hash and require a real
+kernel rebuild plus the install tests.
 
 Containers need `CGROUP_BPF`. Cgroup v2 enforces device access with a BPF
 program that crun loads for every container (systemd does the same for
