@@ -29,7 +29,6 @@
 
 # --- Structural differences, one epic child each ---------------------------
 
-spice-protocol = { status = "waived", area = "virt-dev", issue = "#1264", reason = "Headers only; no runtime library or user-facing files for Utah to ship" }
 kanata = { status = "planned", area = "accessibility-input", issue = "#1222", reason = "#1297 installs kanata from the factory in place of input-remapper" }
 ydotool = { status = "planned", area = "accessibility-input", issue = "#1222", reason = "Installed from the factory with kanata (#1297)" }
 "/usr/lib/systemd/system/dakota-secure-boot-update.service" = { status = "planned", area = "boot", issue = "#1225" }
@@ -192,7 +191,7 @@ lame = { status = "waived", reason = "Library utility: the LAME encoder CLI" }
 libflac = { status = "waived", reason = "Library utility: flac and metaflac" }
 speex = { status = "waived", reason = "Library utility: speexenc and speexdec (speex-tools)" }
 sbc = { status = "waived", reason = "Library utility: SBC codec test tools" }
-libbluray = { status = "planned", area = "media", issue = "#1264", reason = "Installed in [parity]; Dakota's runtime library is shipped, while its libbluray test tools remain out of scope" }
+libbluray = { status = "waived", reason = "Library utility: libbluray test tools (libbluray-utils)" }
 ladspa-sdk = { status = "waived", reason = "Library utility: LADSPA example plugin tools" }
 fftw = { status = "waived", reason = "Library utility: FFTW wisdom generation tools" }
 "/usr/bin/yuvconvert" = { status = "waived", reason = "Library utility: libyuv's conversion test tool" }
@@ -206,7 +205,7 @@ openjpeg = { status = "waived", reason = "Library utility: OpenJPEG CLIs (openjp
 librsvg = { status = "waived", reason = "Library utility: rsvg-convert (librsvg2-tools)" }
 lcms = { status = "waived", reason = "Library utility: Little CMS transform tools (lcms2-utils); lcms is installed" }
 libgxps = { status = "waived", reason = "Library utility: XPS conversion tools (libgxps-tools)" }
-libpaper = { status = "planned", area = "media", issue = "#1264", reason = "Installed in [parity]; Dakota's runtime library is shipped, while its paper-size CLI remains out of scope" }
+libpaper = { status = "waived", reason = "Library utility: paper size query CLI" }
 libmtp = { status = "waived", reason = "Library utility: libmtp example programs; Files reaches MTP devices through gvfs" }
 libnfs = { status = "waived", reason = "Library utility: libnfs userspace client tools; Utah mounts NFS with nfs-utils" }
 libplist = { status = "waived", reason = "Library utility: plist2json" }
@@ -234,7 +233,7 @@ libei = { status = "waived", reason = "Library utility: input debugging tool (li
 libevdev = { status = "waived", reason = "Library utility: input debugging tool (libevdev-utils)" }
 libinput = { status = "waived", reason = "Library utility: mouse-dpi-tool and touchpad-edge-detector (libevdev-utils)" }
 libwacom = { status = "waived", reason = "Library utility: tablet database query tools (libwacom-utils)" }
-sonic = { status = "planned", area = "accessibility-input", issue = "#1264", reason = "Installed in [parity]; Dakota's runtime library is shipped, while its speech-speed CLI remains out of scope" }
+sonic = { status = "waived", reason = "Library utility: sonic's speech speed CLI" }
 bluez = { status = "waived", reason = "Library utility: BlueZ l2ping, l2test and rctest test tools" }
 "/usr/bin/isotest" = { status = "waived", reason = "Library utility: BlueZ ISO channel test tool" }
 libgusb = { status = "waived", reason = "Library utility: gusbcmd" }

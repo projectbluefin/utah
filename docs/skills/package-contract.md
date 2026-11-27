@@ -387,10 +387,11 @@ Closing a gap means shipping the files Utah lacks,
 usually by adding the Fedora package to `base.toml` or `utah.toml`, then
 re-measuring and dropping the entry `check` reports as no longer a gap.
 Runtime libraries can be absent from `GAP.md` when they install no user-visible
-path; if a shipped Dakota package needs one, add it to `[parity]` anyway and
-track the related utility commands separately as waivers. Header-only
-dependencies such as `spice-protocol` do not belong in the install contract;
-record them as waived with a reason instead.
+path. Add one to `[parity]` only when a named Utah package loads it at runtime;
+otherwise leave it out and document the skipped consumer decision next to the
+manifest. Utility commands that Dakota exposes through an unsplit library
+element remain separate `waived` entries when they are gaps. Header-only
+dependencies such as `spice-protocol` are not install-contract entries.
 
 A file the shared image dropped is waived instead: the other image still
 ships it, so the item is a gap Utah cannot close by shipping anything. Record
@@ -405,7 +406,7 @@ describe the same image as its `surface.tsv`; after a refresh,
 [remove resolved triage entries](package-contract/references/factory-consumption.md#closing-baseline-gaps).
 
 Current counts, per the README "Parity with Dakota" section: 57 base manifest
-packages installed, 380 Utah additions (GNOME 51, base-image parity, device
+packages installed, 376 Utah additions (GNOME 51, base-image parity, device
 firmware, desktop services), 5 genuinely unavailable. After changing a manifest,
 run `python3 scripts/generate-site-data.py`, then
 `python3 scripts/check-doc-counts.py --write` to refresh both documents.
