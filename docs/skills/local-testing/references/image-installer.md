@@ -342,6 +342,11 @@ Recreate `target.qcow2` (and copy a fresh `vars.fd`) to install again.
   clicks with a USB tablet at AT-SPI extents. GTK 4 reports extents relative
   to the window, so the window is maximized first (it then starts under the
   32 px top bar).
+- gnome-initial-setup's Time Zone page keeps Next insensitive until it has a
+  location: GeoClue's network geolocation or its city search. CI runners do
+  not always get one (run 45926390728: two of four flavors), so the harness
+  searches a city when Next is insensitive. A GTK button's inner label stays
+  sensitive while the button is not: match Next/Skip by button role.
 - The pinned-fetches gate scans workflow text: say "bootc switch" only in
   comments, and fetch git sources by commit (`git fetch <url> <sha>`), not
   `git clone`.
