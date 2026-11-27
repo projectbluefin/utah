@@ -125,6 +125,9 @@ SHIM_FALLBACK_TEXT = ("boot option restoration", "stop system reset")
 # stops the countdown, and GRUB's menu gives "x" no meaning (no hotkeys).
 GRUB_HOLD_KEY = "x"
 GRUB_WAIT = 180
+# GRUB's menu is two colours (grey text on black, run 45935827310's
+# debug/grub-probe.png): any frame that is not flat is read back.
+GRUB_MIN_COLORS = 2
 # fastfetch-ocr-match.sh needs fastfetch's body and this sentinel.
 FASTFETCH_CMD = "fastfetch && echo UTAH-E2E-FASTFETCH"
 # /efi exists and neither EFI mount unit failed (#1330).
@@ -921,7 +924,7 @@ class Harness:
                 if self.vm.poll() is not None:
                     raise Fail("live VM exited before GRUB's menu was drawn")
                 ppm = self.screendump(probe)
-                if not drawn(ppm, min_colors=3):
+                if not drawn(ppm, min_colors=GRUB_MIN_COLORS):
                     time.sleep(0.5)
                     continue
                 ocr = subprocess.run(["tesseract", str(ppm), "stdout"], capture_output=True, text=True).stdout

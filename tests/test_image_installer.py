@@ -82,12 +82,13 @@ class GrubenvTests(unittest.TestCase):
 
 
 # tesseract's transcripts of an early boot frame: shim's fallback as Post-Testing
-# run 45918946265's 00-grub-menu.png showed it, and GRUB's menu on the medium.
+# run 45918946265's 00-grub-menu.png showed it, and GRUB's menu on the medium
+# as image-installer run 45935827310's debug/grub-probe.png showed it.
 SHIM_FALLBACK_OCR = "Boot Option Restoration\n\nPress any key to stop system reset\n\nBooting in 2 seconds\n"
-GRUB_MENU_OCR = ("GNU GRUB version 2.12\n\nUtah Live (try or install)\nHummingbird 20252124 (ostree:0)\n"
-                 "UEFI Firmware Settings\n\nUse the * and v keys to select which entry is highlighted.\n"
-                 "Press enter to boot the selected OS, `e' to edit the commands before booting\n"
-                 "or `c' for a command-line.\n")
+GRUB_MENU_OCR = ("GRUB version 2.12\n\nUtah Live (try or install)\nBluefin Wersion: test ing-20261127-2de3690)\n"
+                 "UEFI Firmware Settings\n\nUse the 4 and ¥ keys to select uhich entry is highlighted.\n"
+                 "Press enter to boot the selected 0S, \u201ce\u2019 to edit the conmands before booting or "
+                 "\u201cc\u2019 for a command-line. ESC to return previous menu.\n")
 
 
 class GrubMenuTests(unittest.TestCase):
@@ -97,6 +98,17 @@ class GrubMenuTests(unittest.TestCase):
         self.assertEqual(raw_e2e.boot_frame(GRUB_MENU_OCR), "grub")
         # tesseract may break the title across lines or change its case.
         self.assertEqual(raw_e2e.boot_frame(GRUB_MENU_OCR.replace("Utah Live", "UTAH\nLIVE")), "grub")
+
+    def test_grub_menu_two_colour_frame_is_read_back(self):
+        # Grey text on black: run 45935827310 skipped every GRUB frame as undrawn at 3 colours.
+        w, h = 200, 100
+        text = bytes(b for i in range(w * h) for b in ((0x98,) * 3 if i % 7 == 0 else (0,) * 3))
+        with tempfile.TemporaryDirectory() as d:
+            ppm = Path(d) / "grub.ppm"
+            ppm.write_bytes(b"P6\n%d %d\n255\n" % (w, h) + text)
+            self.assertTrue(raw_e2e.drawn(ppm, min_colors=raw_e2e.GRUB_MIN_COLORS))
+            ppm.write_bytes(b"P6\n%d %d\n255\n" % (w, h) + bytes(3 * w * h))
+            self.assertFalse(raw_e2e.drawn(ppm, min_colors=raw_e2e.GRUB_MIN_COLORS))
 
     def test_grub_shim_fallback_frame_reads_as_fallback(self):
         self.assertEqual(raw_e2e.boot_frame(SHIM_FALLBACK_OCR), "fallback")
