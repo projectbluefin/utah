@@ -215,6 +215,9 @@ ISO_BOOT_FACTS = (
 # AT-SPI had that role, "toggle button".
 ENCRYPT_SWITCH = "Encrypt Disk"
 SWITCH_ROLES = ("switch", "toggle button")
+# The recovery key page's QR code (a Gtk.Picture shown under the key, not
+# behind a button).
+RECOVERY_QR = "Recovery Key QR Code"
 # The definitions gnome-setup installs with when that switch is off
 # (utah-live-definitions writes them at boot).
 PLAIN_DEFINITIONS = "/run/utah-live/repart-unencrypted.d"
@@ -558,7 +561,6 @@ class Page(Enum):
     CONFIRM = auto()
     PASSPHRASE = auto()
     RECOVERY_KEY = auto()
-    QR = auto()
     PROGRESS = auto()
     UNKNOWN = auto()
 
@@ -573,7 +575,6 @@ def classify_setup_page(nodes):
     for page, headings in (
         (Page.FAILURE, ("Installation Failed", "Could not install")),
         (Page.DONE, ("Installation Complete",)),
-        (Page.QR, ("Scan to Back Up",)),
         (Page.RECOVERY_KEY, ("Back Up Recovery Key",)),
         (Page.PASSPHRASE, ("Choose a Disk Passphrase",)),
         (Page.DATA_FOUND, ("Existing Data Found",)),
@@ -1557,7 +1558,6 @@ class Harness:
         deadline = start + 4200
         previous, since = None, start
         seen = set()
-        qr_seen = False
         target_selected = False
         passphrase_filled = False
         confirmed_at = None
@@ -1639,19 +1639,17 @@ class Harness:
                         self.setup_dump(runner, "miss")
                 else:
                     self.setup_press(runner, nodes, "Next")
-            elif page in (Page.QR, Page.RECOVERY_KEY) and not self.encrypt:
+            elif page is Page.RECOVERY_KEY and not self.encrypt:
                 raise Fail(f"gnome-setup showed a recovery key although {ENCRYPT_SWITCH!r} was off")
-            elif page is Page.QR:
-                qr_seen = True
-                self.setup_press(runner, nodes, "Done")
             elif page is Page.RECOVERY_KEY:
                 key = self.recovery_key_text(nodes)
                 if key:
+                    # The QR code sits on the page itself; behind an icon-only button nobody found it.
+                    if not has_name(nodes, RECOVERY_QR):
+                        raise Fail(f"the recovery key page shows no {RECOVERY_QR!r} next to the key")
                     self.recovery_key = key
                     self.save("recovery-key.txt", key + "\n")
-                    if not qr_seen:
-                        self.setup_press(runner, nodes, "Show QR Code for Recovery Key")
-                    elif has_name(nodes, "Done", sensitive=True, role="button"):
+                    if has_name(nodes, "Done", sensitive=True, role="button"):
                         self.setup_press(runner, nodes, "Done")
                     else:
                         checkbox = named(nodes, "I backed up my recovery key", role="check box")

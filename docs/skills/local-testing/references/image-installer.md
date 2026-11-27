@@ -116,8 +116,9 @@ pressed. Emptiness comes from the `partitionCount` systemd-sysinstall forwards o
 libblkid finds a whole-disk signature); gnome-setup calls a fitting disk empty
 only when it is 0. Its old test, `currentSizeBytes == 0`, never held:
 systemd-repart reports the whole device there, so every disk read as data.
-Recovery keys come from the key-shaped label; the QR dialog takes precedence
-over its parent page. Each distinct page gets one screenshot in the manifest.
+Recovery keys come from the key-shaped label; the page must also show its QR
+code (`Recovery Key QR Code`, a picture under the key: behind the old icon-only
+button nobody found it). Each distinct page gets one screenshot in the manifest.
 Run `python3 -m unittest discover -s tests -p 'test_setup_pages.py'` for
 host-only route replays; these do not replace a VM run.
 Unknown pages time out after 60 seconds, interactive pages after 120 seconds,
