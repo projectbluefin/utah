@@ -402,6 +402,21 @@ class Fail(Exception):
     pass
 
 
+def accel_args(kvm_writable, ci):
+    """QEMU acceleration arguments. Without KVM the guests fall back to TCG, which is
+    so slow that boots time out in ways that look like product bugs: the Common
+    candidate's installed disk dropped to emergency mode on /boot's device timeout
+    (run 45950837602) only because a setfacl KVM grant had vanished. CI never wants
+    TCG, so it fails here instead; a local run keeps the fallback with a warning."""
+    if kvm_writable:
+        return ["-accel", "kvm", "-cpu", "host"]
+    if ci:
+        raise Fail("/dev/kvm is not writable: grant the runner KVM (sudo chmod a+rw /dev/kvm) "
+                   "instead of running the VMs under TCG")
+    log("WARNING: /dev/kvm not writable, using TCG (slow)")
+    return ["-accel", "tcg"]
+
+
 class Page(Enum):
     FAILURE = auto()
     DONE = auto()
@@ -642,7 +657,8 @@ class Harness:
                "-display", "none", "-serial", f"file:{self.serial}",
                "-monitor", f"unix:{self.mon_sock},server,nowait",
                "-qmp", f"unix:{self.qmp_sock},server=on,wait=off"]
-        cmd += ["-accel", "kvm", "-cpu", "host"] if os.access("/dev/kvm", os.W_OK) else ["-accel", "tcg"]
+        cmd += accel_args(os.access("/dev/kvm", os.W_OK),
+                          os.environ.get("GITHUB_ACTIONS") == "true" or bool(os.environ.get("CI")))
         if tpm:
             cmd += self.start_swtpm(name)
         for d in drives:
