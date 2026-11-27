@@ -3,9 +3,11 @@
 #
 # gnome-setup asks systemd-sysinstall to install onto TARGET with the
 # definitions utah-live-definitions wrote at boot: every medium partition
-# block-copied (CopyBlocks=), the root into LUKS2 (Encrypt=key-file, plus
-# tpm2 when the machine has a TPM; the key file is empty until gnome-setup's
-# recovery key page enrolls a recovery key and wipes it). systemd-sysinstall
+# block-copied (CopyBlocks=), the root into LUKS2 by default (Encrypt=key-file,
+# plus tpm2 when the machine has a TPM; the key file is empty until
+# gnome-setup's recovery key page enrolls a recovery key and wipes it), or a
+# plain btrfs copy when the user switched "Encrypt Disk" off (the
+# repart-unencrypted.d definitions). systemd-sysinstall
 # runs with --install-kernel=no --install-boot-loader=no: the copied ESP
 # already carries shim and GRUB, and /boot the deployment's BLS entries.
 # gnome-setup then starts this script as utah-sysinstall-post@<TARGET>.service
@@ -17,8 +19,9 @@
 #     bootupd's GRUB configs on the ESP and in /boot, the deployment's
 #     /etc/fstab);
 #   * the live boot entry and its GRUB default (grubenv saved_entry) removed;
-#   * rd.luks.uuid (and tpm2-device=auto when a TPM2 token is enrolled) on the
-#     BLS entries and an /etc/crypttab line in every deployment;
+#   * for a LUKS2 root, rd.luks.uuid (and tpm2-device=auto when a TPM2 token
+#     is enrolled) on the BLS entries and an /etc/crypttab line in every
+#     deployment; a plain root gets neither;
 #   * the root filesystem grown to the partition systemd-repart grew;
 #   * from the hybrid ISO (build-hybrid-iso.sh), the ESP's live systemd-boot
 #     setup undone: the medium's EFI/BOOT files back from /utah-live/BOOT,
@@ -60,16 +63,17 @@ src_disk="$(lsblk -rnpo NAME,PKNAME,UUID | awk -v v="${root_spec}" -v t="${targe
 [[ -n "${src_disk}" && "$(realpath "${src_disk}")" != "${target}" ]] || fail "${target} is the live medium, or the medium was not found"
 
 udevadm settle
-esp="" boot="" root_part=""
+esp="" boot="" root_part="" luks=0
 while read -r part; do
     ptype="$(lsblk -rno PARTTYPE "${part}" | tr '[:upper:]' '[:lower:]')"
     fstype="$(blkid -p -s TYPE -o value "${part}" || true)"
     if [[ "${ptype}" == "${ESP_TYPE}" ]]; then esp="${part}"
-    elif [[ "${fstype}" == crypto_LUKS ]]; then root_part="${part}"
+    elif [[ "${fstype}" == crypto_LUKS ]]; then root_part="${part}" luks=1
+    elif [[ "${fstype}" == btrfs ]]; then root_part="${part}"
     elif [[ "${fstype}" == ext4 ]]; then boot="${part}"
     fi
 done < <(lsblk -rnpo NAME,TYPE "${target}" | awk '$2 == "part" { print $1 }')
-[[ -n "${esp}" && -n "${root_part}" ]] || fail "expected an ESP and a LUKS2 root on ${target} (esp=${esp:-none} root=${root_part:-none})"
+[[ -n "${esp}" && -n "${root_part}" ]] || fail "expected an ESP and a LUKS2 or btrfs root on ${target} (esp=${esp:-none} root=${root_part:-none})"
 log "Target ESP=${esp} boot=${boot:-none} root=${root_part} (medium ${src_disk})"
 
 work="$(mktemp -d /run/utah-install.XXXXXX)"
@@ -83,10 +87,11 @@ cleanup() {
 trap cleanup EXIT
 mkdir -p "${work}/mnt/root" "${work}/mnt/boot" "${work}/mnt/efi"
 
-# systemd-repart enrolled an empty passphrase (no key file was passed); the
-# cryptsetup CLI cannot pass an empty one, libcryptsetup can.
-luks_uuid="$(cryptsetup luksUUID "${root_part}")"
-python3 - "${root_part}" "${mapper}" <<'PY'
+if [[ "${luks}" == 1 ]]; then
+    # systemd-repart enrolled an empty passphrase (no key file was passed); the
+    # cryptsetup CLI cannot pass an empty one, libcryptsetup can.
+    luks_uuid="$(cryptsetup luksUUID "${root_part}")"
+    python3 - "${root_part}" "${mapper}" <<'PY'
 import ctypes, sys
 lib = ctypes.CDLL("libcryptsetup.so.12")
 lib.crypt_init.argtypes = [ctypes.POINTER(ctypes.c_void_p), ctypes.c_char_p]
@@ -106,10 +111,15 @@ try:
 finally:
     lib.crypt_free(cd)
 PY
-root_dev="/dev/mapper/${mapper}"
-tpm2=0
-cryptsetup luksDump "${root_part}" | grep -q 'systemd-tpm2' && tpm2=1
-log "root is LUKS2 ${luks_uuid} (TPM2 token: ${tpm2})"
+    root_dev="/dev/mapper/${mapper}"
+    tpm2=0
+    cryptsetup luksDump "${root_part}" | grep -q 'systemd-tpm2' && tpm2=1
+    log "root is LUKS2 ${luks_uuid} (TPM2 token: ${tpm2})"
+else
+    # "Encrypt Disk" was off: the root is the medium's btrfs, copied as is.
+    root_dev="${root_part}"
+    log "root is unencrypted (btrfs)"
+fi
 
 # --- Give every copied filesystem a new identity. ----------------------------
 declare -A uuid_map
@@ -220,16 +230,18 @@ if grep -rqw "${LIVE_KARG}" "${entry_dir}/" 2>/dev/null; then
     fail "a boot entry still carries ${LIVE_KARG}"
 fi
 
-options="discard"
-[[ "${tpm2}" == 1 ]] && options="tpm2-device=auto,discard"
-for entry in "${entry_dir}"/*.conf; do
-    [[ -f "${entry}" ]] || continue
-    sed -i "/^options /{/rd.luks.uuid=${luks_uuid}/!s/\$/ rd.luks.uuid=${luks_uuid} rd.luks.options=${luks_uuid}=${options}/}" "${entry}"
-    log "boot entry ${entry##*/}: $(sed -n 's/^options //p' "${entry}")"
-done
-for d in "${deployments[@]}"; do
-    printf 'luks-%s UUID=%s none %s\n' "${luks_uuid}" "${luks_uuid}" "${options}" >"$d/etc/crypttab"
-done
+if [[ "${luks}" == 1 ]]; then
+    options="discard"
+    [[ "${tpm2}" == 1 ]] && options="tpm2-device=auto,discard"
+    for entry in "${entry_dir}"/*.conf; do
+        [[ -f "${entry}" ]] || continue
+        sed -i "/^options /{/rd.luks.uuid=${luks_uuid}/!s/\$/ rd.luks.uuid=${luks_uuid} rd.luks.options=${luks_uuid}=${options}/}" "${entry}"
+        log "boot entry ${entry##*/}: $(sed -n 's/^options //p' "${entry}")"
+    done
+    for d in "${deployments[@]}"; do
+        printf 'luks-%s UUID=%s none %s\n' "${luks_uuid}" "${luks_uuid}" "${options}" >"$d/etc/crypttab"
+    done
+fi
 
 btrfs filesystem resize max "${work}/mnt/root" >/dev/null
 log "root filesystem grown: $(df -h --output=size "${work}/mnt/root" | tail -1 | tr -d ' ')"
@@ -243,7 +255,7 @@ sync
 umount -R "${work}/mnt/efi"
 [[ -n "${boot}" ]] && umount -R "${work}/mnt/boot"
 umount -R "${work}/mnt/root"
-cryptsetup close "${mapper}"
+[[ "${luks}" == 0 ]] || cryptsetup close "${mapper}"
 
 if [[ -n "${loader}" && -d /sys/firmware/efi/efivars ]]; then
     efibootmgr --create --disk "${target}" --part "$(lsblk -rno PARTN "${esp}")" --label Utah \

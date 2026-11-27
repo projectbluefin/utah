@@ -24,12 +24,14 @@ def page(heading, *buttons):
 
 
 def disk_page(target_status=raw.DISK_EMPTY_TEXT):
-    """gnome-setup's disk list: the blank target and the live medium, each a
-    row whose title and subtitle labels sit below it."""
+    """gnome-setup's disk list: the 'Encrypt Disk' switch (on, its default)
+    above the blank target and the live medium, each a row whose title and
+    subtitle labels sit below it."""
     def row(path, title, subtitle):
         return [dict(node(title, "table row"), path=path),
                 dict(node(title), path=path + ".0"), dict(node(subtitle), path=path + ".1")]
-    return ([node("Select a Disk")]
+    return ([node("Select a Disk"),
+             node(raw.ENCRYPT_SWITCH, "switch", ["showing", "sensitive", "checked"])]
             + row("1.0", "Unknown Disk 51.5\u00a0GB", target_status)
             + row("1.1", "Unknown Disk 9.7\u00a0GB", raw.DISK_DATA_TEXT))
 
@@ -47,6 +49,8 @@ class SetupPages(unittest.TestCase):
     def harness(self, snapshots):
         h = object.__new__(raw.Harness)
         h.tpm = True
+        h.encrypt = True
+        h.results = Mock(encryption={"encrypted": True, "tpm2": True, "unlocks": {}})
         h.recovery_key = None
         h.timings = {}
         h.snapshot = Mock(side_effect=snapshots)
@@ -64,25 +68,25 @@ class SetupPages(unittest.TestCase):
             h.drive_setup(None)
 
     def recovery(self):
-        return [node("Back Up Recovery Key"), node(KEY),
-                node("Show QR Code for Recovery Key", "button")]
+        return [node("Back Up Recovery Key"), node(KEY), node(raw.RECOVERY_QR, "image"),
+                node("I backed up my recovery key", "check box")]
 
     def test_empty_disk_route_completes(self):
         route = [page("Language", "English", "Next"),
                  page("Keyboard Layout", "Next"), page("Welcome", "Install Now"),
                  disk_page(), empty_disk_confirm(),
                  page("Installing"), self.recovery(),
-                 page("Scan to Back Up", "Done"),
-                 [node("Back Up Recovery Key"), node(KEY),
+                 [node("Back Up Recovery Key"), node(KEY), node(raw.RECOVERY_QR, "image"),
                   node("I backed up my recovery key", "check box")],
-                 [node("Back Up Recovery Key"), node(KEY), node("Done", "button")],
+                 [node("Back Up Recovery Key"), node(KEY), node(raw.RECOVERY_QR, "image"),
+                  node("Done", "button")],
                  page("Installation Complete")]
         h = self.harness(route)
         self.run_loop(h)
         self.assertEqual(h.recovery_key, KEY)
         names = [c.args[3] for c in h.atspi.call_args_list]
         self.assertIn("Install", names)
-        self.assertEqual(names.count("Done"), 2)
+        self.assertEqual(names.count("Done"), 1)
         self.assertEqual(h.click_node.call_args_list[-1].args[1]["path"], "1.0")
         labels = [c.args[0] for c in h.shot.call_args_list]
         self.assertIn("setup-confirm", labels)
@@ -107,7 +111,12 @@ class SetupPages(unittest.TestCase):
         self.assertIs(raw.classify_setup_page([
             node("Installation Failed", states=[]), node("Back Up Recovery Key"), node(KEY)]), raw.Page.RECOVERY_KEY)
         self.assertIs(raw.classify_setup_page(page("Something new")), raw.Page.UNKNOWN)
-        self.assertIs(raw.classify_setup_page(page("Scan to Back Up Back Up Recovery Key")), raw.Page.QR)
+
+    def test_recovery_key_without_its_qr_code_on_the_page_fails(self):
+        h = self.harness([[node("Back Up Recovery Key"), node(KEY),
+                           node("Show QR Code for Recovery Key", "button")]])
+        with self.assertRaisesRegex(raw.Fail, "shows no 'Recovery Key QR Code'"):
+            self.run_loop(h)
 
     def test_confirm_without_selecting_the_target_is_refused(self):
         h = self.harness([empty_disk_confirm()])
@@ -117,8 +126,8 @@ class SetupPages(unittest.TestCase):
 
     def test_skipped_pages_and_transient_unknown_are_allowed(self):
         h = self.harness([page("Drawing..."), self.recovery(),
-                          page("Scan to Back Up", "Done"),
-                          [node("Back Up Recovery Key"), node(KEY), node("Done", "button")],
+                          [node("Back Up Recovery Key"), node(KEY), node(raw.RECOVERY_QR, "image"),
+                           node("Done", "button")],
                           page("Installation Complete")])
         self.run_loop(h)
 

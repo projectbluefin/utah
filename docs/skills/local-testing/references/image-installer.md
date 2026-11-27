@@ -45,9 +45,9 @@ The live entry carries `utah.live.installer=gnome-setup` (set by
 | Piece | File |
 |---|---|
 | Varlink sockets on the standard paths, live + gnome-setup only; sysinstall with the kernel and boot loader steps off (the copied ESP carries shim and GRUB) | `src/usr/lib/systemd/system/utah-{sysinstall,cryptenroll}.socket`, `@.service` |
-| repart.d written at boot: every medium partition but BIOS boot by PARTUUID with `CopyBlocks=`, root into LUKS2 (`key-file+tpm2`, `TPM2PCRs=7` with a TPM 2.0, else `key-file`); gnome-setup's definitions dir links to it | `src/usr/libexec/utah-live-definitions` |
-| The post-copy fixups, started by gnome-setup after sysinstall (`[page:installer] post-install-unit=`) and before its recovery key page wipes the empty passphrase | `src/usr/libexec/utah-sysinstall-post`, `utah-sysinstall-post@.service` |
-| Pages (language, keyboard, try-or-install, disk, disk passphrase without a TPM, recovery key, done), live user's polkit grants | `src/usr/share/utah/gnome-setup/pages.conf`, `src/usr/share/polkit-1/rules.d/50-utah-live-gnome-setup.rules` |
+| repart.d written at boot: every medium partition but BIOS boot by PARTUUID with `CopyBlocks=`, root into LUKS2 (`key-file+tpm2`, `TPM2PCRs=7` with a TPM 2.0, else `key-file`); gnome-setup's definitions dir links to it. `repart-unencrypted.d` next to it: the same partitions, the root without `Encrypt=`/`TPM2PCRs=` | `src/usr/libexec/utah-live-definitions` |
+| The post-copy fixups, started by gnome-setup after sysinstall (`[page:installer] post-install-unit=`) and before its recovery key page wipes the empty passphrase. A plain btrfs root (no `crypto_LUKS` partition) gets the same fixups minus the LUKS unlock, crypttab and `rd.luks.*` kargs | `src/usr/libexec/utah-sysinstall-post`, `utah-sysinstall-post@.service` |
+| Pages (language, keyboard, try-or-install, disk with the "Encrypt Disk" switch, disk passphrase without a TPM, recovery key, done), the unencrypted definitions (`[page:installer] unencrypted-definitions=`), live user's polkit grants | `src/usr/share/utah/gnome-setup/pages.conf`, `src/usr/share/polkit-1/rules.d/50-utah-live-gnome-setup.rules` |
 
 The recorded encryption policy and the limits of the merged CI evidence
 are in [ADR-0001's TPM2 update](../../../adr/0001-image-based-installer.md#update-tpm2-enrollment-and-recovery-key-1405).
@@ -56,8 +56,14 @@ upstream-signing requirement and retest recovery after firmware policy
 changes. Recovery-page screenshots contain a working disk key; keep them
 confined to disposable test installs, never real user disks.
 
-Keys on the installed root: with a TPM 2.0, the TPM (PCR 7) plus the
-recovery key. Without one, gnome-setup's disk passphrase page (shown only
+Encryption is the default: the disk page's "Encrypt Disk" switch
+(`Adw.SwitchRow`, accessible name `Encrypt Disk`, role switch) is on unless
+the user turns it off, and gnome-setup shows it only because `pages.conf`
+sets `unencrypted-definitions`. Off, gnome-setup runs sysinstall with
+`/run/utah-live/repart-unencrypted.d`, skips the disk passphrase and recovery
+key pages and enrolls nothing; the confirmation says whether the disk will
+be encrypted. Keys on an encrypted root: with a TPM 2.0, the TPM (PCR 7) plus
+the recovery key. Without one, gnome-setup's disk passphrase page (shown only
 then) enrolls the passphrase the user picks, and the recovery key is a second
 slot; the recovery key is never the only boot key.
 
@@ -72,6 +78,20 @@ boot and the rollback boot with the passphrase and the bootc switch boot with
 the recovery key. Scheduled and PR CI runs always enable TPM; the TPM-less
 path requires a manual workflow dispatch with `tpm: false` or a local run
 without `--tpm`. Do not cite a default CI pass as TPM-less coverage.
+
+`--encryption off` (workflow input `encryption`, default `on`) checks the
+switch is on by default, toggles it off through AT-SPI before it selects the
+target row (selecting the row opens the confirmation), and fails on a disk
+passphrase or recovery key page or on a confirmation that says the disk will
+be encrypted. The live target must hold a plain btrfs root and no
+`crypto_LUKS` (`evidence/target-filesystems.txt`); every installed boot must
+come up with no prompt, its root on no dm-crypt device, no `/etc/crypttab`
+entry and no `rd.luks.*` karg (`plain_root_problems`,
+`evidence/plain-root-*.txt`, screenshots `12-first-boot-no-prompt`,
+`14-first-boot-plain-root`). Pull requests and the nightly run add this as a
+second matrix leg for the main flavor (`e2e (<image>, unencrypted)`, raw
+medium only, artifact `image-installer-<image>-unencrypted`); the
+Post-Testing gate (`workflow_call`) runs only the encrypted leg.
 
 The GUI harness waits up to 300 seconds for any recognized setup page before
 sending Esc (the live session must not start in the overview:
@@ -96,8 +116,9 @@ pressed. Emptiness comes from the `partitionCount` systemd-sysinstall forwards o
 libblkid finds a whole-disk signature); gnome-setup calls a fitting disk empty
 only when it is 0. Its old test, `currentSizeBytes == 0`, never held:
 systemd-repart reports the whole device there, so every disk read as data.
-Recovery keys come from the key-shaped label; the QR dialog takes precedence
-over its parent page. Each distinct page gets one screenshot in the manifest.
+Recovery keys come from the key-shaped label; the page must also show its QR
+code (`Recovery Key QR Code`, a picture under the key: behind the old icon-only
+button nobody found it). Each distinct page gets one screenshot in the manifest.
 Run `python3 -m unittest discover -s tests -p 'test_setup_pages.py'` for
 host-only route replays; these do not replace a VM run.
 Unknown pages time out after 60 seconds, interactive pages after 120 seconds,

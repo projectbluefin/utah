@@ -3,13 +3,16 @@
 Split from the former single tests/test_image_installer.py; see docs/adr/0001 and iso/raw/.
 """
 
+import configparser
 import importlib.util
+import json
 import subprocess
 import sys
 import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import yaml
 
@@ -333,6 +336,194 @@ class LiveSessionDiagnosticsTests(unittest.TestCase):
         source = (RAW / "raw_e2e.py").read_text()
         self.assertIn("lambda: self.live_session_diagnose(runner, label)", source)
         self.assertIn("stall=self.live_session_stall", source)
+
+
+class OptionalEncryptionTests(unittest.TestCase):
+    """gnome-setup's "Encrypt Disk" switch: encrypted by default, the user may turn it off."""
+
+    workflow = yaml.safe_load(WORKFLOW.read_text())
+    definitions = RAW / "src/usr/libexec/utah-live-definitions"
+    post = RAW / "src/usr/libexec/utah-sysinstall-post"
+    bios = "21686148-6449-6e6f-744e-656564454649"
+    table = {"partitiontable": {"sectorsize": 512, "partitions": [
+        {"node": "/dev/vda1", "type": "21686148-6449-6E6F-744E-656564454649",
+         "uuid": "0A0A0A0A-0000-4000-8000-000000000001", "size": 2048, "name": "BIOS-BOOT"},
+        {"node": "/dev/vda2", "type": "C12A7328-F81F-11D2-BA4B-00A0C93EC93B",
+         "uuid": "0A0A0A0A-0000-4000-8000-000000000002", "size": 1024000, "name": "EFI-SYSTEM"},
+        {"node": "/dev/vda3", "type": "0FC63DAF-8483-4772-8E79-3D69D8477DE4",
+         "uuid": "0A0A0A0A-0000-4000-8000-000000000003", "size": 2048000, "name": "boot"},
+        {"node": "/dev/vda4", "type": "4F68BCE3-E8CD-4DB1-96E7-FBCAF984B709",
+         "uuid": "0A0A0A0A-0000-4000-8000-000000000004", "size": 9000000, "name": "root"},
+    ]}}
+
+    def generate(self, tpm2):
+        """Run utah-live-definitions' generator over a medium's sfdisk table."""
+        text = self.definitions.read_text()
+        script = text[text.index("<<'PY'\n") + len("<<'PY'\n"):text.index("\nPY\n")]
+        with tempfile.TemporaryDirectory() as d:
+            out, plain = Path(d) / "repart.d", Path(d) / "repart-unencrypted.d"
+            out.mkdir()
+            plain.mkdir()
+            subprocess.run([sys.executable, "-", str(out), "/dev/vda4", "1" if tpm2 else "0", self.bios,
+                            json.dumps(self.table), str(plain)], input=script, text=True, check=True)
+            return ({f.name: f.read_text() for f in sorted(out.iterdir())},
+                    {f.name: f.read_text() for f in sorted(plain.iterdir())})
+
+    def test_both_definition_sets_copy_the_same_partitions_only_one_encrypts_the_root(self):
+        for tpm2, encrypt in ((True, ["Encrypt=key-file+tpm2", "TPM2PCRs=7"]), (False, ["Encrypt=key-file"])):
+            with self.subTest(tpm2=tpm2):
+                encrypted, plain = self.generate(tpm2)
+                self.assertEqual(sorted(encrypted), ["02-copy.conf", "03-copy.conf", "04-copy.conf"])
+                self.assertEqual(sorted(plain), sorted(encrypted))
+                for name in ("02-copy.conf", "03-copy.conf"):
+                    self.assertEqual(plain[name], encrypted[name])
+                root = encrypted["04-copy.conf"].splitlines()
+                self.assertEqual(root[-len(encrypt):], encrypt)
+                self.assertEqual(plain["04-copy.conf"].splitlines(), root[:-len(encrypt)])
+                self.assertIn("CopyBlocks=/dev/disk/by-partuuid/0a0a0a0a-0000-4000-8000-000000000004",
+                              plain["04-copy.conf"])
+                for text in plain.values():
+                    self.assertNotIn("Encrypt=", text)
+                    self.assertNotIn("TPM2PCRs=", text)
+
+    def test_gnome_setup_is_pointed_at_the_unencrypted_definitions(self):
+        pages = configparser.ConfigParser(interpolation=None)
+        pages.read_string((RAW / "src/usr/share/utah/gnome-setup/pages.conf").read_text())
+        path = pages["page:installer"]["unencrypted-definitions"]
+        self.assertEqual(path, "/run/utah-live/repart-unencrypted.d")
+        self.assertEqual(path, raw_e2e.PLAIN_DEFINITIONS)
+        self.assertIn(f"out_plain={path}\n", self.definitions.read_text())
+        steps = pages["modes"]["live-initial-setup"].split(";")
+        self.assertLess(steps.index("installer"), steps.index("disk-passphrase"))
+
+    def test_post_install_takes_a_plain_btrfs_root_and_leaves_luks_settings_to_luks(self):
+        lines = self.post.read_text().splitlines()
+        self.assertIn('    elif [[ "${fstype}" == crypto_LUKS ]]; then root_part="${part}" luks=1', lines)
+        self.assertIn('    elif [[ "${fstype}" == btrfs ]]; then root_part="${part}"', lines)
+        self.assertIn('    root_dev="${root_part}"', lines)
+        guarded = set()
+        for start, line in enumerate(lines):
+            if line == 'if [[ "${luks}" == 1 ]]; then':
+                end = next(i for i in range(start, len(lines)) if lines[i] in ("fi", "else"))
+                guarded.update(range(start, end))
+        for needle in ("cryptsetup luksUUID", "crypt_activate_by_passphrase(", 'root_dev="/dev/mapper/',
+                       "rd.luks.uuid=${luks_uuid}", '>"$d/etc/crypttab"'):
+            with self.subTest(needle=needle):
+                at = [i for i, line in enumerate(lines) if needle in line]
+                self.assertTrue(at)
+                self.assertTrue(all(i in guarded for i in at), f"{needle!r} runs for a plain root too")
+        self.assertIn('[[ "${luks}" == 0 ]] || cryptsetup close "${mapper}"', lines)
+
+    def test_the_harness_takes_the_encryption_mode(self):
+        base = ["--raw", "m.raw", "--work", "w", "--candidate", "r@sha256:0", "--ssh-key", "k"]
+        self.assertEqual(raw_e2e.arg_parser().parse_args(base).encryption, "on")
+        self.assertEqual(raw_e2e.arg_parser().parse_args(base + ["--encryption", "off"]).encryption, "off")
+        with mock.patch("sys.stderr"), self.assertRaises(SystemExit):
+            raw_e2e.arg_parser().parse_args(base + ["--encryption", "maybe"])
+
+    def test_unencrypted_boots_expect_no_prompt_at_all(self):
+        phases = ("first boot", "after bootc switch", "after bootc rollback")
+        plain = raw_e2e.unlock_plan(False, tpm=True)
+        self.assertEqual([plain[p][0] for p in phases], ["none"] * 3)
+        self.assertEqual([raw_e2e.unlock_plan(True, tpm=True)[p][0] for p in phases], ["tpm", "recovery", "tpm"])
+        self.assertEqual([raw_e2e.unlock_plan(True, tpm=False)[p][0] for p in phases], ["pin", "recovery", "pin"])
+        self.assertEqual(raw_e2e.unlock_plan(True, tpm=False)["first boot"][1], "12-first-boot-luks-prompt")
+        self.assertEqual(len({label for _, label in plain.values()}), 3)
+
+    def test_a_plain_root_has_no_dm_crypt_crypttab_or_luks_karg(self):
+        clean = raw_e2e.parse_facts("root_source=/dev/vda4\nroot_types=part disk \ncrypttab=\nluks_kargs=\n")
+        self.assertEqual(raw_e2e.plain_root_problems(clean), [])
+        for facts, problem in (
+            ({**clean, "root_source": "/dev/mapper/luks-1", "root_types": "crypt part disk"}, "dm-crypt"),
+            ({**clean, "crypttab": "luks-1 UUID=1 none discard;"}, "/etc/crypttab"),
+            ({**clean, "luks_kargs": "rd.luks.uuid=1"}, "rd.luks.uuid=1"),
+            ({**clean, "root_types": ""}, "no block device"),
+        ):
+            with self.subTest(problem=problem):
+                problems = raw_e2e.plain_root_problems(facts)
+                self.assertEqual(len(problems), 1)
+                self.assertIn(problem, problems[0])
+        self.assertIn("lsblk -nso TYPE", raw_e2e.PLAIN_ROOT_FACTS)
+
+    @staticmethod
+    def switch_nodes(checked, role="switch"):
+        states = ["sensitive", "showing"] + (["checked"] if checked else [])
+        return [{"path": "0.1", "role": "label", "name": "Encrypt Disk", "text": "Encrypt Disk",
+                 "ext": [0, 0, 10, 10], "states": ["sensitive", "showing"]},
+                {"path": "0.0", "role": role, "name": "Encrypt Disk", "text": "",
+                 "ext": [0, 0, 100, 40], "states": states}]
+
+    def test_the_switch_is_found_by_role_not_by_its_title_label(self):
+        for role in raw_e2e.SWITCH_ROLES:
+            with self.subTest(role=role):
+                self.assertEqual(raw_e2e.encrypt_switch(self.switch_nodes(True, role))["path"], "0.0")
+        self.assertIsNone(raw_e2e.encrypt_switch(self.switch_nodes(True)[:1]))
+        self.assertTrue(raw_e2e.switch_is(True)(self.switch_nodes(True)))
+        self.assertFalse(raw_e2e.switch_is(False)(self.switch_nodes(True)))
+        self.assertTrue(raw_e2e.switch_is(False)(self.switch_nodes(False)))
+
+    @staticmethod
+    def harness(encrypt):
+        harness = object.__new__(raw_e2e.Harness)
+        harness.encrypt = encrypt
+        harness.results = raw_e2e.Results("gui")
+        harness.press = mock.Mock()
+        harness.shot = mock.Mock()
+        return harness
+
+    def test_the_switch_is_on_by_default_and_turned_off_only_when_asked(self):
+        on = self.harness(True)
+        self.assertTrue(on.choose_encryption(None, self.switch_nodes(True), 0))
+        on.press.assert_not_called()
+        self.assertEqual(on.results.encryption["switch_default"], "on")
+        off = self.harness(False)
+        self.assertFalse(off.choose_encryption(None, self.switch_nodes(True), 0))
+        args, kwargs = off.press.call_args
+        self.assertEqual(args[1:3], (raw_e2e.GS_APP, "Encrypt Disk"))
+        self.assertEqual(kwargs["role"], "switch")
+        self.assertTrue(off.choose_encryption(None, self.switch_nodes(False), 5))
+        self.assertEqual(off.press.call_count, 1)
+        with self.assertRaises(raw_e2e.Fail):
+            self.harness(True).choose_encryption(None, self.switch_nodes(False), 0)
+
+    def test_a_disk_page_without_the_switch_fails_after_a_grace(self):
+        harness = self.harness(True)
+        self.assertFalse(harness.choose_encryption(None, [], 5))
+        with self.assertRaises(raw_e2e.Fail):
+            harness.choose_encryption(None, [], 30)
+
+    def test_the_confirmation_must_not_contradict_the_switch(self):
+        def says(text):
+            return raw_e2e.confirm_says([{"name": "", "text": text}])
+        self.assertEqual(says("Erase all data? The disk will not be encrypted."), "unencrypted")
+        self.assertEqual(says("The disk will be encrypted, and you will need to save a recovery key."), "encrypted")
+        self.assertIsNone(says("Begin Installation?"))
+        # Neither sentence may make the confirmation read as another page.
+        for text in (raw_e2e.CONFIRM_ENCRYPTED_TEXT, raw_e2e.CONFIRM_PLAIN_TEXT):
+            nodes = [{"path": "0", "role": "label", "name": "Begin Installation?", "text": "",
+                      "states": ["showing"]},
+                     {"path": "1", "role": "label", "name": text, "text": "", "states": ["showing"]}]
+            self.assertIs(raw_e2e.classify_setup_page(nodes), raw_e2e.Page.CONFIRM)
+
+    def test_ci_runs_an_unencrypted_leg_for_the_main_flavor_on_prs_and_nightly(self):
+        on = self.workflow[True]
+        dispatch = on["workflow_dispatch"]["inputs"]["encryption"]
+        self.assertEqual((dispatch["type"], dispatch["options"], dispatch["default"]), ("choice", ["on", "off"], "on"))
+        self.assertEqual(on["workflow_call"]["inputs"]["encryption"]["default"], "on")
+        resolve = self.workflow["jobs"]["resolve"]["steps"][-1]
+        self.assertEqual(resolve["env"]["ENCRYPTION"], "${{ inputs.encryption || 'on' }}")
+        self.assertIn('( "$EVENT" == pull_request || "$EVENT" == schedule )', resolve["run"])
+        self.assertIn('[[ "$iso" == true && "$ENCRYPTION" == on', resolve["run"])
+        self.assertIn('.encryption = "off" | .iso = false', resolve["run"])
+        e2e = self.workflow["jobs"]["e2e"]
+        self.assertEqual(e2e["env"]["ENCRYPTION"], "${{ matrix.encryption }}")
+        self.assertIn("unencrypted", e2e["name"])
+        runs = [s["run"] for s in e2e["steps"] if "python3 iso/raw/raw_e2e.py" in s.get("run", "")]
+        self.assertEqual(len(runs), 3)
+        for run in runs:
+            self.assertIn('--encryption "$ENCRYPTION"', run)
+        upload = next(s for s in e2e["steps"] if "upload-artifact" in s.get("uses", ""))
+        self.assertIn("-unencrypted", upload["with"]["name"])
 
 
 if __name__ == "__main__":
