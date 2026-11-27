@@ -34,6 +34,14 @@ rm -rf "${blur_dir}/build"
 mv /usr/share/gnome-shell/extensions/tmp/caffeine/caffeine@patapon.info /usr/share/gnome-shell/extensions/caffeine@patapon.info
 
 # Dash to Dock
+# patches/dash-to-dock (shared byte-for-byte with Dakota): GNOME Shell imports
+# every enabled extension before it enables any, so the dock can come up after
+# startup-complete; disable-overview-on-startup then never applied and the
+# session started in the Activities overview. git apply runs from / (no
+# repository) and fails the build when a submodule bump no longer takes a patch.
+for patch in /tmp/utah-patches/dash-to-dock/*.patch; do
+    (cd / && git apply -p1 --directory=usr/share/gnome-shell/extensions/dash-to-dock@micxgx.gmail.com "${patch}")
+done
 make -C /usr/share/gnome-shell/extensions/dash-to-dock@micxgx.gmail.com
 
 # Gradia Capture
