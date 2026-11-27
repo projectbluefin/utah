@@ -63,9 +63,11 @@ SDBOOT_MENU_OCR = "Utah Live (try or install)\nReboot Into Firmware Interface\n\
 GRUB_MENU_OCR_RAW = ("GNU GRUB version 2.12\n\nUtah Live (try or install)\nUEFI Firmware Settings\n\n"
                      "Use the * and v keys to select which entry is highlighted.\n")
 LIVE_UNIT_OCR = "[  OK  ] Finished utah-live-root.service - Utah live: tmpfs overlay over the medium root.\n"
-CDROM_FACTS = {"loader": "systemd-boot 261.2-1.1.hum1", "loader_part_uuid": "80a68949-9ded-4b69-8867-c263b5e6e972",
+# What a CD-ROM boot of the hybrid ISO reported in a local VM: the loop device
+# attached in the initrd names its backing device relative to the initrd's /dev.
+CDROM_FACTS = {"loader": "systemd-boot 261.2-1.1.hum1", "loader_part_uuid": "82D819E3-81A7-4A05-A582-97E7ECCBE210",
                "root_part": "/dev/loop0p4", "root_disk": "/dev/loop0", "root_tran": "",
-               "loop_backing": "/dev/sr0", "loop_devices": "/dev/loop0:/dev/sr0"}
+               "loop_backing": "/sr0", "loop_devices": "/dev/loop1:/ostree/deploy/default/deploy/b5fb.0/.ostree.cfs /dev/loop0:/sr0"}
 USB_FACTS = {"loader": "systemd-boot 261.2-1.1.hum1", "loader_part_uuid": "80a68949-9ded-4b69-8867-c263b5e6e972",
              "root_part": "/dev/sda4", "root_disk": "/dev/sda", "root_tran": "usb",
              "loop_backing": "", "loop_devices": ""}
@@ -177,8 +179,8 @@ class HybridIsoTests(unittest.TestCase):
         self.assertEqual(raw_e2e.iso_boot_problems("usb", USB_FACTS), [])
         self.assertTrue(raw_e2e.iso_boot_problems("cdrom", USB_FACTS))
         self.assertTrue(raw_e2e.iso_boot_problems("usb", CDROM_FACTS))
-        twice = {**CDROM_FACTS, "loop_devices": "/dev/loop0:/dev/sr0 /dev/loop1:/dev/sr0"}
-        self.assertEqual(raw_e2e.iso_boot_problems("cdrom", twice), ["2 loop devices over the CD-ROM: /dev/loop0:/dev/sr0 /dev/loop1:/dev/sr0"])
+        twice = {**CDROM_FACTS, "loop_devices": "/dev/loop0:/sr0 /dev/loop1:/dev/sr0"}
+        self.assertEqual(raw_e2e.iso_boot_problems("cdrom", twice), ["2 loop devices over the CD-ROM: /dev/loop0:/sr0 /dev/loop1:/dev/sr0"])
         grub = {**USB_FACTS, "loader": "GRUB 2.12", "loader_part_uuid": ""}
         self.assertEqual(len(raw_e2e.iso_boot_problems("usb", grub)), 2)
         text = "loader=systemd-boot 261.2\nroot_disk=/dev/loop0\nloop_devices=/dev/loop0:/dev/sr0 \nNAME SIZE\n"

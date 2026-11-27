@@ -296,8 +296,9 @@ The E2E runs the hybrid ISO for the main flavor only (the resolve job's
 --boot-as cdrom` (AHCI `ide-cd`, `media=cdrom`) and `--boot-as usb`
 (`usb-storage` on the VM's xHCI), each a full install with its own work
 directory (`e2e-iso-cdrom/`, `e2e-iso-usb/`). Stage 1 presses `x` (no
-systemd-boot hotkey, names no entry) from power-on so systemd-boot's
-countdown stops, reads the menu back with tesseract (`sdboot_frame`: the live
+systemd-boot hotkey, names no entry) between screendumps: systemd-boot drops
+keys typed before its menu, but one typed while it shows stops the 5 s
+countdown. It reads the menu back with tesseract (`sdboot_frame`: the live
 title plus "Reboot Into Firmware Interface", GRUB's "UEFI Firmware Settings"
 or "GNU GRUB" fails) and keeps it as `00-systemd-boot-menu.png`
 (`evidence/sdboot-menu-ocr.txt`). The live system must report systemd-boot
@@ -498,3 +499,16 @@ systemd-boot shows "Utah Live (try or install)" for 5 seconds.
   boots through utah-sysinstall-post's efibootmgr entry, its removable path
   still reaches GRUB, and a later `bootupctl update` restores `fbx64.efi`
   there (Fedora's stock layout on an installed disk).
+- repart's El Torito primary descriptor declares a 21-block volume and its
+  boot entry a sector count of 0 ("to the end of the medium" per the UEFI
+  spec). OVMF boots it as a CD-ROM all the same (local TCG boot of a 9.5 GB
+  ISO). The ESP must start on a 2048-byte block: `build-hybrid-iso.sh` and
+  repart both refuse otherwise.
+- After a CD-ROM boot, `losetup` in the live system names the loop device's
+  backing device `/sr0`: it was attached in the initrd. `iso_boot_problems`
+  accepts any path ending in `srN`.
+- The host kernel decides whether `build-raw-image.sh` can build a composefs
+  medium: bootc mounts the erofs image from a file, which needs file-backed
+  erofs (Linux 6.12+). Ubuntu 24.04's 6.8 fails with "Block device required";
+  build with `UTAH_RAW_BACKEND=ostree` there. `build-hybrid-iso.sh` mounts
+  the composefs image through a loop device instead.

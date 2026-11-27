@@ -167,9 +167,10 @@ STAGES = ("live boot", "install", "first boot unlock", "initial setup",
 # The hybrid ISO (--iso, build-hybrid-iso.sh). systemd-boot's menu lists the
 # live entry (medium.LIVE_TITLE) and, with auto-firmware, "Reboot Into
 # Firmware Interface", where GRUB says "UEFI Firmware Settings". The harness
-# presses SDBOOT_HOLD_KEY from power-on until the menu is read: any key stops
-# systemd-boot's countdown, and this one is no hotkey there (boot.c) and
-# names no entry. Then Enter boots the default entry.
+# presses SDBOOT_HOLD_KEY between screendumps until the menu is read:
+# systemd-boot drops keys typed before its menu, but one typed while it shows
+# stops the 5 s countdown (loader.conf), and this one is no hotkey there
+# (boot.c) and names no entry. Then Enter boots the default entry.
 BOOT_AS = ("cdrom", "usb")
 SDBOOT_LIVE_TEXT = "utah live"
 SDBOOT_MENU_TEXT = "reboot into firmware"
@@ -502,13 +503,19 @@ def sdboot_frame(ocr):
 
 
 def parse_facts(text):
-    """key=value lines (ISO_BOOT_FACTS) into a dict."""
+    """key=value lines (ISO_BOOT_FACTS) into a dict; the first of a key wins,
+    so the diagnostics printed after the facts cannot shadow them."""
     facts = {}
     for line in (text or "").splitlines():
         key, sep, value = line.partition("=")
         if sep and key and " " not in key:
-            facts[key] = value.strip()
+            facts.setdefault(key, value.strip())
     return facts
+
+
+def optical(path):
+    """Whether a device path names an optical drive (sr0, /dev/sr0)."""
+    return re.fullmatch(r"(.*/)?sr[0-9]+", path or "") is not None
 
 
 def iso_boot_problems(boot_as, facts):
@@ -526,10 +533,12 @@ def iso_boot_problems(boot_as, facts):
         problems.append("systemd-boot exported no LoaderDevicePartUUID")
     disk = facts.get("root_disk", "")
     if boot_as == "cdrom":
-        if not disk.startswith("/dev/loop") or not facts.get("loop_backing", "").startswith("/dev/sr"):
+        # The loop device was attached in the initrd, so losetup reports its
+        # backing device relative to the initrd's /dev ("/sr0").
+        if not disk.startswith("/dev/loop") or not optical(facts.get("loop_backing", "")):
             problems.append(f"root is on {disk or 'no disk'} (backed by {facts.get('loop_backing') or 'nothing'}), "
                             "not on a loop device over the CD-ROM")
-        over_drive = [d for d in facts.get("loop_devices", "").split() if d.split(":", 1)[-1].startswith("/dev/sr")]
+        over_drive = [d for d in facts.get("loop_devices", "").split() if optical(d.split(":", 1)[-1])]
         if len(over_drive) > 1:
             problems.append(f"{len(over_drive)} loop devices over the CD-ROM: {' '.join(over_drive)}")
     elif boot_as == "usb":
@@ -1089,8 +1098,8 @@ class Harness:
     def shot_when_sdboot(self):
         """00-systemd-boot-menu: systemd-boot's menu on the hybrid ISO, read
         back by tesseract (sdboot_frame, evidence/sdboot-menu-ocr.txt).
-        SDBOOT_HOLD_KEY is pressed from power-on until the menu is read, which
-        stops its countdown; Enter then boots the default entry. GRUB's menu,
+        SDBOOT_HOLD_KEY is pressed between screendumps until the menu is read,
+        so the countdown stops; Enter then boots the default entry. GRUB's menu,
         or no menu within SDBOOT_WAIT, fails the stage."""
         proves = (f"Firmware -> El Torito/{self.args.boot_as} -> systemd-boot on the hybrid ISO's ESP; "
                   "'Utah Live' Type #1 entry listed")
