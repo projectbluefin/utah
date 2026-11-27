@@ -78,13 +78,26 @@ the installer window. Keep this startup budget separate from the page loop's
 shorter unknown-page timeout: an empty accessibility snapshot during slow
 application startup must not trigger clicks against fallback window offsets.
 
-`iso/raw/raw_e2e.py` classifies visible gnome-setup pages on each poll,
-accepting free-space and plain-confirmation routes. Destructive confirmation
-requires `/dev/vdb` exactly; free-space selection never falls back to erase.
+`iso/raw/raw_e2e.py` classifies visible gnome-setup pages on each poll. The
+target (`install.qcow2`, `/dev/vdb`) is created fresh and all-zero, so the one
+accepted route is the empty-disk one: the target's row (picked by its
+`51.5 GB` size) reads "This disk is fully empty" when AT-SPI exposes it, and
+selecting it opens the nondestructive "Begin Installation?" dialog, confirmed
+with "Install". That dialog names no disk, so the harness confirms it only
+after it selected the target row itself. "Existing Data Found", any "Erase and
+Install" confirmation (after "Use Entire Disk", or forced as "Insufficient
+Free Space" or "Disk is Full"), or a target row reading "This disk contains
+existing data" fails the run with "gnome-setup reported existing data on the
+blank target disk (empty-disk detection regressed)" before anything is
+pressed. Emptiness comes from the `partitionCount` systemd-sysinstall forwards on
+`ListCandidateDevices` (0 for a zeroed disk or an empty GPT; absent when
+libblkid finds a whole-disk signature); gnome-setup calls a fitting disk empty
+only when it is 0. Its old test, `currentSizeBytes == 0`, never held:
+systemd-repart reports the whole device there, so every disk read as data.
 Recovery keys come from the key-shaped label; the QR dialog takes precedence
 over its parent page. Each distinct page gets one screenshot in the manifest.
 Run `python3 -m unittest discover -s tests -p 'test_setup_pages.py'` for
-host-only route replays; these do not replace VM runs through both routes.
+host-only route replays; these do not replace a VM run.
 Unknown pages time out after 60 seconds, interactive pages after 120 seconds,
 and progress after an hour, within a 70-minute total budget. Missing controls
 save `atspi-gs-miss.json` and log button names and showing/sensitive states.

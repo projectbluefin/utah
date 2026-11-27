@@ -875,15 +875,62 @@ class GnomeSetupTests(unittest.TestCase):
         self.assertEqual(out["installer"], "gnome-setup")
         self.assertIn("encryption", out)
 
-    def test_wipe_or_free_takes_free_space_without_a_confirm_dialog(self):
-        # The empty target reads as DataDetected ('Existing Data Found'), so the
-        # harness takes 'Install to Free Space' and starts installation directly;
-        # full wipe would ask 'Erase and Install' instead (run 44968690146).
-        harness = (RAW / "raw_e2e.py").read_text()
-        self.assertIn('"Existing Data Found"', harness)
-        self.assertIn('"Install to Free Space"', harness)
-        self.assertIn('"Start Installation"', harness)
-        self.assertIn('"Install"', harness)
+    @staticmethod
+    def showing(*names, role="label"):
+        return [{"path": f"0.{i}", "role": role, "name": name, "text": "",
+                 "ext": [0, 0, 10, 10], "states": ["sensitive", "showing", "visible"]}
+                for i, name in enumerate(names)]
+
+    def test_installer_pages_classify_from_gnome_setup_text(self):
+        # Headings and response labels of gnome-setup 80825ae's dialogs
+        # (src/page/installer/disk/confirm.rs) and pages; the dialogs sit over
+        # the still-showing disk page.
+        disk = self.showing("Select a Disk", "Unknown Disk 51.5\u00a0GB", raw_e2e.DISK_EMPTY_TEXT)
+        page = raw_e2e.Page
+        for nodes, expected in (
+            (disk, page.DISK),
+            (disk + self.showing("Begin Installation?") + self.showing("Cancel", "Install", role="button"),
+             page.CONFIRM),
+            (self.showing("Existing Data Found", "Install to Free Space"), page.DATA_FOUND),
+            (disk + self.showing("Begin Installation?") + self.showing("Cancel", "Erase and Install", role="button"),
+             page.ERASE),
+            (disk + self.showing("Insufficient Free Space") + self.showing("Erase and Install (3)", role="button"),
+             page.ERASE),
+            (disk + self.showing("Disk is Full") + self.showing("Erase and Install", role="button"), page.ERASE),
+        ):
+            with self.subTest(expected=expected, last=nodes[-1]["name"]):
+                self.assertIs(raw_e2e.classify_setup_page(nodes), expected)
+
+    def test_existing_data_on_the_blank_target_is_a_failure(self):
+        # install.qcow2 is created fresh: the data page, any erase confirmation,
+        # or a target row saying it holds data means empty-disk detection broke.
+        page = raw_e2e.Page
+        for p in (page.DATA_FOUND, page.ERASE):
+            self.assertEqual(raw_e2e.blank_target_problem(p), raw_e2e.BLANK_TARGET_DATA)
+        self.assertIn("existing data on the blank target disk", raw_e2e.BLANK_TARGET_DATA)
+        data_row = self.showing("Unknown Disk 51.5\u00a0GB", raw_e2e.DISK_DATA_TEXT)
+        self.assertEqual(raw_e2e.blank_target_problem(page.DISK, data_row), raw_e2e.BLANK_TARGET_DATA)
+        for p in (page.DISK, page.CONFIRM, page.PROGRESS, page.UNKNOWN):
+            self.assertIsNone(raw_e2e.blank_target_problem(p))
+        empty_row = self.showing("Unknown Disk 51.5\u00a0GB", raw_e2e.DISK_EMPTY_TEXT)
+        self.assertIsNone(raw_e2e.blank_target_problem(page.DISK, empty_row))
+
+    def test_the_target_row_status_is_read_from_its_own_subtree(self):
+        # The live medium's row says it holds data; only the target's row counts.
+        nodes = [
+            {"path": "1.0", "role": "table row", "name": "Unknown Disk 51.5\u00a0GB", "text": "",
+             "ext": [0, 0, 100, 20], "states": ["showing"]},
+            {"path": "1.0.1", "role": "label", "name": raw_e2e.DISK_EMPTY_TEXT, "text": "",
+             "ext": [0, 0, 100, 20], "states": ["showing"]},
+            {"path": "1.1", "role": "table row", "name": "Unknown Disk 9.7\u00a0GB", "text": "",
+             "ext": [0, 30, 100, 20], "states": ["showing"]},
+            {"path": "1.1.1", "role": "label", "name": raw_e2e.DISK_DATA_TEXT, "text": "",
+             "ext": [0, 30, 100, 20], "states": ["showing"]},
+        ]
+        row = raw_e2e.row_containing(nodes, raw_e2e.TARGET_SIZE_TEXT)
+        shown = raw_e2e.subtree(nodes, row)
+        self.assertEqual([n["path"] for n in shown], ["1.0", "1.0.1"])
+        self.assertIsNone(raw_e2e.blank_target_problem(raw_e2e.Page.DISK, shown))
 
     def test_recovery_key_read_from_label_shaped_like_a_key(self):
         # Run 44972858422's atspi-timeout-recovery-key.json: the key label's
