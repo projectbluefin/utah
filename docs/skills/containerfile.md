@@ -1,7 +1,7 @@
 ---
 name: containerfile
 version: "1.0"
-last_updated: "2026-11-21"
+last_updated: "2026-11-27"
 id: containerfile
 one_line_purpose: Edit the Containerfile without regressing layer count or cache hits.
 entry_point: docs/skills/containerfile.md
@@ -324,6 +324,15 @@ partition to systemd, whose generator selects `/efi` when `/boot` is occupied.
 An immutable root cannot create that mountpoint on boot. The installed-system
 ISO test checks the directory and that `efi.automount` has not failed; a GRUB
 `bootc install to-disk` VM should also be checked when changing this behavior.
+
+## Flavor-only files
+
+`system_files/shared` reaches every flavor through the script-staging RUN.
+`system_files/nvidia` is staged in the same `inputs` stage but bind mounted
+only into the flavor step, which copies it in the NVIDIA arm right after
+`utah-install-nvidia`, so its drop-ins land beside the packages they adjust
+and never on `main` or `gaming`. Put a file there only when it is meaningless
+without the NVIDIA packages; `tests/test_boot_noise.py` pins the wiring.
 
 ## `just` override and the 1.56 floor
 
