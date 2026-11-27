@@ -8,7 +8,7 @@ GHCR ("fetching blob: received unexpected HTTP status: 500"), so the whole
 run was wasted. `rerun-e2e-infra-failures.yml` calls this on every failed
 first attempt and re-runs the failed jobs once, after a delay, only when
 every failed job is explained by a signature below. One unexplained failure
-of a gating job leaves the run red: a re-run must never paper over a product defect.
+leaves the run red: a re-run must never paper over a product defect.
 
 Each failed job is judged on its first failing step only -- the step that
 printed the first `##[error]` line -- so a transient error an earlier step
