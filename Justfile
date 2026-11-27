@@ -190,6 +190,7 @@ check-desktop-contract image_ref="localhost/utah:testing":
 check-repos:
     #!/usr/bin/env bash
     set -uo pipefail
+    python3 scripts/check-retag-names.py || exit "$?"
     gate() {
       for attempt in 1 2 3; do
         python3 scripts/check-repo-availability.py "$@"

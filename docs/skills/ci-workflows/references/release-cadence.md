@@ -53,6 +53,9 @@ The cadence is RFC'd in #336. What runs today:
   week old: a chain of scheduled releases settles on an eight-day rhythm.
   An unreadable registry or Actions API fails `check-trigger` rather than
   guessing. A run is serialized by the `utah-stable-release` concurrency group.
+  `just check-repos` fetches the reusable workflow at the caller's pinned
+  commit and checks the job and step names used to read release history.
+  A rename fails the contract; a fetch failure is reported separately.
   Every release, scheduled or not, then goes through the same two gates.
   First the `e2e-evidence` job runs `promotion-ratchet.py release-gate`: for
   each flavor it takes the digest `:testing` points at, recovers the commit it

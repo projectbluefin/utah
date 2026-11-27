@@ -30,7 +30,7 @@ week old and `:testing` has moved on (#336; see
 ```bash
 just check                            # full static validation (run before every commit)
 just baselines                        # re-measure Dakota vs Utah, rewrite baselines/GAP.md (podman, gh)
-just check-repos                      # contract packages resolvable in enabled repos (network)
+just check-repos                      # package resolution and pinned release-name check (network)
 just build-ghcr utah testing main     # local image build -> localhost/utah:testing
 just check-desktop-contract           # in-image verifiers against a built image
 just generate-bootable-image testing  # bootc install to-disk -> output/bootable.raw
