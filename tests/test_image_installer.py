@@ -690,7 +690,7 @@ class InstalledSystemCheckTests(unittest.TestCase):
             ppm.write_bytes(b"P6\n%d %d\n255\n" % (w, h) + top * 10)
             self.assertTrue(raw_e2e.drawn(ppm, below_top_bar=True))
 
-    def run_setup_state(self, failed_unit):
+    def run_setup_state(self, failed_unit, disabled="kanata.service"):
         """setup_state_script against e2e-services.sh, with systemctl, sudo and the contract parser stubbed."""
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
@@ -698,7 +698,8 @@ class InstalledSystemCheckTests(unittest.TestCase):
             (d / "bin").mkdir()
             shutil.copy(ROOT / "iso/scripts/e2e-services.sh", d / "e2e-services.sh")
             (d / "scripts/verify-desktop-contract.py").write_text(
-                'import sys\nprint({"enabled": "gdm.service", "user_enabled": "pipewire.socket"}[sys.argv[2]])\n')
+                'import sys\nprint({"enabled": "gdm.service", "user_enabled": "pipewire.socket", '
+                f'"disabled": {disabled!r}}}[sys.argv[2]])\n')
             (d / "bin/sudo").write_text('#!/bin/bash\nwhile [[ $1 == -* ]]; do [[ $1 == -p ]] && shift; shift; done\n'
                                         'cat >/dev/null\nexec "$@"\n')
             (d / "bin/systemctl").write_text(
@@ -728,6 +729,16 @@ class InstalledSystemCheckTests(unittest.TestCase):
         failed = self.run_setup_state("gdm.service")
         self.assertNotEqual(failed.returncode, 0)
         self.assertIn("FAIL: system unit gdm.service failed during repeat boot", failed.stderr)
+
+    def test_kanata_is_checked_only_when_the_installed_contract_lists_it(self):
+        # A :stable built before kanata (#1297) has no unit and no contract
+        # entry; the publish run of that image must not fail on it.
+        old = self.run_setup_state("none", disabled="")
+        self.assertEqual(old.returncode, 0, old.stderr)
+        self.assertNotIn("kanata.service", old.stdout)
+        broken = self.run_setup_state("kanata.service")
+        self.assertNotEqual(broken.returncode, 0)
+        self.assertIn("FAIL: system unit kanata.service failed during repeat boot", broken.stderr)
 
     def test_the_reused_fisherman_checks_exist_where_the_harness_reads_them(self):
         # raw_e2e.py runs these from iso/scripts/: removing the ISO path must keep them.

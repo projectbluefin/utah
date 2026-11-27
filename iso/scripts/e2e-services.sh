@@ -101,14 +101,17 @@ check_template_unit_state() {
 # rather than a list copied into this script. The parser is the repo's
 # verifier, copied over because /usr/local/libexec does not survive into a
 # bootc deployment.
+# An empty list fails unless the second argument is "optional": a list an
+# older image under test may not have yet.
 contract_units() {
-    local kind="$1" units
+    local kind="$1" optional="${2:-}" units
     scp_target "${ROOT}/scripts/verify-desktop-contract.py" \
         "${TEST_USER}@127.0.0.1:/tmp/utah-e2e-verify-desktop-contract.py" >/dev/null \
         || fail "could not copy the contract parser to the installed system"
     units="$(ssh_target "python3 /tmp/utah-e2e-verify-desktop-contract.py --services '${kind}' /usr/share/utah/bluefin-desktop.toml" 2>/dev/null)" \
         || fail "could not read [services].${kind} from the installed contract"
-    [[ -n "${units}" ]] || fail "the installed contract lists no [services].${kind} units"
+    [[ -n "${units}" || "${optional}" == optional ]] \
+        || fail "the installed contract lists no [services].${kind} units"
     printf '%s\n' "${units}"
 }
 
@@ -152,6 +155,13 @@ verify_setup_state() {
         esac
     done
     # kanata replaced input-remapper (#1222): installed and loaded, opt-in, so
-    # neither enablement nor a run is required.
-    check_system_unit_state kanata.service false false "${boot_pass}"
+    # neither enablement nor a run is required. Checked only when the
+    # installed contract lists it under [services].disabled, like the units
+    # above: a :stable built before kanata (#1297) has neither the unit nor the
+    # entry, and the hardcoded check failed its publish run (dakota-iso run
+    # 45923328467, "required system unit kanata.service is not-found").
+    listed="$(contract_units disabled optional)"
+    if grep -qx kanata.service <<< "${listed}"; then
+        check_system_unit_state kanata.service false false "${boot_pass}"
+    fi
 }

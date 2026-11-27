@@ -269,7 +269,7 @@ def main() -> int:
     modes.add_argument("--flatpaks", type=Path, metavar="BREWFILE", help="print declared Flatpak IDs")
     modes.add_argument(
         "--services",
-        choices=("enabled", "user_enabled"),
+        choices=("enabled", "user_enabled", "disabled"),
         help="print one [services] list of the contract, one unit per line",
     )
     parser.add_argument("contract", type=Path, nargs="?")
