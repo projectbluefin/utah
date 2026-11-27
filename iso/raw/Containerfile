@@ -16,7 +16,10 @@ ARG BUILDER_IMAGE=registry.fedoraproject.org/fedora:43@sha256:94622fc51eb4f9d524
 # LUKS2 needs systemd main (systemd#44337). So build those binaries and
 # systemd-repart from a pinned commit of hanthor/systemd: systemd main plus
 # --install-kernel=/--install-boot-loader= for sysinstall (proposed upstream),
-# because the copied ESP already carries shim and GRUB and Utah has no UKI.
+# because the copied ESP already carries shim and GRUB and Utah has no UKI, and
+# each candidate disk's partitionCount from repart's dry run (0 only for a
+# blank disk or an empty GPT, left out when libblkid finds any signature),
+# which gnome-setup needs to tell an empty disk from one holding data.
 # Everything but libc is dlopen()ed, so the result runs on Hummingbird. It
 # lives apart from the system's systemd: binaries in
 # /usr/libexec/utah-sysinstall, the shared library under a tag of its own in
@@ -24,7 +27,7 @@ ARG BUILDER_IMAGE=registry.fedoraproject.org/fedora:43@sha256:94622fc51eb4f9d524
 FROM ${BUILDER_IMAGE} AS sysinstall
 ARG SYSTEMD_REPO=https://github.com/hanthor/systemd.git
 # Full commit of hanthor/systemd (branch sysinstall-install-toggles).
-ARG SYSTEMD_REF=8998ad00ff2dee64115d74331d11a9bd8860c194
+ARG SYSTEMD_REF=04591afb2a1307586683591da8f9d87c315fea27
 RUN dnf -y install --setopt=install_weak_deps=False \
         git gcc meson ninja-build gperf diffutils patchelf pkgconf-pkg-config python3-jinja2 \
         libcap-devel libmount-devel libblkid-devel libfdisk-devel cryptsetup-devel \
@@ -51,7 +54,8 @@ RUN dnf -y install --setopt=install_weak_deps=False \
 # from a pinned commit of the hanthor/gnome-setup mirror's bluefin branch: the
 # upstream main plus small fixes proposed upstream (no forced demo mode,
 # install errors shown, a distro post-install unit, the recovery key enrolled
-# on the installed disk, a disk passphrase page without a TPM). Built on
+# on the installed disk, a disk passphrase page without a TPM, empty disks told
+# apart by their partition count). Built on
 # Fedora for the GTK -devel packages Hummingbird lacks; it runs against Utah's
 # GTK 4.24 and libadwaita 1.10 (it needs GTK 4.18 and libadwaita 1.5). Its
 # templates use translated strings in closures (blueprint-compiler 0.20+;
@@ -63,7 +67,7 @@ RUN dnf -y install --setopt=install_weak_deps=False \
 FROM ${BUILDER_IMAGE} AS gnome-setup
 ARG GS_REPO=https://github.com/hanthor/gnome-setup.git
 # Full commit of hanthor/gnome-setup (branch bluefin, shared with Dakota).
-ARG GS_REF=0be3dbbaae78049d384d94ed6418a7dcddb3be70
+ARG GS_REF=80825aedc1115e1e309f002d7e4fd2e7f4323a8a
 ARG BP_REPO=https://gitlab.gnome.org/GNOME/blueprint-compiler.git
 # blueprint-compiler v0.22.2.
 ARG BP_REF=ed35ac74de0c1bb1f5e852410b97edd1f08904c9
