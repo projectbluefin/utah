@@ -85,6 +85,26 @@ class GnomeExtensionPatchTests(unittest.TestCase):
             with self.subTest(path=path.name):
                 self.assertIsNone(removed.search(path.read_text(encoding="utf-8")))
 
+    def test_dash_to_dock_patches_apply_to_the_pinned_submodule(self):
+        # The build applies patches/dash-to-dock (shared with Dakota) with
+        # `git apply` from /; run that loop against a copy of the pin.
+        if not (DASH_TO_DOCK / "docking.js").is_file():
+            self.skipTest("dash-to-dock submodule not initialized")
+        script = (ROOT / "scripts/build-gnome-extensions.sh").read_text()
+        start = script.index("for patch in /tmp/utah-patches/dash-to-dock/")
+        loop = script[start:script.index("\ndone\n", start) + len("\ndone\n")]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dock = root / "usr/share/gnome-shell/extensions/dash-to-dock@micxgx.gmail.com"
+            shutil.copytree(DASH_TO_DOCK, dock, ignore=shutil.ignore_patterns(".git"))
+            loop = loop.replace("/tmp/utah-patches/dash-to-dock", str(ROOT / "patches/dash-to-dock"))
+            loop = loop.replace("cd /", f"cd {root}")
+            result = subprocess.run(["bash", "-euo", "pipefail", "-c", loop], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            docking = (dock / "docking.js").read_text(encoding="utf-8")
+        self.assertIn("let startupOverviewHandled = false;", docking)
+        self.assertIn("Main.overview.hide();\n        }\n        startupOverviewHandled = true;", docking)
+
 
 class ExtensionSchemaTests(unittest.TestCase):
     """The build installs every extension schema globally and the installed

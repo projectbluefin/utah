@@ -374,6 +374,7 @@ ARG UUPD_SHA256=d8d420a153de11589abad3292eef2131a75ac3487414065a2661a558ef0d027c
 # mac_admin probe from plain services (#1198; the .cil says why not allow), and
 # systemd_nsresourced_t's dac_read_search on its own domain (#1329).
 RUN --mount=type=bind,from=artwork,source=/out/branding,target=/tmp/utah-artwork-branding,ro \
+    --mount=type=bind,source=patches/dash-to-dock,target=/tmp/utah-patches/dash-to-dock,ro \
     --mount=type=bind,from=common,source=/system_files/bluefin/usr/share/plymouth,target=/tmp/utah-common-plymouth,ro \
     mkdir -p /tmp/uupd && \
     curl -fsSL "https://github.com/ublue-os/uupd/releases/download/${UUPD_VERSION}/uupd_Linux_x86_64.tar.gz" \

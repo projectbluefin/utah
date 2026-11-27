@@ -52,6 +52,28 @@ Tests: `GSettingsTests` in `tests/test_desktop_contract_verify.py` (fixtures in
 `tests/fixtures/gsettings/`) and `ExtensionSchemaTests` in
 `tests/test_gnome_extensions.py`.
 
+## The key alone does not keep the overview closed
+
+With the key `true`, the live session and installed logins still opened in the
+overview. GNOME Shell (`extensionSystem.js` `_enableAllExtensions`) imports
+every enabled extension before it enables any, while `layoutManager` runs the
+startup animation and checks `Main.sessionMode.hasOverview`. dash-to-dock blocks
+that only when it is enabled while `Main.layoutManager._startingUp`; enabled
+after `startup-complete` (more extensions, a slower machine or VM), it never
+closed the overview (micheleg/dash-to-dock#2582). Utah and Dakota load the
+same eleven default extensions, so both hit it.
+
+`patches/dash-to-dock/0001-close-startup-overview-when-enabled-late.patch`
+closes the overview the first time the dock is enabled in a Shell process when
+that happens after startup; a module-scope flag keeps a later enable (lock
+screen, Extensions app) from closing an overview the user opened. The same
+file is in projectbluefin/dakota `patches/dash-to-dock/`. The build applies it
+with `git apply` before `make`, so a submodule bump it no longer fits fails the
+build; `test_dash_to_dock_patches_apply_to_the_pinned_submodule` catches that
+first. The image-installer E2E reads `OverviewActive` at the live login and at
+each installed login (`check_no_startup_overview`, 20 s) and fails while it is
+`true`.
+
 ## Checking an image or a machine
 
 ```bash

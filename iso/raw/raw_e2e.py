@@ -133,6 +133,10 @@ REPO = HERE.parent.parent
 GUEST_SCRIPTS = "/var/tmp/utah-e2e"
 # GNOME extensions that must reach ACTIVE at first login (#969).
 EXTENSIONS = ("gsconnect@andyholmes.github.io",)
+# GNOME Shell's overview state on the session bus; format with ("Get", "") or
+# ("Set", " '<false>'").
+OVERVIEW_ACTIVE = ("gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell "
+                   "--method org.freedesktop.DBus.Properties.{} org.gnome.Shell OverviewActive{}")
 # GRUB's menu on the medium: its help text and the live entry
 # (medium.LIVE_TITLE), as tesseract reads them, so a kernel console line
 # naming a "Utah live" unit is no menu. shim's fallback (fbx64.efi) screen
@@ -1244,6 +1248,7 @@ class Harness:
         time.sleep(10)
         self.shot("01-live-session", f"{what[0].upper()}{what[1:]} booted as live media (utah.live, tmpfs overlay): GNOME session for the live user",
                   True, required=True, below_top_bar=True)
+        self.check_no_startup_overview("live", runner)
 
     def hold_key(self, key, stop):
         """Press key every quarter second over QMP (the HMP monitor stays free
@@ -1995,6 +2000,27 @@ class Harness:
         self.type(PASSWORD, enter=True)
         self.wait_user_shell()
 
+    def check_no_startup_overview(self, phase, runner):
+        """GNOME starts on the desktop, not in the Activities overview: common sets
+        dash-to-dock's disable-overview-on-startup and patches/dash-to-dock makes it hold
+        when the dock is enabled after startup. The dock may close the overview a few
+        seconds into the session, so poll for 20 s before failing."""
+        end = time.time() + 20
+        while True:
+            try:
+                active = "true" in runner(OVERVIEW_ACTIVE.format("Get", ""))
+            except Fail as e:
+                active = f"unreadable: {e}"
+            if active is False or time.time() >= end:
+                break
+            time.sleep(2)
+        problems = [] if active is False else [
+            "the session started in the Activities overview" if active is True else f"OverviewActive {active}"]
+        self.results.check(phase, "startup overview", problems)
+        log(f"  {phase}: startup overview: {'; '.join(problems) or 'ok'}")
+        if problems:
+            raise Fail(f"{phase}: {problems[0]} (dash-to-dock disable-overview-on-startup)")
+
     def close_overview(self):
         """Leave the overview GNOME Shell opens at login, checked through its D-Bus property.
 
@@ -2002,8 +2028,7 @@ class Harness:
         hand-off) left the overview up. Press Escape like a user until the Shell says
         it is closed; set the property only if keys never take."""
         r = self.user_runner(USER)
-        prop = ("gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell "
-                "--method org.freedesktop.DBus.Properties.{} org.gnome.Shell OverviewActive{}")
+        prop = OVERVIEW_ACTIVE
         for attempt in range(5):
             try:
                 active = "true" in r(prop.format("Get", ""))
@@ -2025,7 +2050,8 @@ class Harness:
             time.sleep(3)
 
     def desktop_and_status(self, phase, prefix):
-        # Close the overview (and Shell's first-login welcome dialog) over the desktop.
+        self.check_no_startup_overview(phase, self.user_runner(USER))
+        # Close Shell's first-login welcome dialog (and any overview) over the desktop.
         self.close_overview()
         self.shot(f"{prefix}-desktop", f"{phase}: GNOME desktop for {USER}", True, required=True)
         status = self.ssh("root", "bootc status", check=False)

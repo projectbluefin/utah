@@ -74,7 +74,8 @@ path requires a manual workflow dispatch with `tpm: false` or a local run
 without `--tpm`. Do not cite a default CI pass as TPM-less coverage.
 
 The GUI harness waits up to 300 seconds for any recognized setup page before
-sending Esc to dismiss the overview, settling for three seconds, and maximizing
+sending Esc (the live session must not start in the overview:
+`check_no_startup_overview`), settling for three seconds, and maximizing
 the installer window. Keep this startup budget separate from the page loop's
 shorter unknown-page timeout: an empty accessibility snapshot during slow
 application startup must not trigger clicks against fallback window offsets.
