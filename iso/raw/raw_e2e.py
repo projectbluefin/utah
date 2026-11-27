@@ -6,6 +6,8 @@
 Stages (every screenshot is listed in DIR/screenshots/manifest.json):
   1. Boot the raw disk image as live media (read-only virtio disk, GRUB's
      default "Utah Live" entry: ro utah.live, tmpfs overlay over the root).
+     GRUB's menu is held and read back by tesseract: shim's fallback screen
+     or no menu with the live entry fails the stage.
   2. Install with the real gnome-setup window driving systemd-sysinstall
      (--install gui): language, keyboard, try-or-install, disk, confirmation,
      progress, the recovery key with its QR code, done. --install script runs
@@ -66,6 +68,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from enum import Enum, auto
@@ -110,6 +113,18 @@ REPO = HERE.parent.parent
 GUEST_SCRIPTS = "/var/tmp/utah-e2e"
 # GNOME extensions that must reach ACTIVE at first login (#969).
 EXTENSIONS = ("gsconnect@andyholmes.github.io",)
+# GRUB's menu on the medium: its help text and the live entry
+# (medium.LIVE_TITLE), as tesseract reads them, so a kernel console line
+# naming a "Utah live" unit is no menu. shim's fallback (fbx64.efi) screen
+# instead restores a firmware boot entry and resets (build-raw-image.sh
+# removes fbx64.efi).
+GRUB_LIVE_TEXT = "utah live"
+GRUB_MENU_TEXT = ("boot the selected", "entry is highlighted")
+SHIM_FALLBACK_TEXT = ("boot option restoration", "stop system reset")
+# Held while waiting for GRUB's menu (1 s timeout on the medium): any key
+# stops the countdown, and GRUB's menu gives "x" no meaning (no hotkeys).
+GRUB_HOLD_KEY = "x"
+GRUB_WAIT = 180
 # fastfetch-ocr-match.sh needs fastfetch's body and this sentinel.
 FASTFETCH_CMD = "fastfetch && echo UTAH-E2E-FASTFETCH"
 # /efi exists and neither EFI mount unit failed (#1330).
@@ -314,6 +329,18 @@ def fastfetch_seen(transcript):
 def welcome_dialog_showing(ocr):
     """GNOME Shell's first-login "Welcome ... Skip / Take Tour" dialog is over the screenshot."""
     return "take tour" in ocr.lower()
+
+
+def boot_frame(ocr):
+    """What a tesseract transcript of an early boot frame shows: "fallback"
+    (shim's fbx64.efi restoring a firmware boot entry before a reset), "grub"
+    (GRUB's menu listing the live entry) or "other" (firmware logo, kernel)."""
+    text = " ".join(ocr.lower().split())
+    if any(s in text for s in SHIM_FALLBACK_TEXT):
+        return "fallback"
+    if GRUB_LIVE_TEXT in text and any(s in text for s in GRUB_MENU_TEXT):
+        return "grub"
+    return "other"
 
 
 def setup_state_script(boot_pass):
@@ -617,12 +644,15 @@ class Harness:
             self.key("shift")
             time.sleep(5)
         self.to_png(ppm, png)
-        self.manifest.append({"file": png.name, "stage": label, "proves": proves})
-        self.write_manifest()
-        log(f"  screenshot {png.name}: {proves}")
+        self.record_shot(png, label, proves)
         if required and not ok:
             raise Fail(f"screenshot {png.name} shows a blank or flat-colour frame rather than: {proves}")
         return png
+
+    def record_shot(self, png, label, proves):
+        self.manifest.append({"file": png.name, "stage": label, "proves": proves})
+        self.write_manifest()
+        log(f"  screenshot {png.name}: {proves}")
 
     def debug_shot(self, label):
         """Diagnostic frame outside the stage table (debug/)."""
@@ -863,20 +893,60 @@ class Harness:
         self.shot("01-live-session", "Raw disk image booted as live media (utah.live, tmpfs overlay): GNOME session for the live user",
                   True, required=True, below_top_bar=True)
 
+    def hold_key(self, key, stop):
+        """Press key every quarter second over QMP (the HMP monitor stays free
+        for screendumps) until stop is set."""
+        while not stop.is_set():
+            try:
+                self.qmp({"execute": "send-key", "arguments": {"keys": [{"type": "qcode", "data": key}]}})
+            except (Fail, OSError):
+                pass
+            stop.wait(0.25)
+
     def shot_when_grub(self):
-        # GRUB shows its menu briefly; catch it to show the live entry is the default.
-        end = time.time() + 60
+        """00-grub-menu: GRUB's menu on the medium, read back by tesseract
+        (boot_frame, evidence/grub-menu-ocr.txt). GRUB_HOLD_KEY is held from
+        power-on until the menu is read, which stops its 1 s countdown; Enter
+        then boots the default entry. shim's fallback screen, or no menu
+        within GRUB_WAIT, fails the stage."""
+        proves = "Firmware -> shim -> GRUB on the medium (no shim fallback); 'Utah Live' BLS entry listed"
         probe = self.debug / "grub-probe.png"
-        while time.time() < end:
-            time.sleep(2)
-            ppm = self.screendump(probe)
-            if drawn(ppm, min_colors=3):
-                ppm.unlink(missing_ok=True)
-                time.sleep(1)
-                self.shot("00-grub-menu", "Firmware -> shim -> GRUB on the medium; 'Utah Live' BLS entry is the default")
+        transcripts = []
+        stop = threading.Event()
+        holder = threading.Thread(target=self.hold_key, args=(GRUB_HOLD_KEY, stop), daemon=True)
+        holder.start()
+        try:
+            end = time.time() + GRUB_WAIT
+            while time.time() < end:
+                if self.vm.poll() is not None:
+                    raise Fail("live VM exited before GRUB's menu was drawn")
+                ppm = self.screendump(probe)
+                if not drawn(ppm, min_colors=3):
+                    time.sleep(0.5)
+                    continue
+                ocr = subprocess.run(["tesseract", str(ppm), "stdout"], capture_output=True, text=True).stdout
+                verdict = boot_frame(ocr)
+                transcripts.append(f"== {time.strftime('%H:%M:%S')} {verdict}\n{ocr}")
+                if verdict == "other":
+                    continue
+                stop.set()
+                holder.join()
+                png = self.shots / "00-grub-menu.png"
+                self.to_png(ppm, png)
+                self.record_shot(png, "00-grub-menu", proves)
+                if verdict == "fallback":
+                    raise Fail("shim's fallback (EFI/BOOT/fbx64.efi: 'Boot Option Restoration', a firmware boot entry "
+                               "and a reset) ran instead of GRUB: screenshots/00-grub-menu.png")
+                self.key("ret")
                 return
-        probe.with_suffix(".ppm").unlink(missing_ok=True)
-        log("  GRUB menu not captured (timeout hidden)")
+            if probe.with_suffix(".ppm").exists():
+                self.to_png(probe.with_suffix(".ppm"), probe)
+            raise Fail(f"no GRUB menu listing the live entry read back within {GRUB_WAIT}s "
+                       "(evidence/grub-menu-ocr.txt, debug/grub-probe.png)")
+        finally:
+            stop.set()
+            holder.join()
+            self.save("grub-menu-ocr.txt", "\n".join(transcripts))
 
     # ---- gnome-setup ----------------------------------------------------------
     def gnome_setup_install(self):

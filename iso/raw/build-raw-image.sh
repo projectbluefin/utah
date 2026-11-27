@@ -20,8 +20,9 @@
 #      utah.live` instead of `rw` (utah-live-root.service overlays the root),
 #      made the GRUB default through grubenv (medium.py). utah-sysinstall-post
 #      removes both from the installed copy.
-#   3. Install the removable-media EFI fallback (shim as BOOTX64.EFI) so the
-#      medium boots on firmware with no NVRAM entry for it.
+#   3. Make the removable-media path (shim as EFI/BOOT/BOOTX64.EFI) boot shim ->
+#      GRUB directly, without shim's fallback, so the medium boots on firmware
+#      with no NVRAM entry for it and writes none.
 #
 # Environment:
 #   UTAH_RAW_SIZE            sparse image size (default 24G)
@@ -144,13 +145,49 @@ grubenv="${bootdir}/grub2/grubenv"
 python3 "${HERE}/medium.py" grubenv "${grubenv}" "${LIVE_ENTRY}"
 grep -av '^#' "${grubenv}" | tee "${EVIDENCE}/grubenv.txt" || true
 
-# --- Removable-media fallback -------------------------------------------------
+# --- Removable-media path -----------------------------------------------------
+# Firmware with no NVRAM entry for the medium starts EFI/BOOT/BOOTX64.EFI
+# (shim). shim on that path starts fbx64.efi when it sits beside it, and the
+# fallback writes a firmware boot entry for every EFI/<vendor>/BOOTX64.CSV,
+# shows "Boot Option Restoration" and resets: booting the USB stick left a
+# stray NVRAM entry on the user's machine and an extra reset before GRUB (the
+# E2E's live serial log: Boot0002 "UEFI Misc Device", then the new Boot0004
+# "Fedora" \EFI\fedora\shimx64.efi). Without fbx64.efi shim starts the
+# grubx64.efi beside it, whose embedded prefix /EFI/<vendor> finds the vendor
+# grub.cfg. The installed disk is a block copy of this ESP: its firmware entry
+# is utah-sysinstall-post's efibootmgr one (EFI/<vendor>/shimx64.efi), and the
+# removable path there still boots shim -> GRUB, only without the automatic
+# NVRAM restore. fbx64.efi also leaves bootupd's record of the ESP
+# (bootupd-state.json), so `bootupctl validate` matches the disk; a later
+# `bootupctl update` adds it back with that payload (an addition), which on an
+# installed disk is Fedora's stock layout.
 vendor="$(find "${mnt}/efi/EFI" -mindepth 2 -maxdepth 2 -name shimx64.efi -printf '%h\n' | head -1)"
 [[ -n "${vendor}" ]] || { echo "no shimx64.efi on the ESP" >&2; exit 1; }
 install -d "${mnt}/efi/EFI/BOOT"
 [[ -f "${mnt}/efi/EFI/BOOT/BOOTX64.EFI" ]] || install -m 0644 "${vendor}/shimx64.efi" "${mnt}/efi/EFI/BOOT/BOOTX64.EFI"
 [[ -f "${mnt}/efi/EFI/BOOT/grubx64.efi" ]] || install -m 0644 "${vendor}/grubx64.efi" "${mnt}/efi/EFI/BOOT/grubx64.efi"
+find "${mnt}/efi/EFI/BOOT" -maxdepth 1 -iname fbx64.efi -print -delete
+bootupd_state="${bootdir}/bootupd-state.json"
+[[ -f "${bootupd_state}" ]] || { echo "no bootupd-state.json in /boot" >&2; exit 1; }
+python3 - "${bootupd_state}" <<'EOF'
+import json, sys
+path = sys.argv[1]
+with open(path) as f:
+    state = json.load(f)
+children = state["installed"]["EFI"]["filetree"]["children"]
+for key in [k for k in children if k.lower() == "boot/fbx64.efi"]:
+    del children[key]
+with open(path, "w") as f:
+    json.dump(state, f)
+EOF
+cp "${bootupd_state}" "${EVIDENCE}/bootupd-state.json"
 find "${mnt}/efi" -type f | sed "s|${mnt}/efi||" | sort | tee "${EVIDENCE}/esp-files.txt"
+if grep -qix '/EFI/BOOT/fbx64.efi' "${EVIDENCE}/esp-files.txt" || grep -qi fbx64 "${bootupd_state}"; then
+    echo "shim's fallback (EFI/BOOT/fbx64.efi) is still on the ESP or in bootupd-state.json" >&2
+    exit 1
+fi
+grep -qix '/EFI/BOOT/grubx64.efi' "${EVIDENCE}/esp-files.txt" \
+    || { echo "no EFI/BOOT/grubx64.efi: shim on the removable path has nothing to start" >&2; exit 1; }
 for f in "${mnt}"/efi/EFI/*/grub.cfg "${mnt}"/efi/EFI/*/bootuuid.cfg "${bootdir}"/grub2/*.cfg; do
     [[ -f "$f" ]] && { echo "== ${f#"${mnt}"/}"; cat "$f"; }
 done >"${EVIDENCE}/grub-configs.txt"

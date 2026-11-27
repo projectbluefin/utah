@@ -81,6 +81,65 @@ class GrubenvTests(unittest.TestCase):
         self.assertEqual(body, ["boot_success=1", "saved_entry=utah-live"])
 
 
+# tesseract's transcripts of an early boot frame: shim's fallback as Post-Testing
+# run 45918946265's 00-grub-menu.png showed it, and GRUB's menu on the medium.
+SHIM_FALLBACK_OCR = "Boot Option Restoration\n\nPress any key to stop system reset\n\nBooting in 2 seconds\n"
+GRUB_MENU_OCR = ("GNU GRUB version 2.12\n\nUtah Live (try or install)\nHummingbird 20252124 (ostree:0)\n"
+                 "UEFI Firmware Settings\n\nUse the * and v keys to select which entry is highlighted.\n"
+                 "Press enter to boot the selected OS, `e' to edit the commands before booting\n"
+                 "or `c' for a command-line.\n")
+
+
+class GrubMenuTests(unittest.TestCase):
+    """Stage 1 proves firmware -> shim -> GRUB on the medium, not shim's fallback."""
+
+    def test_grub_menu_frame_reads_as_grub(self):
+        self.assertEqual(raw_e2e.boot_frame(GRUB_MENU_OCR), "grub")
+        # tesseract may break the title across lines or change its case.
+        self.assertEqual(raw_e2e.boot_frame(GRUB_MENU_OCR.replace("Utah Live", "UTAH\nLIVE")), "grub")
+
+    def test_grub_shim_fallback_frame_reads_as_fallback(self):
+        self.assertEqual(raw_e2e.boot_frame(SHIM_FALLBACK_OCR), "fallback")
+        self.assertEqual(raw_e2e.boot_frame("Press any key to stop\nsystem reset\n"), "fallback")
+
+    def test_grub_absent_from_firmware_or_kernel_frames(self):
+        for ocr in ("", "TianoCore\n", GRUB_MENU_OCR.replace("Utah Live (try or install)\n", ""),
+                    "[  OK  ] Started utah-live-root.service - Utah live root overlay.\n"):
+            with self.subTest(ocr=ocr):
+                self.assertEqual(raw_e2e.boot_frame(ocr), "other")
+
+    def test_grub_live_text_is_the_live_entry_title(self):
+        self.assertTrue(medium.LIVE_TITLE.lower().startswith(raw_e2e.GRUB_LIVE_TEXT))
+
+    def test_grub_countdown_is_held_by_a_key_the_menu_ignores(self):
+        # GRUB's menu maps these keys to moves, edits or a boot (normal/menu.c).
+        self.assertNotIn(raw_e2e.GRUB_HOLD_KEY, ("ret", "esc", "e", "c", "v", "up", "down", "home", "end",
+                                                 "pgup", "pgdn", "right"))
+
+    def test_grub_build_drops_shim_fallback_from_the_medium_esp(self):
+        build = (RAW / "build-raw-image.sh").read_text()
+        delete = build.index("-iname fbx64.efi -print -delete")
+        listing = build.index('tee "${EVIDENCE}/esp-files.txt"')
+        self.assertLess(delete, listing)
+        self.assertIn("grep -qix '/EFI/BOOT/fbx64.efi' \"${EVIDENCE}/esp-files.txt\"", build)
+        self.assertIn('cp "${bootupd_state}" "${EVIDENCE}/bootupd-state.json"', build)
+
+    def test_grub_build_drops_shim_fallback_from_bootupd_state(self):
+        build = (RAW / "build-raw-image.sh").read_text()
+        script = build.split("<<'EOF'\n", 1)[1].split("\nEOF\n", 1)[0]
+        entry = {"size": 1, "sha512": "sha512:00"}
+        state = {"installed": {"EFI": {"meta": {"version": "grub2-efi-x64-1:2.12-66.fc44,shim-x64-16.1-7"},
+                                       "filetree": {"children": {"BOOT/BOOTX64.EFI": entry,
+                                                                 "BOOT/fbx64.efi": entry,
+                                                                 "fedora/shimx64.efi": entry}}}}}
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "bootupd-state.json"
+            path.write_text(json.dumps(state))
+            subprocess.run([sys.executable, "-", str(path)], input=script, text=True, check=True)
+            children = json.loads(path.read_text())["installed"]["EFI"]["filetree"]["children"]
+        self.assertEqual(sorted(children), ["BOOT/BOOTX64.EFI", "fedora/shimx64.efi"])
+
+
 TABLE = {"partitiontable": {"label": "gpt", "sectorsize": 512, "partitions": [
     {"node": "/dev/loop0p1", "start": 2048, "size": 2048},
     {"node": "/dev/loop0p2", "start": 4096, "size": 1048576},

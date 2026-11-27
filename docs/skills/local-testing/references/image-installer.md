@@ -12,7 +12,7 @@ without the CI debug kargs. Tracking issue: #1403. History: spike #1399.
 | Piece | File |
 |---|---|
 | Live-capable layer on a published digest: gnome-setup and systemd-sysinstall from pinned `hanthor/gnome-setup` and `hanthor/systemd` commits (`GS_REF`, `SYSTEMD_REF`, fetched by commit and compared after checkout), `utah.live` units, initramfs with `systemd-volatile-root` and the live overlay ordered before both root setups (`ostree-prepare-root`, `bootc-root-setup`) | `iso/raw/Containerfile`, `iso/raw/src/` |
-| Raw medium: GPT BIOS-BOOT, 512 MiB ESP, 1 GiB ext4 `/boot`, btrfs root; one `bootc install to-filesystem --generic-image --karg rhgb --karg quiet`, with `--composefs-backend` when the image's kernel has the btrfs fs-verity fix (`UTAH_RAW_BACKEND=auto`, `scripts/kernel_verity.py`; ostree otherwise); "Utah Live" BLS entry as GRUB default; `EFI/BOOT` fallback | `iso/raw/build-raw-image.sh`, `iso/raw/medium.py`, `scripts/kernel_verity.py` |
+| Raw medium: GPT BIOS-BOOT, 512 MiB ESP, 1 GiB ext4 `/boot`, btrfs root; one `bootc install to-filesystem --generic-image --karg rhgb --karg quiet`, with `--composefs-backend` when the image's kernel has the btrfs fs-verity fix (`UTAH_RAW_BACKEND=auto`, `scripts/kernel_verity.py`; ostree otherwise); "Utah Live" BLS entry as GRUB default; removable path `EFI/BOOT/BOOTX64.EFI` (shim) + `EFI/BOOT/grubx64.efi`, without shim's fallback `fbx64.efi` ([gotcha](#gotchas-found-on-the-way)) | `iso/raw/build-raw-image.sh`, `iso/raw/medium.py`, `scripts/kernel_verity.py` |
 | Offline Flatpaks in the medium's stateful `/var` (`state/os/default/var` on composefs, the stateroot's `var` on ostree), never in an image: the set the ISO bakes (`system-flatpaks.Brewfile` apps via `scripts/verify-desktop-contract.py --flatpaks`, `--no-related`, listed runtimes pinned) plus `flatpak preinstall` of the image's `preinstall.d`, run in the image with that directory bind-mounted, then `setfiles` with the image's contexts | `iso/raw/bake-flatpaks.sh` |
 | Shrink to content: fstrim, btrfs balance + resize to minimum (+256 MiB, stepping up while btrfs refuses), fstrim again, cut the root partition and the file, rewrite the backup GPT; `size-breakdown.txt` shows what takes the space | `iso/raw/shrink-raw-image.sh`, `medium.py shrink-plan` |
 | End to end with screenshots and `evidence/results.json`; on composefs, fs-verity checks on every installed boot; the fisherman harness's installed-system checks ([below](#installed-system-checks-ported-from-the-fisherman-harness)) | `iso/raw/raw_e2e.py`, `composefs_check.py`, `atspi_drive.py`, `vte_term.py` |
@@ -237,7 +237,11 @@ boot is the repeat boot (#19). The bootc switch boot runs another image and
 gets none of these checks: an older `:testing` cannot meet rules this
 checkout added later (#1343). The live session, desktop and greeter
 screenshots must draw (retaken for a minute, then the run fails), the live
-one below the top bar too (#786).
+one below the top bar too (#786). `00-grub-menu` must be GRUB's menu
+listing the live entry, read back by tesseract (`boot_frame`, transcripts in
+`evidence/grub-menu-ocr.txt`): the harness holds `x` (no meaning in GRUB's
+menu) over QMP from power-on so GRUB's 1 s countdown stops, then presses
+Enter; shim's fallback screen or no menu within 180 s fails the live stage.
 The harness needs `tesseract` on the host.
 
 Not ported, because they test fisherman's path rather than the installed
@@ -358,3 +362,18 @@ Recreate `target.qcow2` (and copy a fresh `vars.fd`) to install again.
 - The pinned-fetches gate scans workflow text: say "bootc switch" only in
   comments, and fetch git sources by commit (`git fetch <url> <sha>`), not
   `git clone`.
+- shim on the removable path (`EFI/BOOT/BOOTX64.EFI`) starts `fbx64.efi`
+  when it sits beside it, and bootupd installs it there. The fallback writes
+  a firmware boot entry from `EFI/<vendor>/BOOTX64.CSV`, shows "Boot Option
+  Restoration ... Press any key to stop system reset" and resets: every USB
+  boot left a stray NVRAM entry and an extra reset before GRUB. The E2E's
+  `00-grub-menu.png` showed that screen in every flavor of Post-Testing run
+  45918946265, and `live-serial.log` booted Boot0002 "UEFI Misc Device", then
+  the fallback's Boot0004 "Fedora". `build-raw-image.sh` deletes
+  `EFI/BOOT/fbx64.efi` (and its key in `/boot/bootupd-state.json`, kept as
+  `raw-evidence/bootupd-state.json`) and fails the build if either remains,
+  so shim starts `EFI/BOOT/grubx64.efi`, whose embedded `/EFI/<vendor>`
+  prefix finds the vendor `grub.cfg`. The installed disk keeps that ESP: it
+  boots through utah-sysinstall-post's efibootmgr entry, its removable path
+  still reaches GRUB, and a later `bootupctl update` restores `fbx64.efi`
+  there (Fedora's stock layout on an installed disk).
