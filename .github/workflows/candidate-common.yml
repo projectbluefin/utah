@@ -83,8 +83,13 @@ jobs:
           env -i PATH="$PATH" HOME="$work/home" git -C "$work/repo" checkout --detach "$COMMON_SHA"
           test "$(git -C "$work/repo" rev-parse 'HEAD^{commit}')" = "$COMMON_SHA"
           env -i PATH="$PATH" HOME="$work/home" git -C "$work/repo" submodule update --init --recursive
+          # env -i leaves podman no user D-Bus session, so it falls back to the
+          # cgroupfs manager for itself, but the build's RUN containers still
+          # asked crun for systemd cgroups over the system bus and were refused
+          # ("sd-bus call: Access denied ... interactive authentication",
+          # run 45926387896). Name cgroupfs for the whole build.
           env -i PATH="$PATH" HOME="$work/home" XDG_RUNTIME_DIR="$work/runtime" REGISTRY_AUTH_FILE="$work/auth/config.json" DOCKER_CONFIG="$work/auth" \
-            podman build --file "$work/repo/Containerfile" --tag localhost/common:candidate "$work/repo"
+            podman --cgroup-manager=cgroupfs build --file "$work/repo/Containerfile" --tag localhost/common:candidate "$work/repo"
           env -i PATH="$PATH" HOME="$work/home" XDG_RUNTIME_DIR="$work/runtime" podman save --format oci-archive --output "$RUNNER_TEMP/common.oci.tar" localhost/common:candidate
           digest=$(env -i PATH="$PATH" HOME="$work/home" XDG_RUNTIME_DIR="$work/runtime" skopeo inspect --raw "oci-archive:$RUNNER_TEMP/common.oci.tar" | sha256sum | cut -d ' ' -f1)
           echo "digest=sha256:$digest" >> "$GITHUB_OUTPUT"

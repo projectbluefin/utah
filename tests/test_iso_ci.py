@@ -208,6 +208,14 @@ class ReviewAndCandidateInstallTests(unittest.TestCase):
                         with self.subTest(workflow=workflow, step=step.get("name")):
                             self.assertNotRegex(step["with"]["path"], r"medium\.raw|\.qcow2|id_ed25519|utah-live\.iso")
 
+    def test_isolated_common_build_names_the_cgroupfs_manager(self):
+        # The Common source build runs under env -i: no user D-Bus session, so
+        # crun's systemd cgroup request for each RUN step went to the system
+        # bus and was refused (run 45926387896). The build must name cgroupfs.
+        run = self.steps("candidate-common.yml", "source")
+        self.assertIn("podman --cgroup-manager=cgroupfs build --file", run)
+        self.assertEqual(run.count(" build --file"), 1)
+
 
 class E2eServicesTests(unittest.TestCase):
     """iso/scripts/e2e-services.sh, the installed-contract service gate raw_e2e.py runs."""
