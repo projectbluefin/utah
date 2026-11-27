@@ -228,7 +228,7 @@ pass/fail. `Harness.check_installed` runs every check, records each one's
 problems under `installed_checks` in `results.json` and fails the boot with
 all of them together. The guest-side checks are scripts in `iso/scripts/`
 that the fisherman harness also used, run from there rather than copied
-(`tests/test_image_installer.py` `InstalledSystemCheckTests` fails if one
+(`tests/test_image_installer_verify.py` `InstalledSystemCheckTests` fails if one
 goes):
 
 | Check | How | First boot | Rollback boot |
