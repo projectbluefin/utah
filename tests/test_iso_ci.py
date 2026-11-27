@@ -208,6 +208,17 @@ class ReviewAndCandidateInstallTests(unittest.TestCase):
                         with self.subTest(workflow=workflow, step=step.get("name")):
                             self.assertNotRegex(step["with"]["path"], r"medium\.raw|\.qcow2|id_ed25519|utah-live\.iso")
 
+    def test_every_vm_job_grants_kvm_by_mode(self):
+        # raw_e2e.py takes KVM only when /dev/kvm is writable, else TCG. A setfacl
+        # grant was gone by the installed VM (run 45950837602), which booted under
+        # TCG and missed /boot's device timeout; chmod lasts across the VMs.
+        for workflow, job in (("build.yml", "review_vm"), ("candidate-common.yml", "candidate"),
+                              ("image-installer.yml", "e2e")):
+            with self.subTest(workflow):
+                run = self.steps(workflow, job)
+                self.assertIn("sudo chmod a+rw /dev/kvm", run)
+                self.assertNotIn("sudo setfacl", run)
+
     def test_isolated_common_build_names_the_cgroupfs_manager(self):
         # The Common source build runs under env -i: no user D-Bus session, so
         # crun's systemd cgroup request for each RUN step went to the system

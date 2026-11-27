@@ -166,7 +166,9 @@ post-build verification workflows, not the complete workflow inventory:
   `all_flavors`), shrinks it, drives gnome-setup through a LUKS2 install,
   first boot, gnome-initial-setup, bootc switch and rollback with
   screenshots. Read-only permissions and no tag moves of its own;
-  `tests/test_image_installer.py` holds that. Details:
+  `tests/test_image_installer.py` holds that, and fails any other workflow
+  whose text (comments too) names `image-installer` besides
+  post-testing-e2e.yml: say "the installer E2E" instead. Details:
   [image-installer](local-testing/references/image-installer.md).
 - `.github/workflows/publish-installer.yml` -- weekly Monday 09:41 UTC and
   manual dispatch. Ships the experimental
