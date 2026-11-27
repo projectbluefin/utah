@@ -194,5 +194,54 @@ class SetupPages(unittest.TestCase):
         h.grab_sysinstall_journal.assert_called_once()
 
 
+class InitialSetupTimeZone(unittest.TestCase):
+    """gnome-initial-setup's Time Zone page without a GeoClue location (run 45926390728)."""
+
+    def time_zone(self, located):
+        insensitive = ["showing", "visible", "focusable"]
+        return [node("Time Zone", "heading"),
+                node("The time zone will be set automatically if your location can be found. "
+                     "You can also search for a city to set it yourself."),
+                node("", "text", ["editable", "focused", "showing", "sensitive"]),
+                node("Next", "button", None if located else insensitive),
+                node("Next")]
+
+    def harness(self, polls):
+        h = object.__new__(raw.Harness)
+        h.fill = Mock()
+        h.key = Mock()
+        h.poll = Mock(side_effect=polls)
+        h.snapshot = Mock(return_value=self.time_zone(False))
+        h.save = Mock()
+        h.shot = Mock()
+        return h
+
+    def test_the_label_of_an_insensitive_next_is_not_a_next_button(self):
+        self.assertIsNone(raw.next_button(self.time_zone(False)))
+        self.assertEqual(raw.next_button(self.time_zone(True))["role"], "button")
+
+    def test_search_picks_a_city_until_next_is_sensitive(self):
+        located = self.time_zone(True)
+        h = self.harness([None, located])
+        entry = self.time_zone(False)[2]
+        with patch.object(raw.time, "sleep"):
+            self.assertIs(h.search_time_zone(None, raw.GIS_APP, entry), located)
+        self.assertEqual(h.fill.call_count, 2)
+        h.fill.assert_called_with(None, raw.GIS_APP, entry, raw.TIMEZONE_CITY)
+        self.assertEqual([c.args[0] for c in h.key.call_args_list], ["down", "ret"] * 2)
+        done = h.poll.call_args.args[2]
+        self.assertFalse(done(self.time_zone(False)))
+        self.assertTrue(done(located))
+        self.assertTrue(done(page("About You", "Next")))
+
+    def test_search_that_never_completes_fails_with_evidence(self):
+        h = self.harness([None, None])
+        with patch.object(raw.time, "sleep"):
+            with self.assertRaisesRegex(raw.Fail, "never completed the Time Zone page"):
+                h.search_time_zone(None, raw.GIS_APP, self.time_zone(False)[2])
+        h.save.assert_called_once()
+        self.assertEqual(h.shot.call_args.args[0], "fail-time-zone-search")
+
+
 if __name__ == "__main__":
     unittest.main()

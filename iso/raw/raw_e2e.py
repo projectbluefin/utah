@@ -18,7 +18,8 @@ Stages (every screenshot is listed in DIR/screenshots/manifest.json):
      key: first boot and rollback unlock with the passphrase, the bootc switch
      boot with the recovery key.
   3. Boot the installed disk alone: Plymouth LUKS prompt, unlock,
-     gnome-initial-setup (user creation), GNOME desktop, a terminal with
+     gnome-initial-setup (user creation; a Time Zone page GeoClue left without
+     a location gets one from its city search), GNOME desktop, a terminal with
      `bootc status`.
   4. `bootc switch` to the candidate digest, reboot, unlock, log in at GDM:
      desktop + `bootc status`. Then `bootc rollback` and the same again.
@@ -81,6 +82,10 @@ USER = "tester"
 PASSWORD = "utahtest2026"
 GS_APP = "setup"              # AT-SPI app name of gnome-setup (org.gnome.Setup)
 GIS_APP = "initial-setup"
+# gnome-initial-setup's Time Zone page ("... You can also search for a city to
+# set it yourself."): without a GeoClue location the harness searches this city.
+TIMEZONE_SEARCH_HINT = "search for a city"
+TIMEZONE_CITY = "Berlin"
 TARGET_DISK = "/dev/vdb"
 TARGET_SIZE_TEXT = "51.5 GB"  # glib's format_size of the 48 GiB target, as gnome-setup's disk row shows it
 # gnome-setup's disk row subtitles (src/models/disk/disk.rs, display_desc).
@@ -1429,6 +1434,12 @@ class Harness:
                     time.sleep(1)
                 if len(txt) > 1:
                     self.fill(r, app, txt[1], USER)
+            elif txt and has_text(nodes, TIMEZONE_SEARCH_HINT) and next_button(nodes) is None:
+                nodes = self.search_time_zone(r, app, txt[0])
+                if not has_text(nodes, TIMEZONE_SEARCH_HINT):
+                    # Return in the search went on to the next page: drive that one.
+                    previous = page
+                    continue
             time.sleep(1)
             self.shot(f"13-gis-{step:02d}-{slug(page)[:30]}", f"gnome-initial-setup on the installed system: {page}", True)
             nodes = self.snapshot(r, app)
@@ -1436,17 +1447,42 @@ class Harness:
             if start_using:
                 self.atspi(r, "act", app, start_using[0]["name"])
                 break
-            nxt = [n for n in nodes if norm(n["name"]) in ("next", "skip") and "sensitive" in n["states"]]
-            if not nxt:
+            nxt = next_button(nodes)
+            if nxt is None:
                 self.save(f"atspi-gis-stuck-{step:02d}.json", json.dumps(nodes, indent=1))
                 raise Fail(f"initial setup page {page!r}: no sensitive Next/Skip")
             sig = page_sig(nodes)
-            self.press(r, app, nxt[0]["name"], lambda n, s=sig: page_sig(n) != s or has_name(n, "~Start Using"),
-                       f"page after {page}", timeout=60)
+            self.press(r, app, nxt["name"], lambda n, s=sig: page_sig(n) != s or has_name(n, "~Start Using"),
+                       f"page after {page}", timeout=60, role=nxt["role"])
             previous = page
         else:
             raise Fail(f"initial setup did not finish in 20 pages (last {previous!r})")
         self.wait_user_shell()
+
+    def search_time_zone(self, runner, app, entry):
+        """Give gnome-initial-setup's Time Zone page a location through its city search.
+
+        The page completes only once it has a location, from GeoClue (the
+        runner's network geolocation) or from that search. Run 45926390728:
+        GeoClue found none on two of four legs, Next stayed insensitive and
+        the harness clicked the label inside it for three minutes. Type a city
+        and take the first completion, as a user without geolocation does."""
+        for attempt in range(2):
+            self.fill(runner, app, entry, TIMEZONE_CITY)
+            time.sleep(3)
+            self.key("down")
+            self.key("ret")
+            got = self.poll(runner, app,
+                            lambda n: next_button(n) is not None or not has_text(n, TIMEZONE_SEARCH_HINT), 30)
+            if got is not None:
+                log(f"  time zone set by searching {TIMEZONE_CITY!r} (attempt {attempt + 1})")
+                return got
+        nodes = self.snapshot(runner, app)
+        self.save("atspi-timeout-time-zone-search.json", json.dumps(nodes, indent=1))
+        for line in summarize_nodes(nodes):
+            log(f"  atspi [time-zone-search]: {line}")
+        self.shot("fail-time-zone-search", f"FAILURE: searching {TIMEZONE_CITY!r} never completed the Time Zone page")
+        raise Fail(f"searching {TIMEZONE_CITY!r} never completed the Time Zone page")
 
     def wait_user_shell(self):
         end = time.time() + 300
@@ -1706,6 +1742,13 @@ def subtree(nodes, root):
 def top_frame(nodes):
     frames = [n for n in nodes if n["role"] in ("frame", "window", "dialog") and n.get("ext") and n["ext"][2] > 0]
     return max(frames, key=lambda n: n["ext"][2] * n["ext"][3]) if frames else None
+
+
+def next_button(nodes):
+    """The page's sensitive Next or Skip button. Never the label inside it: that
+    label stays sensitive while its button is not (run 45926390728)."""
+    return next((n for n in nodes if n["role"] in ("button", "push button")
+                 and norm(n["name"]) in ("next", "skip") and "sensitive" in n["states"]), None)
 
 
 def page_sig(nodes):
