@@ -7,6 +7,7 @@ import importlib.util
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -259,6 +260,79 @@ class GnomeSetupTests(unittest.TestCase):
         row = raw_e2e.row_containing(nodes, raw_e2e.TARGET_SIZE_TEXT)
         self.assertIsNotNone(row)
         self.assertEqual(row["role"], "table row")
+
+
+class LiveSessionDiagnosticsTests(unittest.TestCase):
+    """A live session that cannot draw the installer is explained, not guessed.
+
+    Run 45927940366 (attempt 1) wedged after the live session drew: the
+    session's desktop portal never started, gnome-setup blocked on it and
+    never opened a window, and the AT-SPI desktop listed no application at
+    all, so the harness only saw "no buttons, check boxes or labels".
+    """
+
+    FAILED_PORTAL = ("Id=xdg-desktop-portal.service\nActiveState=failed\nSubState=failed\n"
+                     "Result=timeout\n"
+                     "Id=xdg-desktop-portal-gnome.service\nActiveState=failed\nSubState=failed\n"
+                     "Result=timeout\n")
+
+    def test_a_failed_portal_is_read_from_the_unit_report(self):
+        self.assertEqual(raw_e2e.failed_session_units(self.FAILED_PORTAL),
+                         ["xdg-desktop-portal.service", "xdg-desktop-portal-gnome.service"])
+
+    def test_a_healthy_or_starting_portal_is_not_a_failure(self):
+        healthy = ("Id=xdg-desktop-portal.service\nActiveState=active\nSubState=running\n"
+                   "Result=success\n")
+        self.assertEqual(raw_e2e.failed_session_units(healthy), [])
+        starting = "Id=xdg-desktop-portal.service\nActiveState=activating\nSubState=start\n"
+        self.assertEqual(raw_e2e.failed_session_units(starting), [])
+        self.assertEqual(raw_e2e.failed_session_units(""), [])
+
+    def test_the_session_state_command_reports_the_portal_the_shell_and_the_coredumps(self):
+        command = raw_e2e.session_state_command()
+        self.assertIn("xdg-desktop-portal.service", command)
+        self.assertIn("at-spi2-registryd.service", command)
+        self.assertIn("journalctl --user -b", command)
+        self.assertIn("/proc/$p/stack", command)
+        self.assertIn("coredumpctl list", command)
+        self.assertIn("coredumpctl info --no-pager gnome-shell", command)
+
+    def test_the_session_commands_carry_the_live_session_environment(self):
+        # `systemctl --user` without XDG_RUNTIME_DIR answers "Failed to connect
+        # to bus" and the report comes back empty, which reads as no failure.
+        for command in (raw_e2e.portal_state_command(), raw_e2e.session_state_command()):
+            self.assertIn("XDG_RUNTIME_DIR", command)
+            self.assertIn("DBUS_SESSION_BUS_ADDRESS", command)
+
+    def test_a_failed_portal_ends_the_wait_with_the_reason(self):
+        harness = object.__new__(raw_e2e.Harness)
+        harness.portal_failed_at = None
+        harness.ssh = lambda *args, **kwargs: self.FAILED_PORTAL
+        # The first failure only starts the grace period: the portal can still
+        # come back, and the installer can open its window without one.
+        self.assertIsNone(harness.live_session_stall())
+        harness.portal_failed_at = time.monotonic() - raw_e2e.PORTAL_GRACE - 1
+        message = harness.live_session_stall()
+        self.assertIn("xdg-desktop-portal.service", message)
+        self.assertIn("portal", message)
+
+    def test_a_healthy_portal_never_stalls_the_wait(self):
+        harness = object.__new__(raw_e2e.Harness)
+        harness.portal_failed_at = None
+        harness.ssh = lambda *args, **kwargs: (
+            "Id=xdg-desktop-portal.service\nActiveState=active\nSubState=running\nResult=success\n")
+        self.assertIsNone(harness.live_session_stall())
+
+    def test_the_atspi_desktop_lists_the_applications_it_has(self):
+        harness = object.__new__(raw_e2e.Harness)
+        harness.atspi = lambda *args, **kwargs: {"error": "no application matching 'setup'",
+                                                  "apps": ["Firefox", "org.gnome.Nautilus"]}
+        self.assertEqual(harness.atspi_apps(None), ["Firefox", "org.gnome.Nautilus"])
+
+    def test_the_stage_two_failure_path_collects_the_live_session_state(self):
+        source = (RAW / "raw_e2e.py").read_text()
+        self.assertIn("lambda: self.live_session_diagnose(runner, label)", source)
+        self.assertIn("stall=self.live_session_stall", source)
 
 
 if __name__ == "__main__":
