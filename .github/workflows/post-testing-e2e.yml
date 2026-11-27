@@ -275,7 +275,7 @@ jobs:
           SOURCE_SHA: ${{ needs.resolve.outputs.sha }}
         run: |
           set -euo pipefail
-          test -f "$RECORD/screenshots/14-first-boot-desktop.png"
+          test -f "$RECORD/screenshots/14-first-boot-fastfetch.png"
           git worktree add --orphan -b verification "$RUNNER_TEMP/record"
           cp -a "$RECORD/." "$RUNNER_TEMP/record/"
           git -C "$RUNNER_TEMP/record" add -A
