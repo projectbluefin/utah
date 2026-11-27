@@ -131,7 +131,7 @@ jobs:
             tesseract-ocr swtpm swtpm-tools
           # Ubuntu's AppArmor profile keeps swtpm out of the work dir (raw_e2e.py --tpm).
           if [[ -f /etc/apparmor.d/usr.bin.swtpm ]]; then sudo apparmor_parser -R /etc/apparmor.d/usr.bin.swtpm || true; fi
-          # The mode bits, as review_vm and image-installer.yml grant it. A setfacl
+          # The mode bits, as the review VM and the installer E2E grant it. A setfacl
           # grant did not last (run 45950837602): the live VM ran with
           # `-accel kvm`, but by the installed VM /dev/kvm was no longer writable,
           # raw_e2e.py fell back to `-accel tcg`, and the first boot was too slow
