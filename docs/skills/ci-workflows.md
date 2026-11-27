@@ -151,9 +151,9 @@ post-build verification workflows, not the complete workflow inventory:
   attempt of Post-Testing E2E, `scripts/e2e-infra-rerun.py` classifies every
   failed job, including `gnome-setup` installer jobs, against a short infra
   signature list. Only when all match does it re-run the failed jobs once,
-  behind the `e2e-infra-retry-wait` environment's wait timer. An unexplained
-  installer failure vetoes the re-run even when the testsuite failures match
-  known infra signatures. See [infra re-run](ci-workflows/references/iso-e2e.md#infra-re-run).
+  behind the `e2e-infra-retry-wait` environment's wait timer. Any unexplained
+  failed job vetoes the re-run, including an installer failure alongside
+  testsuite failures matching known infra signatures. See [infra re-run](ci-workflows/references/iso-e2e.md#infra-re-run).
 - `.github/workflows/rerun-startup-failures.yml` -- every three hours,
   `scripts/rerun-startup-failures.py` re-dispatches sync-main-to-testing, the
   testing build and Post-Testing E2E when GitHub never started their newest
