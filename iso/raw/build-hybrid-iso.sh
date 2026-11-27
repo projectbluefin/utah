@@ -22,9 +22,10 @@
 #      off until a signed chain lands, #1380) as its second stage
 #      EFI/BOOT/grubx64.efi, loader/entries/utah-live.conf is GRUB's live
 #      entry with the kernel and initrd copied to /utah-live (medium.py
-#      iso-entry), and the medium's own EFI/BOOT/grubx64.efi (and shim's
-#      fallback fbx64.efi, if bootupd put one there) wait in
-#      /utah-live/BOOT. Keeping shim first keeps PCR 7 what the installed
+#      iso-entry), and the medium's own EFI/BOOT/grubx64.efi waits in
+#      /utah-live/BOOT (the raw medium has no shim fallback fbx64.efi there,
+#      build-raw-image.sh; the build fails if one is). Keeping shim first
+#      keeps PCR 7 what the installed
 #      shim -> GRUB boot measures (shim extends it with its SBAT and MOK
 #      state even with Secure Boot off), so the TPM2 policy gnome-setup seals
 #      in the live session unlocks the installed root: with systemd-boot
@@ -137,14 +138,14 @@ efi="${work}/esp"
     || { echo "the medium's ESP already has /${ESP_DIR} or /loader" >&2; exit 1; }
 [[ -f "${efi}/EFI/BOOT/BOOTX64.EFI" && -f "${efi}/EFI/BOOT/grubx64.efi" ]] \
     || { echo "the medium's ESP lacks shim's removable path (EFI/BOOT/BOOTX64.EFI, grubx64.efi)" >&2; exit 1; }
+# shim would start its fallback instead of systemd-boot (build-raw-image.sh removes it).
+[[ ! -e "${efi}/EFI/BOOT/fbx64.efi" ]] || { echo "the medium's ESP still has EFI/BOOT/fbx64.efi" >&2; exit 1; }
 install -d "${efi}/${ESP_DIR}/BOOT" "${efi}/loader/entries"
 python3 "${HERE}/medium.py" iso-entry "${live_entry}" "${efi}/loader/entries/${LIVE_ENTRY}.conf" >"${work}/files"
 while read -r dest from; do
     install -m 0644 "${bootdir}/${from#/}" "${efi}${dest}"
 done <"${work}/files"
-for f in grubx64.efi fbx64.efi; do
-    if [[ -f "${efi}/EFI/BOOT/${f}" ]]; then mv "${efi}/EFI/BOOT/${f}" "${efi}/${ESP_DIR}/BOOT/${f}"; fi
-done
+mv "${efi}/EFI/BOOT/grubx64.efi" "${efi}/${ESP_DIR}/BOOT/grubx64.efi"
 install -m 0644 "${deploy}/${SDBOOT}" "${efi}/EFI/BOOT/grubx64.efi"
 python3 "${HERE}/medium.py" iso-loader-conf "${efi}/loader/loader.conf"
 cp "${efi}/loader/entries/${LIVE_ENTRY}.conf" "${EVIDENCE}/iso-entry.conf"

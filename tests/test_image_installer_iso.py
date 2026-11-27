@@ -130,7 +130,11 @@ class HybridIsoTests(unittest.TestCase):
         # (run 45940409726: systemd-boot first, the TPM2 policy did not unlock).
         self.assertIn('install -m 0644 "${deploy}/${SDBOOT}" "${efi}/EFI/BOOT/grubx64.efi"', self.build)
         self.assertNotIn('"${efi}/EFI/BOOT/BOOTX64.EFI"\n', self.build.split("SDBOOT}")[-1])
-        self.assertIn("for f in grubx64.efi fbx64.efi; do", self.build)
+        self.assertIn('mv "${efi}/EFI/BOOT/grubx64.efi" "${efi}/${ESP_DIR}/BOOT/grubx64.efi"', self.build)
+        # #1619 removed shim's fallback from the raw medium; the ISO must not bring it back.
+        self.assertIn('[[ ! -e "${efi}/EFI/BOOT/fbx64.efi" ]] ||', self.build)
+        after = self.build.split("still has EFI/BOOT/fbx64.efi\" >&2; exit 1; }\n", 1)[1]
+        self.assertNotIn("fbx64", after)
 
     def test_the_installed_esp_gets_the_removable_path_back(self):
         post = (RAW / "src/usr/libexec/utah-sysinstall-post").read_text()

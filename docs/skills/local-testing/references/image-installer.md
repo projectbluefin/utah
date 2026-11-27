@@ -238,8 +238,9 @@ except:
   `EFI/BOOT/grubx64.efi`; `loader/entries/utah-live.conf` is GRUB's live
   entry with the same options and the kernel and initrd copied to
   `/utah-live` (`medium.py iso-entry`), `loader/loader.conf` makes it the
-  default with a 5 s menu, and the medium's own `EFI/BOOT/grubx64.efi` (and
-  `fbx64.efi`, if bootupd put one there) wait in `/utah-live/BOOT`. shim
+  default with a 5 s menu, and the medium's own `EFI/BOOT/grubx64.efi` waits
+  in `/utah-live/BOOT` (the raw medium has no `fbx64.efi`; the build fails
+  if one is there, since shim would start the fallback instead). shim
   has to stay first: it extends PCR 7 (SBAT, MOK state) even with Secure
   Boot off, and gnome-setup seals the TPM2 policy (PCR 7) in the live
   session. With systemd-boot itself on the removable path, the first
