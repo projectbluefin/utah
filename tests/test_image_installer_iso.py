@@ -125,17 +125,27 @@ class HybridIsoTests(unittest.TestCase):
         self.assertIn('"${EVIDENCE}/iso.json"', self.build)
         self.assertIn('"iso_bytes": %s, "build_seconds": %s', self.build)
 
-    def test_the_installed_esp_gets_shim_back(self):
+    def test_the_live_medium_boots_shim_then_systemd_boot(self):
+        # shim stays first so PCR 7 matches the installed shim -> GRUB boot
+        # (run 45940409726: systemd-boot first, the TPM2 policy did not unlock).
+        self.assertIn('install -m 0644 "${deploy}/${SDBOOT}" "${efi}/EFI/BOOT/grubx64.efi"', self.build)
+        self.assertNotIn('"${efi}/EFI/BOOT/BOOTX64.EFI"\n', self.build.split("SDBOOT}")[-1])
+        self.assertIn("for f in grubx64.efi fbx64.efi; do", self.build)
+
+    def test_the_installed_esp_gets_the_removable_path_back(self):
         post = (RAW / "src/usr/libexec/utah-sysinstall-post").read_text()
         self.assertIn(f"ISO_ESP_DIR={medium.ISO_ESP_DIR}\n", post)
-        self.assertIn('mv -f "${iso_dir}/BOOTX64.EFI" "${work}/mnt/efi/EFI/BOOT/BOOTX64.EFI"', post)
+        self.assertIn('mv -f "$f" "${work}/mnt/efi/EFI/BOOT/${f##*/}"', post)
         self.assertIn('rm -rf "${iso_dir}" "${work}/mnt/efi/loader"', post)
         # Before the boot-config rewrite and the firmware entry.
         self.assertLess(post.index('iso_dir="${work}/mnt/efi/${ISO_ESP_DIR}"'), post.index('entry_dir="${bootdir}/loader/entries"'))
-        self.assertEqual(raw_e2e.target_esp_problems(["EFI/BOOT/BOOTX64.EFI", "EFI/fedora/shimx64.efi"]), [])
-        self.assertEqual(raw_e2e.target_esp_problems(["EFI/BOOT/BOOTX64.EFI", "loader/loader.conf", "utah-live/vmlinuz"]),
+        good = ["EFI/BOOT/BOOTX64.EFI", "EFI/BOOT/grubx64.efi", "EFI/fedora/shimx64.efi", raw_e2e.VENDOR_GRUB_MARK]
+        self.assertEqual(raw_e2e.target_esp_problems(good), [])
+        self.assertEqual(raw_e2e.target_esp_problems(good + ["loader/loader.conf", "utah-live/vmlinuz"]),
                          ["live boot files left: loader/loader.conf utah-live/vmlinuz"])
-        self.assertEqual(raw_e2e.target_esp_problems(["EFI/fedora/shimx64.efi"]), ["no EFI/BOOT/BOOTX64.EFI"])
+        self.assertEqual(raw_e2e.target_esp_problems(good[:-1]), ["EFI/BOOT/grubx64.efi is not the vendor GRUB"])
+        self.assertEqual(raw_e2e.target_esp_problems(["EFI/fedora/shimx64.efi"]),
+                         ["no EFI/BOOT/BOOTX64.EFI", "no EFI/BOOT/grubx64.efi"])
 
     def test_the_live_initramfs_attaches_the_cdrom_partitions_once(self):
         dracut = (RAW / "src/usr/lib/dracut/dracut.conf.d/60-utah-live.conf").read_text()

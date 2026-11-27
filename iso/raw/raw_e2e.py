@@ -549,13 +549,22 @@ def iso_boot_problems(boot_as, facts):
     return problems
 
 
+# check_target_esp prints it when EFI/BOOT/grubx64.efi is the vendor GRUB
+# again, not the systemd-boot the hybrid ISO's shim started.
+VENDOR_GRUB_MARK = "REMOVABLE-GRUB-IS-VENDOR-GRUB"
+
+
 def target_esp_problems(files):
-    """What the installed ESP (paths relative to it) still carries of the
-    hybrid ISO's live systemd-boot setup, or lacks of shim -> GRUB."""
+    """What the installed ESP (paths relative to it, plus VENDOR_GRUB_MARK)
+    still carries of the hybrid ISO's live systemd-boot setup, or lacks of
+    shim -> GRUB on the removable path."""
     lower = {f.lower().strip("/") for f in files}
     problems = []
-    if "efi/boot/bootx64.efi" not in lower:
-        problems.append("no EFI/BOOT/BOOTX64.EFI")
+    for need in ("EFI/BOOT/BOOTX64.EFI", "EFI/BOOT/grubx64.efi"):
+        if need.lower() not in lower:
+            problems.append(f"no {need}")
+    if "efi/boot/grubx64.efi" in lower and VENDOR_GRUB_MARK not in files:
+        problems.append("EFI/BOOT/grubx64.efi is not the vendor GRUB")
     leftovers = sorted(f for f in files if f.lower().strip("/").split("/", 1)[0] in ("utah-live", "loader"))
     if leftovers:
         problems.append("live boot files left: " + " ".join(leftovers))
@@ -1101,7 +1110,7 @@ class Harness:
         SDBOOT_HOLD_KEY is pressed between screendumps until the menu is read,
         so the countdown stops; Enter then boots the default entry. GRUB's menu,
         or no menu within SDBOOT_WAIT, fails the stage."""
-        proves = (f"Firmware -> El Torito/{self.args.boot_as} -> systemd-boot on the hybrid ISO's ESP; "
+        proves = (f"Firmware -> El Torito/{self.args.boot_as} -> shim -> systemd-boot on the hybrid ISO's ESP; "
                   "'Utah Live' Type #1 entry listed")
         probe = self.debug / "sdboot-probe.png"
         transcripts = []
@@ -1152,10 +1161,13 @@ class Harness:
 
     def check_target_esp(self):
         """After an install from the hybrid ISO, the target's ESP boots shim ->
-        GRUB like a raw-medium install: utah-sysinstall-post put shim back and
-        removed the ISO's systemd-boot setup (target_esp_problems)."""
+        GRUB like a raw-medium install: utah-sysinstall-post put the medium's
+        EFI/BOOT files back and removed the ISO's systemd-boot setup
+        (target_esp_problems)."""
         out = self.ssh("liveuser", f"esp=$(lsblk -rnpo NAME,PARTTYPE {self.target_disk} | awk 'tolower($2) == \"{ESP_TYPE}\" {{print $1}}'); "
                        "sudo sh -c 'd=$(mktemp -d) && mount -o ro \"$1\" \"$d\" && find \"$d\" -type f -printf \"%P\\n\" | sort; "
+                       "for v in \"$d\"/EFI/*/grubx64.efi; do case \"$v\" in */EFI/BOOT/*) ;; "
+                       f"*) cmp -s \"$v\" \"$d/EFI/BOOT/grubx64.efi\" && echo {VENDOR_GRUB_MARK} ;; esac; done; "
                        "umount \"$d\"; rmdir \"$d\"' sh \"$esp\"",
                        password="live", check=False)
         self.save("target-esp-files.txt", out)

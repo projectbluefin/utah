@@ -231,13 +231,20 @@ except:
 
 - **The ESP also boots systemd-boot.** Firmware booting El Torito media
   exposes only the El Torito image (the ESP), and GRUB reads the kernel from
-  the separate ext4 `/boot`, so the kernel has to move to the ESP:
-  `EFI/BOOT/BOOTX64.EFI` becomes the image's unsigned systemd-boot
-  (`systemd-boot-unsigned`; Secure Boot off until #1380 brings a signed one),
-  `loader/entries/utah-live.conf` is GRUB's live entry with the same
-  options and the kernel and initrd copied to `/utah-live`
-  (`medium.py iso-entry`), `loader/loader.conf` makes it the default with a
-  5 s menu, and the medium's shim waits in `/utah-live/BOOTX64.EFI`.
+  the separate ext4 `/boot`, so the kernel has to move to the ESP. shim
+  stays on the removable path (`EFI/BOOT/BOOTX64.EFI`) and starts the
+  image's unsigned systemd-boot (`systemd-boot-unsigned`; Secure Boot off
+  until #1380 brings a signed one) as its second stage
+  `EFI/BOOT/grubx64.efi`; `loader/entries/utah-live.conf` is GRUB's live
+  entry with the same options and the kernel and initrd copied to
+  `/utah-live` (`medium.py iso-entry`), `loader/loader.conf` makes it the
+  default with a 5 s menu, and the medium's own `EFI/BOOT/grubx64.efi` (and
+  `fbx64.efi`, if bootupd put one there) wait in `/utah-live/BOOT`. shim
+  has to stay first: it extends PCR 7 (SBAT, MOK state) even with Secure
+  Boot off, and gnome-setup seals the TPM2 policy (PCR 7) in the live
+  session. With systemd-boot itself on the removable path, the first
+  installed boot (shim -> GRUB) asked for the recovery key instead of
+  unlocking (run 45940409726, `fail-tpm-unlock-first-boot.png`).
 - **An El Torito catalog** (EFI platform, no emulation, sector count 0 =
   "to the end of the medium") pointing at the ESP's first 2048-byte block,
   written into the gap between the GPT and the first partition (ISO9660
@@ -285,11 +292,10 @@ How the root is found:
 
 The install path is unchanged: `utah-live-definitions` reads the GPT of the
 disk holding the root (`loop0` from a CD), and the block copy puts the ISO's
-ESP on the target. `utah-sysinstall-post` then moves
-`/utah-live/BOOTX64.EFI` back to `EFI/BOOT/BOOTX64.EFI` and deletes
-`/utah-live` and `/loader`, so the installed ESP is the raw medium's again
-(shim -> GRUB -> ext4 `/boot`, the same bytes `bootupd-state.json` records)
-and fails if the live entry survives.
+ESP on the target. `utah-sysinstall-post` then moves `/utah-live/BOOT/*`
+back to `EFI/BOOT/` and deletes `/utah-live` and `/loader`, so the installed
+ESP is the raw medium's again (shim -> GRUB -> ext4 `/boot`, the same bytes
+`bootupd-state.json` records) and fails if the live entry survives.
 
 The E2E runs the hybrid ISO for the main flavor only (the resolve job's
 `iso` matrix field), after the raw leg: `raw_e2e.py --iso medium.iso
@@ -305,8 +311,9 @@ or "GNU GRUB" fails) and keeps it as `00-systemd-boot-menu.png`
 in `LoaderInfo`, a `LoaderDevicePartUUID`, and its root on one loop device
 backed by `/dev/sr0` (CD-ROM) or on a disk with transport `usb`
 (`iso_boot_problems`, `evidence/iso-boot.txt`). After the install the
-target's ESP must have `EFI/BOOT/BOOTX64.EFI` and no `utah-live/` or
-`loader/` (`target_esp_problems`, `evidence/target-esp-files.txt`).
+target's ESP must have `EFI/BOOT/BOOTX64.EFI` and an `EFI/BOOT/grubx64.efi`
+identical to the vendor GRUB, and no `utah-live/` or `loader/`
+(`target_esp_problems`, `evidence/target-esp-files.txt`).
 `results.json` records the medium under `medium`. The target is `/dev/vda`
 in the ISO legs: virtio disks are named in PCI order and the ISO is no
 virtio disk.

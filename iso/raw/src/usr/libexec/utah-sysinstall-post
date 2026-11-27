@@ -21,8 +21,8 @@
 #     BLS entries and an /etc/crypttab line in every deployment;
 #   * the root filesystem grown to the partition systemd-repart grew;
 #   * from the hybrid ISO (build-hybrid-iso.sh), the ESP's live systemd-boot
-#     setup undone: shim back on the removable path, /utah-live and /loader
-#     removed;
+#     setup undone: the medium's EFI/BOOT files back from /utah-live/BOOT,
+#     /utah-live and /loader removed;
 #   * a firmware boot entry for shim.
 #
 # Both bootc backends are handled: ostree (/ostree/deploy/<stateroot>/deploy)
@@ -36,7 +36,8 @@ read -r -a cmdline </proc/cmdline
 grep -qw utah.live /proc/cmdline || { echo "ERROR: not running from Utah live media" >&2; exit 1; }
 LIVE_KARG=utah.live
 LIVE_ENTRY=utah-live
-# medium.ISO_ESP_DIR: the hybrid ISO's kernel, initrd and the medium's shim.
+# medium.ISO_ESP_DIR: the hybrid ISO's kernel, initrd and, in BOOT, the
+# medium's own EFI/BOOT files that systemd-boot stands in for.
 ISO_ESP_DIR=utah-live
 
 exec > >(tee -a /run/utah-install.log) 2>&1
@@ -163,16 +164,19 @@ fi
 mount "${esp}" "${work}/mnt/efi"
 
 # --- The hybrid ISO's live boot setup on the copied ESP. ---------------------
-# The ISO's ESP boots systemd-boot from the removable path with the live
-# entry (/loader) and its kernel and initrd under /utah-live, where the
-# medium's own removable-path shim waits. The installed system boots
-# shim -> GRUB -> /boot like a copy of the raw medium.
+# On the ISO's ESP, shim on the removable path starts systemd-boot as its
+# second stage (EFI/BOOT/grubx64.efi), with the live entry (/loader) and its
+# kernel and initrd under /utah-live; the medium's own EFI/BOOT files wait in
+# /utah-live/BOOT. The installed system boots shim -> GRUB -> /boot like a
+# copy of the raw medium.
 iso_dir="${work}/mnt/efi/${ISO_ESP_DIR}"
 if [[ -e "${iso_dir}" ]]; then
-    [[ -f "${iso_dir}/BOOTX64.EFI" ]] || fail "the copied ESP has /${ISO_ESP_DIR} without the medium's shim (BOOTX64.EFI)"
-    mv -f "${iso_dir}/BOOTX64.EFI" "${work}/mnt/efi/EFI/BOOT/BOOTX64.EFI"
+    [[ -f "${iso_dir}/BOOT/grubx64.efi" ]] || fail "the copied ESP has /${ISO_ESP_DIR} without the medium's BOOT/grubx64.efi"
+    for f in "${iso_dir}"/BOOT/*; do
+        mv -f "$f" "${work}/mnt/efi/EFI/BOOT/${f##*/}"
+    done
     rm -rf "${iso_dir}" "${work}/mnt/efi/loader"
-    log "ESP: hybrid ISO's systemd-boot and live entry removed, shim back on EFI/BOOT/BOOTX64.EFI"
+    log "ESP: hybrid ISO's systemd-boot and live entry removed, EFI/BOOT restored: $(ls "${work}/mnt/efi/EFI/BOOT" | tr '\n' ' ')"
 fi
 [[ ! -e "${work}/mnt/efi/loader/entries/${LIVE_ENTRY}.conf" ]] || fail "the ESP still carries the live entry"
 

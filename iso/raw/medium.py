@@ -47,9 +47,10 @@ ALIGN_BYTES = 1024 * 1024
 # Room after the last partition for the backup GPT (33 sectors), aligned.
 GPT_TAIL_BYTES = ALIGN_BYTES
 # The hybrid ISO (build-hybrid-iso.sh): systemd-boot's live entry, the
-# kernel and initrd it boots and the medium's own removable-path loader
-# (shim) live under /ISO_ESP_DIR on the ESP; utah-sysinstall-post puts shim
-# back and removes the directory and /loader from the installed copy.
+# kernel and initrd it boots and, in BOOT, the medium's own EFI/BOOT files
+# systemd-boot stands in for live under /ISO_ESP_DIR on the ESP;
+# utah-sysinstall-post moves them back and removes the directory and /loader
+# from the installed copy.
 ISO_ESP_DIR = "utah-live"
 ISO_ENTRY_ID = "utah-live.conf"
 ISO_LOADER_TIMEOUT = 5

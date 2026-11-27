@@ -17,13 +17,21 @@
 #   1. The ESP also boots systemd-boot. GRUB boots the raw medium from the
 #      separate ext4 /boot, and firmware booting El Torito media exposes only
 #      the El Torito image (the ESP), so the kernel has to be on the ESP:
-#      EFI/BOOT/BOOTX64.EFI becomes the image's unsigned systemd-boot
-#      (systemd-boot-unsigned; Secure Boot off until a signed chain lands,
-#      #1380), loader/entries/utah-live.conf is GRUB's live entry with the
-#      kernel and initrd copied to /utah-live (medium.py iso-entry), and the
-#      medium's shim moves to /utah-live/BOOTX64.EFI. utah-sysinstall-post
-#      moves shim back and removes /utah-live and /loader from the installed
-#      copy of the ESP, so the installed system boots shim -> GRUB as before.
+#      shim on the removable path (EFI/BOOT/BOOTX64.EFI) stays and starts
+#      the image's unsigned systemd-boot (systemd-boot-unsigned; Secure Boot
+#      off until a signed chain lands, #1380) as its second stage
+#      EFI/BOOT/grubx64.efi, loader/entries/utah-live.conf is GRUB's live
+#      entry with the kernel and initrd copied to /utah-live (medium.py
+#      iso-entry), and the medium's own EFI/BOOT/grubx64.efi (and shim's
+#      fallback fbx64.efi, if bootupd put one there) wait in
+#      /utah-live/BOOT. Keeping shim first keeps PCR 7 what the installed
+#      shim -> GRUB boot measures (shim extends it with its SBAT and MOK
+#      state even with Secure Boot off), so the TPM2 policy gnome-setup seals
+#      in the live session unlocks the installed root: with systemd-boot
+#      directly on the removable path the first installed boot asked for the
+#      recovery key (run 45940409726). utah-sysinstall-post moves
+#      /utah-live/BOOT back to EFI/BOOT and removes /utah-live and /loader
+#      from the installed copy of the ESP, so it boots shim -> GRUB as before.
 #   2. An El Torito boot catalog for EFI, pointing at the ESP, written by the
 #      medium's own systemd-repart (`--el-torito`, systemd 261) into the gap
 #      between the GPT and the first partition: ISO9660 descriptors at block
@@ -127,14 +135,17 @@ mount "${dst_esp}" "${work}/esp"
 efi="${work}/esp"
 [[ ! -e "${efi}/${ESP_DIR}" && ! -e "${efi}/loader" ]] \
     || { echo "the medium's ESP already has /${ESP_DIR} or /loader" >&2; exit 1; }
-[[ -f "${efi}/EFI/BOOT/BOOTX64.EFI" ]] || { echo "the medium's ESP has no EFI/BOOT/BOOTX64.EFI" >&2; exit 1; }
-install -d "${efi}/${ESP_DIR}" "${efi}/loader/entries"
+[[ -f "${efi}/EFI/BOOT/BOOTX64.EFI" && -f "${efi}/EFI/BOOT/grubx64.efi" ]] \
+    || { echo "the medium's ESP lacks shim's removable path (EFI/BOOT/BOOTX64.EFI, grubx64.efi)" >&2; exit 1; }
+install -d "${efi}/${ESP_DIR}/BOOT" "${efi}/loader/entries"
 python3 "${HERE}/medium.py" iso-entry "${live_entry}" "${efi}/loader/entries/${LIVE_ENTRY}.conf" >"${work}/files"
 while read -r dest from; do
     install -m 0644 "${bootdir}/${from#/}" "${efi}${dest}"
 done <"${work}/files"
-mv "${efi}/EFI/BOOT/BOOTX64.EFI" "${efi}/${ESP_DIR}/BOOTX64.EFI"
-install -m 0644 "${deploy}/${SDBOOT}" "${efi}/EFI/BOOT/BOOTX64.EFI"
+for f in grubx64.efi fbx64.efi; do
+    if [[ -f "${efi}/EFI/BOOT/${f}" ]]; then mv "${efi}/EFI/BOOT/${f}" "${efi}/${ESP_DIR}/BOOT/${f}"; fi
+done
+install -m 0644 "${deploy}/${SDBOOT}" "${efi}/EFI/BOOT/grubx64.efi"
 python3 "${HERE}/medium.py" iso-loader-conf "${efi}/loader/loader.conf"
 cp "${efi}/loader/entries/${LIVE_ENTRY}.conf" "${EVIDENCE}/iso-entry.conf"
 cp "${efi}/loader/loader.conf" "${EVIDENCE}/iso-loader.conf"
