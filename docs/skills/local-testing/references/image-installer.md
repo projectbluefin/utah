@@ -520,10 +520,10 @@ systemd-boot shows "Utah Live (try or install)" for 5 seconds.
   erofs (Linux 6.12+). Ubuntu 24.04's 6.8 fails with "Block device required";
   build with `UTAH_RAW_BACKEND=ostree` there. `build-hybrid-iso.sh` mounts
   the composefs image through a loop device instead.
-- `raw_e2e.py` uses KVM only if `/dev/kvm` is writable and otherwise falls
-  back to TCG without failing. CI jobs grant it with `sudo chmod a+rw
-  /dev/kvm`. A `setfacl` grant was gone by the second VM: in the Common
-  candidate (run 45950837602) the live VM ran `-accel kvm` and the installed
-  VM `-accel tcg`, whose first boot missed /boot's 90 s device timeout and
-  dropped to emergency mode. Check each `starting VM` line's `-accel` when a
-  boot is mysteriously slow.
+- `raw_e2e.py` needs a writable `/dev/kvm`. Under CI (`GITHUB_ACTIONS`/`CI`)
+  it fails at VM start without one (`accel_args`, #1632); locally it falls
+  back to TCG with a warning. CI jobs grant it with `sudo chmod a+rw
+  /dev/kvm`; a `setfacl` grant was gone by the second VM. Before #1632 that
+  failed silently: in the Common candidate (run 45950837602) the live VM ran
+  `-accel kvm` and the installed VM `-accel tcg`, whose first boot missed
+  /boot's 90 s device timeout and dropped to emergency mode (#1631).
