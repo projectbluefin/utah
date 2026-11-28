@@ -86,8 +86,10 @@ can predate the patch: run 46071542116's `overview-live.txt` shows the key
 
 With the overview closed, Shell's first-login welcome dialog ("Take Tour") is
 no longer dismissed by the Escape meant for the overview, and it covered the
-fastfetch terminal (run 46065121091). The harness presses Escape (its Skip key)
-once at every desktop login.
+fastfetch terminal (run 46065121091). Neither Return nor Escape from the
+harness dismissed it (run 46094671535: 24 presses per leg), so at every desktop
+login, and when fastfetch's frame shows it, the harness reads Skip's position
+with tesseract (`word_center`) and clicks it, as a user would.
 
 ## Checking an image or a machine
 
