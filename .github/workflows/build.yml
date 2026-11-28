@@ -127,7 +127,7 @@ jobs:
       - name: Check package availability in Utah's repositories
         run: just check-repos
       - name: Install cosign
-        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        uses: sigstore/cosign-installer@881c63bd87e38389154debd8331404ce7ca8a3ab # v4.1.4
       - name: Verify Red Hat Hardened Images signatures
         run: just verify-rhhi-signatures
       # config/flavors.json is the single source for the build, promote and
@@ -214,7 +214,7 @@ jobs:
           echo "$GITHUB_TOKEN" | podman login ghcr.io -u "${{ github.actor }}" --password-stdin \
             || echo "::warning title=ghcr login failed::continuing; a cache hit can still be read anonymously"
       - name: Install cosign
-        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        uses: sigstore/cosign-installer@881c63bd87e38389154debd8331404ce7ca8a3ab # v4.1.4
       - name: Build the kernel cache image if it is not published yet
         id: cache
         env:
