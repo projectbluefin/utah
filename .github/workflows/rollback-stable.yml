@@ -1,0 +1,116 @@
+name: Rollback stable release
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Previously tested testing-<yyyymmdd>-<sha> tag or sha256 digest (applied to every active flavor)'
+        required: true
+        type: string
+      reason:
+        description: 'Why stable needs to be rolled back; recorded in the audit release'
+        required: true
+        type: string
+      dry_run:
+        description: 'Verify and preview only; disable explicitly to move stable'
+        type: boolean
+        default: true
+
+permissions: {}
+
+# Shared with execute-release.yml, including its entire verification/retag run.
+concurrency:
+  group: utah-stable-release
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main' && github.repository == 'projectbluefin/utah'
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      packages: read
+      statuses: read
+    outputs:
+      plan: ${{ steps.plan.outputs.plan }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Install skopeo
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq skopeo
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+      - name: Authenticate read-only registry access
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "$GH_TOKEN" | skopeo login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Verify every target before any writes
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET: ${{ inputs.target }}
+          REASON: ${{ inputs.reason }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: python3 scripts/rollback-stable.py
+
+  rollback:
+    needs: verify
+    if: ${{ !inputs.dry_run && github.ref == 'refs/heads/main' && github.repository == 'projectbluefin/utah' }}
+    runs-on: ubuntu-26.04
+    permissions:
+      packages: write
+      contents: write
+    env:
+      PLAN: ${{ needs.verify.outputs.plan }}
+      REASON: ${{ inputs.reason }}
+      TARGET: ${{ inputs.target }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Install skopeo
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq skopeo
+      - name: Authenticate registry writes
+        run: echo "$GH_TOKEN" | skopeo login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      # All preflight checks precede the first write. Registry tag updates are
+      # not transactional: on failure inspect the logs before retrying.
+      - name: Copy verified digests and check stable
+        run: |
+          set -euo pipefail
+          while IFS=$'\t' read -r image before digest; do
+            now=$(skopeo inspect --format '{{.Digest}}' "docker://ghcr.io/projectbluefin/${image}:stable")
+            [ "$now" = "$before" ] || { echo "stable changed since verification: $image"; exit 1; }
+          done < <(jq -r '.[] | [.image, .from, .to] | @tsv' <<< "$PLAN")
+          while IFS=$'\t' read -r image digest; do
+            skopeo copy --preserve-digests --all \
+              "docker://ghcr.io/projectbluefin/${image}@${digest}" \
+              "docker://ghcr.io/projectbluefin/${image}:stable"
+          done < <(jq -r '.[] | [.image, .to] | @tsv' <<< "$PLAN")
+          while IFS=$'\t' read -r image digest; do
+            now=$(skopeo inspect --format '{{.Digest}}' "docker://ghcr.io/projectbluefin/${image}:stable")
+            [ "$now" = "$digest" ] || { echo "stable digest mismatch: $image"; exit 1; }
+          done < <(jq -r '.[] | [.image, .to] | @tsv' <<< "$PLAN")
+      - name: Record audit prerelease
+        env:
+          AUDIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          plan = json.loads(os.environ['PLAN'])
+          notes = ['# Stable rollback', '', f"Actor: @{os.environ['GITHUB_ACTOR']}",
+                   f"Run: https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+                   f"Target: {os.environ['TARGET']}", '', '## Reason', '', os.environ['REASON'], '',
+                   '## Verified digest changes', '', '| Image | From | To | Build commit |',
+                   '| --- | --- | --- | --- |']
+          for entry in plan:
+              notes.append(f"| {entry['image']} | `{entry['from']}` | `{entry['to']}` | `{entry['sha']}` |")
+          notes += ['', 'Signatures and both per-digest E2E gates verified before copying; all stable digests rechecked afterward.']
+          Path('rollback-notes.md').write_text('\n'.join(notes) + '\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('\n'.join(notes) + '\n')
+          PY
+          gh release create "rollback-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --repo "$GITHUB_REPOSITORY" --target "$AUDIT_SHA" \
+            --title "Stable rollback ${GITHUB_RUN_ID}" \
+            --notes-file rollback-notes.md --prerelease --latest=false
