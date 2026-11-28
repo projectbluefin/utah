@@ -7,7 +7,7 @@
 # hanthor/systemd). utah.live.installer=gnome-setup on the live entry starts it.
 # The layers sit on top of a published Utah digest; the published image and
 # the ISO/fisherman path are unchanged.
-ARG SOURCE_IMAGE=ghcr.io/projectbluefin/utah:testing@sha256:5d7709fa79af87eeea86cb106026f6c4ac43594e7b2bd1da68a05f74de11ef4b
+ARG SOURCE_IMAGE=ghcr.io/projectbluefin/utah:testing@sha256:dd587da212a02a38e134bffdff7481750f4f42afe182aaf7f5014bfb53e88264
 ARG BUILDER_IMAGE=registry.fedoraproject.org/fedora:43@sha256:218c0b6e4f928fbfe0ca88188b3842d8a55a9914f4d8bd95dcaf72192411939c
 
 # systemd-sysinstall's Varlink API (io.systemd.SysInstall, which gnome-setup
