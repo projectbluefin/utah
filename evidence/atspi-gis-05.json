@@ -1,0 +1,1223 @@
+[
+ {
+  "path": "0.0",
+  "role": "frame",
+  "name": "Initial Setup",
+  "text": "",
+  "states": [
+   "active",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "window.minimize",
+   "default.activate"
+  ],
+  "ext": [
+   0,
+   0,
+   1024,
+   768
+  ]
+ },
+ {
+  "path": "0.0.0",
+  "role": "scroll pane",
+  "name": "",
+  "text": "",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0",
+  "role": "grouping",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   0,
+   0,
+   32597
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0",
+  "role": "grouping",
+  "name": "Set a Password for Utah Tester Be careful not to lose your password.",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0",
+  "role": "grouping",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0",
+  "role": "scroll pane",
+  "name": "",
+  "text": "",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   519
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   519
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0",
+  "role": "grouping",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   519
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   70,
+   576,
+   471
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.0",
+  "role": "grouping",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   94,
+   576,
+   171
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   94,
+   576,
+   171
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   94,
+   576,
+   171
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.0.0.0.0",
+  "role": "image",
+  "name": "Avatar of Utah Tester",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   94,
+   576,
+   96
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.0.0.0.1",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   208,
+   576,
+   57
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.0.0.0.1.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   208,
+   576,
+   57
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.0.0.0.1.0.0",
+  "role": "label",
+  "name": "Set a Password for Utah Tester",
+  "text": "Set a Password for Utah Tester",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   224,
+   208,
+   576,
+   33
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.0.0.0.1.0.1",
+  "role": "label",
+  "name": "Be careful not to lose your password.",
+  "text": "Be careful not to lose your password.",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   224,
+   247,
+   576,
+   18
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.1",
+  "role": "grouping",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   289,
+   576,
+   121
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.1.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   289,
+   576,
+   121
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.1.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   289,
+   576,
+   121
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.1.0.0.0",
+  "role": "list",
+  "name": "",
+  "text": "",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   289,
+   576,
+   54
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.1.0.0.0.0",
+  "role": "list item",
+  "name": "Password Password",
+  "text": "",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   289,
+   576,
+   54
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.1.0.0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   230,
+   289,
+   560,
+   50
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.1.0.0.0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   230,
+   289,
+   520,
+   50
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.1.0.0.0.0.0.0.0",
+  "role": "label",
+  "name": "Password",
+  "text": "Password",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   230,
+   296,
+   57,
+   15
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.1.0.0.0.0.0.0.1",
+  "role": "label",
+  "name": "Password",
+  "text": "Password",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   230,
+   296,
+   57,
+   15
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.1.0.0.0.0.0.0.2",
+  "role": "password text",
+  "name": "Password",
+  "text": "",
+  "states": [
+   "editable",
+   "focusable",
+   "focused",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "text.undo",
+   "text.redo",
+   "text.clear",
+   "misc.insert-emoji",
+   "menu.popup",
+   "misc.toggle-visibility",
+   "misc.toggle-direction"
+  ],
+  "ext": [
+   230,
+   289,
+   508,
+   50
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.1.0.0.0.0.0.1",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   750,
+   289,
+   34,
+   50
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.1.0.0.0.0.0.1.0",
+  "role": "button",
+  "name": "Show Password",
+  "text": "",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "click"
+  ],
+  "ext": [
+   750,
+   297,
+   34,
+   34
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.1.0.0.1",
+  "role": "level bar",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   355,
+   576,
+   8
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.1.0.0.2",
+  "role": "label",
+  "name": "Mix uppercase and lowercase and try to use a number or two.",
+  "text": "Mix uppercase and lowercase and try to use a number or two.",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   224,
+   369,
+   576,
+   17
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.2",
+  "role": "grouping",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   434,
+   576,
+   107
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.2.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   434,
+   576,
+   107
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.2.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   434,
+   576,
+   107
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.2.0.0.0",
+  "role": "list",
+  "name": "",
+  "text": "",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   434,
+   576,
+   54
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.2.0.0.0.0",
+  "role": "list item",
+  "name": "Confirm Password Confirm Password",
+  "text": "",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   434,
+   576,
+   54
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.2.0.0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   230,
+   434,
+   560,
+   50
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.2.0.0.0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   230,
+   434,
+   520,
+   50
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.2.0.0.0.0.0.0.0",
+  "role": "label",
+  "name": "Confirm Password",
+  "text": "Confirm Password",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   230,
+   450,
+   128,
+   18
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.2.0.0.0.0.0.0.1",
+  "role": "label",
+  "name": "Confirm Password",
+  "text": "Confirm Password",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   230,
+   450,
+   129,
+   18
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.2.0.0.0.0.0.0.2",
+  "role": "password text",
+  "name": "Confirm Password",
+  "text": "",
+  "states": [
+   "editable",
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "text.undo",
+   "text.redo",
+   "text.clear",
+   "misc.insert-emoji",
+   "menu.popup",
+   "misc.toggle-visibility",
+   "misc.toggle-direction"
+  ],
+  "ext": [
+   230,
+   434,
+   468,
+   50
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.2.0.0.0.0.0.1",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   750,
+   434,
+   34,
+   50
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.2.0.0.0.0.0.1.0",
+  "role": "button",
+  "name": "Show Password",
+  "text": "",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "click"
+  ],
+  "ext": [
+   750,
+   442,
+   34,
+   34
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.2.0.0.1",
+  "role": "label",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   224,
+   500,
+   576,
+   17
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.2",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   0,
+   0,
+   32597
+  ]
+ },
+ {
+  "path": "0.0.1",
+  "role": "grouping",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   -1,
+   0,
+   1026,
+   46
+  ]
+ },
+ {
+  "path": "0.0.1.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   -1,
+   0,
+   1026,
+   46
+  ]
+ },
+ {
+  "path": "0.0.1.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   -1,
+   0,
+   1026,
+   46
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   -1,
+   0,
+   103,
+   34
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.0.0",
+  "role": "button",
+  "name": "Previous",
+  "text": "",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "click"
+  ],
+  "ext": [
+   -1,
+   0,
+   97,
+   34
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.0.0.0",
+  "role": "label",
+  "name": "Previous",
+  "text": "Previous",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   -1,
+   0,
+   63,
+   24
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.0.1",
+  "role": "label",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   102,
+   0,
+   0,
+   34
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.1",
+  "role": "label",
+  "name": "Password",
+  "text": "Password",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   470,
+   0,
+   71,
+   34
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.2",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   914,
+   0,
+   97,
+   34
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.2.0",
+  "role": "button",
+  "name": "Next",
+  "text": "",
+  "states": [
+   "focusable",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "click"
+  ],
+  "ext": [
+   914,
+   0,
+   97,
+   34
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.2.0.0",
+  "role": "label",
+  "name": "Next",
+  "text": "Next",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   914,
+   0,
+   63,
+   24
+  ]
+ }
+]

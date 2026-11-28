@@ -1,0 +1,87 @@
+Checking repeat-boot setup units and desktop enablement...
+  flatpak-preinstall.service: success
+  ublue-system-setup.service: success
+  ublue-user-setup.service: success; enabled
+  avahi-daemon.service: success
+  avahi-daemon.socket: success
+  bluetooth.service: success
+  bluefin-migrate-var-home-passwd.service: success
+  vmtoolsd.service: success
+  qemu-guest-agent.service: success
+  ublue-firstboot-date.path: success
+  ublue-booted-image.service: success
+  bluefin-remove-installer.service: success
+  bootc-unified-storage.timer: success
+  brew-setup.service: success
+  cups.socket: success
+  ublue-wallpaper-month.service: success
+  bluefin-wallpaper-month.service: success
+  dconf-update.service: success
+  flatpak-nuke-fedora.service: success
+  flatpak-preinstall.service: success
+  gdm.service: success
+  accounts-daemon.service: success
+  ModemManager.service: success
+  kmsconvt@.service: enabled; no failed instance
+  power-profiles-daemon.service: success
+  rtkit-daemon.service: success
+  uresourced.service: success
+  upower.service: success
+  udisks2.service: success
+  polkit-agent-helper.socket: success
+  cups.service: success
+  pcscd.socket: success
+  gnome-remote-desktop.service: success
+  gnome-remote-desktop-configuration.service: success
+  malcontent-timerd.service: success
+  malcontent-timer-extension-agent.service: success
+  malcontent-webd.service: success
+  malcontent-webd-update.timer: success
+  systemd-oomd.service: success
+  systemd-oomd.socket: success
+  wpa_supplicant.service: success
+  podman.socket: success
+  podman-auto-update.timer: success
+  podman-restart.service: success
+  podman-clean-transient.service: success
+  systemd-sysext.socket: success
+  systemd-factory-reset.socket: success
+  systemd-pcrextend.socket: success
+  systemd-storage-block.socket: success
+  systemd-storage-fs.socket: success
+  systemd-udev-load-credentials.service: success
+  systemd-userdb-load-credentials.service: success
+  nvmf-autoconnect.service: success
+  nvmefc-boot-connections.service: success
+  systemd-imdsd.socket: success
+  speech-dispatcherd.service: success
+  nfs-client.target: active
+  thermald.service: success
+  projectbluefin-countme.timer: success
+  switcheroo-control.service: success
+  ublue-system-setup.service: success
+  uupd.timer: success
+  tailscaled.service: success
+  firewalld.service: success
+  fwupd-refresh.timer: success
+  systemd-boot-update.service: success
+  systemd-timesyncd.service: success
+  systemd-pcrlock-make-policy.service: success
+  systemd-pcrlock-machine-id.service: success
+  systemd-pcrlock-secureboot-authority.service: success
+  podman.service: success
+  netavark-dhcp-proxy.socket: success
+  netavark-dhcp-proxy.service: success
+  netavark-firewalld-reload.service: success
+  netavark-nftables-reload.service: success
+  brew-preinstall.service: exit-code; enabled
+  ublue-user-setup.service: success; enabled
+  pipewire.socket: success; enabled
+  pipewire-pulse.socket: success; enabled
+  wireplumber.service: success; enabled
+  xdg-user-dirs.service: success; enabled
+  speech-dispatcher.socket: success; enabled
+  xdg-desktop-portal-rewrite-launchers.service: success; enabled
+  oo7-daemon.service: success; enabled
+  ublue-gtk3-theme-sync.service: success; enabled
+  kanata.service: success

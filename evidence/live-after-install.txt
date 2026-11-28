@@ -1,0 +1,25 @@
+BootCurrent: 0002
+Timeout: 0 seconds
+BootOrder: 0004,0002,0000,0001,0003
+Boot0000* BootManagerMenuApp	FvVol(7cb8bdc9-f8eb-4f34-aaea-3ee4af6516a1)/FvFile(eec25bdc-67f2-4d95-b1d5-f81b2039d11d)
+      dp: 04 07 14 00 c9 bd b8 7c eb f8 34 4f aa ea 3e e4 af 65 16 a1 / 04 06 14 00 dc 5b c2 ee f2 67 95 4d b1 d5 f8 1b 20 39 d1 1d / 7f ff 04 00
+Boot0001* EFI Firmware Setup	FvVol(7cb8bdc9-f8eb-4f34-aaea-3ee4af6516a1)/FvFile(462caa21-7614-4503-836e-8ab6f4662331)
+      dp: 04 07 14 00 c9 bd b8 7c eb f8 34 4f aa ea 3e e4 af 65 16 a1 / 04 06 14 00 21 aa 2c 46 14 76 03 45 83 6e 8a b6 f4 66 23 31 / 7f ff 04 00
+Boot0002* UEFI Misc Device	PciRoot(0x0)/Pci(0x4,0x0){auto_created_boot_option}
+      dp: 02 01 0c 00 d0 41 03 0a 00 00 00 00 / 01 01 06 00 00 04 / 7f ff 04 00
+    data: 4e ac 08 81 11 9f 59 4d 85 0e e2 1a 52 2c 59 b2
+Boot0003* EFI Internal Shell	FvVol(7cb8bdc9-f8eb-4f34-aaea-3ee4af6516a1)/FvFile(7c04a583-9e3e-4f1c-ad65-e05268d0b4d1)
+      dp: 04 07 14 00 c9 bd b8 7c eb f8 34 4f aa ea 3e e4 af 65 16 a1 / 04 06 14 00 83 a5 04 7c 3e 9e 1c 4f ad 65 e0 52 68 d0 b4 d1 / 7f ff 04 00
+Boot0004* Utah	HD(1,GPT,f51dfc42-7b58-46fd-b264-c3ef49fa46b0,0x800,0x100000)/\EFI\fedora\shimx64.efi
+      dp: 04 01 2a 00 01 00 00 00 00 08 00 00 00 00 00 00 00 00 10 00 00 00 00 00 42 fc 1d f5 58 7b fd 46 b2 64 c3 ef 49 fa 46 b0 02 02 / 04 04 34 00 5c 00 45 00 46 00 49 00 5c 00 66 00 65 00 64 00 6f 00 72 00 61 00 5c 00 73 00 68 00 69 00 6d 00 78 00 36 00 34 00 2e 00 65 00 66 00 69 00 00 00 / 7f ff 04 00
+NAME    SIZE TYPE FSTYPE      UUID                                 PARTLABEL
+sr0    1024M rom                                                   
+vda     9.1G disk                                                  
+├─vda1    1M part                                                  BIOS-BOOT
+├─vda2  512M part vfat        ACD7-E2A4                            EFI-SYSTEM
+├─vda3    1G part ext4        847919ab-3d17-47ad-b04e-4425f7556c60 boot
+└─vda4  7.6G part btrfs       902ed84a-7fcf-4eef-ac37-cd7e83e59010 root
+vdb      48G disk                                                  
+├─vdb1  512M part vfat        D17F-DC1D                            EFI-SYSTEM
+├─vdb2    1G part ext4        847919ab-3d17-47ad-b04e-4425f7556c60 boot
+└─vdb3 46.5G part crypto_LUKS 57759fc8-fb9f-4a9d-b55d-1647c0105c5f root

@@ -1,0 +1,684 @@
+[
+ {
+  "path": "0.0",
+  "role": "frame",
+  "name": "Initial Setup",
+  "text": "",
+  "states": [
+   "active",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "window.minimize",
+   "default.activate"
+  ],
+  "ext": [
+   0,
+   0,
+   1024,
+   768
+  ]
+ },
+ {
+  "path": "0.0.0",
+  "role": "scroll pane",
+  "name": "",
+  "text": "",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0",
+  "role": "grouping",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   0,
+   0,
+   32597
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0",
+  "role": "grouping",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0",
+  "role": "grouping",
+  "name": "Time Zone The time zone will be set automatically if your location can be found. You can also search for a city to set it yourself.",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   111,
+   46,
+   802,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   111,
+   70,
+   802,
+   189
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0",
+  "role": "image",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   111,
+   70,
+   802,
+   96
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.1",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   111,
+   184,
+   802,
+   75
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.1.0",
+  "role": "label",
+  "name": "Time Zone",
+  "text": "Time Zone",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   111,
+   184,
+   802,
+   33
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.1.1",
+  "role": "label",
+  "name": "The time zone will be set automatically if your location can be found. You can also search for a city to set it yourself.",
+  "text": "The time zone will be set automatically if your location can be found. You can also search for a city to set it yourself.",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   111,
+   223,
+   802,
+   36
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.1",
+  "role": "grouping",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   111,
+   277,
+   802,
+   477
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.1.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   255,
+   277,
+   513,
+   34
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.1.0.0",
+  "role": "text",
+  "name": "",
+  "text": "",
+  "states": [
+   "editable",
+   "focusable",
+   "focused",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "activate"
+  ],
+  "ext": [
+   255,
+   277,
+   513,
+   34
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.1.1",
+  "role": "grouping",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   111,
+   325,
+   802,
+   411
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.1.1.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   111,
+   325,
+   800,
+   409
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.1.1.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   111,
+   325,
+   800,
+   409
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.2",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   0,
+   0,
+   32597
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.3",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   0,
+   0,
+   32597
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.4",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   0,
+   0,
+   32597
+  ]
+ },
+ {
+  "path": "0.0.1",
+  "role": "grouping",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   -1,
+   0,
+   1026,
+   46
+  ]
+ },
+ {
+  "path": "0.0.1.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   -1,
+   0,
+   1026,
+   46
+  ]
+ },
+ {
+  "path": "0.0.1.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   -1,
+   0,
+   1026,
+   46
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   -1,
+   0,
+   103,
+   34
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.0.0",
+  "role": "button",
+  "name": "Previous",
+  "text": "",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "click"
+  ],
+  "ext": [
+   -1,
+   0,
+   97,
+   34
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.0.0.0",
+  "role": "label",
+  "name": "Previous",
+  "text": "Previous",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   -1,
+   0,
+   63,
+   24
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.0.1",
+  "role": "label",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   102,
+   0,
+   0,
+   34
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.1",
+  "role": "label",
+  "name": "Time Zone",
+  "text": "Time Zone",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   467,
+   0,
+   76,
+   34
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.2",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   914,
+   0,
+   97,
+   34
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.2.0",
+  "role": "button",
+  "name": "Next",
+  "text": "",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "click"
+  ],
+  "ext": [
+   914,
+   0,
+   97,
+   34
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.2.0.0",
+  "role": "label",
+  "name": "Next",
+  "text": "Next",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   914,
+   0,
+   63,
+   24
+  ]
+ }
+]

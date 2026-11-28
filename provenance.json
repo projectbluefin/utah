@@ -1,0 +1,6 @@
+{
+  "source_sha": "38d65f74d12b44c55d9b0a1c14a7f7a5502f705d",
+  "e2e_run": "46150213784",
+  "image": "ghcr.io/projectbluefin/utah@sha256:21e62e09515b992c2518b63163c7ec7c028f9fc7df7c04e6bd0d2a418c07f5c0",
+  "installer": "gnome-setup"
+}

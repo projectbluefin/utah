@@ -1,0 +1,120 @@
+==> 2026-11-28T14:17:59+00:00 Utah post-install for /dev/vdb started
+==> Target ESP=/dev/vdb1 boot=/dev/vdb2 root=/dev/vdb3 (medium /dev/vda)
+	tpm2-hash-pcrs:   7
+	tpm2-pcr-bank:    sha256
+	tpm2-pubkey:
+	            (null)
+	tpm2-pubkey-pcrs: 
+	tpm2-pin:         false
+	tpm2-pcrlock:     false
+	tpm2-salt:        false
+	tpm2-srk:         true
+	tpm2-pcrlock-nv:  false
+	tpm2-policy-hash:
+	            8c 3d 9b 87 d9 b8 f1 ba ba be ab d7 0d cb d3 e3
+	            a3 4c c2 a8 5f 70 02 db 5e 28 2f 48 bd ee 16 17
+	tpm2-blob:  00 9e 00 20 e3 8b 6a a8 42 c1 c9 87 e8 29 4b 09
+	            cc 6f ea ea 3f 51 d6 79 94 72 a5 ad 47 45 4f 63
+	            ba 60 05 52 00 10 a7 05 2e 12 8a dc e2 75 af ff
+	            4f 49 ee dd e2 c5 64 15 e4 c6 c1 b9 58 a1 3c c8
+	            11 39 9f 36 8f b9 ab d6 21 1d f0 74 50 9e 68 7f
+	            46 89 b2 bd 59 d1 d1 30 a7 5f c1 5b 5a ca 2f 26
+	            24 dd 9e 92 a1 10 8d 59 b2 a2 38 af 71 29 d4 e5
+	            0b 2a ca 4b 42 94 0c 15 00 73 e8 f3 ee 19 f0 4c
+	            6f fc d4 24 9f 14 2a e6 75 d7 fa 6c 46 ae ca f7
+	            b3 c8 f0 09 f0 a3 f9 c5 26 71 56 a6 a1 9b 62 e7
+	            00 4e 00 08 00 0b 00 00 04 12 00 20 8c 3d 9b 87
+	            d9 b8 f1 ba ba be ab d7 0d cb d3 e3 a3 4c c2 a8
+	            5f 70 02 db 5e 28 2f 48 bd ee 16 17 00 10 00 20
+	            68 4d a3 df 17 c7 2c 51 77 23 08 20 b2 df a0 c6
+	            39 28 3f bc b7 67 3b c8 de c3 c7 82 ef fe 49 1c
+	Keyslot:    1
+Digests:
+  0: pbkdf2
+	Hash:       sha256
+	Iterations: 342224
+	Salt:       
+87 
+ac 
+dc 
+e3 
+ec 
+dd 
+55 
+11 
+5f 
+6f 
+60 
+4e 
+06 
+65 
+a2 
+b6 
+	            
+66 
+ac 
+8a 
+26 
+98 
+e2 
+5b 
+3d 
+1f 
+b3 
+06 
+ac 
+25 
+9f 
+fd 
+1c 
+	Digest:     
+ef 
+25 
+f3 
+a1 
+8e 
+03 
+31 
+a5 
+ac 
+da 
+17 
+1c 
+b8 
+18 
+0d 
+8a 
+	            
+2c 
+2b 
+1c 
+43 
+99 
+b2 
+57 
+c9 
+5a 
+20 
+f1 
+c2 
+c8 
+9d 
+bf 
+18 
+Command successful.
+==> root is LUKS2 57759fc8-fb9f-4a9d-b55d-1647c0105c5f (TPM2 token: 1)
+==> /dev/vdb1 (vfat): ACD7-E2A4 -> D17F-DC1D
+e2fsck 1.47.4 (6-Mar-2025)
+==> /dev/vdb2 (ext4): 847919ab-3d17-47ad-b04e-4425f7556c60 -> 819c4477-111e-45b4-bdd8-8cbc69227af9
+==> /dev/mapper/utah-install-root-13875 (btrfs): 902ed84a-7fcf-4eef-ac37-cd7e83e59010 -> 3b836b48-dc51-4531-b63d-3292942ddcf9
+==> deployments: state/deploy/4041a803ded0d72c6ef57001fbf26fdc2129229a541f4672d3bea87c6713722de0df5da55a93177fd88d62712f616f4c63b4460134975bba29abf861a203d8ea
+==> rewrote 847919ab-3d17-47ad-b04e-4425f7556c60 in boot/loader/entries/bootc_hummingbird-20251124-1.conf
+==> rewrote 847919ab-3d17-47ad-b04e-4425f7556c60 in boot/loader/entries/utah-live.conf
+==> rewrote 847919ab-3d17-47ad-b04e-4425f7556c60 in boot/grub2/bootuuid.cfg
+==> rewrote 847919ab-3d17-47ad-b04e-4425f7556c60 in efi/EFI/fedora/bootuuid.cfg
+==> rewrote 902ed84a-7fcf-4eef-ac37-cd7e83e59010 in boot/loader/entries/bootc_hummingbird-20251124-1.conf
+==> rewrote 902ed84a-7fcf-4eef-ac37-cd7e83e59010 in boot/loader/entries/utah-live.conf
+==> boot entry bootc_hummingbird-20251124-1.conf: root=UUID=3b836b48-dc51-4531-b63d-3292942ddcf9 rootflags=subvol=/ rw boot=UUID=819c4477-111e-45b4-bdd8-8cbc69227af9 rhgb quiet composefs.digest=v1-sha512-12:4041a803ded0d72c6ef57001fbf26fdc2129229a541f4672d3bea87c6713722de0df5da55a93177fd88d62712f616f4c63b4460134975bba29abf861a203d8ea systemd.mount-extra=UUID=819c4477-111e-45b4-bdd8-8cbc69227af9:/boot:auto:ro console=tty1 console=ttyS0,115200n8 plymouth.ignore-serial-consoles zswap.enabled=1 zswap.compressor=zstd zswap.max_pool_percent=20 zswap.shrinker_enabled=1 rd.luks.uuid=57759fc8-fb9f-4a9d-b55d-1647c0105c5f rd.luks.options=57759fc8-fb9f-4a9d-b55d-1647c0105c5f=tpm2-device=auto,discard
+==> root filesystem grown: 47G
+==> firmware boot entry: Utah -> /EFI/fedora/shimx64.efi
+==> Utah post-install for /dev/vdb finished in 10s

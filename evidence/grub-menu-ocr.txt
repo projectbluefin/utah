@@ -1,0 +1,18 @@
+== 14:14:23 other
+Guest has not initialized the display (yet).
+
+== 14:14:27 other
+BdsDxe: loading Boot0002 “UEFI Misc Device” from PciRoot (0x0) /Pci (Ox4,.0x0)
+BdsDxe: starting Boot0002 “UEFI Misc Device" from PciRoot (0x0) /Pci (Ox4.0x0)
+
+
+== 14:14:29 grub
+GRUB version 2.12
+
+Utah Live (try or install)
+Bluefin Wersion: test ing-20261128-38d65f7)
+UEFI Firmware Settings
+
+Use the 4 and ¥ keys to select uhich entry is highlighted.
+Press enter to boot the selected 0S, “e’ to edit the conmands before booting or “c’ for a command-line. ESC to return previous menu.
+

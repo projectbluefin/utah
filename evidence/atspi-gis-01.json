@@ -1,0 +1,1518 @@
+[
+ {
+  "path": "0.0",
+  "role": "frame",
+  "name": "Initial Setup",
+  "text": "",
+  "states": [
+   "active",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "window.minimize",
+   "default.activate"
+  ],
+  "ext": [
+   0,
+   0,
+   1024,
+   768
+  ]
+ },
+ {
+  "path": "0.0.0",
+  "role": "scroll pane",
+  "name": "",
+  "text": "",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0",
+  "role": "grouping",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0",
+  "role": "grouping",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0",
+  "role": "grouping",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0",
+  "role": "scroll pane",
+  "name": "",
+  "text": "",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0",
+  "role": "grouping",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   70,
+   576,
+   674
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0",
+  "role": "grouping",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   70,
+   576,
+   674
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   70,
+   576,
+   674
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   70,
+   576,
+   674
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   70,
+   576,
+   674
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0",
+  "role": "grouping",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   94,
+   576,
+   171
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0",
+  "role": "image",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   94,
+   576,
+   96
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   208,
+   576,
+   57
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.0",
+  "role": "label",
+  "name": "Typing",
+  "text": "Typing",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   224,
+   208,
+   576,
+   33
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1",
+  "role": "label",
+  "name": "Select your keyboard layout or an input method.",
+  "text": "Select your keyboard layout or an input method.",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   224,
+   247,
+   576,
+   18
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1",
+  "role": "grouping",
+  "name": "Typing Select your keyboard layout or an input method.",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   283,
+   576,
+   443
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.0",
+  "role": "entry",
+  "name": "",
+  "text": "",
+  "states": [
+   "editable",
+   "focusable",
+   "focused",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "activate"
+  ],
+  "ext": [
+   224,
+   283,
+   576,
+   34
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1",
+  "role": "list",
+  "name": "",
+  "text": "",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   329,
+   576,
+   280
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.0",
+  "role": "list item",
+  "name": "",
+  "text": "",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   329,
+   576,
+   47
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   236,
+   341,
+   548,
+   18
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.0.0.0",
+  "role": "check box",
+  "name": "English (Colemak-DH ISO)",
+  "text": "English (Colemak-DH ISO)",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   236,
+   341,
+   183,
+   18
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.0.0.1",
+  "role": "image",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   431,
+   341,
+   16,
+   18
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.0.0.2",
+  "role": "label",
+  "name": "Preview",
+  "text": "Preview",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   729,
+   341,
+   55,
+   18
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.0.0.2.0",
+  "role": "link",
+  "name": "",
+  "text": "",
+  "states": [
+   "focusable",
+   "focused",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   0,
+   0,
+   32597
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.1",
+  "role": "list item",
+  "name": "",
+  "text": "",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   376,
+   576,
+   47
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.1.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   236,
+   388,
+   548,
+   18
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.1.0.0",
+  "role": "check box",
+  "name": "English (Mali, US, intl.)",
+  "text": "English (Mali, US, intl.)",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   236,
+   388,
+   157,
+   18
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.1.0.1",
+  "role": "image",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   405,
+   388,
+   16,
+   18
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.1.0.2",
+  "role": "label",
+  "name": "Preview",
+  "text": "Preview",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   729,
+   388,
+   55,
+   18
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.1.0.2.0",
+  "role": "link",
+  "name": "",
+  "text": "",
+  "states": [
+   "focusable",
+   "focused",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   0,
+   0,
+   32597
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.2",
+  "role": "list item",
+  "name": "",
+  "text": "",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   423,
+   576,
+   47
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.2.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   236,
+   435,
+   548,
+   18
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.2.0.0",
+  "role": "check box",
+  "name": "English (US)",
+  "text": "English (US)",
+  "states": [
+   "checked",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   236,
+   435,
+   86,
+   18
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.2.0.1",
+  "role": "image",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   334,
+   435,
+   16,
+   18
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.2.0.2",
+  "role": "label",
+  "name": "Preview",
+  "text": "Preview",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   729,
+   435,
+   55,
+   18
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.2.0.2.0",
+  "role": "link",
+  "name": "",
+  "text": "",
+  "states": [
+   "focusable",
+   "focused",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   0,
+   0,
+   32597
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.3",
+  "role": "list item",
+  "name": "",
+  "text": "",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   470,
+   576,
+   47
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.3.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   236,
+   482,
+   548,
+   18
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.3.0.0",
+  "role": "check box",
+  "name": "English (classic Dvorak)",
+  "text": "English (classic Dvorak)",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   236,
+   482,
+   167,
+   18
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.3.0.1",
+  "role": "image",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   415,
+   482,
+   16,
+   18
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.3.0.2",
+  "role": "label",
+  "name": "Preview",
+  "text": "Preview",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   729,
+   482,
+   55,
+   18
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.3.0.2.0",
+  "role": "link",
+  "name": "",
+  "text": "",
+  "states": [
+   "focusable",
+   "focused",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   0,
+   0,
+   32597
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.4",
+  "role": "list item",
+  "name": "",
+  "text": "",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   517,
+   576,
+   47
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.4.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   236,
+   529,
+   548,
+   18
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.4.0.0",
+  "role": "check box",
+  "name": "Indic IPA",
+  "text": "Indic IPA",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   236,
+   529,
+   60,
+   18
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.4.0.1",
+  "role": "image",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   308,
+   529,
+   16,
+   18
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.4.0.2",
+  "role": "label",
+  "name": "Preview",
+  "text": "Preview",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   729,
+   529,
+   55,
+   18
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.4.0.2.0",
+  "role": "link",
+  "name": "",
+  "text": "",
+  "states": [
+   "focusable",
+   "focused",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   0,
+   0,
+   32597
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.5",
+  "role": "list item",
+  "name": "",
+  "text": "",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   564,
+   576,
+   45
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.5.0",
+  "role": "grouping",
+  "name": "More\u2026",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   576,
+   572,
+   16
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.1.5.0.0",
+  "role": "image",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   502,
+   576,
+   16,
+   16
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   0,
+   0,
+   32597
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.2",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   0,
+   0,
+   32597
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.3",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   0,
+   0,
+   32597
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.4",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   0,
+   0,
+   32597
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.5",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   0,
+   0,
+   32597
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.6",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   0,
+   0,
+   32597
+  ]
+ },
+ {
+  "path": "0.0.1",
+  "role": "grouping",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   -1,
+   0,
+   1026,
+   46
+  ]
+ },
+ {
+  "path": "0.0.1.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   -1,
+   0,
+   1026,
+   46
+  ]
+ },
+ {
+  "path": "0.0.1.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   -1,
+   0,
+   1026,
+   46
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   -1,
+   0,
+   103,
+   34
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.0.0",
+  "role": "button",
+  "name": "Previous",
+  "text": "",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "click"
+  ],
+  "ext": [
+   -1,
+   0,
+   97,
+   34
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.0.0.0",
+  "role": "label",
+  "name": "Previous",
+  "text": "Previous",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   -1,
+   0,
+   63,
+   24
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.0.1",
+  "role": "label",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   102,
+   0,
+   0,
+   34
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.1",
+  "role": "label",
+  "name": "Typing",
+  "text": "Typing",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   480,
+   0,
+   50,
+   34
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.2",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   914,
+   0,
+   97,
+   34
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.2.0",
+  "role": "button",
+  "name": "Next",
+  "text": "",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "click"
+  ],
+  "ext": [
+   914,
+   0,
+   97,
+   34
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.2.0.0",
+  "role": "label",
+  "name": "Next",
+  "text": "Next",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   914,
+   0,
+   63,
+   24
+  ]
+ }
+]

@@ -1,0 +1,12 @@
+Uninstalling app/org.gnome.Calculator/x86_64/stable
+
+Note that '/var/lib/flatpak/exports/share' is not in the search path
+set by the XDG_DATA_HOME and XDG_DATA_DIRS
+environment variables, so applications may not
+be able to find it until you set them. The
+directories currently searched are:
+
+- /root/.local/share
+- /usr/local/share/
+- /usr/share/
+

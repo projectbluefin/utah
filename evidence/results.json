@@ -1,0 +1,162 @@
+{
+ "result": "pass",
+ "error": null,
+ "install": "gui",
+ "installer": "gnome-setup",
+ "medium": {
+  "medium": "raw"
+ },
+ "backend": {
+  "backend": "composefs",
+  "requested": "auto",
+  "kernel": "7.3.5-200.1.utah1.fc44.x86_64",
+  "fixed": true,
+  "reason": "7.3.5-200.1.utah1.fc44.x86_64 is Utah's build with the btrfs fs-verity fix (.utah marker)"
+ },
+ "encryption": {
+  "encrypted": true,
+  "tpm2": true,
+  "unlocks": {
+   "first boot": "tpm",
+   "after bootc switch": "recovery",
+   "after bootc rollback": "tpm"
+  },
+  "switch_default": "on",
+  "confirmation": "encrypted",
+  "slots": [
+   "recovery",
+   "tpm2"
+  ]
+ },
+ "stages": [
+  {
+   "stage": "live boot",
+   "status": "pass",
+   "seconds": 55
+  },
+  {
+   "stage": "install",
+   "status": "pass",
+   "seconds": 192
+  },
+  {
+   "stage": "first boot unlock",
+   "status": "pass",
+   "seconds": 101
+  },
+  {
+   "stage": "initial setup",
+   "status": "pass",
+   "seconds": 103
+  },
+  {
+   "stage": "first boot desktop",
+   "status": "pass",
+   "seconds": 123
+  },
+  {
+   "stage": "bootc switch",
+   "status": "pass",
+   "seconds": 241
+  },
+  {
+   "stage": "bootc rollback",
+   "status": "pass",
+   "seconds": 142
+  }
+ ],
+ "boots": {
+  "live": {
+   "selinux": "Enforcing",
+   "failed_units": []
+  },
+  "first boot": {
+   "selinux": "Enforcing",
+   "failed_units": []
+  },
+  "after bootc switch": {
+   "selinux": "Enforcing",
+   "failed_units": []
+  },
+  "after bootc rollback": {
+   "selinux": "Enforcing",
+   "failed_units": []
+  }
+ },
+ "flatpaks": {
+  "first boot": {
+   "apps": 36,
+   "problems": []
+  },
+  "after bootc switch": {
+   "apps": 35,
+   "problems": []
+  },
+  "after bootc rollback": {
+   "apps": 35,
+   "problems": []
+  }
+ },
+ "composefs": {
+  "first boot": {
+   "objects": 91957,
+   "verity_objects": 91957,
+   "read": true,
+   "read_errors": 0,
+   "read_bytes": 6785626178,
+   "root_source": "composefs:4041a803ded0d72c6ef57001fbf26fdc2129229a541f4672d3bea87c6713722de0df5da55a93177fd88d62712f616f4c63b4460134975bba29abf861a203d8ea",
+   "seconds": 46,
+   "corrupted_reports": 0,
+   "problems": []
+  },
+  "after bootc switch": {
+   "objects": 92116,
+   "verity_objects": 92116,
+   "read": false,
+   "read_errors": 0,
+   "read_bytes": 0,
+   "root_source": "composefs:8bf2e9f22fe3526dfd2fbf5fc6fa68129091d462e2867697d63703520e8c8e72a8951cafe50eb65ebc0a534b9bc720443883d770db350ed4a5a4afce505e89d2",
+   "seconds": 10,
+   "corrupted_reports": 0,
+   "problems": []
+  },
+  "after bootc rollback": {
+   "objects": 92116,
+   "verity_objects": 92116,
+   "read": false,
+   "read_errors": 0,
+   "read_bytes": 0,
+   "root_source": "composefs:4041a803ded0d72c6ef57001fbf26fdc2129229a541f4672d3bea87c6713722de0df5da55a93177fd88d62712f616f4c63b4460134975bba29abf861a203d8ea",
+   "seconds": 9,
+   "corrupted_reports": 0,
+   "problems": []
+  }
+ },
+ "installed_checks": {
+  "live": {
+   "startup overview": []
+  },
+  "first boot": {
+   "startup overview": [],
+   "boot state": [],
+   "flavor": [],
+   "countme": [],
+   "extensions": [],
+   "fastfetch": [],
+   "flathub remote": [],
+   "setup units": []
+  },
+  "after bootc switch": {
+   "startup overview": []
+  },
+  "after bootc rollback": {
+   "startup overview": [],
+   "flathub remote": [],
+   "setup units": []
+  }
+ },
+ "timings": {
+  "gui-install-seconds-after-confirm": 79,
+  "bootc-switch-seconds": 29
+ }
+}

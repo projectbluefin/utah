@@ -1,0 +1,1020 @@
+[
+ {
+  "path": "0.0",
+  "role": "frame",
+  "name": "Initial Setup",
+  "text": "",
+  "states": [
+   "active",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "window.minimize",
+   "default.activate"
+  ],
+  "ext": [
+   0,
+   0,
+   1024,
+   768
+  ]
+ },
+ {
+  "path": "0.0.0",
+  "role": "scroll pane",
+  "name": "",
+  "text": "",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0",
+  "role": "grouping",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   0,
+   0,
+   32597
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0",
+  "role": "grouping",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0",
+  "role": "grouping",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0",
+  "role": "scroll pane",
+  "name": "",
+  "text": "",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0",
+  "role": "grouping",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   46,
+   1024,
+   722
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   70,
+   576,
+   674
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.0",
+  "role": "grouping",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   70,
+   576,
+   195
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   70,
+   576,
+   195
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   70,
+   576,
+   195
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   94,
+   576,
+   171
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.0.0.0.0.0",
+  "role": "image",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   94,
+   576,
+   96
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.0.0.0.0.1",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   208,
+   576,
+   57
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.0.0.0.0.1.0",
+  "role": "label",
+  "name": "Privacy",
+  "text": "Privacy",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   224,
+   208,
+   576,
+   33
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.0.0.0.0.1.1",
+  "role": "label",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   224,
+   247,
+   576,
+   18
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.1",
+  "role": "grouping",
+  "name": "Privacy",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   289,
+   576,
+   83
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.1.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   289,
+   576,
+   83
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.1.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   289,
+   576,
+   83
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.1.0.0.0",
+  "role": "list",
+  "name": "",
+  "text": "",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   289,
+   576,
+   54
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.1.0.0.0.0",
+  "role": "list item",
+  "name": "Location Services",
+  "text": "",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   289,
+   576,
+   54
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.1.0.0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   236,
+   289,
+   548,
+   50
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.1.0.0.0.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   236,
+   305,
+   496,
+   18
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.1.0.0.0.0.0.0.0",
+  "role": "label",
+  "name": "Location Services",
+  "text": "Location Services",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   236,
+   305,
+   496,
+   18
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.1.0.0.0.0.0.1",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   738,
+   289,
+   46,
+   50
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.1.0.0.0.0.0.1.0",
+  "role": "switch",
+  "name": "Location Services",
+  "text": "",
+  "states": [
+   "checked",
+   "focusable",
+   "focused",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "toggle"
+  ],
+  "ext": [
+   738,
+   301,
+   46,
+   26
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.1.0.0.1",
+  "role": "label",
+  "name": "Allows apps to determine your geographical location.",
+  "text": "Allows apps to determine your geographical location.",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   224,
+   355,
+   576,
+   17
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.2",
+  "role": "grouping",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   396,
+   576,
+   348
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.2.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   396,
+   576,
+   348
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.2.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   224,
+   396,
+   576,
+   348
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.1.0.0.0.0.0.0.2.0.0.0",
+  "role": "label",
+  "name": "Privacy controls can be changed at any time from the Settings app.",
+  "text": "Privacy controls can be changed at any time from the Settings app.",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   224,
+   708,
+   576,
+   18
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.2",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   0,
+   0,
+   32597
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.3",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   0,
+   0,
+   32597
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.4",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   0,
+   0,
+   32597
+  ]
+ },
+ {
+  "path": "0.0.0.0.0.0.5",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   0,
+   0,
+   0,
+   32597
+  ]
+ },
+ {
+  "path": "0.0.1",
+  "role": "grouping",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   -1,
+   0,
+   1026,
+   46
+  ]
+ },
+ {
+  "path": "0.0.1.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   -1,
+   0,
+   1026,
+   46
+  ]
+ },
+ {
+  "path": "0.0.1.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   -1,
+   0,
+   1026,
+   46
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.0",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   -1,
+   0,
+   103,
+   34
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.0.0",
+  "role": "button",
+  "name": "Previous",
+  "text": "",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "click"
+  ],
+  "ext": [
+   -1,
+   0,
+   97,
+   34
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.0.0.0",
+  "role": "label",
+  "name": "Previous",
+  "text": "Previous",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   -1,
+   0,
+   63,
+   24
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.0.1",
+  "role": "label",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   102,
+   0,
+   0,
+   34
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.1",
+  "role": "label",
+  "name": "Privacy",
+  "text": "Privacy",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   478,
+   0,
+   54,
+   34
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.2",
+  "role": "panel",
+  "name": "",
+  "text": "",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [],
+  "ext": [
+   914,
+   0,
+   97,
+   34
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.2.0",
+  "role": "button",
+  "name": "Next",
+  "text": "",
+  "states": [
+   "focusable",
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "click"
+  ],
+  "ext": [
+   914,
+   0,
+   97,
+   34
+  ]
+ },
+ {
+  "path": "0.0.1.0.0.2.0.0",
+  "role": "label",
+  "name": "Next",
+  "text": "Next",
+  "states": [
+   "sensitive",
+   "showing",
+   "visible"
+  ],
+  "actions": [
+   "clipboard.copy",
+   "selection.delete",
+   "clipboard.paste",
+   "link.open",
+   "clipboard.cut",
+   "link.copy",
+   "menu.popup",
+   "selection.select-all"
+  ],
+  "ext": [
+   914,
+   0,
+   63,
+   24
+  ]
+ }
+]

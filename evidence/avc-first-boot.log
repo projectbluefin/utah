@@ -1,0 +1,1 @@
+selinux: avc:  denied  { status } for auid=n/a uid=60579 gid=973 path="/usr/lib/systemd/user/graphical-session.target" cmdline="/usr/libexec/gnome-session-init-worker gnome-initial-setup" function="reply_unit_path" scontext=system_u:system_r:xdm_t:s0-s0:c0.c1023 tcontext=system_u:object_r:systemd_unit_file_t:s0 tclass=service permissive=0

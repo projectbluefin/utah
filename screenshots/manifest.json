@@ -1,0 +1,157 @@
+[
+  {
+    "file": "00-grub-menu.png",
+    "stage": "00-grub-menu",
+    "proves": "Firmware -> shim -> GRUB on the medium (no shim fallback); 'Utah Live' BLS entry listed"
+  },
+  {
+    "file": "01-live-session.png",
+    "stage": "01-live-session",
+    "proves": "The raw disk image booted as live media (utah.live, tmpfs overlay): GNOME session for the live user"
+  },
+  {
+    "file": "setup-language.png",
+    "stage": "setup-language",
+    "proves": "Installer page: language"
+  },
+  {
+    "file": "setup-keyboard.png",
+    "stage": "setup-keyboard",
+    "proves": "Installer page: keyboard"
+  },
+  {
+    "file": "setup-try_or_install.png",
+    "stage": "setup-try_or_install",
+    "proves": "Installer page: try_or_install"
+  },
+  {
+    "file": "setup-disk.png",
+    "stage": "setup-disk",
+    "proves": "Installer page: disk"
+  },
+  {
+    "file": "setup-confirm.png",
+    "stage": "setup-confirm",
+    "proves": "Installer page: confirm"
+  },
+  {
+    "file": "setup-progress.png",
+    "stage": "setup-progress",
+    "proves": "Installer page: progress"
+  },
+  {
+    "file": "setup-unknown.png",
+    "stage": "setup-unknown",
+    "proves": "Installer page: unknown"
+  },
+  {
+    "file": "setup-recovery_key.png",
+    "stage": "setup-recovery_key",
+    "proves": "Installer page: recovery_key"
+  },
+  {
+    "file": "setup-done.png",
+    "stage": "setup-done",
+    "proves": "Installer page: done"
+  },
+  {
+    "file": "12-first-boot-tpm2-unlock.png",
+    "stage": "12-first-boot-tpm2-unlock",
+    "proves": "first boot: no Plymouth prompt; the LUKS2 root was unlocked by the TPM2 (PCR 7) and the system reached the graphical target"
+  },
+  {
+    "file": "13-gis-00-welcome.png",
+    "stage": "13-gis-00-welcome",
+    "proves": "gnome-initial-setup on the installed system: Welcome!"
+  },
+  {
+    "file": "13-gis-01-typing.png",
+    "stage": "13-gis-01-typing",
+    "proves": "gnome-initial-setup on the installed system: Typing"
+  },
+  {
+    "file": "13-gis-02-privacy.png",
+    "stage": "13-gis-02-privacy",
+    "proves": "gnome-initial-setup on the installed system: Privacy"
+  },
+  {
+    "file": "13-gis-03-time-zone.png",
+    "stage": "13-gis-03-time-zone",
+    "proves": "gnome-initial-setup on the installed system: Time Zone"
+  },
+  {
+    "file": "13-gis-04-about-you.png",
+    "stage": "13-gis-04-about-you",
+    "proves": "gnome-initial-setup on the installed system: About You"
+  },
+  {
+    "file": "13-gis-05-set-a-password-for-utah-tester.png",
+    "stage": "13-gis-05-set-a-password-for-utah-tester",
+    "proves": "gnome-initial-setup on the installed system: Set a Password for Utah Tester"
+  },
+  {
+    "file": "13-gis-06-all-done.png",
+    "stage": "13-gis-06-all-done",
+    "proves": "gnome-initial-setup on the installed system: All done!"
+  },
+  {
+    "file": "14-first-boot-desktop.png",
+    "stage": "14-first-boot-desktop",
+    "proves": "first boot: GNOME desktop for tester"
+  },
+  {
+    "file": "14-first-boot-bootc-status.png",
+    "stage": "14-first-boot-bootc-status",
+    "proves": "first boot: terminal on the desktop running `bootc status`"
+  },
+  {
+    "file": "14-first-boot-luks.png",
+    "stage": "14-first-boot-luks",
+    "proves": "first boot: the root's LUKS2 keyslots (recovery key and TPM2, no passphrase) and how it was unlocked"
+  },
+  {
+    "file": "14-first-boot-fastfetch.png",
+    "stage": "14-first-boot-fastfetch",
+    "proves": "first boot: fastfetch in a terminal on the desktop, read back by OCR"
+  },
+  {
+    "file": "20-switch-recovery-key-prompt.png",
+    "stage": "20-switch-recovery-key-prompt",
+    "proves": "after bootc switch: graphical, Bluefin-branded Plymouth LUKS prompt, answered with the recovery key (plymouth-prompt.py exit 0)"
+  },
+  {
+    "file": "21-switch-gdm.png",
+    "stage": "21-switch-gdm",
+    "proves": "after bootc switch: GDM greeter offers the account created by gnome-initial-setup"
+  },
+  {
+    "file": "22-switch-desktop.png",
+    "stage": "22-switch-desktop",
+    "proves": "after bootc switch: GNOME desktop for tester"
+  },
+  {
+    "file": "22-switch-bootc-status.png",
+    "stage": "22-switch-bootc-status",
+    "proves": "after bootc switch: terminal on the desktop running `bootc status`"
+  },
+  {
+    "file": "30-rollback-tpm2-unlock.png",
+    "stage": "30-rollback-tpm2-unlock",
+    "proves": "after bootc rollback: no Plymouth prompt; the LUKS2 root was unlocked by the TPM2 (PCR 7) and the system reached the graphical target"
+  },
+  {
+    "file": "31-rollback-gdm.png",
+    "stage": "31-rollback-gdm",
+    "proves": "after bootc rollback: GDM greeter offers the account created by gnome-initial-setup"
+  },
+  {
+    "file": "32-rollback-desktop.png",
+    "stage": "32-rollback-desktop",
+    "proves": "after bootc rollback: GNOME desktop for tester"
+  },
+  {
+    "file": "32-rollback-bootc-status.png",
+    "stage": "32-rollback-bootc-status",
+    "proves": "after bootc rollback: terminal on the desktop running `bootc status`"
+  }
+]

@@ -1,0 +1,4 @@
+/dev/vdb3
+SLOT TYPE
+   1 tpm2
+   2 recovery

@@ -1,0 +1,38 @@
+apiVersion: org.containers.bootc/v1
+kind: BootcHost
+metadata:
+  name: host
+spec:
+  image:
+    image: ghcr.io/projectbluefin/utah:testing
+    transport: registry
+  bootOrder: default
+status:
+  staged: null
+  booted:
+    image:
+      image:
+        image: ghcr.io/projectbluefin/utah:testing
+        transport: registry
+      version: testing-20261128-38d65f7
+      timestamp: 2026-11-28T13:44:29.631487218Z
+      imageDigest: sha256:a11462a6f5558680e1bb7305f68a90e960f7d71e5c1d21064be3d7e5879d9994
+      architecture: amd64
+    cachedUpdate: null
+    incompatible: false
+    pinned: false
+    softRebootCapable: false
+    downloadOnly: false
+    store: null
+    ostree: null
+    composefs:
+      verity: 4041a803ded0d72c6ef57001fbf26fdc2129229a541f4672d3bea87c6713722de0df5da55a93177fd88d62712f616f4c63b4460134975bba29abf861a203d8ea
+      bootType: Bls
+      bootloader: grub
+      bootDigest: 236c49c3b5909c6944d3870a6bceb241508f3c8ece1593e8998608814afc7473
+      missingVerityAllowed: false
+  rollback: null
+  rollbackQueued: false
+  type: null
+  usrOverlay: null
+  readOnly: false

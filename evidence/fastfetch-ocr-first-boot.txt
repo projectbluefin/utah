@@ -1,0 +1,36 @@
+-_- SatNov 28 8:23 AM azo O
+
+* ."peeceececcece:;,. - -
+. ;eecccecccecccceccceccc;. os: Bluefin (Version: testing-20261128-38d65f7) x86_64
+mY . 1eeecceccceccceecceccccccce:. bose: KVM/QEMU Standard PC (Q35 + ICH9, 2009) (pc-q35-10.2
+My cecececccccce; tdddl:. ;cccccce;. Merve: Linux 7.3.5-200.1.utah1.fc44.x86_64
+| cece cece cee ONMKOOXMWE coco cos Uptime: 4 mins
+- cece ec ccecce KMMG > co XMM cocccce: Packages: 3 (brew), 2 (brew-cask), 44 (flatpak), 1564 (rpm
+_ccccccccccccce MMM. coo GW: ccccccce, — Shellt bash 5.3.20
+scoecccecccecce MMM. scoccccccccecccee: Display (QENU Monitor): 1920x1080 in 22", 75 Hz
+H . ox0000 MMMOOOK. ccc Deseo Envivonnene: GNOME 54.1
+ccccce OMMKxdd: -MMMKdde. ccccccccccce) Window Neneger: Mutter (Wayland)
+cece XMOT coCOOMMM, scocccccccececcce’ WN Theme: adw-gtk3
+cece MMos coc COMM, 5 occ c cee cee cces Thene: adw-gtk3 [6TK2/3/4]
+6c 0 OMNG. 00 XMM: coco ccc rece eens Teonst Adwaita [GTK2/3/4]
+660000 ANMWXXXWM@ coc ccccce reece, Fone: Adwaita Sans (11pt) [GTK2/3/4
+ccccecce; .todl:. ;ccccccecccecce Cursor: Adwaita (24px
+
+eccecccecececccecccecccceccce:'. Terminal: python3
+:ececcccecceccceccceccce: ;,.. ceU: AMD EPYC 7763 64-Core (4) @ 2.44 GHz
+" :eecccecccecccece::;,. PU: QEMU Virtual Video Controller
+
+Vemory: 1.97 GiB / 5.77 GiB ( )
+
+Swep: 85.59 MiB / 2.89 GiB (3%)
+
+Disk (/): 39.20 MiB / 39.20 MiB (100%) - overlay [Read-only
+Disk (/sysroot): 10.50 GiB / 46.48 GiB ( ) - btrfs [Read-only
+Locel TP (enpést): 10.0.2.15/24
+
+Locele: en_US.UTF-8
+
+UTAH-E2E-FASTFETCH
+
+UTAH-E2E-TERMINAL -DONE
+bash-5.3$ §f

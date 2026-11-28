@@ -1,0 +1,81 @@
+BOOT_IMAGE=(hd0,gpt2)/bootc_composefs-8bf2e9f22fe3526dfd2fbf5fc6fa68129091d462e2867697d63703520e8c8e72a8951cafe50eb65ebc0a534b9bc720443883d770db350ed4a5a4afce505e89d2/vmlinuz root=UUID=3b836b48-dc51-4531-b63d-3292942ddcf9 rootflags=subvol=/ rw boot=UUID=819c4477-111e-45b4-bdd8-8cbc69227af9 rhgb quiet systemd.mount-extra=UUID=819c4477-111e-45b4-bdd8-8cbc69227af9:/boot:auto:ro console=tty1 console=ttyS0,115200n8 plymouth.ignore-serial-consoles zswap.enabled=1 zswap.compressor=zstd zswap.max_pool_percent=20 zswap.shrinker_enabled=1 rd.luks.uuid=57759fc8-fb9f-4a9d-b55d-1647c0105c5f rd.luks.options=57759fc8-fb9f-4a9d-b55d-1647c0105c5f=tpm2-device=auto,discard composefs.digest=v1-sha512-12:8bf2e9f22fe3526dfd2fbf5fc6fa68129091d462e2867697d63703520e8c8e72a8951cafe50eb65ebc0a534b9bc720443883d770db350ed4a5a4afce505e89d2
+
+btrfs /dev/mapper/luks-57759fc8-fb9f-4a9d-b55d-1647c0105c5f
+ext4 /dev/vda2 ro,relatime,seclabel
+NAME                                          FSTYPE      FSVER LABEL      UUID                                 FSAVAIL FSUSE% MOUNTPOINTS
+sr0                                                                                                                            
+vda                                                                                                                            
+|-vda1                                        vfat        FAT32 EFI-SYSTEM D17F-DC1D                                           
+|-vda2                                        ext4        1.0   boot       819c4477-111e-45b4-bdd8-8cbc69227af9  349.8M    57% /boot
+`-vda3                                        crypto_LUKS 2     luks-root  57759fc8-fb9f-4a9d-b55d-1647c0105c5f                
+  `-luks-57759fc8-fb9f-4a9d-b55d-1647c0105c5f btrfs             root       3b836b48-dc51-4531-b63d-3292942ddcf9   34.9G    24% /home
+                                                                                                                               /var
+                                                                                                                               /etc
+                                                                                                                               /sysroot
+Enforcing
+luks-57759fc8-fb9f-4a9d-b55d-1647c0105c5f UUID=57759fc8-fb9f-4a9d-b55d-1647c0105c5f none tpm2-device=auto,discard
+active
+active
+apiVersion: org.containers.bootc/v1
+kind: BootcHost
+metadata:
+  name: host
+spec:
+  image:
+    image: ghcr.io/projectbluefin/utah@sha256:5d7709fa79af87eeea86cb106026f6c4ac43594e7b2bd1da68a05f74de11ef4b
+    transport: registry
+  bootOrder: default
+status:
+  staged: null
+  booted:
+    image:
+      image:
+        image: ghcr.io/projectbluefin/utah@sha256:5d7709fa79af87eeea86cb106026f6c4ac43594e7b2bd1da68a05f74de11ef4b
+        transport: registry
+      version: testing-20261128-c872e97
+      timestamp: 2026-11-28T06:46:51Z
+      imageDigest: sha256:5d7709fa79af87eeea86cb106026f6c4ac43594e7b2bd1da68a05f74de11ef4b
+      architecture: amd64
+    cachedUpdate: null
+    incompatible: false
+    pinned: false
+    softRebootCapable: false
+    downloadOnly: false
+    store: null
+    ostree: null
+    composefs:
+      verity: 8bf2e9f22fe3526dfd2fbf5fc6fa68129091d462e2867697d63703520e8c8e72a8951cafe50eb65ebc0a534b9bc720443883d770db350ed4a5a4afce505e89d2
+      bootType: Bls
+      bootloader: grub
+      bootDigest: 3bb565be0ea76ef1935faf18d3d7c2a5aba08fffbb1c73b6efe2079a9b4e662b
+      missingVerityAllowed: false
+  rollback:
+    image:
+      image:
+        image: ghcr.io/projectbluefin/utah:testing
+        transport: registry
+      version: testing-20261128-38d65f7
+      timestamp: 2026-11-28T13:44:29.631487218Z
+      imageDigest: sha256:a11462a6f5558680e1bb7305f68a90e960f7d71e5c1d21064be3d7e5879d9994
+      architecture: amd64
+    cachedUpdate: null
+    incompatible: false
+    pinned: false
+    softRebootCapable: false
+    downloadOnly: false
+    store: null
+    ostree: null
+    composefs:
+      verity: 4041a803ded0d72c6ef57001fbf26fdc2129229a541f4672d3bea87c6713722de0df5da55a93177fd88d62712f616f4c63b4460134975bba29abf861a203d8ea
+      bootType: Bls
+      bootloader: grub
+      bootDigest: 236c49c3b5909c6944d3870a6bceb241508f3c8ece1593e8998608814afc7473
+      missingVerityAllowed: false
+  rollbackQueued: false
+  type: null
+  usrOverlay: null
+  readOnly: false
+== /etc/resolv.conf
+lrwxrwxrwx. 1 root root system_u:object_r:net_conf_t:s0 37 Nov 28 08:24 /etc/resolv.conf -> /run/systemd/resolve/stub-resolv.conf
+/run/systemd/resolve/stub-resolv.conf
+== SELinux denials

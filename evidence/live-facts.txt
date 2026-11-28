@@ -1,0 +1,17 @@
+BOOT_IMAGE=(hd0,gpt3)/bootc_composefs-4041a803ded0d72c6ef57001fbf26fdc2129229a541f4672d3bea87c6713722de0df5da55a93177fd88d62712f616f4c63b4460134975bba29abf861a203d8ea/vmlinuz root=UUID=902ed84a-7fcf-4eef-ac37-cd7e83e59010 rootflags=subvol=/ boot=UUID=847919ab-3d17-47ad-b04e-4425f7556c60 rhgb quiet composefs.digest=v1-sha512-12:4041a803ded0d72c6ef57001fbf26fdc2129229a541f4672d3bea87c6713722de0df5da55a93177fd88d62712f616f4c63b4460134975bba29abf861a203d8ea systemd.mount-extra=UUID=847919ab-3d17-47ad-b04e-4425f7556c60:/boot:auto:ro console=tty1 console=ttyS0,115200n8 plymouth.ignore-serial-consoles zswap.enabled=1 zswap.compressor=zstd zswap.max_pool_percent=20 zswap.shrinker_enabled=1 ro utah.live utah.live.debug systemd.journald.forward_to_console=1 plymouth.enable=0 rd.plymouth=0 utah.live.installer=gnome-setup
+
+overlay overlay ro,relatime,seclabel,lowerdir=/sysroot,upperdir=/run/systemd/overlay-sysroot/upper,workdir=/run/systemd/overlay-sysroot/work,uuid=on
+overlay ro,relatime,seclabel,lowerdir=/proc/self/fd/5::/proc/self/fd/6,redirect_dir=on,metacopy=on,verity=require
+Enforcing
+NAME    SIZE RO TYPE FSTYPE LABEL      PARTLABEL  MOUNTPOINTS
+sr0    1024M  1 rom                               
+vda     9.1G  1 disk                              
+├─vda1    1M  1 part                   BIOS-BOOT  
+├─vda2  512M  1 part vfat   EFI-SYSTEM EFI-SYSTEM 
+├─vda3    1G  1 part ext4   boot       boot       
+└─vda4  7.6G  1 part btrfs  root       root       
+vdb      48G  0 disk                              
+== /etc/resolv.conf
+lrwxrwxrwx. 1 root root system_u:object_r:net_conf_t:s0 37 Nov 28 14:14 /etc/resolv.conf -> /run/systemd/resolve/stub-resolv.conf
+/run/systemd/resolve/stub-resolv.conf
+== SELinux denials
