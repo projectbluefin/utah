@@ -102,6 +102,15 @@ class InstalledSystemCheckTests(unittest.TestCase):
         self.assertTrue(raw_e2e.welcome_dialog_showing("Welcome to Bluefin\nSkip  Take Tour\n"))
         self.assertFalse(raw_e2e.welcome_dialog_showing("Linux 7.3"))
 
+    def test_welcome_dialog_skip_is_located_from_tesseract_tsv(self):
+        header = "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext"
+        tsv = "\n".join([header,
+                         "5\t1\t1\t1\t1\t1\t760\t630\t90\t24\t95\tWelcome",
+                         "5\t1\t2\t1\t1\t1\t827\t744\t50\t20\t96\tSkip",
+                         "5\t1\t2\t1\t1\t2\t1003\t744\t46\t20\t96\tTake"])
+        self.assertEqual(raw_e2e.word_center(tsv, "Skip"), (852, 754))
+        self.assertIsNone(raw_e2e.word_center(header + "\n", "Skip"))
+
     def test_a_frame_with_only_the_top_bar_drawn_is_not_drawn_below_it(self):
         w, h = 200, 100
         top = bytes(b for i in range(w * (h // 10)) for b in (i % 251, (i * 7) % 253, (i * 13) % 255))

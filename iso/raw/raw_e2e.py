@@ -521,6 +521,16 @@ def welcome_dialog_showing(ocr):
     return "take tour" in ocr.lower()
 
 
+def word_center(tsv, word):
+    """Screen center (x, y) of the first `word` in tesseract's TSV output, or None."""
+    for line in tsv.splitlines()[1:]:
+        cols = line.split("\t")
+        if len(cols) == 12 and cols[11].strip().lower() == word.lower():
+            left, top, width, height = (int(c) for c in cols[6:10])
+            return left + width // 2, top + height // 2
+    return None
+
+
 def boot_frame(ocr):
     """What a tesseract transcript of an early boot frame shows: "fallback"
     (shim's fbx64.efi restoring a firmware boot entry before a reset), "grub"
@@ -1658,8 +1668,10 @@ class Harness:
             elif page is Page.RECOVERY_KEY:
                 key = self.recovery_key_text(nodes)
                 if key:
-                    # The QR code sits on the page itself; behind an icon-only button nobody found it.
-                    if not has_name(nodes, RECOVERY_QR):
+                    # The QR code sits on the page itself; behind an icon-only button nobody found
+                    # it. Checked when the key is first read: once the page scrolls toward Done
+                    # the picture is no longer "showing" (run 46094671535, utah-nvidia).
+                    if self.recovery_key is None and not has_name(nodes, RECOVERY_QR):
                         raise Fail(f"the recovery key page shows no {RECOVERY_QR!r} next to the key")
                     self.recovery_key = key
                     self.save("recovery-key.txt", key + "\n")
@@ -2046,10 +2058,7 @@ class Harness:
                 if seen:
                     break
                 if welcome_dialog_showing(ocr):
-                    # Escape is the dialog's Skip key; Return (Take Tour) left it up in run 46065121091.
-                    log("  GNOME Shell welcome dialog is showing; pressing Escape (Skip)")
-                    self.key("esc")
-                    time.sleep(3)
+                    self.dismiss_welcome_dialog(png)
                 time.sleep(5)
         finally:
             if png.exists():
@@ -2240,13 +2249,32 @@ class Harness:
                     log(f"  could not close the overview: {e}")
             time.sleep(3)
 
+    def dismiss_welcome_dialog(self, png):
+        """Click Skip on Shell's first-login welcome dialog in png, as a user would.
+
+        Neither Return nor Escape from the harness dismissed it (runs 46065121091 and
+        46094671535: 24 key presses per leg), so read Skip's position with tesseract."""
+        tsv = subprocess.run(["tesseract", str(png), "stdout", "tsv"], capture_output=True, text=True).stdout
+        at = word_center(tsv, "Skip")
+        log(f"  GNOME Shell welcome dialog is showing; clicking Skip at {at}")
+        if at is not None:
+            self.click_at(*at)
+            time.sleep(3)
+
+    def welcome_dialog_gone(self, prefix):
+        """Dismiss Shell's first-login welcome dialog (it opens at startup-complete, over
+        the desktop) before the desktop shots; with the overview closed nothing else does."""
+        png = self.work / f"{prefix}-welcome-check.png"
+        for _ in range(3):
+            self.to_png(self.screendump(png), png)
+            ocr = subprocess.run(["tesseract", str(png), "stdout"], capture_output=True, text=True).stdout
+            if not welcome_dialog_showing(ocr):
+                return
+            self.dismiss_welcome_dialog(png)
+
     def desktop_and_status(self, phase, prefix):
         self.check_no_startup_overview(phase, self.user_runner(USER))
-        # Shell's first-login welcome dialog opens at startup-complete over the desktop.
-        # Escape is its Skip key; before the overview stayed closed, close_overview's
-        # Escape dismissed it by accident, and fastfetch then ran under it (run 46065121091).
-        self.key("esc")
-        time.sleep(3)
+        self.welcome_dialog_gone(prefix)
         self.close_overview()
         self.shot(f"{prefix}-desktop", f"{phase}: GNOME desktop for {USER}", True, required=True)
         status = self.ssh("root", "bootc status", check=False)
