@@ -205,6 +205,12 @@ packages = [
     "totem-pl-parser",
     "gstreamer1-plugin-openh264",
     "openh264",
+    # qt6-qtbase loads this cursor library at runtime. The other libraries
+    # from Dakota's inventory are intentionally skipped: c-ares is only a
+    # build dependency of packages Utah does not ship, libbluray and libpaper
+    # support is disabled in Utah's gvfs/FFmpeg and Ghostscript builds, and
+    # sonic has no Utah runtime consumer.
+    "xcb-util-cursor",
     # Locale and fonts
     "langpacks-en",
     "langpacks-fonts-en",

@@ -430,6 +430,7 @@
         "wireless-regdb",
         "words",
         "wpa_supplicant",
+        "xcb-util-cursor",
         "xdg-utils",
         "xmlsec1",
         "xxd",
@@ -489,7 +490,7 @@
     }
   ],
   "totals": {
-    "installed": 432,
+    "installed": 433,
     "unavailable": 5
   },
   "unavailable": [
